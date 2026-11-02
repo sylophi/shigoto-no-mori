@@ -42,6 +42,7 @@ const leads = (entry: DeviceRosterEntry) =>
 // hosts no forest, so no pick offers it. The tabs below layer the
 // command grant on it, and the sidebar's device filter reads it as is.
 export function useDeviceRoster(): DeviceRosterEntry[] {
+  const page = useApi();
   const entries = useHostDevices().map(
     (device): DeviceRosterEntry => ({
       deviceId: device.deviceId,
@@ -49,7 +50,7 @@ export function useDeviceRoster(): DeviceRosterEntry[] {
       icon: device.icon,
       isThisDevice: device.isThisDevice,
       status: statusViewOf(device),
-      api: liveApi(device),
+      api: liveApi(page, device),
     }),
   );
   return [

@@ -35,33 +35,37 @@ function useThisDevice(): Device {
     acceptsCommands: true,
     isThisDevice: true,
     hostsProjects: page.isElectron,
-    api: page,
   };
 }
 
 // The other devices on the account.
 export function usePeers(): Device[] {
-  const page = useApi();
-  return useAtomValue(remoteDevicesAtom).map((peer) => peerOf(page, peer));
+  return useAtomValue(remoteDevicesAtom).map(peerOf);
 }
 
 export function useDevices(): Device[] {
   return [useThisDevice(), ...usePeers()];
 }
 
-// One device by id, live like the list. Undefined for an id the list
+// One peer by id, undefined for this machine, for an id the list
 // doesn't know (a revoked peer, or a stale link into a device that left
-// the account), and for undefined. A selector, so another peer's churn
-// leaves the caller alone: shared leaf hooks that draw at list scale (a
-// project icon per row) read through this.
-export function useDevice(deviceId: string | undefined): Device | undefined {
-  const page = useApi();
-  const thisDevice = useThisDevice();
+// the account) and for undefined. A selector, so another peer's churn
+// leaves the caller alone: the lookups that run at list scale (a
+// project icon per row) read through this, with no name or icon to
+// build for this machine.
+export function usePeer(deviceId: string | undefined): Device | undefined {
   const peer = useAtomValue(remoteDevicesAtom, (devices) =>
     devices.find((entry) => entry.deviceId === deviceId),
   );
-  if (deviceId === page.deviceId) return thisDevice;
-  return peer === undefined ? undefined : peerOf(page, peer);
+  return peer === undefined ? undefined : peerOf(peer);
+}
+
+// One device by id, this machine included.
+export function useDevice(deviceId: string | undefined): Device | undefined {
+  const page = useApi();
+  const thisDevice = useThisDevice();
+  const peer = usePeer(deviceId);
+  return deviceId === page.deviceId ? thisDevice : peer;
 }
 
 // How a device can be reached from here: this machine, a peer that can
@@ -98,16 +102,19 @@ export function useEveryHost(): {
   deviceId: string;
   api: HostApi | undefined;
 }[] {
+  const page = useApi();
   return useHostDevices().map((device) => ({
     deviceId: device.deviceId,
-    api: liveApi(device),
+    api: liveApi(page, device),
   }));
 }
 
 // One device's api while it can be asked, else undefined.
 export function useLiveApi(deviceId: string | undefined): HostApi | undefined {
-  const device = useDevice(deviceId);
-  return device === undefined ? undefined : liveApi(device);
+  const page = useApi();
+  const peer = usePeer(deviceId);
+  if (deviceId === page.deviceId) return page;
+  return peer === undefined ? undefined : liveApi(page, peer);
 }
 
 // What a device looks like, with the fallback shape for an id the list
@@ -119,18 +126,15 @@ export function useDeviceIcon(deviceId: string): DeviceIcon {
 
 // A peer's name for prose ("on MacBook", "MacBook:3000").
 export function useRemoteDeviceLabel(deviceId: string): string {
-  const device = useDevice(deviceId);
-  return device === undefined || device.isThisDevice
-    ? UNNAMED_DEVICE
-    : device.label;
+  return usePeer(deviceId)?.label ?? UNNAMED_DEVICE;
 }
 
 // Either party of a cross-device pair by name: "this device" for this
 // machine, a peer's label otherwise.
 export function useDeviceName(deviceId: string): string {
-  const device = useDevice(deviceId);
-  if (device?.isThisDevice === true) return "this device";
-  return device?.label ?? UNNAMED_DEVICE;
+  const page = useApi();
+  const label = useRemoteDeviceLabel(deviceId);
+  return deviceId === page.deviceId ? "this device" : label;
 }
 
 // The same with this machine by its own name, for a title or a label

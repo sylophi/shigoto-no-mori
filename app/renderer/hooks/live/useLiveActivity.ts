@@ -18,10 +18,12 @@ import type { RunningScript, Terminal } from "@shigomori/contracts/schemas";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 import { useEveryHostMirrors } from "@/hooks/remote/useMirrors";
 import { usePortForwardCount } from "@/hooks/remote/usePortForwards";
-import { useDevice, useHostDevices } from "@/hooks/remote/useDevices";
+import { useDeviceCommandAccess } from "@/hooks/remote/useCommandAccess";
+import { useHostDevices } from "@/hooks/remote/useDevices";
 import { commandAccessOf, liveApi } from "@/lib/remote/devices";
 import { terminalsAtom } from "@/hooks/terminals/useTerminals";
 import { hostViewAtom } from "@/lib/runtime/atoms";
+import { useApi } from "@/lib/runtime/pageApi";
 import { useView, useViews, viewsOf } from "@/lib/runtime/viewHooks";
 
 // A host's running scripts. The api is undefined while a peer has no
@@ -52,7 +54,7 @@ export function useDeviceRunningScripts(
   deviceId: string,
   api: HostApi | undefined,
 ): readonly RunningScript[] | undefined {
-  const access = commandAccessOf(useDevice(deviceId));
+  const access = useDeviceCommandAccess(deviceId);
   const reads = api !== undefined && access.canCommand;
   return useView(reads ? runningScriptsAtom(deviceId) : null).data?.runs;
 }
@@ -66,8 +68,9 @@ const hostsTerminalsAtom = viewsOf((deviceId) => terminalsAtom(deviceId));
 // Nor does one that runs no commands from here (the views are gated),
 // settled.
 function useCommandedHosts() {
+  const page = useApi();
   return useHostDevices().map((device) => {
-    const api = liveApi(device);
+    const api = liveApi(page, device);
     return {
       deviceId: device.deviceId,
       api,

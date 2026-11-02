@@ -30,6 +30,7 @@ import {
 import { useAtomValue } from "@effect/atom-react";
 import * as Atom from "effect/reactivity/Atom";
 import { hostSessionAtom } from "@/lib/runtime/atoms";
+import { useApi } from "@/lib/runtime/pageApi";
 import { useViews, viewsOf } from "@/lib/runtime/viewHooks";
 import { useDevices, usePeers } from "./useDevices";
 
@@ -139,6 +140,7 @@ export function useRemoteProjects(): {
 export function useRemoteForests(
   options: RemoteForestsOptions = {},
 ): RemoteForests {
+  const page = useApi();
   const { inboxFacts = false } = options;
   // Flattened (device, project) pairs, so the worktree fan-out is one
   // flat read whatever shape the forests have.
@@ -167,7 +169,7 @@ export function useRemoteForests(
     queries: pairs.map(({ device, project }) => ({
       ...shigomoriConfigQueryOptions(project.id, {
         deviceId: device.deviceId,
-        api: liveApi(device),
+        api: liveApi(page, device),
       }),
       staleTime: Infinity,
       refetchOnWindowFocus: false,

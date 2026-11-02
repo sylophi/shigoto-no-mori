@@ -37,8 +37,7 @@ function RemoteScopeGate({
   // DeviceScope). This matters twice here: a page opened on this
   // device's route can be showing ANOTHER device's tab
   // (ProjectDevicePage picks locally, without navigating), and that
-  // device is fine. The wrapper keys this gate by deviceId, so what is
-  // kept never outlives a navigation to a different device.
+  // device is fine.
   return (
     <DeviceScope deviceId={deviceId} absent={<AbsentDevice reach={reach} />}>
       <RemoteScopeFrameView
@@ -120,10 +119,10 @@ export function withDeviceScope(
   Page: ComponentType & { preload?: () => Promise<unknown> },
 ): () => ReactElement {
   // A peer's gate is keyed by device: not every device route remounts
-  // on a params change, and the gate's kept api must not survive a
-  // switch to another device. This machine's page is a different
-  // element from any peer's gate, so a switch between the two remounts
-  // it all the same.
+  // on a params change, and a page's own state (a form seeded from one
+  // device's answers) must not carry over to another device. This
+  // machine's page is a different element from any peer's gate, so a
+  // switch between the two remounts it all the same.
   const DeviceScoped = () => {
     const { deviceId } = useParams({ strict: false }) as { deviceId: string };
     const localDeviceId = useApi().deviceId;

@@ -48,39 +48,44 @@ export type Device = Omit<RemoteDevice, "platform"> & {
   // Whether a host stands behind it to read a forest, settings or runs
   // from: this machine on the desktop, a peer that is a machine.
   hostsProjects: boolean;
-  // Its host modules: the page's for this machine, a peer's over the
-  // hub hop (lib/runtime/Api.ts, peerApi), one object per device for
-  // the window's life. Set whatever the status, which says whether it
-  // is worth asking (isLive).
-  api: HostApi;
 };
 
 // A peer off the list, as a surface reads it.
-export function peerOf(page: RendererApi, peer: RemoteDevice): Device {
+export function peerOf(peer: RemoteDevice): Device {
   const { platform, ...rest } = peer;
   return {
     ...rest,
     isThisDevice: false,
     hostsProjects: hostsProjects(platform),
-    api: page.peerApi(peer.deviceId),
   };
 }
 
-// Whether a device can be asked now: this machine always, a peer while
-// its session is up, or while it's rostered with no session yet, since
-// a call made while the direct plane's keeper (shared/hub/directKeeper.ts)
-// dials joins the dial and remoteDeviceSync refetches when it lands.
+// Whether a peer can be asked now: while its session is up, or while
+// it's rostered with no session yet, since a call made while the direct
+// plane's keeper (shared/hub/directKeeper.ts) dials joins the dial and
+// remoteDeviceSync refetches when it lands.
+export function isLiveStatus(status: RemoteDeviceStatus): boolean {
+  return status.phase === "connected" || status.phase === "online";
+}
+
+// The same for any device: this machine always.
 export function isLive(device: Device): boolean {
-  return (
-    device.isThisDevice ||
-    device.status.phase === "connected" ||
-    device.status.phase === "online"
-  );
+  return device.isThisDevice || isLiveStatus(device.status);
+}
+
+// A device's host modules: the page's for this machine, a peer's over
+// the hub hop (lib/runtime/Api.ts), one object per device for the
+// window's life.
+export function apiOf(page: RendererApi, deviceId: string): HostApi {
+  return deviceId === page.deviceId ? page : page.peerApi(deviceId);
 }
 
 // Its api while it can be asked, the shape the fan-outs hand on.
-export function liveApi(device: Device): HostApi | undefined {
-  return isLive(device) ? device.api : undefined;
+export function liveApi(
+  page: RendererApi,
+  device: Device,
+): HostApi | undefined {
+  return isLive(device) ? apiOf(page, device.deviceId) : undefined;
 }
 
 // Its state where a surface tags it. This machine shows none while its

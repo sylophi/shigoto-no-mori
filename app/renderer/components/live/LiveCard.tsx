@@ -28,7 +28,10 @@ import {
 import { isLive, statusViewOf } from "@/lib/remote/devices";
 import { useViewsWanted } from "@/hooks/remote/useRemoteForests";
 import { useDeviceWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { THIS_DEVICE_VIEW } from "@shigomori/ui/lib/deviceStatus.ts";
+import {
+  deviceStatusView,
+  THIS_DEVICE_VIEW,
+} from "@shigomori/ui/lib/deviceStatus.ts";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import {
   mappedPullRequest,
@@ -61,8 +64,11 @@ export function DeviceHeading({
   const icon = useDeviceIcon(deviceId);
   const name = useDeviceProperName(deviceId);
   const device = useDevice(deviceId);
+  // A device the list no longer knows has left the account.
   const status =
-    (device === undefined ? null : statusViewOf(device)) ?? THIS_DEVICE_VIEW;
+    device === undefined
+      ? deviceStatusView({ phase: "stopped" })
+      : (statusViewOf(device) ?? THIS_DEVICE_VIEW);
   return (
     <DeviceHeadingView
       icon={icon}

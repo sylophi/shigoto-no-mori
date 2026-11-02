@@ -1,19 +1,32 @@
 import type { CommandAccess } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
-import { useDevice, useDevices } from "@/hooks/remote/useDevices";
+import { usePeer, usePeers } from "@/hooks/remote/useDevices";
 import { commandAccessOf, type Device, liveApi } from "@/lib/remote/devices";
+import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 
 // Does THIS device hold command access on the scoped host? Drives
 // whether a scoped page renders mutation controls or a read-only note.
 export function useCommandAccess(): CommandAccess {
-  return commandAccessOf(useDevice(useHostScope().deviceId));
+  return useDeviceCommandAccess(useHostScope().deviceId);
+}
+
+// The same for a device by id.
+export function useDeviceCommandAccess(deviceId: string): CommandAccess {
+  const page = useApi();
+  const peer = usePeer(deviceId);
+  return commandAccessOf(
+    deviceId === page.deviceId ? { isThisDevice: true } : peer,
+  );
 }
 
 // A device's api while this device may command it (a verdict not in
 // yet counts, as canCommand has it) and it can be asked, else undefined.
-function commandableApiOf(device: Device | undefined): HostApi | undefined {
+function commandableApiOf(
+  page: RendererApi,
+  device: Device | undefined,
+): HostApi | undefined {
   return device !== undefined && commandAccessOf(device).canCommand
-    ? liveApi(device)
+    ? liveApi(page, device)
     : undefined;
 }
 
@@ -21,9 +34,13 @@ function commandableApiOf(device: Device | undefined): HostApi | undefined {
 // (commandableApiOf). The lookup the group actions and the inbox's
 // create button share.
 export function useCommandableApi(): (deviceId: string) => HostApi | undefined {
-  const devices = useDevices();
+  const page = useApi();
+  const devices = usePeers();
   return (deviceId) =>
-    commandableApiOf(devices.find((device) => device.deviceId === deviceId));
+    commandableApiOf(
+      page,
+      devices.find((device) => device.deviceId === deviceId),
+    );
 }
 
 // The same for one device, the api a sidebar row reads its device's
@@ -33,6 +50,10 @@ export function useCommandableApi(): (deviceId: string) => HostApi | undefined {
 export function useCommandableDeviceApi(
   deviceId: string | undefined,
 ): HostApi | undefined {
-  const device = useDevice(deviceId);
-  return device?.hostsProjects === true ? commandableApiOf(device) : undefined;
+  const page = useApi();
+  const peer = usePeer(deviceId);
+  if (deviceId === page.deviceId) return page.isElectron ? page : undefined;
+  return peer?.hostsProjects === true
+    ? commandableApiOf(page, peer)
+    : undefined;
 }

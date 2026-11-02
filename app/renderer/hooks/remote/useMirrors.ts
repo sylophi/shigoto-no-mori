@@ -44,10 +44,10 @@ import {
 } from "@/hooks/remote/useMoveWorktree";
 import { quietVillagerMoves } from "@/lib/villagers/moves";
 import {
-  useDevice,
   useDeviceName,
   useEveryHost,
   useLiveApi,
+  usePeer,
   usePeers,
 } from "@/hooks/remote/useDevices";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
@@ -133,7 +133,7 @@ export function useCopyOff(
   const localDeviceId = useApi().deviceId;
   const acceptsCommands = useAcceptsCommands().data;
   const sharing = useSharing().data;
-  const peer = useDevice(deviceId);
+  const peer = usePeer(deviceId);
   const device = useDeviceName(deviceId ?? "");
   const off = copySwitchOff({
     here: deviceId === localDeviceId,

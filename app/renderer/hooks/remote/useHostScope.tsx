@@ -20,7 +20,7 @@ import {
   useDeviceReach,
   useRemoteDeviceLabel,
 } from "@/hooks/remote/useDevices";
-import { isLive, peerOf, remoteDeviceById } from "@/lib/remote/devices";
+import { apiOf, isLiveStatus, remoteDeviceById } from "@/lib/remote/devices";
 import { queryKeysFor, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 
@@ -43,8 +43,9 @@ export interface HostScope {
   // the hooks that read one gate on this instead of asking and being
   // refused.
   hasHost: boolean;
-  // The api those calls go through: the page's locally, a connected
-  // remote device's socket- or hub-backed api under a DeviceScope.
+  // The api those calls go through: the page's locally, a peer's
+  // hub-backed api under a DeviceScope. A subtree kept through a blip
+  // holds an away peer's, whose calls fail until its session lands.
   api: HostApi;
   // The key registry the subtree's queries cache under, bound to
   // deviceId. Referentially stable per device (queryKeysFor memoizes),
@@ -70,7 +71,7 @@ function scopeFor(page: RendererApi, deviceId: string): HostScope {
       deviceId,
       remote,
       hasHost: remote || page.isElectron,
-      api: remote ? page.peerApi(deviceId) : page,
+      api: apiOf(page, deviceId),
       keys: queryKeysFor(deviceId),
     };
     byDevice.set(deviceId, scope);
@@ -92,11 +93,11 @@ export function hostScopeOf(
   registry: AtomRegistry.AtomRegistry,
   deviceId: string,
 ): HostScope | undefined {
-  if (deviceId === page.deviceId) return localHostScope(page);
   const peer = remoteDeviceById(registry, deviceId);
-  return peer !== undefined && isLive(peerOf(page, peer))
-    ? scopeFor(page, deviceId)
-    : undefined;
+  const live =
+    deviceId === page.deviceId ||
+    (peer !== undefined && isLiveStatus(peer.status));
+  return live ? scopeFor(page, deviceId) : undefined;
 }
 
 // Scopes a subtree to a device. With `absent`, the subtree shows once
