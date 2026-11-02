@@ -13,13 +13,14 @@ import * as Ops from "../engineOps";
 import { findProjectAndWorktree } from "../projects";
 import * as Scripts from "../Scripts";
 import { Terminals } from "../terminals/Terminals";
-import { moveMirrorsOfWorktree } from "@host/mirror/registry";
+import { MirrorLedger } from "@host/mirror/MirrorLedger";
 import { RunningWorkError } from "./documents";
 
 export const makeMoving = <H>(host: Context.Context<H>) =>
   Effect.gen(function* () {
     const scripts = yield* Scripts.Scripts;
     const terminals = yield* Terminals;
+    const ledger = yield* MirrorLedger;
 
     const refuseRunningWork = (
       worktree: WorktreeIdentity,
@@ -69,7 +70,7 @@ export const makeMoving = <H>(host: Context.Context<H>) =>
           (moved) =>
             moved.id === worktree.id
               ? Effect.void
-              : moveMirrorsOfWorktree(worktree.id, moved),
+              : ledger.moveMirrorsOfWorktree(worktree.id, moved),
         );
       });
 

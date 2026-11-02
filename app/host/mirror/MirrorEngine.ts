@@ -1,4 +1,4 @@
-// The mirror daemon as the mirror surfaces use it (registry.ts,
+// The mirror daemon as the mirror surfaces use it (MirrorLedger.ts,
 // sessions.ts, the handlers), with the git follower and the threads
 // over it (MirrorEngineLayer.ts).
 import type {

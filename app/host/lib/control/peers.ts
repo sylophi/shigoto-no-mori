@@ -40,7 +40,7 @@ import * as DeviceId from "@host/lib/config/DeviceId";
 import * as AccountPeers from "./AccountPeers";
 import type { DirectPeer } from "./AccountPeers";
 import * as Ops from "@host/lib/engineOps";
-import { mirrorList } from "@host/mirror/sessions";
+import { MirrorLedger } from "@host/mirror/MirrorLedger";
 import {
   listed,
   matchDevices,
@@ -341,12 +341,14 @@ export const peerMirrorOf = <E, R>(
 // The mirror one of this device's worktrees is the original of, among
 // the sessions this device runs (a copy here is a peer's session).
 export const mirrorOf = (target: { projectId: string; worktreeId: string }) =>
-  Effect.map(mirrorList(), ({ sessions }): MirrorSession | undefined =>
-    sessions.find(
-      (candidate) =>
-        candidate.localProjectId === target.projectId &&
-        candidate.localWorktreeId === target.worktreeId,
-    ),
+  Effect.map(
+    Effect.flatMap(MirrorLedger, (ledger) => ledger.list()),
+    ({ sessions }): MirrorSession | undefined =>
+      sessions.find(
+        (candidate) =>
+          candidate.localProjectId === target.projectId &&
+          candidate.localWorktreeId === target.worktreeId,
+      ),
   );
 
 // Where a send clones the repo on a device with no checkout of it, as

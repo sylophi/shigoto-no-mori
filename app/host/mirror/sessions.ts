@@ -1,7 +1,7 @@
 // The mirror sessions this device runs, the executor behind the mirror
 // handlers (host/ipc/modules/mirror.ts): starting one, stopping it with
-// its copy, pausing, re-opening it on a new rule, and the list, over the
-// mirror engine (MirrorEngine.ts).
+// its copy, pausing, and re-opening it on a new rule, over the mirror
+// engine (MirrorEngine.ts) and what the ledger keeps (MirrorLedger.ts).
 //
 // start = send, then mirror. The send (sync's, reused verbatim) lands
 // the worktree's branch, commits and uncommitted changes on the peer
@@ -29,9 +29,6 @@ import * as Schema from "effect/Schema";
 import {
   MIRROR_COPY_STAYED,
   mirrorFilesSettled,
-  type MirrorListResult,
-  type MirrorSession,
-  type MirrorStarting,
   type MirrorStartFromPayload,
   type MirrorStartToPayload,
   MirrorStartToResultSchema,
@@ -45,13 +42,7 @@ import {
   syncContract,
 } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
-import { errorWordsOf } from "@host/lib/errorWords";
-import {
-  PeerReach,
-  peerMirrorFor,
-  peerWorktree,
-  peerWorktreesFor,
-} from "@host/ipc/PeerReach";
+import { PeerReach, peerMirrorFor } from "@host/ipc/PeerReach";
 import * as DeviceId from "@host/lib/config/DeviceId";
 import * as Moves from "@host/lib/sync/Moves";
 import { rollBackSent, sendWorktree } from "@host/lib/sync/move";
@@ -63,11 +54,7 @@ import {
   startLabels,
 } from "./plan";
 import {
-  endMirrorKeepingCopy,
-  endMirrorsIntoGoneCopy,
-  engineOrNull,
   findSession,
-  isWaitingOnPeer,
   type MirrorSessionRaw,
   mirrorSessions,
   ORIGINAL_GONE_DETAIL,
@@ -76,10 +63,8 @@ import {
   STOPPED_WAITING_DETAIL,
 } from "./registry";
 import { MirrorEngine, MirrorError } from "./MirrorEngine";
-import { MirrorSignals } from "./MirrorSignals";
+import { MirrorLedger } from "./MirrorLedger";
 import { ownMirrorHereBlocker } from "./MirrorGateway";
-import { announceServingChange, listMirrorServing } from "./serving";
-import { log } from "@shared/log";
 
 const decodePullProgress = Schema.decodeUnknownOption(SyncPullProgressSchema);
 const decodeMirrorStartToResult = Schema.decodeUnknownSync(
@@ -87,68 +72,6 @@ const decodeMirrorStartToResult = Schema.decodeUnknownSync(
 );
 
 type Daemon = MirrorEngine["Service"];
-
-// Ignore changes in flight, by session: two at once (both devices'
-// pages) would each open a session on the pair.
-const reopening = new Set<string>();
-
-// The sessions a stop has ended whose copy is still being removed,
-// as last listed. The engine drops a session at terminate, and the
-// copy's delete follows for seconds. Listed through that, the pair
-// keeps reading as one worktree (the sidebar folds it, the page keeps
-// its pill) instead of the copy surfacing as a worktree of its own
-// until it vanishes.
-const stopping = new Map<string, MirrorSession>();
-
-// The mirrors being started whose copy already exists, by the original's
-// worktree id: the copy lists from its create on, through its setup and
-// the first pass, and the session only opens after. Listed through that,
-// the pair reads as one worktree from the start too. A start that went
-// through gives its place up to the session once the engine lists it,
-// which is a state event after the create answers.
-const starting = new Map<string, MirrorStarting>();
-
-// A device's mirror picture: what mirror:list answers and what
-// mirror:changed carries. The same for every caller. A daemon that is
-// restarting lists the sessions it had, which come back with it, under
-// the daemon status that says why nothing moves.
-export const mirrorList = (given?: Daemon) =>
-  Effect.gen(function* () {
-    const daemon = given ?? (yield* MirrorEngine);
-    const status = yield* daemon.status;
-    const sessions = (yield* mirrorSessions(daemon)).map((raw) =>
-      annotateMirrorSession(raw, daemon.gitStatus(raw.session)),
-    );
-    const live = new Set(sessions.map((session) => session.session));
-    for (const session of sessions) starting.delete(session.localWorktreeId);
-    for (const [id, session] of stopping) {
-      if (!live.has(id)) sessions.push(session);
-    }
-    return {
-      daemon: status,
-      daemonFailure: yield* daemon.failure,
-      sessions,
-      serving: listMirrorServing(),
-      starting: [...starting.values()],
-    } satisfies MirrorListResult;
-  });
-
-// The list for the changed broadcast, or undefined, which a reader
-// answers by asking. Before the daemon is wired there is none to send.
-// A list that fails to build is said so.
-export const currentMirrorList = Effect.flatMap(engineOrNull, (daemon) => {
-  if (daemon === null) return Effect.undefined;
-  return mirrorList(daemon).pipe(
-    Effect.catchCause((cause) =>
-      Effect.sync(() => {
-        log.warn(
-          `[mirror] the changed broadcast goes without its list: ${errorWordsOf(cause)}`,
-        );
-        return undefined;
-      }),
-    ),
-  );
-});
 
 // The mirror: one of this device's worktrees, sent to a peer and kept
 // in step with the copy made there. No leave-out rule goes to the
@@ -177,25 +100,24 @@ export const startMirrorTo = (
 ) =>
   Effect.gen(function* () {
     const daemon = yield* requireRunningEngine;
+    const ledger = yield* MirrorLedger;
     const refusal = mirrorStartRefusal(input.worktreeId, {
       sessions: yield* mirrorSessions(daemon),
-      servedWorktreeIds: listMirrorServing().map((stream) => stream.worktreeId),
+      servedWorktreeIds: ledger
+        .listServing()
+        .map((stream) => stream.worktreeId),
     });
     if (refusal !== null) {
       return yield* new MirrorStartRefusedError({ reason: refusal });
     }
     const { ignoreMode, ignores, ...sendInput } = input;
     const moves = yield* Moves.Moves;
-    const signals = yield* MirrorSignals;
-    const noteCopy = (worktreeId: string) => {
-      if (starting.get(input.worktreeId)?.worktreeId === worktreeId) return;
-      starting.set(input.worktreeId, {
+    const noteCopy = (worktreeId: string) =>
+      ledger.noteStarting({
         localWorktreeId: input.worktreeId,
         deviceId: input.targetDeviceId,
         worktreeId,
       });
-      signals.servingChanged();
-    };
     return yield* moves.run(
       ctx,
       input.worktreeId,
@@ -269,9 +191,7 @@ export const startMirrorTo = (
         return { ...sent, session };
       }).pipe(
         Effect.onError(() =>
-          Effect.sync(() => {
-            if (starting.delete(input.worktreeId)) signals.servingChanged();
-          }),
+          Effect.sync(() => ledger.forgetStarting(input.worktreeId)),
         ),
       ),
     );
@@ -348,12 +268,9 @@ export const startMirrorFrom = (
 // Stop ends the session and removes the copy the mirror made: the
 // mirror was the copy's reason to exist, and the source keeps the
 // branch. The copy is the peer's worktree, and the original here
-// stays. The delete follows the terminate (the other way round the
-// tombstone protocol would stop the session itself, mid-delete) and
-// is forced, since the copy carries the source's uncommitted state
-// by design. A copy the delete cannot remove is reported with the
-// session already gone: the worktree page then offers the ordinary
-// delete.
+// stays. The delete follows the terminate (ledger/ends.ts says why). A
+// copy the delete cannot remove is reported with the session already
+// gone: the worktree page then offers the ordinary delete.
 //
 // A stop whose original is gone (removed outside the app) ends the
 // session alone: the copy is then the only one there is, and it is
@@ -361,6 +278,7 @@ export const startMirrorFrom = (
 export const stopMirror = (session: string, force: boolean) =>
   Effect.gen(function* () {
     const daemon = yield* MirrorEngine;
+    const ledger = yield* MirrorLedger;
     const raw = yield* findSession(daemon, session);
     if (raw === undefined) {
       return yield* new MirrorError({
@@ -369,10 +287,10 @@ export const stopMirror = (session: string, force: boolean) =>
     }
     if (!(yield* Effect.promise(() => rootExists(raw.localRoot)))) {
       // A moved original's, waiting on its peer, isn't gone.
-      yield* endMirrorKeepingCopy(
+      yield* ledger.endMirrorKeepingCopy(
         daemon,
         raw,
-        isWaitingOnPeer(session)
+        ledger.isWaitingOnPeer(session)
           ? STOPPED_WAITING_DETAIL
           : ORIGINAL_GONE_DETAIL,
       );
@@ -392,20 +310,19 @@ export const stopMirror = (session: string, force: boolean) =>
         // A copy the peer no longer lists (deleted while this device
         // missed the announcement, or moved) holds nothing to protect
         // and nothing to remove, so the session just ends.
-        if (yield* endMirrorIfCopyGone(raw)) return { removedCopy: true };
+        if (yield* ledger.endMirrorIfCopyGone(raw)) {
+          return { removedCopy: true };
+        }
         return yield* new MirrorError({ reason: mirrorStopRefusal(blocker) });
       }
     }
-    stopping.set(session, {
-      ...annotateMirrorSession(raw, daemon.gitStatus(session)),
-      stopping: true,
-    });
-    yield* stopAndRemoveCopy(daemon, session, raw).pipe(
-      Effect.ensuring(
-        Effect.sync(() => stopping.delete(session)).pipe(
-          Effect.andThen(announceServingChange),
-        ),
-      ),
+    yield* ledger.whileStopping(
+      session,
+      {
+        ...annotateMirrorSession(raw, daemon.gitStatus(session)),
+        stopping: true,
+      },
+      stopAndRemoveCopy(daemon, ledger, raw),
     );
     return { removedCopy: true };
   });
@@ -416,74 +333,21 @@ export const stopMirror = (session: string, force: boolean) =>
 // thread gets the line either way.
 const stopAndRemoveCopy = Effect.fnUntraced(function* (
   daemon: Daemon,
-  session: string,
+  ledger: MirrorLedger["Service"],
   raw: MirrorSessionRaw,
 ) {
-  yield* daemon.terminate(session);
-  const stayed = yield* peerWorktreesFor(raw.deviceId)
-    .delete({
-      projectId: raw.projectId,
-      worktreeId: raw.worktreeId,
-      force: true,
-      oneSide: true,
-    })
-    .pipe(
-      Effect.map((removed) =>
-        removed.ok ? null : `its ${removed.cleanupError.phase} step failed`,
-      ),
-      // A forced stop of a copy that was already gone has nothing left
-      // to remove.
-      Effect.catch((error) =>
-        Effect.map(copyIsGone(raw), (gone) =>
-          gone ? null : errorWordsOf(error),
-        ),
-      ),
-    );
+  const stayed = yield* ledger.endThenDeleteCopy(daemon, raw);
   daemon.noteEvent(
     raw.localWorktreeId,
     "stopped",
-    stayed === null ? "" : "Copy on the other device kept",
+    stayed === undefined ? "" : "Copy on the other device kept",
   );
-  if (stayed !== null) {
+  if (stayed !== undefined) {
     return yield* new MirrorError({
       reason: `${MIRROR_COPY_STAYED} on the other device stayed: ${stayed}. Delete it from its page.`,
     });
   }
 });
-
-// Whether the peer answers, within a few seconds, that it no longer
-// lists the session's copy. A peer that fails or stalls is no answer.
-// A folder deleted by hand still lists until git prunes it.
-const COPY_PROBE_MS = 5_000;
-const copyIsGone = (
-  raw: Pick<MirrorSessionRaw, "deviceId" | "projectId" | "worktreeId">,
-) =>
-  peerWorktree(raw.deviceId, raw.projectId, raw.worktreeId).pipe(
-    Effect.map((copy) => copy === undefined),
-    Effect.timeoutOrElse({
-      duration: COPY_PROBE_MS,
-      orElse: () => Effect.succeed(false),
-    }),
-    Effect.orElseSucceed(() => false),
-  );
-
-// A copy the peer no longer lists (deleted while this device missed
-// the announcement, or moved) ends its session: the stop's way out when
-// the copy cannot be confirmed in step. True when it ended them.
-export const endMirrorIfCopyGone = (session: {
-  deviceId: string;
-  projectId: string;
-  worktreeId: string;
-}) =>
-  Effect.gen(function* () {
-    if (!(yield* copyIsGone(session))) return false;
-    yield* endMirrorsIntoGoneCopy(
-      session.deviceId,
-      session.projectId,
-      session.worktreeId,
-    );
-    return true;
-  });
 
 // A resume against a peer that is away answers with the connect's
 // error after the engine has already un-paused the session and started
@@ -529,6 +393,7 @@ export const reopenMirror = (
 ) =>
   Effect.gen(function* () {
     const daemon = yield* MirrorEngine;
+    const ledger = yield* MirrorLedger;
     const raw = yield* findSession(daemon, session);
     if (raw === undefined) {
       return yield* new MirrorError({
@@ -541,26 +406,19 @@ export const reopenMirror = (
           "What the mirror leaves out can change once it is running and in step. Resume it, or wait for it to catch up.",
       });
     }
-    if (reopening.has(session)) {
+    if (ledger.isRecreating(session)) {
       return yield* new MirrorError({
         reason: "What the mirror leaves out is already changing.",
       });
     }
-    return yield* Effect.acquireUseRelease(
-      Effect.sync(() => reopening.add(session)),
-      () =>
-        Effect.gen(function* () {
-          const next = yield* daemon.recreate(
-            session,
-            reopenInput(raw, ignoreMode, ignores),
-          );
-          daemon.noteEvent(
-            raw.localWorktreeId,
-            "ignores-changed",
-            summarizeIgnores(ignoreMode, ignores),
-          );
-          return { session: next };
-        }),
-      () => Effect.sync(() => reopening.delete(session)),
+    const next = yield* daemon.recreate(
+      session,
+      reopenInput(raw, ignoreMode, ignores),
     );
+    daemon.noteEvent(
+      raw.localWorktreeId,
+      "ignores-changed",
+      summarizeIgnores(ignoreMode, ignores),
+    );
+    return { session: next };
   });

@@ -1,8 +1,8 @@
 // The mirror engine (MirrorEngine.ts) as the host runs it: the daemon's
 // sessions with the git follower and the threads over them, and the
 // bookkeeping each snapshot runs. Apart from the tag because the
-// helpers it runs (registry.ts, sessions.ts) reach the engine by that
-// tag.
+// helpers it runs (MirrorLedger.ts, sessions.ts) reach the engine by
+// that tag.
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import * as MirrorAgreements from "@shigomori/engine/MirrorAgreements";
 import * as MirrorHistoryStore from "@shigomori/engine/MirrorHistory";
@@ -29,17 +29,8 @@ import {
   MirrorEngine,
   MirrorError,
 } from "./MirrorEngine";
-import {
-  endMirrorsWithPeers,
-  isOrphanedTransfer,
-  isRecreating,
-  LEFT_ACCOUNT_DETAIL,
-  lookAgainAt,
-  mirrorSessions,
-  settleMirrorBookkeeping,
-  whileRecreating,
-} from "./registry";
-import { endMirrorIfCopyGone } from "./sessions";
+import { MirrorLedger } from "./MirrorLedger";
+import { LEFT_ACCOUNT_DETAIL, mirrorSessions } from "./registry";
 
 // A device leaving its account ends its mirrors within this, so a stuck
 // daemon request cannot hold the sign-out: the hub refresh that follows
@@ -54,18 +45,11 @@ const LINK_LOST: ReadonlySet<MirrorStatus> = new Set([
   "connecting-remote",
 ]);
 
-type Bookkeeping = Exclude<
+type Bookkeeping =
   | PeerReach
-  | Effect.Services<typeof settleMirrorBookkeeping>
-  | Effect.Services<ReturnType<typeof endMirrorsWithPeers>>
-  | Effect.Services<ReturnType<typeof endMirrorIfCopyGone>>,
-  MirrorEngine
->;
+  | Effect.Services<MirrorLedger["Service"]["settleMirrorBookkeeping"]>;
 
 const make = (options: {
-  // Anything a window shows of the mirrors moved: a follower's verdict
-  // or a thread's event.
-  readonly onChange: () => void;
   // A pull the follower applied moved a project's git state here.
   readonly projectChanged: (projectId: string) => void;
 }) =>
@@ -73,6 +57,7 @@ const make = (options: {
     const daemon = yield* MirrorDaemon.MirrorDaemon;
     const account = yield* HostAccount.HostAccount;
     const reach = yield* PeerReach;
+    const ledger = yield* MirrorLedger;
     const runFork = yield* FiberSet.makeRuntime<never>();
     const context = yield* Effect.context<Bookkeeping>();
     // What reaches the engine through its tag, run on this one.
@@ -98,7 +83,7 @@ const make = (options: {
           runFork(writes.withPermit(threads.save(events)));
         },
       },
-      onChange: options.onChange,
+      onChange: ledger.changed,
     });
 
     // Every re-key the engine records (Worktrees.movedIds), this
@@ -147,7 +132,7 @@ const make = (options: {
       // resumes the follow rule rather than falling back to ancestry.
       agreedStore: yield* MirrorAgreements.MirrorAgreements,
       onChange: () => {
-        options.onChange();
+        ledger.changed();
         runFork(observeHistory);
       },
       // The peer says the session's copy is gone, behind this device's
@@ -155,7 +140,7 @@ const make = (options: {
       // registry loads, or mid-move, is no removal), the session ends and
       // the original keeps its own.
       onCopyGone: (session) =>
-        runFork(Effect.ignore(withEngine(endMirrorIfCopyGone(session)))),
+        runFork(Effect.ignore(withEngine(ledger.endMirrorIfCopyGone(session)))),
       // Announced at once, so the pages showing it refetch without
       // waiting on the git watcher.
       onLocalApplied: (projectId) => {
@@ -207,11 +192,11 @@ const make = (options: {
     // mirror as it was instead of gone with no way to re-open it. The
     // agreement moves to the new id, so the follower picks up where it
     // was instead of starting from the no-agreement fallback. Held as
-    // recreating throughout, so the leftover sweep (registry.ts
+    // recreating throughout, so the leftover sweep (MirrorLedger's
     // settleMirrorBookkeeping) does not end the old session under it.
     const recreate = Effect.fn("MirrorEngine.recreate")(
       (session: string, input: MirrorCreateInput) =>
-        whileRecreating(
+        ledger.whileRecreating(
           session,
           Effect.gen(function* () {
             // Undone however the create ends short of a session, an
@@ -254,7 +239,7 @@ const make = (options: {
       ),
     );
 
-    // A transfer session no pull here is waiting on (registry.ts
+    // A transfer session no pull here is waiting on (MirrorLedger's
     // isOrphanedTransfer) is ended on sight, since no mirror surface
     // would ever show it, off the running daemon's own snapshot. Each is
     // asked once while its end is under way or done, and the engine drops
@@ -265,7 +250,7 @@ const make = (options: {
       yield* Effect.forEach(
         (yield* daemon.sessions).filter(
           (session) =>
-            isOrphanedTransfer(session) && !reaped.has(session.session),
+            ledger.isOrphanedTransfer(session) && !reaped.has(session.session),
         ),
         (session) => {
           reaped.add(session.session);
@@ -296,7 +281,7 @@ const make = (options: {
     // running daemon's own snapshot is asked about: the one that stands
     // through a restart can end nothing.
     const endAll = withEngine(
-      endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL),
+      ledger.endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL),
     );
     const asked = new Set<string>();
     const endSignedOut = Effect.gen(function* () {
@@ -358,7 +343,7 @@ const make = (options: {
 
     // A peer coming to take this device's calls (its link up, both of
     // its switches on): git looks again, the bookkeeping re-opens what
-    // waited on the peer (a moved original's sessions, registry.ts
+    // waited on the peer (a moved original's sessions, MirrorLedger's
     // settleMirrorBookkeeping), or ends it past 2 minutes of waiting,
     // deletes the copies of gone originals left there, and
     // the sessions into it that wait on the link, that nobody paused and
@@ -369,14 +354,14 @@ const make = (options: {
     const admit = (deviceId: string) =>
       Effect.gen(function* () {
         follower.onPeerAdmitted(deviceId);
-        lookAgainAt(deviceId);
-        runFork(Effect.ignore(withEngine(settleMirrorBookkeeping)));
+        ledger.lookAgainAt(deviceId);
+        runFork(Effect.ignore(withEngine(ledger.settleMirrorBookkeeping)));
         const waiting = (yield* daemon.sessions).filter(
           (raw) =>
             raw.deviceId === deviceId &&
             !raw.paused &&
             LINK_LOST.has(raw.status) &&
-            !isRecreating(raw.session),
+            !ledger.isRecreating(raw.session),
         );
         yield* Effect.forEach(
           waiting,
@@ -399,7 +384,7 @@ const make = (options: {
     // that only moved a cycle count is a no-op there), and the history,
     // the orphaned transfers, the stops that waited for the daemon,
     // originals gone behind the app's back, sessions a re-open replaced
-    // (registry.ts) and the sessions of a device on no account are
+    // (MirrorLedger.ts) and the sessions of a device on no account are
     // looked at again.
     yield* daemon.changes.pipe(
       Stream.runForEach(() =>
@@ -410,7 +395,7 @@ const make = (options: {
               Effect.all([
                 observeHistory,
                 reapOrphanedTransfers,
-                withEngine(settleMirrorBookkeeping),
+                withEngine(ledger.settleMirrorBookkeeping),
               ]),
             ),
           );
@@ -429,12 +414,12 @@ const make = (options: {
     // Every move the store records or forgets: a session waiting on its
     // peer to re-open on a moved original is paused, so no snapshot
     // comes for it, and a worktree made at its old folder meanwhile ends
-    // it (registry.ts settleMirrorBookkeeping).
+    // it (MirrorLedger's settleMirrorBookkeeping).
     yield* (yield* (yield* StoreChanges.StoreChanges).subscribe).pipe(
       Stream.filter((tables) => tables.has("wt_moves")),
       Stream.runForEach(() =>
         Effect.sync(() =>
-          runFork(Effect.ignore(withEngine(settleMirrorBookkeeping))),
+          runFork(Effect.ignore(withEngine(ledger.settleMirrorBookkeeping))),
         ),
       ),
       Effect.forkScoped,

@@ -18,9 +18,9 @@ import { launchersContract } from "@shigomori/contracts/modules/launchers";
 import { servedHub } from "@shared/hub/bridgeHandlers";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import {
   MirrorWorktreePayloadSchema,
@@ -62,11 +62,7 @@ import {
 import { hygieneHandlers } from "@host/ipc/modules/hygiene";
 import { launchersHandlers } from "@host/ipc/modules/launchers";
 import { mirrorHandlers, mirrorViews } from "@host/ipc/modules/mirror";
-import { currentMirrorList } from "@host/mirror/sessions";
-import {
-  endMirrorsOnPeerRemoval,
-  endMirrorsWithPeers,
-} from "@host/mirror/registry";
+import { MirrorLedger } from "@host/mirror/MirrorLedger";
 import * as HostWorktrees from "@host/lib/Worktrees";
 import { MirrorEngine } from "@host/mirror/MirrorEngine";
 import * as MirrorEngineLayer from "@host/mirror/MirrorEngineLayer";
@@ -156,37 +152,44 @@ const peerReach = PeerReach.make({
 // A change push's window: a burst goes out as one ping this long after
 // its first member.
 const CHANGE_WINDOW_MS = 150;
-// The daemon snapshots on every cycle of every session and the
-// follower reports every verdict. The renderer's ping goes out once a
-// window (mirrorChangesLayer), so a busy mirror costs viewers one
-// re-read per beat, not one per cycle. One change waiting is all a
-// burst needs.
-const mirrorChanges = Effect.runSync(Queue.sliding<void>(1));
-const broadcastMirrorChanged = () =>
-  void Queue.offerUnsafe(mirrorChanges, undefined);
-const pushMirrorChanged = () =>
-  void Graph.run(currentMirrorList).then(
-    (list) => {
-      // The list is validated against its strict schema on the way
-      // out, and one that fails it goes out as the bare signal (a
-      // reader then asks).
-      try {
-        broadcastAll(mirrorContract, "changed", list);
-      } catch (error) {
-        log.warn(
-          `[mirror] the changed broadcast goes without its list: ${errorWordsOf(error)}`,
-        );
-        broadcastAll(mirrorContract, "changed", undefined);
-      }
-    },
-    () => {},
-  );
-// The mirror's changed push, for the length of the graph.
+// The mirror's changed push, for the length of the graph: each picture
+// of the host's own view, to every window and peer. The list is
+// validated against its strict schema on the way out, and one that
+// fails it goes out as the bare signal (a reader then asks). A picture
+// that fails to build (a session the daemon reports that its schema
+// rejects) ends the view's read, and the push joins a new one, backing
+// off up to a minute.
 export const mirrorChangesLayer = Layer.effectDiscard(
-  Stream.fromQueue(mirrorChanges).pipe(
-    Stream.groupedWithin(Infinity, CHANGE_WINDOW_MS),
-    Stream.runForEach(() => Effect.sync(pushMirrorChanged)),
-    Effect.forkScoped,
+  Effect.flatMap(MirrorLedger, (ledger) =>
+    ledger.watch.pipe(
+      Stream.runForEach((list) =>
+        Effect.sync(() => {
+          try {
+            broadcastAll(mirrorContract, "changed", list);
+          } catch (error) {
+            log.warn(
+              `[mirror] the changed broadcast goes without its list: ${errorWordsOf(error)}`,
+            );
+            broadcastAll(mirrorContract, "changed", undefined);
+          }
+        }),
+      ),
+      Effect.catchDefect((defect) => Effect.fail(defect)),
+      Effect.tapError((error) =>
+        Effect.sync(() =>
+          log.warn(
+            `[mirror] the changed push lost its picture: ${errorWordsOf(error)}`,
+          ),
+        ),
+      ),
+      Effect.retry(
+        Schedule.min([
+          Schedule.exponential("1 second"),
+          Schedule.spaced("1 minute"),
+        ]),
+      ),
+      Effect.forkScoped,
+    ),
   ),
 );
 // Every script start and end, whoever ran it, to every window and
@@ -224,7 +227,6 @@ export const mirrorSessionsNow = () =>
 // reports "unavailable" and keeps retrying.
 export const mirrorDaemonLayer = MirrorDaemon.layer({ dataDir: fileSyncDir });
 export const mirrorEngineLayer = MirrorEngineLayer.layer({
-  onChange: broadcastMirrorChanged,
   projectChanged: (projectId) =>
     broadcastAll(gitContract, "projectChanged", { projectId }),
 });
@@ -256,12 +258,13 @@ const deleteOriginals = (
 
 // Every daemon snapshot and status change, to every window.
 export const mirrorDaemonChangesLayer = Layer.effectDiscard(
-  Effect.flatMap(MirrorDaemon.MirrorDaemon, (daemon) =>
-    daemon.changes.pipe(
-      Stream.runForEach(() => Effect.sync(broadcastMirrorChanged)),
+  Effect.gen(function* () {
+    const ledger = yield* MirrorLedger;
+    yield* (yield* MirrorDaemon.MirrorDaemon).changes.pipe(
+      Stream.runForEach(() => Effect.sync(ledger.changed)),
       Effect.forkScoped,
-    ),
-  ),
+    );
+  }),
 );
 
 // The command-access switch as it now stands, to every connected peer
@@ -363,9 +366,11 @@ export function noteAccountDevices(deviceIds: ReadonlyArray<string>): void {
   lastMembership = onAccount;
   const stillOn = (deviceId: string) => onAccount.has(deviceId);
   void Graph.run(
-    endMirrorsWithPeers(
-      stillOn,
-      "The other device left the account. The copy stays as a worktree.",
+    Effect.flatMap(MirrorLedger, (ledger) =>
+      ledger.endMirrorsWithPeers(
+        stillOn,
+        "The other device left the account. The copy stays as a worktree.",
+      ),
     ),
   ).catch(() => {});
   // A forward is standing intent across a peer being asleep, so it
@@ -382,9 +387,6 @@ export const rootServices = Layer.mergeAll(
   Layer.succeed(
     MirrorSignals,
     MirrorSignals.of({
-      // The serving set (streams this host serves for peers) fans out
-      // on the mirror's changed push.
-      servingChanged: broadcastMirrorChanged,
       // A served worktree's index moved: to the device mirroring it
       // (remote, so it rides the peer push path to the follower there).
       gitChanged: (change) =>
@@ -474,10 +476,12 @@ export function registerHostHandlers(): void {
       }
     } else if (push.channel === "worktrees:removal") {
       void Graph.run(
-        Effect.flatMap(
-          endMirrorsOnPeerRemoval(push.deviceId, push.payload),
-          (originals) =>
+        Effect.flatMap(MirrorLedger, (ledger) =>
+          ledger.endMirrorsOnPeerRemoval(push.deviceId, push.payload),
+        ).pipe(
+          Effect.flatMap((originals) =>
             acceptsPeerCommands() ? deleteOriginals(originals) : Effect.void,
+          ),
         ),
       ).catch(() => {});
     }

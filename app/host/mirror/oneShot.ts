@@ -21,14 +21,13 @@ import {
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import {
-  beginTransfer,
-  endTransfer,
   findSession,
   transferModeFor,
   type MirrorSessionRaw,
   requireRunningEngine,
 } from "./registry";
 import type { MirrorEngine } from "./MirrorEngine";
+import { MirrorLedger } from "./MirrorLedger";
 import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import { log } from "@shared/log";
 
@@ -81,53 +80,55 @@ export const transferFilesOnce = (
     direction?: "pull" | "push" | "replica";
   },
   onProgress: (bytes: number, totalBytes: number) => void,
-): Effect.Effect<TransferFilesResult, never, MirrorEngine> =>
-  Effect.acquireUseRelease(
-    Effect.sync(() =>
-      beginTransfer({
-        deviceId: input.sourceDeviceId,
-        worktreeId: input.sourceWorktreeId,
-        transfer: (input.direction ?? "pull") === "pull" ? "out" : "in",
-      }),
-    ),
-    (token) =>
-      Effect.gen(function* () {
-        const daemon = yield* requireRunningEngine;
-        // Ended whatever happens: after the terminate, so the host's sweep
-        // only picks the session up when that failed.
-        return yield* Effect.acquireUseRelease(
-          Effect.uninterruptible(
-            daemon.create({
-              localRoot: input.localRoot,
-              deviceId: input.sourceDeviceId,
-              projectId: input.sourceProjectId,
-              worktreeId: input.sourceWorktreeId,
-              remoteRoot: input.remoteRoot,
-              name: input.name,
-              localWorktreeId: input.localWorktreeId,
-              labels: { [MIRROR_LABEL_MODE]: transferModeFor(token) },
-              ignores: input.ignores,
-              direction: input.direction ?? "pull",
-            }),
-          ),
-          (session) => waitSettled(daemon, session, onProgress),
-          (session) =>
-            daemon
-              .terminate(session)
-              .pipe(
-                Effect.catch((error) =>
-                  Effect.sync(() =>
-                    log.warn(
-                      `[sync] could not end the file transfer session: ${errorWordsOf(error)}`,
+): Effect.Effect<TransferFilesResult, never, MirrorEngine | MirrorLedger> =>
+  Effect.flatMap(MirrorLedger, (ledger) =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        ledger.beginTransfer({
+          deviceId: input.sourceDeviceId,
+          worktreeId: input.sourceWorktreeId,
+          transfer: (input.direction ?? "pull") === "pull" ? "out" : "in",
+        }),
+      ),
+      (token) =>
+        Effect.gen(function* () {
+          const daemon = yield* requireRunningEngine;
+          // Ended whatever happens: after the terminate, so the host's sweep
+          // only picks the session up when that failed.
+          return yield* Effect.acquireUseRelease(
+            Effect.uninterruptible(
+              daemon.create({
+                localRoot: input.localRoot,
+                deviceId: input.sourceDeviceId,
+                projectId: input.sourceProjectId,
+                worktreeId: input.sourceWorktreeId,
+                remoteRoot: input.remoteRoot,
+                name: input.name,
+                localWorktreeId: input.localWorktreeId,
+                labels: { [MIRROR_LABEL_MODE]: transferModeFor(token) },
+                ignores: input.ignores,
+                direction: input.direction ?? "pull",
+              }),
+            ),
+            (session) => waitSettled(daemon, session, onProgress),
+            (session) =>
+              daemon
+                .terminate(session)
+                .pipe(
+                  Effect.catch((error) =>
+                    Effect.sync(() =>
+                      log.warn(
+                        `[sync] could not end the file transfer session: ${errorWordsOf(error)}`,
+                      ),
                     ),
                   ),
                 ),
-              ),
-        );
-      }).pipe(
-        Effect.catch((error) => Effect.succeed(failed(errorWordsOf(error)))),
-      ),
-    (token) => Effect.sync(() => endTransfer(token)),
+          );
+        }).pipe(
+          Effect.catch((error) => Effect.succeed(failed(errorWordsOf(error)))),
+        ),
+      (token) => Effect.sync(() => ledger.endTransfer(token)),
+    ),
   );
 
 // One full cycle with both sides scanned and nothing left staging is

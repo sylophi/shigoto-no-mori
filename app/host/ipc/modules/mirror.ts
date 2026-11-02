@@ -6,16 +6,16 @@ import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { EffectHandlers, ViewHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
-import * as Views from "@host/lib/Views";
+import * as Stream from "effect/Stream";
 import type { HostServices } from "@host/process/services";
 import { MirrorEngine } from "@host/mirror/MirrorEngine";
+import { MirrorLedger } from "@host/mirror/MirrorLedger";
 import {
   applyServedGitState,
   servedGitState,
   serveStream,
 } from "@host/mirror/serving";
 import {
-  mirrorList,
   pauseOrResume,
   reopenMirror,
   startMirrorFrom,
@@ -25,15 +25,11 @@ import {
 
 export const mirrorViews: ViewHandlers<typeof mirrorContract, HostServices> = {
   watch: () =>
-    Views.view(
-      "mirror:watch",
-      () => mirrorList(),
-      Views.pushed(mirrorContract, "changed"),
-    ),
+    Stream.unwrap(Effect.map(MirrorLedger, (ledger) => ledger.watch)),
 };
 
 export const mirrorHandlers = {
-  list: () => mirrorList(),
+  list: () => Effect.flatMap(MirrorLedger, (ledger) => ledger.list()),
   startTo: (input, ctx) => startMirrorTo(input, ctx),
   startFrom: (input, ctx) => startMirrorFrom(input, ctx),
   stop: ({ session, force }) => stopMirror(session, force === true),

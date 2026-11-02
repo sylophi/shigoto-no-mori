@@ -95,7 +95,7 @@ const HALT_DETAIL: Record<string, string> = {
 // What the surface knows beside the session: the runner's reach (a
 // peer runner with no session up leaves only its last list, cached),
 // its engine's state (a restarting engine lists its last sessions,
-// host/mirror/sessions.ts mirrorList), and a switch that is off on the
+// host/mirror/ledger/listing.ts), and a switch that is off on the
 // device holding the copy, which turns the mirror away until it is on.
 type MirrorContext = {
   runnerAway?: string;

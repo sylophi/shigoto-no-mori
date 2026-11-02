@@ -46,6 +46,7 @@ import * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
 import * as Moves from "@host/lib/sync/Moves";
 import * as FileSyncRunner from "@host/fileSync/runner";
 import * as MirrorGateway from "@host/mirror/MirrorGateway";
+import * as MirrorLedger from "@host/mirror/MirrorLedger";
 import * as ScratchIndex from "@host/mirror/ScratchIndex";
 import {
   announceProjectChanged,
@@ -236,6 +237,9 @@ const foundation = (
     Layer.provideMerge(Views.layer),
     // The engine's deletes stop the mirrors of what they take first.
     Layer.provideMerge(Layer.effect(MirrorsOnDelete, mirrorsOnDelete("both"))),
+    // What the host keeps about its mirrors while it works on them, which
+    // those deletes, the scripts' tombstone and the mirror engine share.
+    Layer.provideMerge(MirrorLedger.layer),
     Layer.provideMerge(pushesLayer),
     Layer.provideMerge(EngineStoreChanges.layer),
     // What the root provides from its own wiring: the peers' reach, the
@@ -314,10 +318,9 @@ export const layer = (options: {
     // they stop and refuse for and the mirrors they carry or end, and the
     // carry-over reads.
     Layer.provideMerge(Worktrees.layer),
-    Layer.provideMerge(mirrors),
-    // The mirror's changed push, which the engine above and the
-    // served streams feed.
+    // The mirror's changed push, over the engine whose sessions it lists.
     Layer.provideMerge(mirrorChangesLayer),
+    Layer.provideMerge(mirrors),
     Layer.provideMerge(remotePlanes),
     Layer.provideMerge(followDeviceSettings(Effect.promise(refreshDirectHost))),
     // The cloudflared child, fronting the device link's listener.

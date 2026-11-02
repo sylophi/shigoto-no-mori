@@ -27,6 +27,7 @@ import type * as Scope from "effect/Scope";
 import type * as Git from "@shigomori/engine/Git";
 import { PeerReach } from "@host/ipc/PeerReach";
 import { MirrorEngine } from "@host/mirror/MirrorEngine";
+import { MirrorLedger } from "@host/mirror/MirrorLedger";
 import type * as Engine from "./Engine";
 import * as HostPushes from "./HostPushes";
 import * as Scripts from "./Scripts";
@@ -182,11 +183,16 @@ const make = Effect.gen(function* () {
   const host = Context.pick(
     HostPushes.HostPushes,
     MirrorEngine,
+    MirrorLedger,
     PeerReach,
     Scripts.Scripts,
   )(
     yield* Effect.context<
-      HostPushes.HostPushes | MirrorEngine | PeerReach | Scripts.Scripts
+      | HostPushes.HostPushes
+      | MirrorEngine
+      | MirrorLedger
+      | PeerReach
+      | Scripts.Scripts
     >(),
   );
   const removing = yield* makeRemoving(host);
