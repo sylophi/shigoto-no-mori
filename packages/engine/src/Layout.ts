@@ -66,7 +66,7 @@ const make = Effect.gen(function* () {
   // A custom base under `~/` is in this device's home, whichever device
   // wrote it.
   const customBase = (base: string | undefined) =>
-    base === undefined ? undefined : expandHome(base);
+    base === undefined ? undefined : expandHome(base.trim());
 
   const baseFor = Effect.fn("Layout.baseFor")(function* (
     project: ProjectPlace,
