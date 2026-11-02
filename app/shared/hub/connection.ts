@@ -73,6 +73,13 @@ const ACCEPT_TIMEOUT_MS = HELLO_TIMEOUT_MS;
 // socket is cut, so it cannot hold the close for ws's ~30s window.
 const TERMINATE_GRACE_MS = 1_500;
 
+// How long a socket's roster is still filling after it connects. A hub
+// deploy closes every device's socket at once, and each dials again a
+// rung of the ladder later (supervisor.ts), so the first rosters name
+// only the devices that got back first. Room for a redial that failed
+// once too.
+const ROSTER_SETTLE_MS = 10_000;
+
 // A websocket over a NAT, a tunnel edge or a laptop that just slept can
 // die without either end seeing a close, so the socket is watched as a
 // device link is (engine/liveness.ts, on link.ts's timings): the
@@ -220,6 +227,8 @@ export const make = (
     const clock = yield* Clock.Clock;
     const lifecycle = yield* Semaphore.make(1);
     let link: HubLink | null = null;
+    // Whether the live link's roster has had ROSTER_SETTLE_MS to fill.
+    let rosterSettled = false;
     // Kept across the links a redial replaces (link.ts, SeenAsks).
     const seenAsks: SeenAsks = new Map();
     // The established connection as the supervisor reports it (null the
@@ -360,6 +369,7 @@ export const make = (
             if (!established) {
               established = true;
               link = nextLink;
+              rosterSettled = false;
               log.info("[hub] connected");
               Deferred.doneUnsafe(accepted, Exit.void);
             }
@@ -447,6 +457,16 @@ export const make = (
                 new RemoteConnectError("hub accept timeout", null, false),
               ),
           }),
+        );
+
+        yield* Effect.sleep(ROSTER_SETTLE_MS).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              rosterSettled = true;
+              notifyChange();
+            }),
+          ),
+          Effect.forkScoped,
         );
 
         // A socket that stopped answering: torn down and reported to the
@@ -594,6 +614,7 @@ export const make = (
               ? { phase: "connecting" }
               : socketStatus,
           onlineDeviceIds: online,
+          rosterSettled,
         };
       },
     } satisfies HubConnection;
