@@ -1,9 +1,9 @@
 // This device's sharing switch (packages/contracts/src/modules/sharing.ts),
 // kept in the store's device settings as shareWithDevices, and here as
 // the value the device link's SharingGate reads on every call. A change
-// from anywhere (the account page, `sm config` in a terminal) reaches it
-// within a store tick, and goes out as sharing:changed: to this
-// device's windows, and over the link to every peer.
+// from anywhere (the account page, `sm devices share` in a terminal)
+// reaches it within a store tick, and goes out as sharing:changed: to
+// this device's windows, and over the link to every peer.
 import * as EngineConfig from "@shigomori/engine/Config";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import * as Context from "effect/Context";
