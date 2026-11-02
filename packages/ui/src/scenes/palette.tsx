@@ -48,6 +48,7 @@ const PRS = unposedPullRequests(SM.id) as Record<string, PaletteEntry["pr"]>;
 
 const entryOf = (worktree: Worktree): PaletteEntry => ({
   key: `wt:${worktree.id}`,
+  deviceId: LOCAL_DEVICE_ID,
   worktree,
   project: SM,
   device: undefined,
@@ -75,6 +76,7 @@ const ROWS: PaletteRow[] = [
     item: {
       key: `project:${POOL.id}`,
       project: POOL,
+      deviceId: LOCAL_DEVICE_ID,
       device: undefined,
       lead: undefined,
       localProject: POOL,

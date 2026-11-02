@@ -2,23 +2,15 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useParams } from "@tanstack/react-router";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-import { useDeviceBadges } from "@/components/sidebar/deviceBadges";
+import { useForestSources } from "@/components/sidebar/forestSources";
 import { worktreeRowKey } from "@shigomori/ui/lib/forest.ts";
-import { rowDeviceId } from "@/lib/routePaths";
 import { useLauncherForProject } from "@/hooks/launchers/useLaunchers";
 import { useLaunchShortcuts } from "@/hooks/launchers/useLaunchShortcuts";
-import { useAllProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
-import { useProjects } from "@/hooks/projects/useProjects";
-import { useMirrorLinks } from "@/hooks/remote/useMirrors";
-import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
-import { useClientFlag } from "@/hooks/config/useSidebarMarks";
-import { useWorktreePrefixes } from "@/hooks/sharedSettings/useWorktreePrefixes";
 import { useDebouncedValue } from "@/hooks/ui/useDebouncedValue";
 import { useNow } from "@shigomori/ui/hooks/useNow.ts";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { isMac } from "@shigomori/ui/lib/platform.ts";
 import { useBinding, useKeymapAction } from "@/hooks/ui/useKeymap";
 import { isEditableTarget, isOverlayOpen } from "@/lib/dom";
@@ -78,7 +70,10 @@ export function WorktreePalette() {
   const pageKey =
     worktreeId === undefined || deviceId === undefined
       ? undefined
-      : worktreeRowKey(rowDeviceId(api.deviceId, deviceId), worktreeId);
+      : worktreeRowKey(
+          { deviceId, isThisDevice: deviceId === api.deviceId },
+          worktreeId,
+        );
 
   useEffect(() => {
     if (pageKey !== undefined) recordWorktreeVisit(pageKey);
@@ -117,12 +112,7 @@ export function WorktreePalette() {
     <PaletteDialog
       pageKey={pageKey}
       // This device's project on screen, where a new worktree goes first.
-      pageProjectId={
-        deviceId !== undefined &&
-        rowDeviceId(api.deviceId, deviceId) === undefined
-          ? projectId
-          : undefined
-      }
+      pageProjectId={deviceId === api.deviceId ? projectId : undefined}
       onClose={() => setOpen(false)}
     />
   );
@@ -163,22 +153,20 @@ function PaletteDialog({
   const [creating, setCreating] = useState<{ branch?: string } | null>(null);
   const now = useNow();
 
-  // The sidebar's own views, already streaming, so opening doesn't
-  // re-list every project's worktrees in git.
-  const { data: projects = [] } = useProjects();
-  const worktreeQueries = useAllProjectWorktrees(projects);
-  const pullRequestQueries = useAllProjectPullRequests(projects);
-  const { items: remote } = useRemoteForests();
-  const mirrors = useMirrorLinks();
-  const deviceBadges = useDeviceBadges();
-  const hiddenPrefixes = useWorktreePrefixes("hidden");
-  const allowAgentWorking = useClientFlag("allowAgentWorking");
+  // The sidebar's own reads, already streaming, so opening doesn't
+  // re-list every project's worktrees in git. Every device's, whatever
+  // the sidebar's device filter shows.
+  const {
+    projects,
+    items,
+    mirrors,
+    deviceBadges,
+    hiddenPrefixes,
+    allowAgentWorking,
+  } = useForestSources();
   const pages = usePalettePages();
   const { entries, entryKeyOf } = buildPaletteEntries({
-    projects,
-    worktreeQueries,
-    pullRequestQueries,
-    remote,
+    items,
     mirrors,
     deviceBadges,
     hiddenPrefixes,
@@ -198,7 +186,7 @@ function PaletteDialog({
       entry,
     }));
     if (!listQuery) return worktreeRows;
-    const named = rankPaletteProjects(listQuery, entries, projects, remote);
+    const named = rankPaletteProjects(listQuery, entries, items);
     const projectRows: PaletteRow[] = named.map((item) => ({
       kind: "project",
       key: item.key,
@@ -308,7 +296,7 @@ function PaletteDialog({
   // A worktree page on whichever machine the entry lives on.
   const go: GoTo = (entry, page, extra = {}) => {
     onClose();
-    toPageOn(entry.device?.deviceId, page, {
+    toPageOn(entry.deviceId, page, {
       projectId: entry.worktree.projectId,
       worktreeId: entry.worktree.id,
       ...extra,
@@ -344,10 +332,10 @@ function PaletteDialog({
       case "worktree":
         return go(row.entry, "detail");
       case "project": {
-        const { lead, project, device } = row.item;
+        const { lead, project, deviceId } = row.item;
         return lead
           ? go(lead, "detail")
-          : actions.openCreateForm(project.id, device?.deviceId);
+          : actions.openCreateForm(project.id, deviceId);
       }
       case "page":
         return actions.openPage(row.page);
@@ -477,7 +465,7 @@ function PaletteDialog({
                   <ProjectIcon
                     projectId={picked.row.entry.worktree.projectId}
                     name={picked.row.entry.project.name}
-                    deviceId={picked.row.entry.device?.deviceId}
+                    deviceId={picked.row.entry.deviceId}
                     className="size-3"
                   />
                 )

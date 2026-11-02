@@ -30,10 +30,7 @@ import { pluralize } from "@shigomori/contracts/words";
 import { formatRelativeTime } from "../../lib/relativeTime.ts";
 import { cn } from "../../lib/utils.ts";
 import type { Project } from "@shigomori/contracts/schemas";
-import {
-  DeviceBadgeClusterView,
-  type SidebarDeviceBadge,
-} from "../sidebar/DeviceBadgeView.tsx";
+import { DeviceBadgeClusterView } from "../sidebar/DeviceBadgeView.tsx";
 import { StatusPillView } from "../sidebar/StatusPillView.tsx";
 import type { ProjectListRow, ProjectSection } from "../sidebar/sidebarRow.ts";
 import type { PaletteEntry } from "../palette/paletteEntries.ts";
@@ -48,7 +45,7 @@ export interface GroupWork {
   // the palette's ↩ on the project does: the checkout the group goes
   // by (projectGroups), on its device.
   project: Project;
-  device: SidebarDeviceBadge | undefined;
+  deviceId: string;
   lastActivity: number;
   openPullRequests: number;
 }

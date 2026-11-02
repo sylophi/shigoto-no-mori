@@ -1,165 +1,126 @@
 // What the sidebar, the inbox, the home grid and the palette build their
-// rows from, as the app's hooks read it: this device's per-project reads,
-// its peers' forests and its mirrors. The fixture world builds the same.
-// And what every one of those builders reads off it alike: a group's
-// key, a row's key, a peer's badge and the fold a worktree sits behind.
-import {
-  type DeviceIcon,
-  MACHINE_FALLBACK_ICON,
-} from "@shigomori/contracts/deviceIcon";
+// rows from, as the app's hooks read it: every device's projects as
+// items, and the mirrored pairs between them. The fixture world builds
+// the same. And what every one of those builders reads off it alike: a
+// group's key, a row's key, the fold a worktree sits behind and whether
+// the device filter keeps it.
+import { MACHINE_FALLBACK_ICON } from "@shigomori/contracts/deviceIcon";
 import {
   isAgentWorking,
   type Project,
   type PullRequest,
-  type ShigomoriConfig,
   type Worktree,
 } from "@shigomori/contracts/schemas";
 import { peerProjectKey } from "@shigomori/contracts/schemas/config";
 import { isHiddenByPrefix } from "@shigomori/contracts/sharedSettings";
-import type { StatusTone } from "../primitives/status-dot.tsx";
 import type { SidebarDeviceBadge } from "../views/sidebar/DeviceBadgeView.tsx";
 import type { GroupShelf, InboxShelf } from "../views/sidebar/sidebarRow.ts";
 import { UNNAMED_DEVICE } from "./deviceRoster.ts";
-import { showPrimaryInInbox } from "./showPrimaryInInbox.ts";
 
-// One read per project, positionally aligned with the projects it was
-// asked for (the app's useAllProject… fan-outs).
-type ProjectReads<T> = readonly {
-  readonly data: T | undefined;
-  readonly error: Error | null;
-  readonly isLoading: boolean;
-  readonly isPending: boolean;
-}[];
+// A device as the forest's items carry it: its badge, and whether it
+// is the machine this window runs on.
+export interface ForestDevice extends SidebarDeviceBadge {
+  isThisDevice: boolean;
+}
 
-export type ProjectWorktreeQueries = ProjectReads<readonly Worktree[]>;
-// Branch -> PR, per project.
-export type ProjectPullRequestQueries = ProjectReads<
-  Record<string, PullRequest>
->;
-export type ProjectShigomoriConfigQueries =
-  ProjectReads<ShigomoriConfig | null>;
+// What a key spelled per device reads off it.
+export type DeviceRef = Pick<ForestDevice, "deviceId" | "isThisDevice">;
 
-// One remote project's slice, flat because that is exactly the unit
-// the row builder merges by repo identity.
-export interface RemoteForestItem {
-  deviceId: string;
-  deviceLabel: string;
-  // What the device looks like, for its badge on the rows.
-  deviceIcon: DeviceIcon;
-  // False when the device is not currently reachable: its rows are the
-  // cache's last known state, and the tree fades them rather than
-  // hiding work that still exists on that machine.
-  reachable: boolean;
-  // The device's connection tone, so a badge for it reads the same as
-  // its chip on the account page.
-  tone: StatusTone;
+// One project on one device, with what every view reads off it. The
+// same shape for this machine's projects and every peer's, so a
+// builder files them alike.
+export interface ForestItem {
+  device: ForestDevice;
   project: Project;
+  // What the device last listed. Kept through a failed refetch, which
+  // the tree answers with its error row and the inbox looks past.
   worktrees: readonly Worktree[];
-  // Branch -> PR on that device, what its own sidebar reads for the
-  // pills and the inbox's merged shelf. Empty until it lands.
+  // Whether the listing is in. Only this machine's answers anything but
+  // ready: a peer's rows are its last known state either way.
+  listing: "ready" | "loading" | "error";
+  // Branch -> PR, what the pills, the stacks and the inbox's merged
+  // shelf read. Empty until it lands.
   pullRequests: Record<string, PullRequest>;
-  // That project's inbox opt-in for its primary checkout
-  // (ShigomoriConfigSchema.showPrimaryInInbox), read off the peer so a
-  // project shows its root the same way in every sidebar. Undefined
-  // until the config is read, which is only while the inbox shows.
-  showPrimaryInInbox: boolean | undefined;
-  // A failed worktree listing, folded into the sidebar's coalesced
-  // fan-out toast beside the local failures.
-  worktreesError: boolean;
-}
-
-// A mirrored pair as the sidebar folds it: the peer's row (device,
-// worktree) that folds into a local row, and the peer device the local
-// row wears. A session pairs its local original with the peer's copy.
-// A served stream pairs the served copy with the peer's original, when
-// the peer named it.
-export type MirrorLink = {
-  peerDeviceId: string;
-  peerWorktreeId: string;
-  localWorktreeId: string;
-};
-
-// This device's worktree in a mirrored pair, in its project, with the
-// project's primary opt-in (showPrimaryInInbox), undefined while unread.
-export interface LocalSide {
-  worktree: Worktree;
-  project: Project;
+  // The project's inbox opt-in for its primary checkout
+  // (ShigomoriConfigSchema.showPrimaryInInbox). Undefined while unread,
+  // which for a peer is whenever the inbox isn't showing.
   showPrimaryInInbox: boolean | undefined;
 }
 
-// This device's sides of its pairs with a peer, by worktree id, for the
-// device filter narrowed to that peer. A pair is one worktree on two
-// machines, so it is on either one's filter: the builders list this
-// device's side among the peer's rows as they do under every device,
-// and the peer's row folds into it by the same rule. A listing not in
-// yet, or failed, holds none.
-export function localSidesWith(
-  peerDeviceId: string,
-  mirrors: readonly MirrorLink[],
-  projects: readonly Project[],
-  worktreeQueries: ProjectWorktreeQueries,
-  configQueries: ProjectShigomoriConfigQueries,
-): Map<string, LocalSide> {
-  const paired = new Set(
-    mirrors
-      .filter((link) => link.peerDeviceId === peerDeviceId)
-      .map((link) => link.localWorktreeId),
-  );
-  const sides = new Map<string, LocalSide>();
-  projects.forEach((project, i) => {
-    const query = worktreeQueries[i];
-    if (project.pathExists === false || query?.error) return;
-    for (const worktree of query?.data ?? []) {
-      if (!paired.has(worktree.id)) continue;
-      sides.set(worktree.id, {
-        worktree,
-        project,
-        showPrimaryInInbox: showPrimaryInInbox(configQueries[i]?.data),
-      });
-    }
-  });
-  return sides;
+// A worktree wherever it is. Its id is only unique on its device: a
+// repo at the same path on two machines has the same ids on both.
+export interface WorktreeAt {
+  deviceId: string;
+  worktreeId: string;
 }
 
-// The pairs as the builders look them up: the local worktree each
-// peer row (device, worktree) folds into, and the pair each local
-// worktree is in.
-export function mirrorPairsOf(mirrors: readonly MirrorLink[]): {
-  peerRowsFolded: Map<string, string>;
-  peerOfLocal: Map<string, MirrorLink>;
+// What the builders look a worktree up by, on any device.
+export const worktreeAt = (deviceId: string, worktreeId: string) =>
+  `${deviceId}/${worktreeId}`;
+
+// A mirrored pair as the views fold it: one worktree on two machines,
+// drawn as the kept side's row, which wears the folded side's device.
+export interface MirrorPair {
+  kept: WorktreeAt;
+  folded: WorktreeAt;
+}
+
+// The pairs as the builders look them up, by worktreeAt: the kept side
+// each folded worktree folds into, and the folded side each kept
+// worktree stands for.
+export function mirrorPairsOf(pairs: readonly MirrorPair[]): {
+  keptOf: Map<string, string>;
+  foldedOf: Map<string, WorktreeAt>;
 } {
-  const peerRowsFolded = new Map<string, string>();
-  const peerOfLocal = new Map<string, MirrorLink>();
-  for (const link of mirrors) {
-    peerRowsFolded.set(
-      remoteWorktreeKey(link.peerDeviceId, link.peerWorktreeId),
-      link.localWorktreeId,
-    );
-    peerOfLocal.set(link.localWorktreeId, link);
+  const keptOf = new Map<string, string>();
+  const foldedOf = new Map<string, WorktreeAt>();
+  for (const { kept, folded } of pairs) {
+    const keptAt = worktreeAt(kept.deviceId, kept.worktreeId);
+    keptOf.set(worktreeAt(folded.deviceId, folded.worktreeId), keptAt);
+    foldedOf.set(keptAt, folded);
   }
-  return { peerRowsFolded, peerOfLocal };
+  return { keptOf, foldedOf };
 }
 
-// The badge a local row wears for the peer it is mirrored with: the
-// peer's own when the registry knows it (its label and tone), else
-// unnamed. Shared by both builders so a pair reads the same in each.
-export function mirrorBadgeLookup(
-  peerOfLocal: ReadonlyMap<string, MirrorLink>,
+// The badge a kept row wears for the device its pair folded away: the
+// device's own when the registry knows it (its label and tone), else
+// unnamed. Shared by the builders so a pair reads the same in each.
+export function mirrorBadgeOf(
+  folded: WorktreeAt | undefined,
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>,
-): (worktree: Worktree) => SidebarDeviceBadge | undefined {
-  return (worktree) => {
-    const peer = peerOfLocal.get(worktree.id)?.peerDeviceId;
-    if (peer === undefined) return undefined;
-    return (
-      deviceBadges.get(peer) ?? {
-        deviceId: peer,
-        label: UNNAMED_DEVICE,
-        icon: MACHINE_FALLBACK_ICON,
-        tone: "slate",
-        reachable: false,
-      }
-    );
-  };
+): SidebarDeviceBadge | undefined {
+  if (folded === undefined) return undefined;
+  return (
+    deviceBadges.get(folded.deviceId) ?? {
+      deviceId: folded.deviceId,
+      label: UNNAMED_DEVICE,
+      icon: MACHINE_FALLBACK_ICON,
+      tone: "slate",
+      reachable: false,
+    }
+  );
+}
+
+// Whether a worktree files under the device filter (`picked`, null for
+// every device): one on the picked device does, and so does one paired
+// with one there, since a pair is one worktree on two machines and is
+// on either one's filter. The builders then fold it as they do under
+// every device.
+export function deviceFiling(
+  picked: string | null,
+  pairs: readonly MirrorPair[],
+): (deviceId: string, worktreeId: string) => boolean {
+  const paired = new Set<string>();
+  for (const { kept, folded } of pairs) {
+    if (kept.deviceId === picked)
+      paired.add(worktreeAt(folded.deviceId, folded.worktreeId));
+    if (folded.deviceId === picked)
+      paired.add(worktreeAt(kept.deviceId, kept.worktreeId));
+  }
+  return (deviceId, worktreeId) =>
+    picked === null ||
+    deviceId === picked ||
+    paired.has(worktreeAt(deviceId, worktreeId));
 }
 
 // Which fold a worktree sits behind in its group, if any. An agent's
@@ -198,70 +159,68 @@ export function worktreeShelfOf(
   return null;
 }
 
-// Whether a local project takes the peers' checkouts of its repo.
-// Claimed by identity even while still loading, so the project's
-// remote worktrees stay under it instead of reappearing as a duplicate
-// peer-only group. A missing local project
-// claims nothing: its remote counterpart is alive and belongs under
-// its own header.
-export const claimsPeers = (
-  project: Project,
-): project is Project & { identity: string } =>
-  project.pathExists !== false && project.identity != null;
-
-// The key a group goes by: what the peers' checkouts are grouped
-// under, and what the shell keeps the open project and the group's
-// shelf reveals by. The repo identity when the project has one, so
-// every checkout of a repo is one group. A
-// peer's project with no identity can only group with itself, so its
-// device names it (peerProjectKey). A local project that claims no
-// peers (no identity, or missing on disk) is its own group, by id.
-// `deviceId` is the peer holding the project, undefined for this
-// machine's.
-export function projectGroupKey(
-  project: Project,
-  deviceId: string | undefined,
-): string {
-  if (deviceId === undefined)
-    return claimsPeers(project) ? project.identity : project.id;
-  return project.identity ?? peerProjectKey(deviceId, project.id);
+// The key a group goes by: what every device's checkouts of a repo are
+// grouped under, and what the shell keeps the open project, its folds
+// and its pin by. The repo identity when the project has one. A peer's
+// project with no identity can only group with itself, so its device
+// names it (peerProjectKey). This machine's project with none, or
+// missing on disk, is its own group, by id: a missing one takes none
+// of the peers' checkouts, which are alive and belong under their own
+// header. One still loading groups by identity all the same, so the
+// peers' checkouts stay under it.
+export function projectGroupKey(project: Project, device: DeviceRef): string {
+  if (!device.isThisDevice)
+    return project.identity ?? peerProjectKey(device.deviceId, project.id);
+  return project.pathExists !== false && project.identity != null
+    ? project.identity
+    : project.id;
 }
 
-// A peer-only group's id: its key (projectGroupKey) behind a prefix,
-// so it can never collide with a local project's id and the shell can
-// read the key back off a toggle.
-const REMOTE_GROUP_PREFIX = "rp:";
-export const remoteGroupId = (groupKey: string) =>
-  `${REMOTE_GROUP_PREFIX}${groupKey}`;
-export const remoteGroupKeyOf = (groupId: string): string | undefined =>
-  groupId.startsWith(REMOTE_GROUP_PREFIX)
-    ? groupId.slice(REMOTE_GROUP_PREFIX.length)
-    : undefined;
+// The key an item's project groups under (projectGroupKey).
+export const groupKeyOf = ({ project, device }: ForestItem) =>
+  projectGroupKey(project, device);
 
-// Device-qualified: the same repo pulled to two machines can carry
-// the same worktree id on both. Shared with the inbox builder so a
-// peer's row has one key in both views.
-export const remoteWorktreeKey = (deviceId: string, worktreeId: string) =>
-  `rw:${deviceId}:${worktreeId}`;
+// The groups a forest's items fall into, in the items' order: one per
+// group key, every device's checkout of a repo together, led by the
+// first. Items come this machine's first, so a group this machine holds
+// is led by its checkout. A repo registered twice here is two groups
+// under one key, the later going by its project's id, the one thing
+// that can't collide with a key or another project here.
+export interface ForestGroup {
+  id: string;
+  key: string;
+  items: [ForestItem, ...ForestItem[]];
+}
 
-// A worktree's row key wherever it lives: this machine's (deviceId
-// undefined) or a peer's. One spelling for the tree, the inbox and the
-// ⌘K palette, so a worktree has one identity in all three.
-export const worktreeRowKey = (
-  deviceId: string | undefined,
-  worktreeId: string,
-) =>
-  deviceId === undefined
+export function forestGroups(items: readonly ForestItem[]): ForestGroup[] {
+  const groups: ForestGroup[] = [];
+  const byKey = new Map<string, ForestGroup>();
+  for (const item of items) {
+    const key = groupKeyOf(item);
+    const held = byKey.get(key);
+    const again =
+      item.device.isThisDevice &&
+      held?.items.some((other) => other.device.isThisDevice);
+    if (held && !again) {
+      held.items.push(item);
+      continue;
+    }
+    const group: ForestGroup = {
+      id: held ? item.project.id : key,
+      key,
+      items: [item],
+    };
+    if (!held) byKey.set(key, group);
+    groups.push(group);
+  }
+  return groups;
+}
+
+// A worktree's row key wherever it lives: this machine's or a peer's,
+// whose is device-qualified (worktreeAt). One spelling for the tree,
+// the inbox and the palette, so a worktree has one identity in all
+// three, and the one the palette's visits are kept by.
+export const worktreeRowKey = (device: DeviceRef, worktreeId: string) =>
+  device.isThisDevice
     ? `w:${worktreeId}`
-    : remoteWorktreeKey(deviceId, worktreeId);
-
-// A peer's badge, as the rows and menus draw it.
-export function deviceBadgeOf(item: RemoteForestItem): SidebarDeviceBadge {
-  return {
-    deviceId: item.deviceId,
-    label: item.deviceLabel,
-    icon: item.deviceIcon,
-    tone: item.tone,
-    reachable: item.reachable,
-  };
-}
+    : `rw:${device.deviceId}:${worktreeId}`;

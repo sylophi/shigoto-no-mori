@@ -11,12 +11,7 @@ import {
 } from "@tanstack/react-router";
 import { inboxTopRow } from "@/components/sidebar/inbox/inboxOrder";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import {
-  routeDeviceId,
-  rowDeviceId,
-  WORKTREE_ROUTE_PATHS,
-  type WorktreeDialog,
-} from "@/lib/routePaths";
+import { WORKTREE_ROUTE_PATHS, type WorktreeDialog } from "@/lib/routePaths";
 import { paramToSlot, slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 import {
   drawerKey,
@@ -24,7 +19,6 @@ import {
   openTerminalTab,
 } from "@/store/terminalDrawer";
 import { terminalsAtom } from "@/hooks/terminals/useTerminals";
-import { useApi } from "@/lib/runtime/pageApi";
 import { useRegistry, whenViewShows } from "@/lib/runtime/viewHooks";
 
 // The worktree pages' params, read non-strictly because the pages
@@ -55,7 +49,6 @@ export function useWorktreeNav() {
   const navigate = useNavigate();
   const matchRoute = useMatchRoute();
   const { deviceId } = useHostScope();
-  const localDeviceId = useApi().deviceId;
   const registry = useRegistry();
 
   // `on` names the device whose page to open. The router can only
@@ -242,15 +235,10 @@ export function useWorktreeNav() {
     },
 
     // Any worktree page on a NAMED machine, whatever the surrounding
-    // scope: this one's for undefined (a row's spelling, routeDeviceId),
-    // else that peer's. For a surface that spans every device at once
-    // (the ⌘K palette).
-    toPageOn(
-      on: string | undefined,
-      page: WorktreePage,
-      params: WorktreePageParams,
-    ) {
-      goOn(routeDeviceId(localDeviceId, on), page, params);
+    // scope. For a surface that spans every device at once (the ⌘K
+    // palette).
+    toPageOn(on: string, page: WorktreePage, params: WorktreePageParams) {
+      goOn(on, page, params);
     },
 
     // Where "leave this worktree's pages" lands. While the sidebar
@@ -261,10 +249,10 @@ export function useWorktreeNav() {
     // the root is the merged tree's home either way (the web shell's
     // root dispatches to /account).
     toFallback(gone: readonly string[], replace = false) {
-      const next = inboxTopRow(rowDeviceId(localDeviceId, deviceId), gone);
+      const next = inboxTopRow(deviceId, gone);
       if (next) {
         goOn(
-          routeDeviceId(localDeviceId, next.device?.deviceId),
+          next.deviceId,
           "detail",
           { projectId: next.project.id, worktreeId: next.worktree.id },
           replace,

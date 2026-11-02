@@ -10,16 +10,17 @@ import {
   WorktreeRowView,
 } from "@shigomori/ui/views/sidebar/WorktreeRowView.tsx";
 
-export function WorktreeRow({ mirrorWorktreeId, ...props }: WorktreeRowProps) {
-  const entry = useWorktreeEntry(props.worktree, props.device, {
-    deviceId: props.mirror?.deviceId,
-    worktreeId: mirrorWorktreeId,
-  });
+export function WorktreeRow({
+  deviceId,
+  mirrorWorktreeId,
+  ...props
+}: WorktreeRowProps & { deviceId: string }) {
+  const entry = useWorktreeEntry({ ...props, deviceId, mirrorWorktreeId });
   return (
     <WorktreeMenu
       worktree={props.worktree}
       pr={props.pr}
-      deviceId={props.device?.deviceId}
+      deviceId={deviceId}
       row={<WorktreeRowView {...props} entry={entry} />}
     />
   );

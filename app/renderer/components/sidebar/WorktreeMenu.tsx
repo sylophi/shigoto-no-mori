@@ -25,7 +25,7 @@ import {
   type TransferOffers,
 } from "@/components/worktreeDetail/TransferActions";
 import { useProjects } from "@/hooks/projects/useProjects";
-import { useCommandableDeviceApi } from "@/hooks/remote/useCommandAccess";
+import { useRowHostApi } from "@/hooks/remote/useCommandAccess";
 import { MaybeHostScope, useHostScope } from "@/hooks/remote/useHostScope";
 import {
   CONFIRM_DESTRUCTIVE_MS,
@@ -49,8 +49,8 @@ type DeleteArm = ReturnType<typeof useConfirmTwice>;
 interface WorktreeMenuProps {
   worktree: Worktree;
   pr: PullRequest | undefined;
-  // The peer the worktree lives on, absent for this machine's own.
-  deviceId: string | undefined;
+  // The device the worktree lives on.
+  deviceId: string;
   // The inbox's: the menu leads with the way to it in the tree. The
   // tree's rows sit under their project already.
   project?: Project;
@@ -84,8 +84,7 @@ function MenuItems({
   project,
   deleteArm,
 }: WorktreeMenuProps & { deleteArm: DeleteArm }) {
-  const peerApi = useCommandableDeviceApi(deviceId);
-  const commandable = deviceId === undefined || peerApi !== undefined;
+  const api = useRowHostApi(deviceId);
   const goToProject = useGoToProject();
   return (
     <>
@@ -95,8 +94,8 @@ function MenuItems({
         path={worktree.path}
         branch={worktree.detached ? undefined : worktree.branch}
       />
-      {commandable && (
-        <MaybeHostScope deviceId={deviceId ?? ""} api={peerApi}>
+      {api !== undefined && (
+        <MaybeHostScope deviceId={deviceId} api={api}>
           <TransferItems worktree={worktree} />
           <ManageItems worktree={worktree} deleteArm={deleteArm} />
         </MaybeHostScope>

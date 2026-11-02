@@ -1,8 +1,8 @@
-// What the forest is built from: this machine's projects and their
-// listings, every peer's forest, and the device filter's narrowing of
-// them. One hook for the sidebar and the home page's grid of projects
-// (home/ProjectGrid.tsx), so the grid lists the very projects the
-// sidebar's list does, in its order, narrowed the same way.
+// What the forest is built from: every device's projects as items, the
+// mirrored pairs between them, and the device the filter picked. One
+// hook for the sidebar, the home page's grid of projects
+// (home/ProjectGrid.tsx) and the palette, so the three list the very
+// same projects, the grid in the list's order, narrowed the same way.
 import { useAllProjectShigomoriConfigs } from "@/hooks/config/useShigomoriConfig";
 import { useAllProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import { useProjects } from "@/hooks/projects/useProjects";
@@ -10,19 +10,19 @@ import {
   useGroupProjectsByOwner,
   useProjectSort,
 } from "@/hooks/projects/useProjectSort";
-import { useMirrorLinks } from "@/hooks/remote/useMirrors";
+import { useMirrorPairs } from "@/hooks/remote/useMirrors";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useClientFlag } from "@/hooks/config/useSidebarMarks";
 import { usePinnedProjects } from "@/hooks/sharedSettings/usePinnedProjects";
 import { useProjectFolders } from "@/hooks/sharedSettings/useProjectFolders";
 import { useWorktreePrefixes } from "@/hooks/sharedSettings/useWorktreePrefixes";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { type LocalSide, localSidesWith } from "@shigomori/ui/lib/forest.ts";
+import type { ForestItem } from "@shigomori/ui/lib/forest.ts";
+import { showPrimaryInInbox } from "@shigomori/ui/lib/showPrimaryInInbox.ts";
 import { sortProjects } from "@shigomori/ui/lib/sortProjects.ts";
 import { projectGroupOrder } from "@shigomori/ui/views/sidebar/projectGroupOrder.ts";
-import { useDeviceBadges } from "./deviceBadges";
+import { useDeviceBadges, useThisDevice } from "./deviceBadges";
 import { useDeviceFilter } from "./deviceFilter";
-import { useApi } from "@/lib/runtime/pageApi";
 
 export function useForestSources({
   arrangeMode = false,
@@ -34,7 +34,6 @@ export function useForestSources({
   // The inbox's extra facts about the peers' worktrees.
   inboxFacts?: boolean;
 } = {}) {
-  const localDeviceId = useApi().deviceId;
   const { data: projects = [], isLoading } = useProjects();
   const sortMode = useProjectSort();
   const groupByOwner = useGroupProjectsByOwner();
@@ -46,90 +45,63 @@ export function useForestSources({
   // arrange mode and arrange mode is only reachable via the manual sort,
   // where the orders match.
   const orderedProjects = sortProjects(projects, sortMode);
-  // Read here rather than inside the row builders so the two views
-  // share one set of reads. Toggling the view then costs nothing: the
+  // Read here rather than inside the row builders so the views share
+  // one set of reads. Toggling the view then costs nothing: the
   // builders are plain functions over these results.
   const worktreeQueries = useAllProjectWorktrees(orderedProjects);
   const pullRequestQueries = useAllProjectPullRequests(orderedProjects);
-  // Peers' forests, merged in beside the local rows.
-  const {
-    items: remoteItems,
-    loading: remoteLoading,
-    devicesFailed,
-  } = useRemoteForests({
-    inboxFacts,
-  });
   const configQueries = useAllProjectShigomoriConfigs(orderedProjects);
-  // This device's mirrored pairs, so a pair reads as one row.
-  const mirrors = useMirrorLinks();
-  // Off the registry, not the rows: a local row mirrored with a peer
-  // the filter hides keeps naming it.
+  const remote = useRemoteForests({ inboxFacts });
+  // Every mirrored pair, so a pair reads as one row.
+  const mirrors = useMirrorPairs();
+  // Off the registry, not the rows: a kept row keeps naming the folded
+  // side's device while the filter hides that device's rows.
   const deviceBadges = useDeviceBadges();
+  const thisDevice = useThisDevice();
   const hiddenPrefixes = useWorktreePrefixes("hidden");
   const groupedPrefixes = useWorktreePrefixes("grouped");
   const allowAgentWorking = useClientFlag("allowAgentWorking");
-  // The device filter narrows what the builders are handed rather than
-  // what they do: one machine's rows only, the local ones or one
-  // peer's. The queries above stay subscribed either way, so a pick
-  // costs no refetch.
   const filter = useDeviceFilter();
   const activeFilter = arrangeMode ? null : filter.selected;
-  const showLocal =
-    activeFilter === null || activeFilter.deviceId === localDeviceId;
-  // Hidden means empty, for every local input at once: the query
-  // arrays too, since the builders count loading and failed listings
-  // off them.
-  const local = showLocal
-    ? {
-        projects: orderedProjects,
-        worktreeQueries,
-        pullRequestQueries,
-        configQueries,
-      }
-    : {
-        projects: [],
-        worktreeQueries: [],
-        pullRequestQueries: [],
-        configQueries: [],
+  // Every device's projects as one list, this machine's first. Only
+  // this machine's listing reports loading or failing, and only it keeps
+  // a project whose folder is gone, which the peers' reads leave out.
+  const items: ForestItem[] = [
+    ...orderedProjects.map((project, i): ForestItem => {
+      const query = worktreeQueries[i];
+      return {
+        device: thisDevice,
+        project,
+        worktrees: query?.data ?? [],
+        listing: query?.isLoading
+          ? "loading"
+          : query?.error
+            ? "error"
+            : "ready",
+        pullRequests: pullRequestQueries[i]?.data ?? {},
+        showPrimaryInInbox: showPrimaryInInbox(configQueries[i]?.data),
       };
-  // Narrowed to a peer, this device's sides of its pairs with it, which
-  // the builders list among the peer's rows.
-  const localSides =
-    activeFilter === null || showLocal
-      ? new Map<string, LocalSide>()
-      : localSidesWith(
-          activeFilter.deviceId,
-          mirrors,
-          orderedProjects,
-          worktreeQueries,
-          configQueries,
-        );
-  const shownRemote =
-    activeFilter === null
-      ? remoteItems
-      : remoteItems.filter((item) => item.deviceId === activeFilter.deviceId);
+    }),
+    ...remote.items,
+  ];
   return {
     // The stored order, which dragging writes.
     projects,
-    orderedProjects,
-    loading: isLoading || remoteLoading,
-    devicesFailed,
+    loading: isLoading || remote.loading,
+    devicesFailed: remote.devicesFailed,
+    // Failed listings on every device, whatever the filter shows.
+    failedListings:
+      worktreeQueries.filter((query) => query.error).length +
+      remote.listingsFailed,
     sortMode,
     groupByOwner,
-    worktreeQueries,
-    remoteItems,
+    items,
+    // The device the filter picked, null for every device, which the
+    // builders file by (deviceFiling).
+    deviceFilter: activeFilter?.deviceId ?? null,
     // Over every device's projects, not the filtered ones, so a pick
     // narrows the tree without reordering it.
-    order: projectGroupOrder({
-      projects: orderedProjects,
-      remote: remoteItems,
-      sortMode,
-      pinned,
-      folders,
-    }),
-    local,
-    localSides,
-    shownRemote,
+    order: projectGroupOrder({ items, sortMode, pinned, folders }),
     mirrors,
     deviceBadges,
     hiddenPrefixes,

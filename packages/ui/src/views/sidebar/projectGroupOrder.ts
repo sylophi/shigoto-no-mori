@@ -1,21 +1,14 @@
 import type { Project, ProjectSortMode } from "@shigomori/contracts/schemas";
-import {
-  claimsPeers,
-  projectGroupKey,
-  type RemoteForestItem,
-  remoteGroupId,
-} from "../../lib/forest.ts";
+import { type ForestItem, forestGroups } from "../../lib/forest.ts";
 import { sortByProject } from "../../lib/sortProjects.ts";
 import { type Owner, ownerOf, type ProjectListRow } from "./sidebarRow.ts";
 
-// Group rank by group id. A repo this machine holds is also ranked
-// under the peer-only id it would have, so narrowed to a peer that
-// holds it too, the peer's group keeps the local project's place. And
-// owner rank and header label by owner key (ownerOf), for the list
-// split by owner. And the pinned groups' keys (projectGroupKey), which
-// lead the list wherever their rank puts them. And the folder each
-// group is filed in, by group key, which gathers the groups of one
-// owner filed in the same one under a header, and those headers.
+// Group rank by group id (forestGroups). And owner rank and header
+// label by owner key (ownerOf), for the list split by owner. And the
+// pinned groups' keys (projectGroupKey), which lead the list wherever
+// their rank puts them. And the folder each group is filed in, by group
+// key, which gathers the groups of one owner filed in the same one
+// under a header, and those headers.
 export interface ProjectGroupOrder {
   groups: ReadonlyMap<string, number>;
   owners: ReadonlyMap<string, { rank: number; label: string }>;
@@ -37,45 +30,31 @@ export interface ProjectGroupOrder {
 // host only when the name is an owner on another host too, decided
 // over every device too so picking one never relabels a header.
 export function projectGroupOrder({
-  projects,
-  remote,
+  items,
   sortMode,
   pinned,
   folders,
 }: {
-  // This machine's projects as buildSidebarRows is handed them, so a
-  // repo registered twice here has its peers claimed by the same
-  // project in both passes.
-  projects: readonly Project[];
-  remote: readonly RemoteForestItem[];
+  // Every device's items, as the builders are handed them before the
+  // filter.
+  items: readonly ForestItem[];
   sortMode: ProjectSortMode;
   pinned: ReadonlySet<string>;
   folders: ReadonlyMap<string, string>;
 }): ProjectGroupOrder {
-  const { claimed, peerOnly } = claimRemote(projects, remote);
-  const entries = projects.map((project, i) => ({
-    groupKey: projectGroupKey(project, undefined),
-    groupIds: claimsPeers(project)
-      ? [project.id, remoteGroupId(project.identity)]
-      : [project.id],
-    project: withMergedUsage(project, claimed[i] ?? []),
-  }));
-  for (const [groupKey, [first, ...rest]] of peerOnly) {
-    if (!first) continue;
-    entries.push({
-      groupKey,
-      groupIds: [remoteGroupId(groupKey)],
-      project: withMergedUsage(first.project, rest),
-    });
-  }
+  const entries = forestGroups(items).map(
+    ({ id, key, items: [lead, ...rest] }) => ({
+      groupKey: key,
+      groupId: id,
+      project: withMergedUsage(lead.project, rest),
+    }),
+  );
   const groups = new Map<string, number>();
   // Owners by key, in the order their projects lead them in.
   const owners = new Map<string, Owner>();
   sortByProject(entries, sortMode, (entry) => entry.project).forEach(
     (entry, rank) => {
-      // A repo registered twice here keeps its first project's place.
-      for (const id of entry.groupIds)
-        if (!groups.has(id)) groups.set(id, rank);
+      groups.set(entry.groupId, rank);
       const owner = ownerOf(entry.project);
       if (owner && !owners.has(owner.key)) owners.set(owner.key, owner);
     },
@@ -136,7 +115,7 @@ function filedFolders(
 // newest use anywhere, and the uses everywhere summed.
 function withMergedUsage(
   project: Project,
-  others: readonly RemoteForestItem[],
+  others: readonly ForestItem[],
 ): Project {
   return {
     ...project,
@@ -149,38 +128,6 @@ function withMergedUsage(
       project.recentCount ?? 0,
     ),
   };
-}
-
-// The peers' checkouts split between the groups: each local project's
-// claim (aligned with `projects`), then the rest by group key. Remote
-// items are grouped up front by repo identity (an identity-less
-// project can only group with itself), and the local pass claims
-// groups by `get` + `delete`, so whatever remains IS the leftover set
-// and a group can never be claimed twice. A peer holding the repo with
-// no worktrees to show still joins its group: it is a device the
-// header's actions can create on, and a local project with nothing
-// under it keeps its header too.
-export function claimRemote(
-  projects: readonly Project[],
-  remote: readonly RemoteForestItem[],
-): {
-  claimed: RemoteForestItem[][];
-  peerOnly: Map<string, RemoteForestItem[]>;
-} {
-  const peerOnly = new Map<string, RemoteForestItem[]>();
-  for (const item of remote) {
-    const groupKey = projectGroupKey(item.project, item.deviceId);
-    const group = peerOnly.get(groupKey);
-    if (group) group.push(item);
-    else peerOnly.set(groupKey, [item]);
-  }
-  const claimed = projects.map((project) => {
-    if (!claimsPeers(project)) return [];
-    const items = peerOnly.get(project.identity) ?? [];
-    peerOnly.delete(project.identity);
-    return items;
-  });
-  return { claimed, peerOnly };
 }
 
 // A section's folders by name, in name order, each with the group keys

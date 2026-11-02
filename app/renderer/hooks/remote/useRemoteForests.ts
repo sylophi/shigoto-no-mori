@@ -10,7 +10,7 @@
 // the primary shows). A device stays in the list whether or not a
 // direct session is up: its views are asked again until one is, and
 // meanwhile read what they last had.
-import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";
+import type { ForestItem } from "@shigomori/ui/lib/forest.ts";
 import { useQueries } from "@tanstack/react-query";
 import type { Project } from "@shigomori/contracts/schemas";
 import { shigomoriConfigQueryOptions } from "@/hooks/config/useShigomoriConfig";
@@ -70,7 +70,9 @@ export function useViewsWanted(
 }
 
 export interface RemoteForests {
-  items: RemoteForestItem[];
+  // Every peer's projects, ready as far as this page goes: a peer's rows
+  // are its last known state whether or not its listing is in.
+  items: ForestItem[];
   // True while any remote listing is actually fetching (isLoading, not
   // isPending: a disconnected device's disabled queries stay pending
   // forever). The web sidebar's empty state hangs on this so a slow
@@ -78,6 +80,9 @@ export interface RemoteForests {
   loading: boolean;
   // The peers whose projects could not be read, by name.
   devicesFailed: readonly string[];
+  // How many of the items' worktree listings failed, for the sidebar's
+  // coalesced toast.
+  listingsFailed: number;
 }
 
 export interface RemoteForestsOptions {
@@ -171,22 +176,27 @@ export function useRemoteForests(
   });
   return {
     items: pairs.map(({ device, project }, index) => {
-      const status = deviceStatusView(device.status);
+      const { reachable, tone } = deviceStatusView(device.status);
       return {
-        deviceId: device.deviceId,
-        deviceLabel: device.label,
-        deviceIcon: device.icon,
-        reachable: status.reachable,
-        tone: status.tone,
+        device: {
+          deviceId: device.deviceId,
+          label: device.label,
+          icon: device.icon,
+          tone,
+          reachable,
+          isThisDevice: false,
+        },
         project,
         worktrees: worktreeQueries[index]?.data ?? [],
+        listing: "ready",
         pullRequests: pullRequestQueries[index]?.data ?? {},
         showPrimaryInInbox: showPrimaryInInbox(configQueries[index]?.data),
-        worktreesError: worktreeQueries[index]?.error != null,
       };
     }),
     loading:
       projectsLoading || worktreeQueries.some((query) => query.isLoading),
     devicesFailed: failed,
+    listingsFailed: worktreeQueries.filter((query) => query.error != null)
+      .length,
   };
 }

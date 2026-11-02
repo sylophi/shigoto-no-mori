@@ -130,17 +130,14 @@ function Forest({
   // narrows: creating is not browsing.
   const {
     projects,
-    orderedProjects,
     loading,
     sortMode,
     groupByOwner,
-    worktreeQueries,
-    remoteItems,
+    items,
+    deviceFilter,
     devicesFailed,
+    failedListings,
     order,
-    local,
-    localSides,
-    shownRemote,
     mirrors,
     deviceBadges,
     hiddenPrefixes,
@@ -154,7 +151,7 @@ function Forest({
   const reorderProjects = useReorderProjects();
   // Off arranging, the drag files projects into folders.
   const filing = useFolderDragging();
-  const folds = useForestFolds(projects);
+  const folds = useForestFolds();
   const [activeId, setActiveId] = useState<string | null>(null);
   // Stepped aside for a page's list (SidebarTakeover).
   const takenOver = useSidebarTakenOver();
@@ -169,7 +166,7 @@ function Forest({
   // goes into the project of the page on screen (openProject.ts).
   // Inline, it shows every project's worktrees under it instead, each
   // project folding in place.
-  const { openKey, onScreenKey } = useOpenProject(projects, remoteItems);
+  const { openKey, onScreenKey } = useOpenProject(items);
   const inline = useClientFlag("inlineWorktrees");
   const worktreeSort = useWorktreeSorts();
   // The level last asked for here, by picking a project or going back,
@@ -182,10 +179,9 @@ function Forest({
   };
   const view: SidebarViewModel = inbox
     ? buildInboxRows({
-        ...local,
-        remote: shownRemote,
+        items,
+        deviceFilter,
         mirrors,
-        localSides,
         deviceBadges,
         openShelves: folds.inboxShelvesOpen,
         hiddenPrefixes,
@@ -195,7 +191,8 @@ function Forest({
         pinWaiting: markAgentsWaiting,
       })
     : buildSidebarRows({
-        ...local,
+        items,
+        deviceFilter,
         openKey,
         inline: inline ? { collapsed: folds.collapsed } : null,
         worktreeSort,
@@ -210,9 +207,7 @@ function Forest({
         arrangeMode,
         byOwner: groupByOwner ? { shut: folds.shutOwners } : null,
         shutFolders: folds.shutFolders,
-        remote: shownRemote,
         mirrors,
-        localSides,
         deviceBadges,
       });
   const { rows, pinned, level } = view;
@@ -230,10 +225,7 @@ function Forest({
   // filter shows their rows. Without it a peer's project would
   // silently vanish from the tree, and a narrowed forest must not also
   // mute a failure behind it.
-  useFanOutErrorToast(
-    worktreeQueries.filter((q) => q.error).length +
-      remoteItems.filter((item) => item.worktreesError).length,
-  );
+  useFanOutErrorToast(failedListings);
   useUnreachedDevicesToast(devicesFailed);
 
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -270,6 +262,7 @@ function Forest({
     empty: rows.length === 0 && pinned === undefined,
     noProjects: projects.length === 0,
     viewMessage: view.emptyMessage,
+    failed: failedListings > 0,
     hasLocalHost,
   });
 
@@ -345,8 +338,7 @@ function Forest({
           <InboxCreateRowView
             button={
               <NewWorktreeButton
-                projects={orderedProjects}
-                remote={remoteItems}
+                items={items}
                 order={order}
                 byOwner={groupByOwner}
               />
@@ -385,7 +377,9 @@ function Forest({
               : filing.handlers)}
           >
             <SortableContext
-              items={orderedProjects.map((p) => p.id)}
+              items={items.flatMap((item) =>
+                item.device.isThisDevice ? [item.project.id] : [],
+              )}
               strategy={verticalListSortingStrategy}
             >
               {pinnedRow}
@@ -413,13 +407,15 @@ function Forest({
 // projects the rows can still be about to arrive from a peer, and a
 // slow device hub must not read as "no projects". A forest narrowed to
 // one machine with nothing in it says which machine it looked at,
-// since the rows it hides are the obvious thing to go looking for.
+// since the rows it hides are the obvious thing to go looking for. A
+// failed listing has its toast, so the view says nothing over it.
 function emptyForestMessage({
   loading,
   narrowedTo,
   empty,
   noProjects,
   viewMessage,
+  failed,
   hasLocalHost,
 }: {
   loading: boolean;
@@ -428,6 +424,7 @@ function emptyForestMessage({
   empty: boolean;
   noProjects: boolean;
   viewMessage: string | null;
+  failed: boolean;
   hasLocalHost: boolean;
 }): string | null {
   if (loading) return null;
@@ -438,5 +435,5 @@ function emptyForestMessage({
       ? "No projects yet."
       : "No reachable devices with projects yet. Open the Devices page to see this account's machines.";
   }
-  return viewMessage;
+  return failed ? null : viewMessage;
 }

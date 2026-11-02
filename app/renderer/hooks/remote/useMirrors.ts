@@ -10,7 +10,11 @@
 // through the scope they are mounted under, which is that device's: its
 // own page, or the far end's page re-scoped to it
 // (useWorktreeMirrorLinks).
-import type { MirrorLink } from "@shigomori/ui/lib/forest.ts";
+import {
+  type MirrorPair,
+  type WorktreeAt,
+  worktreeAt,
+} from "@shigomori/ui/lib/forest.ts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { hostViewAtom } from "@/lib/runtime/atoms";
@@ -43,7 +47,9 @@ import {
   useDeviceName,
   useEveryHost,
   useRemoteDeviceApi,
+  useRemoteDevices,
 } from "@/hooks/remote/useRemoteDevices";
+import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import { useHasLocalHost } from "@/lib/localHost";
 import { useViewsWanted } from "@/hooks/remote/useRemoteForests";
 import { invalidateHostDevice } from "@/lib/queryKeys";
@@ -147,75 +153,60 @@ export function useCopyOff(
   return off === undefined ? undefined : { device, off };
 }
 
-function mirrorLinksOf(mirrors: MirrorListResult): MirrorLink[] {
-  const links: MirrorLink[] = [];
-  for (const pair of [...mirrors.sessions, ...mirrors.starting]) {
-    if (pair.localWorktreeId === "") continue;
-    links.push({
-      peerDeviceId: pair.deviceId,
-      peerWorktreeId: pair.worktreeId,
-      localWorktreeId: pair.localWorktreeId,
-    });
-  }
-  for (const stream of mirrors.serving) {
-    if (stream.peerWorktreeId === undefined) continue;
-    links.push({
-      peerDeviceId: stream.peerDeviceId,
-      peerWorktreeId: stream.peerWorktreeId,
-      localWorktreeId: stream.worktreeId,
-    });
-  }
-  return links;
-}
-
-const NO_LINKS: MirrorLink[] = [];
-
-const linkKey = (link: MirrorLink) =>
-  `${link.peerDeviceId}:${link.peerWorktreeId}:${link.localWorktreeId}`;
-
-// The pairs a peer's list adds for the scoped device: the sessions
-// that peer runs against the scoped device's worktrees, and the ones it
-// is starting into them. A paused or disconnected session serves no
-// stream here, so the served set alone would unfold the pair exactly
-// while it needs attention.
-function peerMirrorLinksOf(
-  peerDeviceId: string,
-  scopedDeviceId: string,
-  mirrors: MirrorListResult,
-): MirrorLink[] {
-  return [...mirrors.sessions, ...mirrors.starting]
-    .filter((pair) => pair.deviceId === scopedDeviceId)
-    .map((pair) => ({
-      peerDeviceId,
-      peerWorktreeId: pair.localWorktreeId,
-      localWorktreeId: pair.worktreeId,
-    }));
-}
-
-// The pairs alone, for the always-mounted sidebar: the scoped device's
-// own projection and every other host's, merged, both pure functions of
-// the lists the compiler memoizes, so the rows are rebuilt only when a
-// list moves. With nothing to add from the others, the own projection
-// is returned as is.
-export function useMirrorLinks(): MirrorLink[] {
-  const { hasHost, deviceId } = useHostScope();
-  const ownList = useDeviceMirrors(deviceId, hasHost);
-  const others = useOtherHostMirrors(deviceId, (list, peerDeviceId) =>
-    peerMirrorLinksOf(peerDeviceId, deviceId, list),
+// Every mirrored pair as the views fold it, off every host's list. A
+// session on its runner pairs the runner's original with the copy,
+// starting or not: a paused or disconnected one serves no stream, so
+// the served set alone would unfold the pair exactly while it needs
+// attention. A stream the copy's host serves pairs the copy with its
+// original, when the runner named it, so the pair holds while the
+// runner's list is unread. The kept side is this machine's when it
+// holds one: what a window here reads as the pair's row is its own
+// worktree. One holding neither side (the web client, a pair between
+// two peers) reads the side whose device can be reached, so a sleeping
+// machine's faded row doesn't stand for a live copy, and the original
+// when both or neither can.
+export function useMirrorPairs(): MirrorPair[] {
+  const thisDeviceId = useApi().deviceId;
+  const hosts = useEveryHostMirrors();
+  // Off the registry the rows' badges read (useDeviceBadges).
+  const reachable = new Set(
+    useRemoteDevices()
+      .filter((device) => deviceStatusView(device.status).reachable)
+      .map((device) => device.deviceId),
   );
-  const own = ownList === undefined ? NO_LINKS : mirrorLinksOf(ownList);
-  if (others.every((other) => (other.data?.length ?? 0) === 0)) return own;
-  const seen = new Set(own.map(linkKey));
-  const links = [...own];
-  for (const other of others) {
-    for (const link of other.data ?? NO_LINKS) {
-      const key = linkKey(link);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      links.push(link);
+  const keptOf = (original: WorktreeAt, copy: WorktreeAt) => {
+    if (original.deviceId === thisDeviceId) return original;
+    if (copy.deviceId === thisDeviceId) return copy;
+    return reachable.has(original.deviceId) || !reachable.has(copy.deviceId)
+      ? original
+      : copy;
+  };
+  const pairs = new Map<string, MirrorPair>();
+  const add = (original: WorktreeAt, copy: WorktreeAt) => {
+    const kept = keptOf(original, copy);
+    pairs.set(
+      `${worktreeAt(original.deviceId, original.worktreeId)}>${worktreeAt(copy.deviceId, copy.worktreeId)}`,
+      { kept, folded: kept === copy ? original : copy },
+    );
+  };
+  for (const { deviceId, data } of hosts) {
+    if (data === undefined) continue;
+    for (const session of [...data.sessions, ...data.starting]) {
+      if (session.localWorktreeId === "") continue;
+      add(
+        { deviceId, worktreeId: session.localWorktreeId },
+        { deviceId: session.deviceId, worktreeId: session.worktreeId },
+      );
+    }
+    for (const stream of data.serving) {
+      if (stream.peerWorktreeId === undefined) continue;
+      add(
+        { deviceId: stream.peerDeviceId, worktreeId: stream.peerWorktreeId },
+        { deviceId, worktreeId: stream.worktreeId },
+      );
     }
   }
-  return links;
+  return [...pairs.values()];
 }
 
 const hostsMirrorsAtom = viewsOf((deviceId) => mirrorsAtom(deviceId));

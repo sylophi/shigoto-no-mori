@@ -12,14 +12,14 @@ import { VirtualRowView } from "@shigomori/ui/views/sidebar/SidebarRowsView.tsx"
 export interface RowHandlers {
   // A project picked off the list, by group key.
   onToggle: (groupKey: string) => void;
-  onToggleShelved: (groupId: string, shelf: GroupShelf) => void;
+  onToggleShelved: (groupKey: string, shelf: GroupShelf) => void;
   onToggleShelf: (shelf: InboxShelf) => void;
   // An owner's header opened or shut, by owner key (ownerOf).
   onToggleOwner: (ownerKey: string) => void;
   // A folder's header opened or shut, by its fold key.
   onToggleFolder: (foldKey: string) => void;
   // A prefix's group in the open project opened or shut.
-  onToggleWorktreeGroup: (groupId: string, prefix: string) => void;
+  onToggleWorktreeGroup: (groupKey: string, prefix: string) => void;
   // A prefix's group in the inbox opened or shut.
   onToggleInboxGroup: (prefix: string) => void;
   // The group key of the project the page on screen belongs to.
@@ -84,12 +84,5 @@ function projectIdForRow(row: SidebarRow): string | null {
     return null;
   // Rows inside a group report the group they render in, so hovering
   // one keeps its header's actions alive, whichever device it is on.
-  if (
-    row.kind === "worktree" ||
-    row.kind === "group-shelf" ||
-    row.kind === "worktree-group"
-  ) {
-    return row.groupId;
-  }
-  return row.projectId;
+  return row.groupId;
 }

@@ -75,12 +75,13 @@ export function RowContent({
           label={row.prefix}
           count={row.count}
           expanded={row.expanded}
-          onToggle={() => onToggleWorktreeGroup(row.groupId, row.prefix)}
+          onToggle={() => onToggleWorktreeGroup(row.groupKey, row.prefix)}
         />
       );
     case "worktree":
       return (
         <WorktreeRow
+          deviceId={row.deviceId}
           worktree={row.worktree}
           device={row.device}
           mirror={row.mirror}
@@ -98,6 +99,7 @@ export function RowContent({
           project={row.project}
           pr={row.pr}
           stack={row.stack}
+          deviceId={row.deviceId}
           device={row.device}
           mirror={row.mirror}
           mirrorWorktreeId={row.mirrorWorktreeId}
@@ -112,7 +114,7 @@ export function RowContent({
           shelf={row.shelf}
           count={row.count}
           expanded={row.expanded}
-          onToggle={() => onToggleShelved(row.groupId, row.shelf)}
+          onToggle={() => onToggleShelved(row.groupKey, row.shelf)}
         />
       );
     case "inbox-shelf":

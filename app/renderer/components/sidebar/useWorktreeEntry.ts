@@ -10,36 +10,38 @@ import { useWorktreeForwardTip } from "@/hooks/remote/usePortForwards";
 import { useResident } from "@/hooks/villagers/useResident";
 import type { SidebarDeviceBadge } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
 import {
-  routeDeviceId,
   WORKTREE_DETAIL_ROUTE_ID,
   WORKTREE_ROUTE_PATHS,
 } from "@/lib/routePaths";
-import { useApi } from "@/lib/runtime/pageApi";
 
 // What the two sidebar rows share in behaviour (their shared look is
 // WorktreeEntryView): "am I the open one", "what's running here",
 // "where does a click go" and which marks it wears have the same
 // answers in the tree and the inbox, and answering them twice is how
 // the two silently drift.
-// `deviceId` names the peer a remote row belongs to. Absent, the row
-// is this machine's. `mirror` names the peer's copy a local row stands
-// for too: its page (reached by the copies' tabs on the worktree page)
-// selects the row as well.
-export function useWorktreeEntry(
-  worktree: Worktree,
-  device?: SidebarDeviceBadge,
-  mirror: { deviceId?: string; worktreeId?: string } = {},
-): WorktreeEntry {
-  const deviceId = device?.deviceId;
-  const localDeviceId = useApi().deviceId;
-  const rowDeviceId = deviceId ?? localDeviceId;
+// `device` is a peer's row's badge, absent on this machine's. `mirror`
+// names the copy the row stands for too: its page (reached by the
+// copies' tabs on the worktree page) selects the row as well.
+export function useWorktreeEntry({
+  worktree,
+  deviceId,
+  device,
+  mirror,
+  mirrorWorktreeId,
+}: {
+  worktree: Worktree;
+  deviceId: string;
+  device?: SidebarDeviceBadge;
+  mirror?: SidebarDeviceBadge;
+  mirrorWorktreeId?: string;
+}): WorktreeEntry {
   const navigate = useNavigate();
-  const api = useRowHostApi(rowDeviceId);
-  const running = useWorktreeScriptActivity(worktree.id, rowDeviceId, api);
-  const terminal = useWorktreeTerminalMark(worktree.id, rowDeviceId, api);
+  const api = useRowHostApi(deviceId);
+  const running = useWorktreeScriptActivity(worktree.id, deviceId, api);
+  const terminal = useWorktreeTerminalMark(worktree.id, deviceId, api);
   const isDeleting = useIsDeletingWorktree(worktree.id, deviceId);
   const params = {
-    deviceId: routeDeviceId(localDeviceId, deviceId),
+    deviceId,
     projectId: worktree.projectId,
     worktreeId: worktree.id,
   };
@@ -53,9 +55,9 @@ export function useWorktreeEntry(
         (open.deviceId === params.deviceId &&
           open.projectId === params.projectId &&
           open.worktreeId === params.worktreeId) ||
-        (mirror.deviceId !== undefined &&
+        (mirror !== undefined &&
           open.deviceId === mirror.deviceId &&
-          open.worktreeId === mirror.worktreeId),
+          open.worktreeId === mirrorWorktreeId),
     }) === true;
   // A failure is only news off the worktree's pages (its console, diff
   // and commits all sit under the detail path): on them it is on screen.
@@ -70,7 +72,7 @@ export function useWorktreeEntry(
   const activity = running === "failed" && onScreen ? null : running;
 
   const resident = useResident(worktree);
-  const forwardTip = useWorktreeForwardTip(deviceId ?? "", worktree);
+  const forwardTip = useWorktreeForwardTip(deviceId, worktree);
   return {
     look: { isSelected, activity, terminal, isDeleting },
     open: () => void navigate({ to: WORKTREE_ROUTE_PATHS.detail, params }),

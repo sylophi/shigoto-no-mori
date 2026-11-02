@@ -16,18 +16,18 @@ import { useEffect } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import type { Project } from "@shigomori/contracts/schemas";
 import {
+  type ForestItem,
+  groupKeyOf,
   projectGroupKey,
-  type RemoteForestItem,
 } from "@shigomori/ui/lib/forest.ts";
+import { useApi } from "@/lib/runtime/pageApi";
 import { useSetSidebarView } from "@/hooks/projects/useSidebarView";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
-import { rowDeviceId } from "@/lib/routePaths";
 import { useWindowRoot } from "@/lib/themeRoot";
 import {
   createExternalStore,
   useExternalStore,
 } from "@shigomori/ui/lib/externalStore.ts";
-import { useApi } from "@/lib/runtime/pageApi";
 
 const store = createExternalStore<{
   // Null on the list.
@@ -46,17 +46,20 @@ export function setOpenProject(groupKey: string | null): void {
 }
 
 // The tree, open on a project: the inbox's way from a worktree to its
-// project. `deviceId` is the peer holding the project, undefined for
-// this machine's. On a phone the tree is a tab of its own.
-export function useGoToProject(): (
-  project: Project,
-  deviceId: string | undefined,
-) => void {
+// project, on the device holding it. On a phone the tree is a tab of
+// its own.
+export function useGoToProject(): (project: Project, deviceId: string) => void {
+  const localDeviceId = useApi().deviceId;
   const phone = usePhoneLayout();
   const navigate = useNavigate();
   const { mutate: setView } = useSetSidebarView();
   return (project, deviceId) => {
-    setOpenProject(projectGroupKey(project, deviceId));
+    setOpenProject(
+      projectGroupKey(project, {
+        deviceId,
+        isThisDevice: deviceId === localDeviceId,
+      }),
+    );
     if (phone) {
       void navigate({ to: "/forest/$view", params: { view: "projects" } });
     } else {
@@ -83,10 +86,7 @@ function withFollowed(root: HTMLElement, page: string | null) {
 // has to call this for the follow to happen: the forest itself on a
 // wide layout, and the phone layout's keepalive (AppShell), where the
 // forest is a tab that a worktree's page replaces.
-export function useOpenProject(
-  projects: readonly Project[],
-  remote: readonly RemoteForestItem[],
-): {
+export function useOpenProject(items: readonly ForestItem[]): {
   openKey: string | null;
   // The group key of the project the page on screen belongs to.
   // Undefined off a project's pages, and until the project is listed.
@@ -100,14 +100,11 @@ export function useOpenProject(
     deviceId === undefined || projectId === undefined
       ? null
       : `${deviceId}:${projectId}:${worktreeId ?? ""}`;
-  const localDeviceId = useApi().deviceId;
-  const onScreenKey = groupKeyOnScreen(
-    localDeviceId,
-    deviceId,
-    projectId,
-    projects,
-    remote,
+  const onScreen = items.find(
+    (item) =>
+      item.device.deviceId === deviceId && item.project.id === projectId,
   );
+  const onScreenKey = onScreen && groupKeyOf(onScreen);
   // Waits, render after render, for the page's project to be listed.
   const follow =
     page !== null && page !== followed && onScreenKey !== undefined;
@@ -135,23 +132,4 @@ export function usePageOnScreen(): {
   const projectId = useParams({ strict: false, select: (p) => p.projectId });
   const worktreeId = useParams({ strict: false, select: (p) => p.worktreeId });
   return { deviceId, projectId, worktreeId };
-}
-
-function groupKeyOnScreen(
-  localDeviceId: string,
-  deviceId: string | undefined,
-  projectId: string | undefined,
-  projects: readonly Project[],
-  remote: readonly RemoteForestItem[],
-): string | undefined {
-  if (deviceId === undefined || projectId === undefined) return undefined;
-  const peer = rowDeviceId(localDeviceId, deviceId);
-  if (peer === undefined) {
-    const project = projects.find((p) => p.id === projectId);
-    return project && projectGroupKey(project, undefined);
-  }
-  const item = remote.find(
-    (i) => i.deviceId === peer && i.project.id === projectId,
-  );
-  return item && projectGroupKey(item.project, peer);
 }

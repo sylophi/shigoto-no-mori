@@ -26,9 +26,9 @@ import type {
 
 // The sidebar's reading of a worktree: project and folder under the
 // branch with its last activity, its one most pressing status (the
-// sidebar's rows have the room for both), and the device badge a peer's
-// row wears (or the mirror badge a local pair wears). The letters the
-// query matched are marked.
+// sidebar's rows have the room for both), the device badge a peer's
+// row wears, and the mirror badge a pair's kept row wears. The letters
+// the query matched are marked.
 export function WorktreeRowView({
   entry,
   query,
@@ -89,9 +89,9 @@ export function WorktreeRowView({
           )}
           <HighlightView text={worktree.name} query={query} />
           {activeAt > 0 && ` · ${formatRelativeTime(activeAt, now)}`}
-          {status && ` · ${status}`}
         </>
       }
+      status={status && ` · ${status}`}
     >
       <PullRequestPillView pr={pr} />
       <StatusIndicatorView worktree={worktree} />
@@ -201,15 +201,26 @@ function PaletteRowLayoutView({
   icon,
   title,
   detail,
+  status,
   dim,
   children,
 }: {
   icon: ReactNode;
   title: ReactNode;
   detail?: ReactNode;
+  // Ends the detail line, kept whole when the rest of it truncates.
+  status?: string;
   dim?: boolean;
   children?: ReactNode;
 }) {
+  // The detail, truncating. Only a row with a status sets it in a line
+  // with the status after it, and a row without one keeps its detail
+  // one run of text.
+  const detailLine = (className: string) => (
+    <SimpleTooltip whenTruncated lazy tip={detail}>
+      <span className={cn("truncate", className)}>{detail}</span>
+    </SimpleTooltip>
+  );
   return (
     <div
       className={cn(
@@ -222,13 +233,15 @@ function PaletteRowLayoutView({
         <SimpleTooltip whenTruncated lazy tip={title}>
           <span className="truncate text-xs">{title}</span>
         </SimpleTooltip>
-        {detail && (
-          <SimpleTooltip whenTruncated lazy tip={detail}>
-            <span className="truncate text-3xs text-muted-foreground">
-              {detail}
+        {detail &&
+          (status ? (
+            <span className="flex min-w-0 text-3xs text-muted-foreground">
+              {detailLine("")}
+              <span className="shrink-0 whitespace-pre">{status}</span>
             </span>
-          </SimpleTooltip>
-        )}
+          ) : (
+            detailLine("text-3xs text-muted-foreground")
+          ))}
       </div>
       {children}
     </div>

@@ -13,11 +13,13 @@ import type { InboxShelf } from "../sidebar/sidebarRow.ts";
 export interface PaletteEntry {
   // The sidebar's own row key, so a worktree has one identity in both.
   key: string;
+  // The device it lives on.
+  deviceId: string;
   worktree: Worktree;
   project: Project;
   // The peer it lives on. Undefined for this machine's own.
   device: SidebarDeviceBadge | undefined;
-  // The peer a local worktree is mirrored with (its peer row folds in).
+  // The device it is mirrored with (that side's row folds in).
   mirror: SidebarDeviceBadge | undefined;
   // The pull request open (or once open) for its branch.
   pr: PullRequest | undefined;
@@ -35,7 +37,8 @@ export interface PaletteProject {
   key: string;
   // The checkout the row names: this device's when it has one.
   project: Project;
-  // The peer that checkout is on. Undefined for this machine's own.
+  // The device that checkout is on, and its badge when it is a peer.
+  deviceId: string;
   device: SidebarDeviceBadge | undefined;
   // Where ↩ goes: its worktree the list would put first. Undefined
   // for a project with none, whose ↩ is its new-worktree page.
