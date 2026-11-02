@@ -5,7 +5,7 @@
 // With no provider mounted the context resolves to the local device,
 // so the hooks behave identically outside a provider.
 //
-// Three categories deliberately do NOT route through here:
+// Two categories deliberately do NOT route through here:
 // - Client-scoped calls (dialog, shell, menu, nav, window, account,
 //   hub, clientConfig, portForward): they
 //   belong to the machine the window runs on, so their call sites keep
@@ -13,11 +13,6 @@
 // - Host broadcast subscriptions: they are boot-scoped, one watchHost
 //   per device (lib/hostWatch.ts) over that device's api, writing into
 //   that device's registry, so no scope is involved.
-// - Host-scoped hooks whose write path is deliberately local-only
-//   (the local settings save in useSettingsSave, which writes through
-//   the page's api): the write lands on this machine's disk, so their
-//   reads and invalidations must stay pinned to this machine's key
-//   registry.
 import type { HostApi } from "@/lib/runtime/Api";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { createContext, use, type ReactNode } from "react";

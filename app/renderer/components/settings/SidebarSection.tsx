@@ -1,15 +1,21 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useAccountStatus } from "@/hooks/account/useAccount";
-import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
+import type { ClientFormState } from "@shigomori/ui/lib/settingsForm.ts";
 import { terrierMarksHere } from "@/hooks/config/useSidebarMarks";
 import { useHasLocalHost } from "@/lib/localHost";
 import { SidebarSectionView } from "@shigomori/ui/views/settings/SidebarSectionView.tsx";
 
 // The sidebar settings (SidebarSectionView), with what the account and
 // this device's terrier switch allow.
-export function SidebarSection(props: {
-  form: SettingsFormState;
-  setForm: Dispatch<SetStateAction<SettingsFormState>>;
+export function SidebarSection({
+  terrier,
+  ...props
+}: {
+  form: ClientFormState;
+  setForm: Dispatch<SetStateAction<ClientFormState>>;
+  // This device's terrier toggle as staged, so switching it on in the
+  // device's own section unlocks this at once.
+  terrier: boolean;
 }) {
   const { data: status } = useAccountStatus();
   return (
@@ -18,10 +24,7 @@ export function SidebarSection(props: {
       // Unlocked while the status loads, so a signed-in window never
       // flashes the lock.
       signedIn={status?.signedIn !== false}
-      // Read off the terrier toggle as staged in this same form (the
-      // device's own section), so switching it on there unlocks this
-      // at once.
-      terrierOn={terrierMarksHere(useHasLocalHost(), props.form.terrier)}
+      terrierOn={terrierMarksHere(useHasLocalHost(), terrier)}
     />
   );
 }

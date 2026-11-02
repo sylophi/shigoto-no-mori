@@ -1,13 +1,9 @@
 import { useEffect, useEffectEvent, useState } from "react";
 import { EditorFooterView } from "@shigomori/ui/views/shared/EditorFooterView.tsx";
+import { useSettingsSave } from "@/hooks/config/useSettingsSave";
 import {
-  SettingsSaveError,
-  useSettingsSave,
-} from "@/hooks/config/useSettingsSave";
-import {
-  fromConfig,
-  type SettingsFormState,
-  withClientFields,
+  type ClientFormState,
+  fromClientConfig,
 } from "@shigomori/ui/lib/settingsForm.ts";
 import {
   pickHostDevice,
@@ -78,6 +74,7 @@ import {
   SettingsEditorRegistryProvider,
   useSettingsEditorRegistry,
 } from "./useSettingsEditors";
+import { useDeviceSettingsForm } from "./useDeviceSettingsForm";
 import { ChangelogDialog } from "./ChangelogDialog";
 import {
   ClientVersionSectionView,
@@ -99,25 +96,39 @@ import { useApi } from "@/lib/runtime/pageApi";
 // that act on its disk (a peer's only while it allows control, and
 // never its danger zone).
 //
-// One form backs the client sections and this device's host sections
-// (client config and this device's config save together through
-// useSettingsSave), and each peer seeds its own form from that device's
-// config read, which spans its three host sections. Sections mount on
-// first visit and stay mounted (SettingsPanelView), so switching section or
-// device never drops an edit, and the one footer saves and discards
-// every form at once.
+// One form per store: this window's client config backs the
+// Appearance and Keyboard sections, and each device's config backs that
+// device's host sections (this machine's also backs Launch tools), each
+// seeded from that device's config read. Sections mount on first visit
+// and stay mounted (SettingsPanelView), so switching section or device
+// never drops an edit, and the one footer saves and discards every form
+// at once.
 //
 // A hostless client (the web shell) has no machine behind the window:
-// Launch tools and this device's sections are not offered, so its local
-// form only ever carries appearance, and every device in the tab bar
-// is a peer, edited over that peer's direct session exactly as from
-// another desktop.
-export function SettingsForm({
+// Launch tools and this device's sections are not offered, so this
+// device's form is never shown, and every device in the tab bar is a
+// peer, edited over that peer's direct session exactly as from another
+// desktop.
+export function SettingsForm(props: {
+  initialConfig: GlobalConfig;
+  initialClientConfig: ClientConfig;
+}) {
+  const editors = useSettingsEditorRegistry();
+  return (
+    <SettingsEditorRegistryProvider registry={editors.registry}>
+      <SettingsPage {...props} editors={editors} />
+    </SettingsEditorRegistryProvider>
+  );
+}
+
+function SettingsPage({
   initialConfig,
   initialClientConfig,
+  editors,
 }: {
   initialConfig: GlobalConfig;
   initialClientConfig: ClientConfig;
+  editors: ReturnType<typeof useSettingsEditorRegistry>;
 }) {
   const api = useApi();
   const localDeviceId = api.deviceId;
@@ -135,16 +146,19 @@ export function SettingsForm({
     picked?.deviceId === deviceId ? hostTab : undefined;
   const villageLife = useVillageLife();
 
-  const seed = fromConfig(initialConfig, initialClientConfig);
+  const seed = fromClientConfig(initialClientConfig);
   const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty, reseed } =
-    useDirtyForm<SettingsFormState>(seed);
+    useDirtyForm<ClientFormState>(seed);
   const setField = fieldSetter(setForm);
-  // Another window, a hotkey or a peer moved a stored setting: the form
-  // follows it, keeping the fields changed here unsaved over it.
+  // Another window or a hotkey moved a stored setting: the form follows
+  // it, keeping the fields changed here unsaved over it.
   const seedJson = JSON.stringify(seed);
   useEffect(() => {
-    reseed(JSON.parse(seedJson) as SettingsFormState, keepTouched);
+    reseed(JSON.parse(seedJson) as ClientFormState, keepTouched);
   }, [seedJson, reseed]);
+  // This machine's form lives here rather than beside its panels, since
+  // the Sidebar section reads its staged terrier toggle.
+  const deviceForm = useDeviceSettingsForm(localDeviceId, initialConfig);
 
   // No palette rotation turns behind the form's back.
   useEffect(() => holdThemeRotation(), []);
@@ -156,24 +170,14 @@ export function SettingsForm({
   useEffect(() => () => dropPreviews(), []);
 
   const handleSave = async () => {
-    // Two stores behind one Save. useSettingsSave routes each field to
-    // its engine and skips whichever store is unchanged.
     const saved = savedSnapshot;
     try {
       await save.mutateAsync({ state: form, saved });
       // Only the fields this Save carried advance: a change another window
-      // or the device made to another field while it was out stays theirs.
+      // made to another field while it was out stays theirs.
       setSavedSnapshot((prev) => keepTouched(form, saved, prev));
-    } catch (error) {
-      // The mutation's toast and the banner below already surface the
-      // failure. A partial failure still landed the device half, so
-      // advance the snapshot for it: only the appearance fields stay
-      // unsaved and Save retries just those.
-      if (error instanceof SettingsSaveError && error.devicePersisted) {
-        setSavedSnapshot((prev) =>
-          withClientFields(keepTouched(form, saved, prev), prev),
-        );
-      }
+    } catch {
+      // The mutation's toast and the banner below surface the failure.
     }
     // No explicit setOverride(null). The provider clears the override
     // automatically once `saved` catches up to the staged value.
@@ -181,6 +185,7 @@ export function SettingsForm({
 
   const handleDiscard = () => {
     setForm(savedSnapshot);
+    save.reset();
     setOverride(null);
   };
 
@@ -218,20 +223,13 @@ export function SettingsForm({
     if (next) pickPair(form.lightTheme, darkTwin(form.lightTheme));
   };
 
-  // The peer forms, as the footer sees them.
-  const {
-    registry,
-    summary: peers,
-    saveAll,
-    discardAll,
-  } = useSettingsEditorRegistry();
-  const anyDirty = isDirty || peers.isDirty;
-  const anyPending = save.isPending || peers.isPending;
-  const anySuccess = save.isSuccess || peers.isSuccess;
+  // The device forms, as the footer sees them.
+  const { summary: deviceForms, saveAll, discardAll } = editors;
+  const anyDirty = isDirty || deviceForms.isDirty;
+  const anyPending = save.isPending || deviceForms.isPending;
+  const anySuccess = save.isSuccess || deviceForms.isSuccess;
 
-  // This machine first: its write lands on this disk and cannot be
-  // refused, so a peer that rejects its patch never strands a staged
-  // local change. Each peer surfaces its own failure and stays dirty.
+  // Each form surfaces its own failure and stays dirty.
   const handleSaveAll = async () => {
     if (isDirty) await handleSave();
     await saveAll();
@@ -271,7 +269,7 @@ export function SettingsForm({
           update={Object.keys(updates).length > 0}
         />
       }
-      saveError={save.error?.message ?? null}
+      saveError={(save.error ?? deviceForm.saveError)?.message ?? null}
       footer={
         <EditorFooterView
           isDirty={anyDirty}
@@ -282,121 +280,126 @@ export function SettingsForm({
         />
       }
     >
-      <SettingsEditorRegistryProvider registry={registry}>
-        <SettingsPanelView
-          id={settingsPanelId(APPEARANCE_TAB)}
-          active={activeTab === APPEARANCE_TAB}
-        >
-          <AppearanceSection
-            heading="Theme"
-            theme={form.theme}
-            onPick={pickTheme}
-            doubutsu={form.doubutsu}
-            onDoubutsuChange={setDoubutsu}
-            lightTheme={form.lightTheme}
-            onLightThemeChange={pickLightTheme}
-            darkTheme={form.darkTheme}
-            onDarkThemeChange={pickDarkTheme}
-            themeRotation={form.themeRotation}
-            onThemeRotationChange={setThemeRotation}
-            themeRotationEvery={form.themeRotationEvery}
-            onThemeRotationEveryChange={setField("themeRotationEvery")}
-            pauseAnimationsOnBattery={form.pauseAnimationsOnBattery}
-            onPauseAnimationsOnBatteryChange={setField(
-              "pauseAnimationsOnBattery",
-            )}
-            darkTerminals={form.darkTerminals}
-            onDarkTerminalsChange={setField("darkTerminals")}
-            villageLife={form.villageLife}
-            onVillageLifeChange={setField("villageLife")}
-            villageNews={form.villageNews}
-            onVillageNewsChange={setField("villageNews")}
-          />
-          <SidebarSection form={form} setForm={setForm} />
-          {hasLocalHost && (
-            <NotificationsSectionView form={form} setForm={setForm} />
+      <SettingsPanelView
+        id={settingsPanelId(APPEARANCE_TAB)}
+        active={activeTab === APPEARANCE_TAB}
+      >
+        <AppearanceSection
+          heading="Theme"
+          theme={form.theme}
+          onPick={pickTheme}
+          doubutsu={form.doubutsu}
+          onDoubutsuChange={setDoubutsu}
+          lightTheme={form.lightTheme}
+          onLightThemeChange={pickLightTheme}
+          darkTheme={form.darkTheme}
+          onDarkThemeChange={pickDarkTheme}
+          themeRotation={form.themeRotation}
+          onThemeRotationChange={setThemeRotation}
+          themeRotationEvery={form.themeRotationEvery}
+          onThemeRotationEveryChange={setField("themeRotationEvery")}
+          pauseAnimationsOnBattery={form.pauseAnimationsOnBattery}
+          onPauseAnimationsOnBatteryChange={setField(
+            "pauseAnimationsOnBattery",
           )}
-          <WorktreePrefixesSection list="hidden" />
-          <WorktreePrefixesSection list="grouped" />
-          <LayoutSectionView
-            onReset={() => {
-              resetLayout();
-              if (hasLocalHost) void api.run(api.window.resetLayout());
-            }}
-          />
-          {/* The desktop states its build in this device's General
+          darkTerminals={form.darkTerminals}
+          onDarkTerminalsChange={setField("darkTerminals")}
+          villageLife={form.villageLife}
+          onVillageLifeChange={setField("villageLife")}
+          villageNews={form.villageNews}
+          onVillageNewsChange={setField("villageNews")}
+        />
+        <SidebarSection
+          form={form}
+          setForm={setForm}
+          terrier={deviceForm.form.terrier}
+        />
+        {hasLocalHost && (
+          <NotificationsSectionView form={form} setForm={setForm} />
+        )}
+        <WorktreePrefixesSection list="hidden" />
+        <WorktreePrefixesSection list="grouped" />
+        <LayoutSectionView
+          onReset={() => {
+            resetLayout();
+            if (hasLocalHost) void api.run(api.window.resetLayout());
+          }}
+        />
+        {/* The desktop states its build in this device's General
                 section. A hostless client has no such section, and its
                 build is still worth a line, so it goes with the other
                 setting that is about this window. */}
-          {!hasLocalHost && <ClientVersionSection />}
-        </SettingsPanelView>
+        {!hasLocalHost && <ClientVersionSection />}
+      </SettingsPanelView>
 
-        {hasLocalHost && (
-          <SettingsPanelView
-            id={settingsPanelId(LAUNCH_TAB)}
-            active={activeTab === LAUNCH_TAB}
-          >
-            <LaunchToolsPanel form={form} setForm={setForm} />
-          </SettingsPanelView>
-        )}
-
+      {hasLocalHost && (
         <SettingsPanelView
-          id={settingsPanelId(KEYBOARD_TAB)}
-          active={activeTab === KEYBOARD_TAB}
+          id={settingsPanelId(LAUNCH_TAB)}
+          active={activeTab === LAUNCH_TAB}
         >
-          <KeyboardSection form={form} setForm={setForm} />
-        </SettingsPanelView>
-
-        {villageLife && (
-          <SettingsPanelView
-            id={settingsPanelId(VISITORS_TAB)}
-            active={activeTab === VISITORS_TAB}
-          >
-            <VisitorsSection />
-          </SettingsPanelView>
-        )}
-
-        {hasLocalHost && (
-          <HostPanels
-            deviceId={localDeviceId}
-            active={hostTabFor(localDeviceId)}
-            sections={deviceSections({
-              form,
-              setForm,
-              version: (
-                <VersionSection
-                  version={
-                    <BuildVersionLineView
-                      version={__APP_VERSION__}
-                      commit={__APP_COMMIT__}
-                    />
-                  }
-                  installed={__APP_VERSION__}
-                />
-              ),
-              commands: true,
-              dangerZone: true,
-            })}
+          <LaunchToolsPanel
+            form={deviceForm.form}
+            setForm={deviceForm.setForm}
           />
-        )}
+        </SettingsPanelView>
+      )}
 
-        {devices.map((device) => (
-          // Keyed by device: a different machine is a different form,
-          // seeded from that device's own config read. Mounted on its
-          // first pick, so opening Settings reads no peer's config.
-          <MountOnceVisited
-            key={device.deviceId}
-            visited={hostTabFor(device.deviceId) !== undefined}
-          >
-            <PeerDeviceSettings
-              device={device}
-              active={hostTabFor(device.deviceId)}
-            />
-          </MountOnceVisited>
-        ))}
+      <SettingsPanelView
+        id={settingsPanelId(KEYBOARD_TAB)}
+        active={activeTab === KEYBOARD_TAB}
+      >
+        <KeyboardSection form={form} setForm={setForm} />
+      </SettingsPanelView>
 
-        {hostTab !== undefined && picked === undefined && <NoDevicesView />}
-      </SettingsEditorRegistryProvider>
+      {villageLife && (
+        <SettingsPanelView
+          id={settingsPanelId(VISITORS_TAB)}
+          active={activeTab === VISITORS_TAB}
+        >
+          <VisitorsSection />
+        </SettingsPanelView>
+      )}
+
+      {hasLocalHost && (
+        <HostPanels
+          deviceId={localDeviceId}
+          active={hostTabFor(localDeviceId)}
+          sections={deviceSections({
+            form: deviceForm.form,
+            setForm: deviceForm.setForm,
+            version: (
+              <VersionSection
+                version={
+                  <BuildVersionLineView
+                    version={__APP_VERSION__}
+                    commit={__APP_COMMIT__}
+                  />
+                }
+                installed={__APP_VERSION__}
+              />
+            ),
+            commands: true,
+            dangerZone: true,
+          })}
+        />
+      )}
+
+      {devices.map((device) => (
+        // Keyed by device: a different machine is a different form,
+        // seeded from that device's own config read. Mounted on its
+        // first pick, so opening Settings reads no peer's config.
+        <MountOnceVisited
+          key={device.deviceId}
+          visited={hostTabFor(device.deviceId) !== undefined}
+        >
+          <PeerDeviceSettings
+            device={device}
+            active={hostTabFor(device.deviceId)}
+          />
+        </MountOnceVisited>
+      ))}
+
+      {hostTab !== undefined && picked === undefined && <NoDevicesView />}
     </SettingsPageView>
   );
 }

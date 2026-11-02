@@ -3,7 +3,7 @@ import type { LauncherCommand } from "@shigomori/contracts/schemas";
 
 // Mutates `launchers` on whatever form shape contains it. Used by both
 // the project config and the global settings forms, which carry their
-// own siblings (theme, scripts, ...) on the same form state. React
+// own siblings (terminal, scripts, ...) on the same form state. React
 // Compiler memoizes the returned callbacks so no useCallback here.
 export function useLauncherListEditor<
   F extends { launchers: readonly LauncherCommand[] },

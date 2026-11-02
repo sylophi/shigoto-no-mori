@@ -1,24 +1,17 @@
-import { useEffect } from "react";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import type { GlobalConfig } from "@shigomori/contracts/schemas";
 import { EmptyPanel } from "@shigomori/ui/primitives/empty-panel.tsx";
 import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
-import { useDeviceSettingsSave } from "@/hooks/config/useDeviceSettingsSave";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
-import {
-  fromConfig,
-  type SettingsFormState,
-} from "@shigomori/ui/lib/settingsForm.ts";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
 import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
-import { keepTouched, useDirtyForm } from "@shigomori/ui/hooks/useDirtyForm.ts";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import type { RemoteDevice } from "@/lib/remote/devices";
 import { deviceSections } from "./deviceSections";
 import { HostPanels, onEveryHostTab } from "./SettingsPanel";
 import type { HostTab } from "@shigomori/ui/views/settings/settingsSections.ts";
-import { useRegisterSettingsEditor } from "./useSettingsEditors";
+import { useDeviceSettingsForm } from "./useDeviceSettingsForm";
 import {
   PeerOfflineNoteView,
   PeerReadOnlyNoteView,
@@ -157,7 +150,6 @@ function PeerSettingsForm({
   offline: boolean;
   active: HostTab | undefined;
 }) {
-  const save = useDeviceSettingsSave();
   // A reachable device this client may read but not command: the
   // verdict is a normal state, not an error. Show what the device has,
   // frozen, and name where the grant is made. While the verdict is
@@ -165,44 +157,13 @@ function PeerSettingsForm({
   // form that turns editable a moment later.
   const access = useCommandAccess();
   const readOnly = !access.canCommand;
-  // Same form shape as the local Settings form so the section
-  // components are shared verbatim. The client half doesn't exist here:
-  // theme/doubutsu seed from an empty client config, nothing in this
-  // subtree renders or edits them (so they can never turn this form
-  // dirty), and the patch encoder carries only the device-managed keys.
-  const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty, reseed } =
-    useDirtyForm<SettingsFormState>(fromConfig(initialConfig, {}));
-  // The device's config moved (its own user changed a toggle): the form
-  // follows it, keeping the fields changed here unsaved over it.
-  useEffect(() => {
-    reseed(fromConfig(initialConfig, {}), keepTouched);
-  }, [initialConfig, reseed]);
-
-  const handleSave = async () => {
-    if (!isDirty) return;
-    const saved = savedSnapshot;
-    try {
-      await save.mutateAsync({ state: form, saved });
-      // Only the fields this Save carried advance: a change the device
-      // made to another field while it was out stays the device's.
-      setSavedSnapshot((prev) => keepTouched(form, saved, prev));
-    } catch {
-      // Surfaced by the mutation cache toast and the banner below.
-      // The form stays dirty so the user can retry or discard.
-    }
-  };
-
-  // The page's one footer saves and discards this form with the rest.
   // Dirty is dirty even once the grant verdict lands as read-only
   // (edits made while it was in flight): the host refuses the save
   // and says so, rather than the footer quietly forgetting them.
-  useRegisterSettingsEditor(device.deviceId, {
-    isDirty,
-    isPending: save.isPending,
-    isSuccess: save.isSuccess,
-    save: handleSave,
-    discard: () => setForm(savedSnapshot),
-  });
+  const { form, setForm, saveError } = useDeviceSettingsForm(
+    device.deviceId,
+    initialConfig,
+  );
 
   // Offline: the note stands in for the sections. The form state (and
   // the registration) stays alive for when the device is back.
@@ -224,9 +185,9 @@ function PeerSettingsForm({
               commands: access.granted,
               readOnly,
               note: readOnly && <PeerReadOnlyNoteView label={device.label} />,
-              saveError: save.error && (
+              saveError: saveError && (
                 <ErrorBanner
-                  message={save.error.message}
+                  message={saveError.message}
                   title="Couldn't save the device's settings"
                 />
               ),

@@ -1,21 +1,21 @@
 import type { Dispatch, SetStateAction } from "react";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
 import { ToggleRowView } from "../shared/ToggleRowView.tsx";
-import type { SettingsFormState } from "../../lib/settingsForm.ts";
+import type { ClientFormState } from "../../lib/settingsForm.ts";
 import { fieldSetter } from "../../hooks/useDirtyForm.ts";
 
 // How the sidebar dresses its rows, in Appearance: settings of this
-// window, saved with the rest of the local form. A row with nothing to
-// mark is locked and reads off, whatever it stores, the way Village
-// life does without its data.
+// window, saved with its other settings. A row with nothing to mark is
+// locked and reads off, whatever it stores, the way Village life does
+// without its data.
 export function SidebarSectionView({
   form,
   setForm,
   signedIn,
   terrierOn,
 }: {
-  form: SettingsFormState;
-  setForm: Dispatch<SetStateAction<SettingsFormState>>;
+  form: ClientFormState;
+  setForm: Dispatch<SetStateAction<ClientFormState>>;
   // Signed out, this machine is the only device, and a badge only
   // tells devices apart.
   signedIn: boolean;

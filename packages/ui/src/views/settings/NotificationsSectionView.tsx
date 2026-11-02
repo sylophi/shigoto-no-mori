@@ -1,18 +1,18 @@
 import type { Dispatch, SetStateAction } from "react";
 import { SectionIntro } from "../../primitives/section-heading.tsx";
 import { ToggleRowView } from "../shared/ToggleRowView.tsx";
-import type { SettingsFormState } from "../../lib/settingsForm.ts";
+import type { ClientFormState } from "../../lib/settingsForm.ts";
 import { fieldSetter } from "../../hooks/useDirtyForm.ts";
 
 // The desktop's notices about agent sessions (lib/agentWatch.ts), in
-// Appearance: settings of this window, saved with the rest of the local
-// form. Only the desktop has a system to notify through.
+// Appearance: settings of this window, saved with its other settings.
+// Only the desktop has a system to notify through.
 export function NotificationsSectionView({
   form,
   setForm,
 }: {
-  form: SettingsFormState;
-  setForm: Dispatch<SetStateAction<SettingsFormState>>;
+  form: ClientFormState;
+  setForm: Dispatch<SetStateAction<ClientFormState>>;
 }) {
   const setField = fieldSetter(setForm);
   return (

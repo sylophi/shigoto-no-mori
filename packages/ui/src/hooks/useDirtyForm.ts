@@ -21,6 +21,19 @@ export function keepTouched<T extends object>(form: T, saved: T, next: T): T {
   return merged;
 }
 
+// The keys of `now` that differ from `was`, a key gone from `now`
+// given as undefined (its default, stored by omission).
+export function changedKeys<T extends object>(was: T, now: T): Partial<T> {
+  const changed: Record<string, unknown> = {};
+  const keys = new Set([...Object.keys(was), ...Object.keys(now)]);
+  for (const key of keys) {
+    const before = (was as Record<string, unknown>)[key];
+    const after = (now as Record<string, unknown>)[key];
+    if (JSON.stringify(before) !== JSON.stringify(after)) changed[key] = after;
+  }
+  return changed as Partial<T>;
+}
+
 // Tracks a form value against its last-saved snapshot. Dirty detection
 // is a JSON.stringify comparison, which is fine for the shallow,
 // JSON-serializable shapes we use in settings/configure forms.

@@ -1,5 +1,5 @@
 // Settings' Keyboard section (KeyboardSectionView) over the form's
-// staged bindings, saved with the rest of the local form. Recording
+// staged bindings, saved with this window's other settings. Recording
 // takes the next keys pressed, ahead of everything else in the window
 // (useKeymapRecording), and refuses keys an action that can hear them
 // already holds.
@@ -12,7 +12,7 @@ import {
   keymapGroups,
   withBinding,
 } from "@shigomori/ui/lib/keymap.ts";
-import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
+import type { ClientFormState } from "@shigomori/ui/lib/settingsForm.ts";
 import { KeyboardSectionView } from "@shigomori/ui/views/settings/KeyboardSectionView.tsx";
 import { isMac } from "@shigomori/ui/lib/platform.ts";
 import { keymapOf, useKeymapRecording } from "@/hooks/ui/useKeymap";
@@ -22,8 +22,8 @@ export function KeyboardSection({
   form,
   setForm,
 }: {
-  form: SettingsFormState;
-  setForm: Dispatch<SetStateAction<SettingsFormState>>;
+  form: ClientFormState;
+  setForm: Dispatch<SetStateAction<ClientFormState>>;
 }) {
   const [recording, setRecording] = useState<string | null>(null);
   const [refused, setRefused] = useState<{
