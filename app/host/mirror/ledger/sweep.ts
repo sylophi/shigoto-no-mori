@@ -6,9 +6,10 @@
 //     stops its mirror): every session's root is looked at on every
 //     snapshot, and one whose root is missing ends with its copy kept.
 //     One whose original moved (the move recorded) re-opens there
-//     instead, once its peer takes this device's calls, and ends if
-//     another worktree takes the old folder first, if the worktree it
-//     became is mirrored meanwhile, or if the peer comes too late.
+//     instead, once its peer takes this device's calls (moves.ts, as a
+//     move in the app does), and ends if another worktree takes the old
+//     folder first, if the worktree it became is mirrored meanwhile, or
+//     if the peer comes too late.
 //     The engine has more than one word for a root that went (a halt
 //     when the copy stood still, a conflict at the root when the copy
 //     had changed too, a problem at the root when the parent folder
@@ -135,9 +136,9 @@ export const makeSweep = ({
         });
       if (yield* Effect.promise(() => rootExists(raw.localRoot))) {
         // The worktree came back to its folder (the folder it was
-        // found at moved back): the wait is over, and the session
-        // stays paused for a person's Resume, which keeps what the
-        // pair agreed on.
+        // found at moved back): the wait is over, its thread back with
+        // it, and the session stays paused for a person's Resume, which
+        // keeps what the pair agreed on.
         if (waiting !== undefined) {
           const movedBack = yield* recordedMove(waiting.path);
           if (movedBack === undefined) {
@@ -149,6 +150,7 @@ export const makeSweep = ({
             worktreeIdFromPath(movedBack) === raw.localWorktreeId
           ) {
             waitingOnPeer.delete(raw.session);
+            daemon.moveHistory(waiting.id, raw.localWorktreeId);
           }
         }
         // A waiting session's old folder, there to see, is another
@@ -184,27 +186,9 @@ export const makeSweep = ({
           yield* end(PEER_LATE_DETAIL, movedId);
           return;
         }
-        // The re-open needs the peer (the engine opens a session
-        // only against both sides): one not taking this device's
-        // calls yet (not reached at a start, away, or a switch of
-        // its off) waits, paused, and is looked at again when it
-        // comes to (MirrorEngineLayer's admissions).
-        if (!reach.admits(raw.deviceId)) {
-          waitingOnPeer.set(raw.session, {
-            id: movedId,
-            path: movedTo,
-            since: waiting?.since ?? now,
-          });
-          rootLooks.delete(raw.session);
-          if (!raw.paused) {
-            yield* Effect.ignoreCause(daemon.pause(raw.session), {
-              log: "Warn",
-              message: "[mirror] a session waiting on its peer didn't pause",
-            });
-          }
-          return;
-        }
-        // One re-open per worktree carries all of its sessions.
+        // One re-open per worktree carries all of its sessions, and
+        // leaves one whose peer doesn't take this device's calls yet
+        // waiting.
         if (reopening.has(raw.localRoot)) return;
         reopening.add(raw.localRoot);
         yield* moves.moveMirrorsOfWorktree(raw.localWorktreeId, {
