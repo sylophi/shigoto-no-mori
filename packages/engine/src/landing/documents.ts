@@ -220,16 +220,20 @@ export type MergeOutcome = {
 // What `merge` did: GitHub's merge of a stack, a PR merged by number
 // (the app's), or the worktree's own PR, which merge waits on until it
 // merges.
-export type Merged = MergeOutcome &
-  (
-    | { readonly kind: "stack" }
-    | { readonly kind: "number"; readonly number: number }
-    | {
-        readonly kind: "branch";
-        readonly pr: PullRequestSummary;
-        readonly branch: string;
-      }
-  );
+export type Merged =
+  | {
+      readonly kind: "stack";
+      readonly method: MergeMethod;
+      readonly outcome: "merged" | "queued";
+    }
+  | (MergeOutcome & { readonly kind: "number"; readonly number: number })
+  | {
+      readonly kind: "branch";
+      readonly pr: PullRequestSummary;
+      readonly branch: string;
+      readonly method: MergeMethod;
+      readonly outcome: "merged";
+    };
 
 // How long the wait for GitHub to merge sleeps between reads.
 export const MergePollInterval = Context.Reference<Duration.Duration>(
