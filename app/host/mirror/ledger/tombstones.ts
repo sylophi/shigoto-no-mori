@@ -5,9 +5,11 @@
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
+import { mirrorBranchFor } from "@shigomori/contracts/git/branches";
 import {
+  isHaltedStatus,
   type MirrorSession,
-  mirrorStopBlocker,
+  mirrorFilesSettled,
 } from "@shigomori/contracts/modules/mirror";
 import type { MovedSource } from "@shigomori/contracts/schemas";
 import { answerWithin } from "@shigomori/engine/liveness";
@@ -33,19 +35,14 @@ import type { Streams } from "./streams";
 const KEPT_DETAIL =
   "This worktree wasn't deleted, so its mirror ended. The copy on the other device stays as a worktree.";
 
-// Why a copy stays, finishing "The copy on <device> stays, since …"
-// like mirrorStopBlocker's words.
-const UNREAD = "it couldn't be read there";
-const NOT_DELETED = "it changed or couldn't be deleted there";
-
-// What a delete's look found of a copy: what it holds, which its delete
-// then expects, or why it stays.
-export type CopyLook =
-  | { readonly expect: MovedSource }
-  | { readonly stays: string };
-
-// A copy on `deviceId` that stayed when its original was deleted here.
-export type Stayed = { readonly deviceId: string; readonly why: string };
+// A mirror that can't come into step without someone's help, so its
+// other side isn't read.
+const stuck = (session: MirrorSessionRaw): boolean =>
+  session.paused ||
+  isHaltedStatus(session.status) ||
+  !session.local.connected ||
+  !session.remote.connected ||
+  session.conflicts.length + session.excludedConflicts > 0;
 
 export const makeTombstones = ({
   marks,
@@ -110,45 +107,30 @@ export const makeTombstones = ({
       });
 
     // A mirror is one worktree on two devices, so deleting either side
-    // deletes both, once the two are in step: what a Stop checks before
-    // it removes the copy (mirrorStopBlocker), git looked at again now as
-    // there. A pair not in step may hold work on the other side that
-    // exists nowhere else, so that side stays. What each session on a
-    // worktree about to be deleted here finds of its copy: read on the
-    // copy's device (peerHolding), then found in step, so what it read
-    // is what was in step. One already not in step isn't read.
+    // deletes both, once the two are in step: the files settled, and the
+    // branch at the same commit on both, since a commit's id is the same
+    // on every device. A pair not in step may hold work on the other side
+    // that exists nowhere else, so that side stays. What each session on
+    // a worktree about to be deleted here finds of its copy, at `tip`
+    // here: read on the copy's device (peerHolding), then found in step,
+    // so what it read is what was in step. A copy on mirror/<branch> (its
+    // device has the branch out in its primary) is read there.
     const lookAtCopiesOf = Effect.fn("MirrorLedger.lookAtCopiesOf")(
-      function* (localWorktreeId: string, branch: string) {
-        const looks = new Map<string, CopyLook>();
+      function* (localWorktreeId: string, branch: string, tip: string) {
+        const looks = new Map<string, MovedSource>();
         yield* withSessionsOn([localWorktreeId], (daemon, sessions) =>
           Effect.forEach(
-            sessions,
+            sessions.filter((raw) => !stuck(raw)),
             (raw) =>
               Effect.gen(function* () {
-                const before = mirrorStopBlocker({
-                  ...raw,
-                  git: daemon.gitStatus(raw.session),
-                });
-                if (before !== undefined) {
-                  looks.set(raw.session, { stays: before });
-                  return;
-                }
                 const expect = yield* peerHolding(
                   raw.deviceId,
                   { projectId: raw.projectId, worktreeId: raw.worktreeId },
-                  branch,
+                  onMirrorBranch(raw) ? mirrorBranchFor(branch) : branch,
                 );
-                if (expect === undefined) {
-                  looks.set(raw.session, { stays: UNREAD });
-                  return;
-                }
-                const git = yield* daemon.refreshGit(raw.session);
+                if (expect?.branchTip !== tip) return;
                 const live = (yield* findSession(daemon, raw.session)) ?? raw;
-                const blocker = mirrorStopBlocker({ ...live, git });
-                looks.set(
-                  raw.session,
-                  blocker === undefined ? { expect } : { stays: blocker },
-                );
+                if (mirrorFilesSettled(live)) looks.set(raw.session, expect);
               }),
             { concurrency: "unbounded", discard: true },
           ),
@@ -158,17 +140,17 @@ export const makeTombstones = ({
       Effect.provideService(PeerReach, reach),
     );
 
-    // The original of a copy here, read on its device (peerHolding),
-    // when the device running the mirror says the two are in step,
-    // asked before the delete ends the stream into the copy, after which
-    // no mirror reads as in step. Its answer is its last verdict, and
-    // its delete there expects what the read right after found. Only a
-    // mirror running live has a stream here, a device that doesn't
-    // answer within a probe's time confirms nothing, and a primary's
-    // copy (on mirror/<branch>) takes nothing: a primary is never
-    // deleted.
+    // The original of a copy here, at `tip` here, read on its device
+    // (peerHolding) when the device running the mirror says the files
+    // are settled, asked before the delete ends the stream into the
+    // copy, after which no mirror reads as settled. Its delete there
+    // expects what the read found, if its branch is at the same commit
+    // as here. Only a mirror running live has a stream here, a device
+    // that doesn't answer within a probe's time confirms nothing, and a
+    // primary's copy (on mirror/<branch>) takes nothing: a primary is
+    // never deleted.
     const lookAtOriginalOf = Effect.fn("MirrorLedger.lookAtOriginalOf")(
-      function* (worktreeId: string, branch: string) {
+      function* (worktreeId: string, branch: string, tip: string) {
         const stream = streams.mirrorStreamInto(worktreeId);
         if (stream === undefined) return undefined;
         const listed = yield* answerWithin(
@@ -181,10 +163,10 @@ export const makeTombstones = ({
         const session = listed.value.value.sessions.find(
           (running: MirrorSession) =>
             running.localWorktreeId === stream.peerWorktreeId &&
-            mirrorStopBlocker(running) === undefined,
+            mirrorFilesSettled(running),
         );
         if (session === undefined || onMirrorBranch(session)) return undefined;
-        return yield* peerHolding(
+        const expect = yield* peerHolding(
           stream.peerDeviceId,
           {
             projectId: session.localProjectId,
@@ -192,6 +174,7 @@ export const makeTombstones = ({
           },
           branch,
         );
+        return expect?.branchTip === tip ? expect : undefined;
       },
       Effect.provideService(PeerReach, reach),
     );
@@ -260,45 +243,33 @@ export const makeTombstones = ({
     // The other side of a worktree deleted here: each session ended,
     // then its copy deleted on its device if the look found it in step,
     // expecting what it held then, and every other copy kept, a worktree
-    // of its own, as is one whose delete fails or is refused there.
-    // Answers the copies that stayed, and why. A daemon that isn't
-    // running takes no copy: its sessions end once it is, their copies
-    // kept.
+    // of its own, as is one whose delete fails or is refused there. A
+    // daemon that isn't running takes no copy: its sessions end once it
+    // is, their copies kept.
     const deleteCopiesOf = Effect.fn("MirrorLedger.deleteCopiesOf")(function* (
       localWorktreeId: string,
-      looks: ReadonlyMap<string, CopyLook>,
+      looks: ReadonlyMap<string, MovedSource>,
     ) {
       const daemon = yield* engineOrNull;
-      if (daemon === null) return [];
-      const stayed: Stayed[] = [];
+      if (daemon === null) return;
       if ((yield* daemon.status) === "running") {
         yield* Effect.forEach(
           (yield* mirrorSessions(daemon)).filter(
             (raw) => marks.worktreeIdNow(raw) === localWorktreeId,
           ),
           (raw) => {
-            const look = looks.get(raw.session);
-            const stays = (why: string) =>
-              Effect.sync(() => {
-                stayed.push({ deviceId: raw.deviceId, why });
-              });
-            if (look === undefined || "stays" in look) {
-              return Effect.andThen(
-                ends.endOnce(raw.session, daemon.terminate(raw.session)),
-                look === undefined ? Effect.void : stays(look.stays),
-              );
+            const expect = looks.get(raw.session);
+            if (expect === undefined) {
+              return ends.endOnce(raw.session, daemon.terminate(raw.session));
             }
-            return ends.endThenDeleteCopy(daemon, raw, look.expect).pipe(
-              Effect.flatMap((failed) =>
-                failed === undefined
+            return ends.endThenDeleteCopy(daemon, raw, expect).pipe(
+              Effect.flatMap((stayed) =>
+                stayed === undefined
                   ? Effect.void
-                  : Effect.andThen(
-                      Effect.sync(() =>
-                        log.warn(
-                          `[mirror] the copy of a deleted worktree stayed: ${failed}`,
-                        ),
+                  : Effect.sync(() =>
+                      log.warn(
+                        `[mirror] the copy of a deleted worktree stayed: ${stayed}`,
                       ),
-                      stays(NOT_DELETED),
                     ),
               ),
               Effect.ignoreCause({
@@ -313,7 +284,6 @@ export const makeTombstones = ({
         marks.pendingStops.add(localWorktreeId);
       }
       daemon.forgetHistory(localWorktreeId);
-      return stayed;
     });
 
     const keepTerminalStop = (worktreeId: string, stopped: Stopped): void => {

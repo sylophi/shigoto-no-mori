@@ -9,25 +9,26 @@
 // again right before its files go: the copy of an original here is
 // deleted on its device, and the device holding the original of a copy
 // here hears that both sides go. A mirror not in step ends with the
-// other side kept, a worktree of its own (a copy kept is told to the
-// window that asked for the delete), and so does one whose files git's
-// step kept. One whose delete stopped short of that step (a cleanup
-// that failed, a refusal, an interrupt) goes on. A move's teardown, a
-// removal that must happen, and a delete the other side asked for leave
-// the other side alone (`this`).
+// other side kept, a worktree of its own, and so does one whose files
+// git's step kept. One whose delete stopped short of that step (a
+// cleanup that failed, a refusal, an interrupt) goes on. A move's
+// teardown, a removal that must happen, and a delete the other side
+// asked for leave the other side alone (`this`).
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
+import type { MovedSource } from "@shigomori/contracts/schemas";
+import * as Git from "@shigomori/engine/Git";
 import {
   type DeleteEnd,
   MirrorsOnDelete,
 } from "@shigomori/engine/MirrorsOnDelete";
 import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as HostPushes from "@host/lib/HostPushes";
-import type { CopyLook } from "./ledger/tombstones";
 import { MirrorLedger } from "./MirrorLedger";
 
 const NO_LOOK = {
-  copies: new Map<string, CopyLook>(),
+  copies: new Map<string, MovedSource>(),
   original: undefined,
 };
 
@@ -36,21 +37,30 @@ export const mirrorsOnDelete = (sides: "both" | "this") =>
     const ledger = yield* MirrorLedger;
     const pushes = yield* HostPushes.HostPushes;
     const worktrees = yield* EngineWorktrees.Worktrees;
+    const git = yield* Git.Git;
 
     // The other sides of a worktree about to be deleted, looked at while
     // its mirrors still run: its copies, and its original when it is a
-    // copy. One with no branch looks at nothing, so they stay. A cancel
-    // isn't held up by a device slow to answer.
+    // copy, each against the branch's commit here. One with no branch
+    // looks at nothing, so they stay. A cancel isn't held up by a device
+    // slow to answer.
     const look = (projectId: string, worktreeId: string) =>
       Effect.gen(function* () {
-        const { worktree } = yield* worktrees.resolveById(
+        const { project, worktree } = yield* worktrees.resolveById(
           yield* worktrees.nowhere,
           { projectId, worktreeId },
         );
         if (worktree.detached) return NO_LOOK;
+        const { branch } = worktree;
+        const tip = yield* git.refTip(project.path, `refs/heads/${branch}`);
+        if (Option.isNone(tip)) return NO_LOOK;
         return {
-          copies: yield* ledger.lookAtCopiesOf(worktreeId, worktree.branch),
-          original: yield* ledger.lookAtOriginalOf(worktreeId, worktree.branch),
+          copies: yield* ledger.lookAtCopiesOf(worktreeId, branch, tip.value),
+          original: yield* ledger.lookAtOriginalOf(
+            worktreeId,
+            branch,
+            tip.value,
+          ),
         };
       }).pipe(
         Effect.orElseSucceed(() => NO_LOOK),
@@ -87,23 +97,9 @@ export const mirrorsOnDelete = (sides: "both" | "this") =>
               // The delete is done here: the copy's, a call to another
               // device, doesn't hold it up.
               yield* Effect.forkDetach(
-                ledger.deleteCopiesOf(worktreeId, copies).pipe(
-                  Effect.flatMap((stayed) =>
-                    Effect.forEach(
-                      stayed,
-                      ({ deviceId, why }) =>
-                        HostPushes.push(worktreesContract, "copyStayed", {
-                          projectId,
-                          worktreeId,
-                          deviceId,
-                          why,
-                        }),
-                      { discard: true },
-                    ),
-                  ),
-                  Effect.provideService(HostPushes.HostPushes, pushes),
-                  Effect.ensuring(Effect.sync(releaseRoots)),
-                ),
+                ledger
+                  .deleteCopiesOf(worktreeId, copies)
+                  .pipe(Effect.ensuring(Effect.sync(releaseRoots))),
               );
             });
         }),

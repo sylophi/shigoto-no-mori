@@ -30,11 +30,7 @@ import { makeMoves } from "./ledger/moves";
 import { makePeers, type Taken } from "./ledger/peers";
 import { makeStreams } from "./ledger/streams";
 import { makeSweep } from "./ledger/sweep";
-import {
-  type CopyLook,
-  makeTombstones,
-  type Stayed,
-} from "./ledger/tombstones";
+import { makeTombstones } from "./ledger/tombstones";
 import { makeTransfers, type TransferTarget } from "./ledger/transfers";
 
 type Daemon = MirrorEngine["Service"];
@@ -90,10 +86,12 @@ export class MirrorLedger extends Context.Service<
     readonly lookAtCopiesOf: (
       id: string,
       branch: string,
-    ) => Effect.Effect<ReadonlyMap<string, CopyLook>>;
+      tip: string,
+    ) => Effect.Effect<ReadonlyMap<string, MovedSource>>;
     readonly lookAtOriginalOf: (
       id: string,
       branch: string,
+      tip: string,
     ) => Effect.Effect<MovedSource | undefined>;
     // Answers the sessions it paused.
     readonly pauseMirrorsOn: (
@@ -105,8 +103,8 @@ export class MirrorLedger extends Context.Service<
     readonly endMirrorsOfKept: (ids: readonly string[]) => Effect.Effect<void>;
     readonly deleteCopiesOf: (
       id: string,
-      looks: ReadonlyMap<string, CopyLook>,
-    ) => Effect.Effect<readonly Stayed[]>;
+      looks: ReadonlyMap<string, MovedSource>,
+    ) => Effect.Effect<void>;
     // The original's root vanishing is this delete or move's, not one
     // behind the app's back, until the release.
     readonly holdRootChecks: (worktreeIds: readonly string[]) => () => void;
@@ -123,7 +121,6 @@ export class MirrorLedger extends Context.Service<
     readonly endThenDeleteCopy: (
       daemon: Daemon,
       raw: MirrorSessionRaw,
-      expect?: MovedSource,
     ) => Effect.Effect<string | undefined, MirrorError>;
     readonly endMirrorKeepingCopy: (
       daemon: Daemon,

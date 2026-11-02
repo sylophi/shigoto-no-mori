@@ -12,9 +12,11 @@
 //   - deleting a mirrored worktree pauses its mirror before its cleanup,
 //     then ends the mirror and deletes the copy on its device,
 //     expecting what that device read of it when the two were in step,
+//     its branch at the same commit, whatever git last said,
 //   - one not in step with its copy (paused, the copy's device away,
-//     git diverged, a file changed on both sides, the copy unread)
-//     goes alone, its mirror ended and its copy kept,
+//     the copy's branch at another commit, a file changed on both
+//     sides, the copy unread) goes alone, its mirror ended and its copy
+//     kept,
 //   - a delete refused at its checks leaves the mirror running, and one
 //     whose cleanup fails resumes it, so its retry takes both sides,
 //   - a copy whose delete fails or is refused on its device stays, and
@@ -33,8 +35,9 @@
 //     read of it, HEAD on its branch, checked before its scripts stop
 //     or its cleanup runs,
 //   - a copy's delete takes both sides only of a mirror its peer runs
-//     in step and not of a primary's, expecting what the original's
-//     device read of it.
+//     with the files settled and the branch at the same commit on both,
+//     and not of a primary's, expecting what the original's device read
+//     of it.
 //
 // Run: pnpm test worktree-removals.
 import assert from "node:assert/strict";
@@ -48,7 +51,6 @@ import * as Stream from "effect/Stream";
 import { afterAll, beforeAll, it } from "vitest";
 import {
   MIRROR_LABEL_MODE,
-  type MirrorGitStatus,
   type MirrorSessionRaw,
 } from "@shigomori/contracts/modules/mirror";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
@@ -314,8 +316,6 @@ it("a refusal at the plan marks nothing and stops nothing", async () => {
   assert.ok((await listed()).includes(bear.id));
 });
 
-const synced: MirrorGitStatus = { status: "synced", detail: "" };
-
 // What a worktree on the peer holds as its source link answers it: a
 // tip, and the tree of a capture when it isn't clean. Null: the link
 // fails, as a device that can't read it does.
@@ -370,9 +370,18 @@ const sourceLink = (held: () => Held) => ({
   }),
 });
 
+// What a worktree holds as a delete's expect: its branch at its tip, and
+// nothing uncommitted.
+const holding = (worktree: Worktree) => ({
+  branch: worktree.branch,
+  branchTip: git(worktree.path, "rev-parse", "HEAD").trim(),
+});
+
 // A worktree fox mirrored to a peer's copy, in step unless `session`
-// and `gitStatus` say otherwise, against a recording daemon and a peer
-// whose copy holds `copy` and whose copy's delete `deleteCopy` answers.
+// or `copy` say otherwise, against a recording daemon and a peer whose
+// copy holds `copy` (fox's tip by default) and whose copy's delete
+// `deleteCopy` answers. Git's last word on the pair is "not checked
+// yet", which a delete's look doesn't go by.
 // `calls` says, in order, what the mirror was asked and whether fox's
 // folder was still there, `deletes` what each delete of the copy
 // expected, and `noted` what fox's thread was told.
@@ -382,17 +391,16 @@ const mirroredFox = async (
   {
     pauseFails = false,
     session = {},
-    gitStatus = synced,
-    copy = { tip: PEER_TIP },
+    copy,
   }: {
     readonly pauseFails?: boolean;
     readonly session?: Partial<MirrorSessionRaw>;
-    readonly gitStatus?: MirrorGitStatus;
     readonly copy?: Held;
   } = {},
 ) => {
   const { project } = await repoAt(name);
   const fox = await create(project, { worktreeName: "fox" });
+  const held = copy === undefined ? { tip: holding(fox).branchTip } : copy;
   const calls: string[] = [];
   const deletes: unknown[] = [];
   const noted: string[] = [];
@@ -424,8 +432,6 @@ const mirroredFox = async (
     inertMirrorImpl({
       status: Effect.succeed("running"),
       sessions: Effect.sync(() => [...live.values()]),
-      gitStatus: () => gitStatus,
-      refreshGit: () => Effect.succeed(gitStatus),
       noteEvent: (worktreeId, _, detail) => {
         if (worktreeId === fox.id) noted.push(detail);
       },
@@ -448,7 +454,7 @@ const mirroredFox = async (
         }),
     }),
   );
-  const link = sourceLink(() => copy);
+  const link = sourceLink(() => held);
   standInPeers({
     // Its worktrees list without the copy, which a look then finds gone.
     invoke: (_, channel, input) =>
@@ -483,18 +489,12 @@ const mirroredFox = async (
   return { project, fox, calls, deletes, noted, remove };
 };
 
-// What a worktree holds as a delete's expect: its branch at its tip, and
-// nothing uncommitted.
-const holding = (worktree: Worktree) => ({
-  branch: worktree.branch,
-  branchTip: git(worktree.path, "rev-parse", "HEAD").trim(),
-});
-
 it("deleting a mirrored worktree pauses its mirror first, then deletes the copy expecting what its device read of it", async () => {
   const { fox, calls, deletes, remove } = await mirroredFox(
     "mirrored",
     async () => ({ ok: true }),
   );
+  const held = holding(fox);
   assert.equal(await remove(false), "removed");
   await waitFor(() => calls.length === 3, "the copy's delete was asked");
   assert.deepEqual(calls, [
@@ -502,7 +502,7 @@ it("deleting a mirrored worktree pauses its mirror first, then deletes the copy 
     "terminate",
     "delete copy, fox gone",
   ]);
-  assert.deepEqual(deletes, [{ branch: fox.branch, branchTip: PEER_TIP }]);
+  assert.deepEqual(deletes, [held]);
   assert.ok(!existsSync(fox.path));
 });
 
@@ -521,7 +521,7 @@ it("a mirrored worktree not in step with its copy goes alone, its mirror ended a
         },
       },
     ],
-    ["diverged", { gitStatus: { status: "diverged", detail: "both moved" } }],
+    ["elsewhere", { copy: { tip: PEER_TIP } }],
     ["unread", { copy: null }],
     [
       "conflicted",
@@ -822,14 +822,17 @@ const removalAnnounced = (input: {
 // A mirror's stop, or the original's own delete, asks the copy's device
 // to delete the copy: that delete mustn't take the original back. The
 // copy's own delete takes it only when the peer running the mirror says
-// the two are in step, asked while the stream into the copy is up, and
-// only if it still holds what its device read of it then. A primary's
-// copy never takes the primary.
+// the files are settled, asked while the stream into the copy is up,
+// with the branch at the same commit on both, whatever git last said,
+// and only if it still holds what its device read of it then. A
+// primary's copy never takes the primary.
 it("a copy's delete takes both sides only of a mirror in step, expecting what the original's device read, and a delete the other device asked for never does", async () => {
   const { project } = await repoAt("one-side");
   const asked = await create(project, { worktreeName: "asked" });
   const own = await create(project, { worktreeName: "own" });
-  const diverged = await create(project, { worktreeName: "diverged" });
+  // A commit here the original lacks.
+  const ahead = await create(project, { worktreeName: "ahead" });
+  git(ahead.path, "commit", "-q", "--allow-empty", "-m", "ahead");
   const primary = await create(project, { worktreeName: "mirror-main" });
   // A paused mirror's stream is down.
   const paused = await create(project, { worktreeName: "paused" });
@@ -837,11 +840,7 @@ it("a copy's delete takes both sides only of a mirror in step, expecting what th
     projectId: project.id,
     worktreeId: worktree.id,
   });
-  const mirrorInto = (
-    worktree: Worktree,
-    gitStatus: MirrorGitStatus,
-    mode = "mirror",
-  ) =>
+  const mirrorInto = (worktree: Worktree, mode = "mirror") =>
     annotateMirrorSession(
       rawMirrorSession({
         session: `into-${worktree.name}`,
@@ -854,23 +853,22 @@ it("a copy's delete takes both sides only of a mirror in step, expecting what th
         },
         successfulCycles: 1,
       }),
-      gitStatus,
+      { status: "following", detail: "" },
     );
-  const link = sourceLink(() => ({ tip: PEER_TIP }));
+  // The original at the commit every worktree here started from.
+  const held = holding(own);
+  const link = sourceLink(() => ({ tip: held.branchTip }));
   standInPeers({
     invoke: (_, channel) =>
       channel === "mirror:list"
         ? Effect.succeed({
             daemon: "running",
             sessions: [
-              mirrorInto(asked, synced),
-              mirrorInto(own, synced),
-              mirrorInto(diverged, {
-                status: "diverged",
-                detail: "both moved",
-              }),
-              mirrorInto(primary, synced, "mirror-branch"),
-              mirrorInto(paused, synced),
+              mirrorInto(asked),
+              mirrorInto(own),
+              mirrorInto(ahead),
+              mirrorInto(primary, "mirror-branch"),
+              mirrorInto(paused),
             ],
             serving: [],
             starting: [],
@@ -883,7 +881,7 @@ it("a copy's delete takes both sides only of a mirror in step, expecting what th
   });
   await runHost(
     Effect.map(MirrorLedger, (ledger) => {
-      for (const worktree of [asked, own, diverged, primary]) {
+      for (const worktree of [asked, own, ahead, primary]) {
         const key = `peer:${worktree.name}`;
         ledger.noteServing(
           key,
@@ -908,10 +906,10 @@ it("a copy's delete takes both sides only of a mirror in step, expecting what th
     Option.some({
       ...of(own),
       state: "removed",
-      expect: { branch: own.branch, branchTip: PEER_TIP },
+      expect: held,
     }),
   );
-  for (const kept of [diverged, primary, paused]) {
+  for (const kept of [ahead, primary, paused]) {
     assert.deepEqual(
       await removalAnnounced(of(kept)),
       Option.some({ ...of(kept), state: "removed" }),

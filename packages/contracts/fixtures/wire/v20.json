@@ -3144,14 +3144,6 @@
       }
     }
   },
-  "worktrees:copyStayed": {
-    "payload": {
-      "projectId": "'",
-      "worktreeId": "\n",
-      "deviceId": "",
-      "why": ""
-    }
-  },
   "worktrees:create": {
     "payload": {
       "projectId": "-1",

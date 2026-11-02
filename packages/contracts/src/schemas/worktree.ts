@@ -326,16 +326,6 @@ export const WorktreeRemovalSchema = Schema.Struct({
 });
 export type WorktreeRemoval = typeof WorktreeRemovalSchema.Type;
 
-// A mirror's copy on `deviceId` that stays though its original was
-// deleted here, and why, finishing "The copy on <device> stays, since
-// …", for the window that asked for the delete to say.
-export const WorktreeCopyStayedSchema = Schema.Struct({
-  ...WorktreeScopedPayloadSchema.fields,
-  deviceId: Schema.String,
-  why: Schema.String,
-});
-export type WorktreeCopyStayed = typeof WorktreeCopyStayedSchema.Type;
-
 export const WorktreeCarryOverCompleteSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   report: CarryOverReportSchema,
