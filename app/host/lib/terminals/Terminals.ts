@@ -741,10 +741,10 @@ const make = <R, E>(options: {
       );
 
     // What the last run left, each in a fresh shell where it was, its
-    // row kept until the shell saves over it. One whose worktree is gone
-    // is dropped, and one whose worktree can't be told (its drive not
-    // mounted yet, its project terrier's while terrier doesn't answer)
-    // waits for the next start.
+    // row kept until the shell saves over it. One whose project can't be
+    // read (its repository on a drive not mounted yet, or terrier's while
+    // terrier doesn't answer) waits for the next start. One whose
+    // worktree is gone, or whose folder is missing, is dropped.
     const restore = Effect.gen(function* () {
       for (const { cwd, seq, history, ...terminal } of yield* saved.list) {
         const start = yield* Effect.option(startOf(terminal));
