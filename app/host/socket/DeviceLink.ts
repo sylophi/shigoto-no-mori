@@ -725,14 +725,13 @@ export const make = (options: {
               ),
             ).pipe(boundedMessages);
 
-        // A view, failing as an invoke does: the contract error it is,
-        // or RemoteCallError with its message and code.
+        // A view, failing as an invoke does (hostCallFailure).
         const watch = (view: View<HostServices>) => (payload: unknown) =>
           Stream.unwrap(
             Effect.map(services, (context) =>
               view(payload).pipe(Stream.provideContext(context)),
             ),
-          ).pipe(Stream.mapError(callFailureOf), boundedMessages);
+          ).pipe(Stream.mapError(hostCallFailure), boundedMessages);
 
         const handlers: Record<string, unknown> = { ...linkHandlers };
         for (const call of group.requests.values()) {
