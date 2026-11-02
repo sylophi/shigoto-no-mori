@@ -58,7 +58,11 @@ import { WorktreeRowView } from "../views/sidebar/WorktreeRowView.tsx";
 import { ProjectIconView } from "../views/shared/ProjectIconView.tsx";
 import type { DeviceRosterEntry } from "../lib/deviceRoster.ts";
 import type { SidebarMarks } from "../views/sidebar/WorktreeEntryView.tsx";
-import { type ForestItem, projectGroupKey } from "../lib/forest.ts";
+import {
+  type ForestDevice,
+  type ForestItem,
+  projectGroupKey,
+} from "../lib/forest.ts";
 import { deviceStatusView } from "../lib/deviceStatus.ts";
 import { assertNever } from "../lib/utils.ts";
 import {
@@ -83,102 +87,75 @@ const MARKS: SidebarMarks = {
   allowAgentWorking: false,
 };
 
-// The peers that answer: the MacBook from the desktop, every online
-// machine from a browser.
-function statusOf(shell: SceneShell, deviceId: string) {
-  const connected =
-    deviceId === MACBOOK_ID ||
-    (shell === "web" && deviceId === LOCAL_DEVICE_ID);
-  return deviceStatusView(
-    connected ? { phase: "connected" } : { phase: "stopped" },
-  );
-}
-
-function peersOf(shell: SceneShell) {
-  return accountDevices.filter(
-    (device) => shell === "web" || device.deviceId !== LOCAL_DEVICE_ID,
-  );
-}
-
-function deviceBadges(shell: SceneShell): Map<string, SidebarDeviceBadge> {
-  return new Map(
-    peersOf(shell).map((device) => {
-      const { tone, reachable } = statusOf(shell, device.deviceId);
-      const badge: SidebarDeviceBadge = {
-        deviceId: device.deviceId,
-        label: device.name,
-        icon: device.icon ?? "desktop",
-        tone,
-        reachable,
-      };
-      return [device.deviceId, badge];
-    }),
-  );
-}
-
-function filterChoices(shell: SceneShell): DeviceRosterEntry[] {
-  const local = accountDevices.find((d) => d.deviceId === LOCAL_DEVICE_ID);
-  const here: DeviceRosterEntry[] =
-    shell === "desktop" && local
-      ? [
-          {
-            deviceId: LOCAL_DEVICE_ID,
-            label: local.name,
-            icon: local.icon ?? "desktop",
-            isThisDevice: true,
-            status: null,
-          },
-        ]
-      : [];
-  const peers = peersOf(shell).map(
-    (device): DeviceRosterEntry => ({
+// Every device on the account as the shell lists it: Studio Mac as
+// this device on the desktop, then its peers, of which the MacBook
+// answers from the desktop and every online machine from a browser.
+function roster(shell: SceneShell): DeviceRosterEntry[] {
+  return accountDevices.map((device) => {
+    const isThisDevice =
+      shell === "desktop" && device.deviceId === LOCAL_DEVICE_ID;
+    const connected =
+      device.deviceId === MACBOOK_ID || device.deviceId === LOCAL_DEVICE_ID;
+    return {
       deviceId: device.deviceId,
       label: device.name,
       icon: device.icon ?? "desktop",
-      isThisDevice: false,
-      status: statusOf(shell, device.deviceId),
-    }),
+      isThisDevice,
+      status: isThisDevice
+        ? null
+        : deviceStatusView(
+            connected ? { phase: "connected" } : { phase: "stopped" },
+          ),
+    };
+  });
+}
+
+const forestDevice = ({
+  status,
+  ...entry
+}: DeviceRosterEntry): ForestDevice => ({
+  ...entry,
+  tone: status?.tone ?? "emerald",
+  reachable: status?.reachable ?? true,
+});
+
+function deviceBadges(shell: SceneShell): Map<string, SidebarDeviceBadge> {
+  return new Map(
+    roster(shell)
+      .filter((entry) => !entry.isThisDevice)
+      .map((entry) => [entry.deviceId, forestDevice(entry)]),
   );
+}
+
+// This device first, then the peers that answer, then the rest.
+function filterChoices(shell: SceneShell): DeviceRosterEntry[] {
+  const entries = roster(shell);
   return [
-    ...here,
-    ...peers.filter((peer) => peer.status?.reachable),
-    ...peers.filter((peer) => !peer.status?.reachable),
+    ...entries.filter((entry) => entry.isThisDevice),
+    ...entries.filter((entry) => entry.status?.reachable),
+    ...entries.filter((entry) => entry.status?.reachable === false),
   ];
 }
 
 // Every device's projects as the forest's items, this machine's first:
 // Studio Mac's own on the desktop, then every peer that answers.
 function forestItems(shell: SceneShell): ForestItem[] {
-  const here = accountDevices.find((d) => d.deviceId === LOCAL_DEVICE_ID);
-  const devices = [
-    ...(shell === "desktop" && here ? [here] : []),
-    ...peersOf(shell),
-  ];
-  return devices.flatMap((device) => {
-    const isThisDevice = shell === "desktop" && device === here;
-    const status = isThisDevice
-      ? { tone: "emerald" as const, reachable: true }
-      : statusOf(shell, device.deviceId);
-    const forest = forests[device.deviceId];
-    if (!status.reachable || !forest) return [];
-    return forest.projects.map(
-      (project): ForestItem => ({
-        device: {
-          deviceId: device.deviceId,
-          label: device.name,
-          icon: device.icon ?? "desktop",
-          tone: status.tone,
-          reachable: status.reachable,
-          isThisDevice,
-        },
-        project,
-        worktrees: forest.worktrees[project.id] ?? [],
-        listing: "ready",
-        pullRequests: unposedPullRequests(project.id),
-        showPrimaryInInbox: false,
-      }),
-    );
-  });
+  return roster(shell)
+    .map(forestDevice)
+    .filter((device) => device.reachable)
+    .flatMap((device) => {
+      const forest = forests[device.deviceId];
+      return (forest?.projects ?? []).map(
+        (project): ForestItem => ({
+          device,
+          project,
+          worktrees: forest?.worktrees[project.id] ?? [],
+          listing: "ready",
+          pullRequests: unposedPullRequests(project.id),
+          showPrimaryInInbox: false,
+        }),
+      );
+    });
 }
 
 function inboxModel(shell: SceneShell) {
