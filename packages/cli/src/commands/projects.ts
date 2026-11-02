@@ -15,6 +15,7 @@ import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import { changing, refuseUnmigrated } from "../engine.ts";
@@ -38,6 +39,18 @@ import { confirm, interactive } from "../prompt.ts";
 import { configVerbs, type Settings } from "./config.ts";
 import { carryOverVerb } from "./configLists.ts";
 import { cloneProject } from "./transfer.ts";
+
+// A worktree's cleanup script that stopped a project's delete, in its
+// own words without rm's way past it (--skip-cleanup), which delete
+// doesn't take.
+class DeleteStopped extends Schema.TaggedError<DeleteStopped>()(
+  "DeleteStopped",
+  { failed: Worktrees.CleanupFailed },
+) {
+  override get message(): string {
+    return this.failed.message;
+  }
+}
 
 const refreshIconsFlag = Flag.Boolean("refresh-icons").pipe(
   Flag.withDefault(false),
@@ -350,10 +363,13 @@ const deleteProject = Command.make("delete", unregisterArgs, (input) =>
           : "") +
         " from disk?",
     );
-    yield* (yield* Projects.Projects).removeWithFiles(
-      project,
-      yield* reporter(),
-    );
+    yield* (yield* Projects.Projects)
+      .removeWithFiles(project, yield* reporter())
+      .pipe(
+        Effect.catchTag("CleanupFailed", (failed) =>
+          Effect.fail(new DeleteStopped({ failed })),
+        ),
+      );
     // A shell left standing in the deleted folder is told where to go.
     const hint = cdHintFor(project.path, dirname(project.path));
     const { json } = yield* Effect.service(Output);
