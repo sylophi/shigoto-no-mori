@@ -334,7 +334,7 @@ const catalog = (names: Names) => {
           bin +
           " projects config list`. Structured lists get element verbs: launcher add " +
           "<label> <command> / rm <label-or-id>, and carryover add <path> [--copy|--symlink] " +
-          "/ rm <path> (add upserts, so re-adding switches the mode). The flags --setup <cmd>, " +
+          "/ rm <path> (add upserts, so re-adding switches the mode), each <path> from a checkout's root as carryover lists it, or absolute in any checkout. The flags --setup <cmd>, " +
           `--teardown <cmd>, and --default-branch <ref> are shorthands: "" clears a ` +
           "script, and default-branch can't be cleared.",
       ],
