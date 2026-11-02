@@ -26,6 +26,7 @@ import type {
   TerminalEvent,
 } from "@shigomori/contracts/schemas";
 import * as SavedTerminals from "@shigomori/engine/SavedTerminals";
+import * as Terrier from "@shigomori/engine/Terrier";
 import { elapsedMillis } from "@shigomori/engine/elapsed";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -307,9 +308,12 @@ export class Terminals extends Context.Service<
     ) => Effect.Effect<void, UnknownTerminalError>;
     // How many live terminals are the worktree's.
     readonly openIn: (worktreeId: string) => number;
-    // Closes the terminals whose worktree, or its project, is gone. A
-    // project whose worktrees can't be read keeps its terminals.
-    readonly closeMissing: Effect.Effect<void>;
+    // Closes the terminals whose worktree, or its project, is gone, a
+    // project the list doesn't name counting as gone only where `gone`
+    // says. A project whose worktrees can't be read keeps its terminals.
+    readonly closeMissing: (
+      gone: (projectId: string) => boolean,
+    ) => Effect.Effect<void>;
     // Closes every terminal, none saved for the next start (a nuke).
     readonly closeEvery: Effect.Effect<void>;
     // How many terminals run something in the foreground: what a quit
@@ -341,8 +345,13 @@ const make = <R, E>(options: {
     // The folder of each of the project's worktrees, none for a project
     // that is gone, or null when that can't be told: git lists at least
     // the primary checkout of a project it can read, so an empty
-    // listing is a read that went missing too.
-    const presentIn = (projectId: string) =>
+    // listing is a read that went missing too, and a project the list
+    // doesn't name is gone only where `gone` says (a list terrier
+    // couldn't answer for names none of terrier's).
+    const presentIn = (
+      projectId: string,
+      gone: (projectId: string) => boolean,
+    ) =>
       options.worktrees(projectId).pipe(
         Effect.map((worktrees) =>
           worktrees.length === 0
@@ -350,7 +359,7 @@ const make = <R, E>(options: {
             : new Map(worktrees.map((w) => [w.id, w.path])),
         ),
         Effect.catchTag("UnknownProjectError", () =>
-          Effect.succeed(new Map<string, string>()),
+          Effect.succeed(gone(projectId) ? new Map<string, string>() : null),
         ),
         Effect.catchCause(() => Effect.succeed(null)),
         Effect.provide(startContext),
@@ -360,6 +369,7 @@ const make = <R, E>(options: {
     const fs = yield* FileSystem.FileSystem;
     const lifecycle = yield* Lifecycle.Lifecycle;
     const saved = yield* SavedTerminals.SavedTerminals;
+    const terrier = yield* Terrier.Terrier;
     const sessions = new Map<string, Session>();
     const listed = yield* SubscriptionRef.make<ReadonlyArray<Terminal>>([]);
     const announce = Effect.suspend(() =>
@@ -453,6 +463,17 @@ const make = <R, E>(options: {
 
     const exists = (path: string) =>
       fs.exists(path).pipe(Effect.orElseSucceed(() => false));
+
+    // Whether a terminal's worktree is gone, by its project's folders
+    // (presentIn).
+    const missingFrom = Effect.fnUntraced(function* (
+      folders: ReadonlyMap<string, string> | null,
+      worktreeId: string,
+    ) {
+      if (folders === null) return false;
+      const path = folders.get(worktreeId);
+      return path === undefined || !(yield* exists(path));
+    });
 
     // Takes the PTY's reads in frames, keeps them, and sends each frame
     // as a chunk, then the exit once the shell is gone.
@@ -721,12 +742,22 @@ const make = <R, E>(options: {
 
     // What the last run left, each in a fresh shell where it was, its
     // row kept until the shell saves over it. One whose worktree is gone
-    // is dropped.
+    // is dropped, and one whose worktree can't be told (its drive not
+    // mounted yet, its project terrier's while terrier doesn't answer)
+    // waits for the next start.
     const restore = Effect.gen(function* () {
       for (const { cwd, seq, history, ...terminal } of yield* saved.list) {
         const start = yield* Effect.option(startOf(terminal));
         if (Option.isNone(start)) {
-          yield* saved.forget(terminal.terminalId);
+          // With no list before this run's to say where a project came
+          // from, one the list doesn't name is gone once terrier answered.
+          const { trouble } = yield* terrier.listing;
+          const folders = yield* presentIn(terminal.projectId, () =>
+            Option.isNone(trouble),
+          );
+          if (yield* missingFrom(folders, terminal.worktreeId)) {
+            yield* saved.forget(terminal.terminalId);
+          }
           continue;
         }
         const folder = (yield* exists(cwd)) ? cwd : start.value.cwd;
@@ -933,7 +964,9 @@ const make = <R, E>(options: {
       openIn: (worktreeId) =>
         living().filter(({ terminal }) => terminal.worktreeId === worktreeId)
           .length,
-      closeMissing: Effect.gen(function* () {
+      closeMissing: Effect.fn("Terminals.closeMissing")(function* (
+        gone: (projectId: string) => boolean,
+      ) {
         const owned = [...sessions.values()];
         const projects = new Set(
           owned.map((session) => session.terminal.projectId),
@@ -943,23 +976,21 @@ const make = <R, E>(options: {
             projects,
             (projectId) =>
               Effect.map(
-                presentIn(projectId),
+                presentIn(projectId, gone),
                 (folders) => [projectId, folders] as const,
               ),
             { concurrency: "unbounded" },
           ),
         );
         const missing = new Set<string>();
-        for (const session of owned) {
-          const folders = present.get(session.terminal.projectId);
-          if (folders === null || folders === undefined) continue;
-          const path = folders.get(session.terminal.worktreeId);
-          if (path === undefined || !(yield* exists(path))) {
-            missing.add(session.terminal.terminalId);
+        for (const { terminal } of owned) {
+          const folders = present.get(terminal.projectId) ?? null;
+          if (yield* missingFrom(folders, terminal.worktreeId)) {
+            missing.add(terminal.terminalId);
           }
         }
         yield* closeAll((session) => missing.has(session.terminal.terminalId));
-      }).pipe(Effect.withSpan("Terminals.closeMissing")),
+      }),
       closeEvery: closeAll(() => true),
     });
   });
