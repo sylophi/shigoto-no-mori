@@ -35,6 +35,8 @@ interface ConfigureFormProps {
   initialConfig: ShigomoriConfig | null;
   resolvedDefaultBranch: string;
   leading?: ReactNode;
+  // Holds the other devices' tabs while there are edits to save.
+  setUnsaved: (unsaved: boolean) => void;
 }
 
 export function ConfigureForm({
@@ -43,6 +45,7 @@ export function ConfigureForm({
   initialConfig,
   resolvedDefaultBranch,
   leading,
+  setUnsaved,
 }: ConfigureFormProps) {
   const api = useApi();
   const { data: runtime } = useRuntimeInfo();
@@ -67,6 +70,12 @@ export function ConfigureForm({
       rebaseConfigureDraft,
     );
   }, [initialConfig, resolvedDefaultBranch, reseed]);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    setUnsaved(true);
+    return () => setUnsaved(false);
+  }, [isDirty, setUnsaved]);
 
   const handleSave = async () => {
     const next = toConfig(initialConfig, form);

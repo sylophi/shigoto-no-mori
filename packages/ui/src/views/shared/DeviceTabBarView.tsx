@@ -40,6 +40,9 @@ export type DeviceBarTab = {
   // A mark after the name (Settings' UpdateMark on a device holding a
   // staged update).
   badge?: ReactNode;
+  // Why the tab can't be picked now, its tip (Configure's other devices
+  // while one's form holds unsaved edits).
+  disabledReason?: string;
 };
 
 export function DeviceTabBarView({
@@ -81,6 +84,7 @@ export function DeviceTabBarView({
             arrowBefore: false,
             badge: undefined,
             disabled: false,
+            disabledReason: undefined,
           },
         ]
       : []),
@@ -93,7 +97,8 @@ export function DeviceTabBarView({
       note: tab.note,
       arrowBefore: tab.arrowBefore === true,
       badge: tab.badge,
-      disabled: devicesDisabled,
+      disabled: devicesDisabled || tab.disabledReason !== undefined,
+      disabledReason: tab.disabledReason,
     })),
   ];
   const listRef = useRevealPicked(
@@ -131,39 +136,48 @@ export function DeviceTabBarView({
                   className="size-3.5 shrink-0 text-muted-foreground"
                 />
               )}
-              <Tabs.Tab
-                value={pill.id}
-                disabled={pill.disabled}
-                data-slot="device-chip"
-                // A page header puts the row under the window's drag strip
-                // (AppShell): each pill carves its own click out of it.
-                style={dragRegion("no-drag")}
-                className={cn(
-                  DEVICE_PILL_CLASS,
-                  "transition-colors",
-                  selected
-                    ? "border-transparent bg-accent text-accent-foreground"
-                    : pill.disabled
-                      ? "cursor-not-allowed opacity-50"
-                      : "hover:text-foreground",
-                )}
-              >
-                {pill.lead}
-                <SimpleTooltip whenTruncated tip={pill.label}>
-                  <span className="max-w-40 truncate">{pill.label}</span>
-                </SimpleTooltip>
-                {pill.note !== undefined && (
-                  <span
-                    className={cn(
-                      "text-2xs",
-                      selected ? "opacity-70" : "text-muted-foreground/70",
-                    )}
+              <SimpleTooltip tip={pill.disabledReason}>
+                <Tabs.Tab
+                  value={pill.id}
+                  disabled={pill.disabled}
+                  data-slot="device-chip"
+                  // A page header puts the row under the window's drag strip
+                  // (AppShell): each pill carves its own click out of it.
+                  style={dragRegion("no-drag")}
+                  className={cn(
+                    DEVICE_PILL_CLASS,
+                    "transition-colors",
+                    selected
+                      ? "border-transparent bg-accent text-accent-foreground"
+                      : pill.disabled
+                        ? "cursor-not-allowed opacity-50"
+                        : "hover:text-foreground",
+                  )}
+                >
+                  {pill.lead}
+                  {/* A tip on the name would take the hover from the
+                      reason's, which covers the whole pill. */}
+                  <SimpleTooltip
+                    whenTruncated
+                    tip={
+                      pill.disabledReason === undefined ? pill.label : undefined
+                    }
                   >
-                    {pill.note}
-                  </span>
-                )}
-                {pill.badge}
-              </Tabs.Tab>
+                    <span className="max-w-40 truncate">{pill.label}</span>
+                  </SimpleTooltip>
+                  {pill.note !== undefined && (
+                    <span
+                      className={cn(
+                        "text-2xs",
+                        selected ? "opacity-70" : "text-muted-foreground/70",
+                      )}
+                    >
+                      {pill.note}
+                    </span>
+                  )}
+                  {pill.badge}
+                </Tabs.Tab>
+              </SimpleTooltip>
             </Fragment>
           );
         })}

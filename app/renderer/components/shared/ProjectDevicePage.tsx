@@ -40,6 +40,7 @@ export function ProjectDevicePage({
   parent,
   renderAllDevices,
   devicesLocked = false,
+  unsaved = false,
   children,
 }: {
   title: string;
@@ -56,6 +57,9 @@ export function ProjectDevicePage({
   // sync): the device tabs are disabled, and the all-devices tab shows
   // the routed device's body.
   devicesLocked?: boolean;
+  // The body holds edits not saved yet, which another device's tab would
+  // throw away: the other devices' tabs wait for a save or a discard.
+  unsaved?: boolean;
   // The body, given the picked device's copy of the project, when
   // there is a choice the tab it came from, and whether it shows under
   // the locked all-devices tab. It reads everything else through the
@@ -128,7 +132,18 @@ export function ProjectDevicePage({
       tabs={
         tabbed ? (
           <DeviceTabBarView
-            tabs={holders}
+            tabs={
+              unsaved && devicePicked
+                ? holders.map((tab) =>
+                    tab.deviceId === picked.deviceId
+                      ? tab
+                      : {
+                          ...tab,
+                          disabledReason: "Save or discard your changes first",
+                        },
+                  )
+                : holders
+            }
             selectedId={allDevicesPicked ? ALL_DEVICES_TAB_ID : picked.deviceId}
             onSelect={(id) => {
               setAllDevicesPicked(id === ALL_DEVICES_TAB_ID);
