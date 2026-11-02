@@ -132,13 +132,16 @@ export function TransferActions(props: TransferPartProps) {
   // starts), and says what failed rather than vanishing mid-run.
   // Always granted locally.
   const { granted } = useCommandAccess();
+  const hasLocalHost = useHasLocalHost();
   if (!(granted && hasOwnBranch(worktree)) && open === null) return null;
   // A peer's project git couldn't identify can never match one here,
   // so no transfer of it will ever work. Say so: two controls
   // disappearing without a word reads as a bug, and the cause (the
   // repo, not the app) is fixable by the person looking at it.
   if (project.identity == null) {
-    return remote && part === "footer" && <NoIdentityNoteView />;
+    return (
+      remote && hasLocalHost && part === "footer" && <NoIdentityNoteView />
+    );
   }
   const Side = remote ? TransfersHere : TransfersToPeer;
   return <Side {...props} sourceIdentity={project.identity} />;
