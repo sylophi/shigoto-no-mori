@@ -76,8 +76,6 @@ type Forward = {
   // The ones whose far end opened, which is what the summary counts: a
   // dial to a port with nothing behind it never shows as a conn.
   opened: Set<BridgedConn>;
-  // Accepted sockets over the device's cap, oldest first.
-  waiting: Set<Socket>;
   // Bridges an accepted socket as one of the conns.
   bridge: (socket: Socket) => void;
 };
@@ -97,6 +95,9 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
   // The conns' opens run on the engine's own services, not a caller's.
   const services = yield* Effect.context<never>();
   const forwards = new Map<string, Forward>();
+  // Accepted sockets over their device's cap, in the order they came
+  // across every forward.
+  const waiting = new Map<Socket, Forward>();
   // A change waiting to go out: one is all a burst needs.
   const changes = yield* Queue.sliding<void>(1);
   const changed = () => void Queue.offerUnsafe(changes, undefined);
@@ -126,16 +127,14 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
     return count;
   }
 
-  // A conn to the device closed: the sockets waiting on its forwards
-  // take the room it left.
+  // A conn to the device closed: the sockets that have waited longest on
+  // its forwards take the room it left.
   function admitWaiting(deviceId: string): void {
-    for (const forward of forwards.values()) {
+    for (const [socket, forward] of waiting) {
+      if (liveConnsTo(deviceId) >= MAX_CONNS_PER_DEVICE) return;
       if (forward.deviceId !== deviceId) continue;
-      for (const socket of forward.waiting) {
-        if (liveConnsTo(deviceId) >= MAX_CONNS_PER_DEVICE) return;
-        forward.waiting.delete(socket);
-        forward.bridge(socket);
-      }
+      waiting.delete(socket);
+      forward.bridge(socket);
     }
   }
 
@@ -265,7 +264,6 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
       scope,
       conns: new Set(),
       opened: new Set(),
-      waiting: new Set(),
       bridge: (socket) => {
         const conn = bridgeSocket(socket, {
           channels,
@@ -289,11 +287,11 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
         forward.bridge(socket);
         return;
       }
-      forward.waiting.add(socket);
+      waiting.set(socket, forward);
       // 'close' always follows 'error'. The listener must exist or node
       // treats the socket error as an uncaught throw.
       socket.on("error", () => {});
-      socket.once("close", () => forward.waiting.delete(socket));
+      socket.once("close", () => waiting.delete(socket));
     };
     for (const server of [v4, v6]) {
       server.on("connection", handleConnection);
@@ -314,10 +312,16 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
           forwards.delete(forward.forwardId);
           v4.close();
           v6.close();
+          // Out of the queue before the conns go, whose closes admit
+          // from it.
+          for (const [socket, owner] of waiting) {
+            if (owner !== forward) continue;
+            waiting.delete(socket);
+            socket.destroy();
+          }
           // destroy deletes only the conn being visited, which Set
           // iteration tolerates.
           for (const conn of forward.conns) conn.destroy();
-          for (const socket of forward.waiting) socket.destroy();
           changed();
         }),
     );
