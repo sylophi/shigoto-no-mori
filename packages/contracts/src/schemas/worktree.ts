@@ -299,17 +299,29 @@ export const WorktreeLifecyclePhaseSchema = Schema.Struct({
 });
 export type WorktreeLifecyclePhase = typeof WorktreeLifecyclePhaseSchema.Type;
 
+// What a delete asked for by another device expects the worktree to
+// still hold right before its files go: its branch at a tip, and its
+// uncommitted work as the tree of a capture (none: clean). A transfer's
+// teardown expects what moved, and a mirror's other side what this side
+// was when the two were found in step.
+const MovedSourceSchema = Schema.Struct({
+  branch: GitRefNameSchema,
+  branchTip: CommitHashSchema,
+  captureTree: Schema.optional(CommitHashSchema),
+});
+export type MovedSource = typeof MovedSourceSchema.Type;
+
 // Announced to every window and peer: the list only drops the row once
 // the delete resolves, so a worktree on its way out would otherwise read
 // as ordinary to anyone who didn't start it.
 export const WorktreeRemovalSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   state: Schema.Literals(["removing", "removed", "kept"]),
-  // A delete that takes both sides of a mirror: the device holding the
-  // original deletes it too. Only a copy's, of a mirror in step, and not
-  // a move's teardown, a removal that must happen (a nuke), nor one the
-  // other device asked for.
-  bothSides: Schema.optional(Schema.Boolean),
+  // A copy's delete that takes both sides of its mirror, found in step:
+  // the device holding the original deletes it too, if it still holds
+  // this. Not a move's teardown, a removal that must happen (a nuke),
+  // nor one the other device asked for.
+  expect: Schema.optional(MovedSourceSchema),
 });
 export type WorktreeRemoval = typeof WorktreeRemovalSchema.Type;
 
@@ -364,16 +376,6 @@ export const ConvertExternalPayloadSchema = Schema.Struct({
   force: Schema.optional(Schema.Boolean),
 });
 
-// What a transfer moved of its source, which the source's teardown
-// must still hold at the delete: its branch at the tip it moved with,
-// and its uncommitted work the tree the move captured (none: clean).
-const MovedSourceSchema = Schema.Struct({
-  branch: GitRefNameSchema,
-  branchTip: CommitHashSchema,
-  captureTree: Schema.optional(CommitHashSchema),
-});
-export type MovedSource = typeof MovedSourceSchema.Type;
-
 export const DeleteWorktreePayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   force: Schema.optional(Schema.Boolean),
@@ -381,9 +383,9 @@ export const DeleteWorktreePayloadSchema = Schema.Struct({
   // Refuse rather than kill live app scripts, for a transplant's
   // teardown.
   refuseRunningScripts: Schema.optional(Schema.Boolean),
-  // A transplant's teardown (any other delete has none): refused, after
-  // its cleanup and right before the delete, unless the source is still
-  // what moved.
+  // A transplant's teardown or a mirror's other side: refused, after its
+  // cleanup and right before the delete, unless the worktree is still
+  // this.
   expect: Schema.optional(MovedSourceSchema),
   // The other device taking its copy (a mirror's stop, a cancelled
   // start or send, the original's delete): that device deals with its

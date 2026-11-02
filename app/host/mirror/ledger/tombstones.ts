@@ -1,21 +1,28 @@
 // What a delete or a move of a worktree here does to its mirrors (the
 // tombstone protocol, onDelete.ts and the worktrees' removing): the
 // sessions on it paused while its files go, then stopped, ended with
-// both sides kept, or ended once their copies are deleted on their
-// devices.
+// both sides kept, or ended with their copies deleted on their devices.
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
-import { mirrorStopBlocker } from "@shigomori/contracts/modules/mirror";
+import { mirrorBranchFor } from "@shigomori/contracts/git/branches";
+import {
+  type MirrorSession,
+  mirrorStopBlocker,
+} from "@shigomori/contracts/modules/mirror";
+import type { MovedSource } from "@shigomori/contracts/schemas";
 import { answerWithin } from "@shigomori/engine/liveness";
 import type { Stopped } from "@shigomori/engine/MirrorsOnDelete";
 import { PeerReach, peerMirrorFor } from "@host/ipc/PeerReach";
+import { log } from "@shared/log";
 import { PROBE_TIMEOUT_MS } from "@shared/remote/link";
 import type { MirrorEngine } from "../MirrorEngine";
 import {
   engineOrNull,
+  findSession,
   type MirrorSessionRaw,
   mirrorSessions,
+  onMirrorBranch,
   runningEngine,
 } from "../registry";
 import type { Ends } from "./ends";
@@ -89,60 +96,71 @@ export const makeTombstones = ({
 
     // A mirror is one worktree on two devices, so deleting either side
     // deletes both, once the two are in step: what a Stop checks before
-    // it removes the copy (mirrorStopBlocker), here on the git
-    // follower's last verdict. A pair not in step may hold work on the
-    // other side that exists nowhere else, so that side stays. The
-    // sessions on worktrees about to be deleted here are paused first,
-    // so nothing crosses while their files go, and answered with those
-    // in step before their pause, whose copies the delete takes. One
-    // that doesn't pause fails, so the delete doesn't go ahead under it.
-    const pauseMirrorsOn = Effect.fn("MirrorLedger.pauseMirrorsOn")(function* (
-      localWorktreeIds: readonly string[],
-    ) {
-      const inStep = new Set<string>();
-      yield* withSessionsOn(localWorktreeIds, (daemon, sessions) => {
-        for (const raw of sessions) {
-          const git = daemon.gitStatus(raw.session);
-          if (mirrorStopBlocker({ ...raw, git }) === undefined) {
-            inStep.add(raw.session);
-          }
-        }
-        return Effect.forEach(
-          sessions.filter((raw) => !raw.paused),
-          (raw) => daemon.pause(raw.session),
-          { concurrency: "unbounded", discard: true },
-        );
-      });
-      return inStep;
-    });
-
-    // Whether the mirror into a copy here is in step by the same check,
-    // asked of the device running it before the delete ends the streams
-    // into the copy, after which no mirror reads as in step. Only a
-    // mirror running live has a stream here, and a device that doesn't
-    // answer within a probe's time confirms nothing.
-    const copyInStep = Effect.fn("MirrorLedger.copyInStep")(function* (
-      worktreeId: string,
-    ) {
-      const stream = streams
-        .listServing()
-        .find((served) => served.worktreeId === worktreeId);
-      if (stream === undefined) return false;
-      const listed = yield* answerWithin(
-        peerMirrorFor(stream.peerDeviceId).list(),
-        PROBE_TIMEOUT_MS,
-      ).pipe(Effect.provideService(PeerReach, reach));
-      return Option.exists(
-        listed,
-        (exit) =>
-          Exit.isSuccess(exit) &&
-          exit.value.sessions.some(
-            (session) =>
-              session.localWorktreeId === stream.peerWorktreeId &&
-              mirrorStopBlocker(session) === undefined,
+    // it removes the copy (mirrorStopBlocker), git looked at again now as
+    // there. A pair not in step may hold work on the other side that
+    // exists nowhere else, so that side stays. The sessions on worktrees
+    // about to be deleted here found in step.
+    const mirrorsInStepOn = Effect.fn("MirrorLedger.mirrorsInStepOn")(
+      function* (localWorktreeIds: readonly string[]) {
+        const inStep = new Set<string>();
+        yield* withSessionsOn(localWorktreeIds, (daemon, sessions) =>
+          Effect.forEach(
+            sessions,
+            (raw) =>
+              Effect.gen(function* () {
+                const git = yield* daemon.refreshGit(raw.session);
+                const live = (yield* findSession(daemon, raw.session)) ?? raw;
+                if (mirrorStopBlocker({ ...live, git }) === undefined) {
+                  inStep.add(raw.session);
+                }
+              }),
+            { concurrency: "unbounded", discard: true },
           ),
-      );
-    });
+        );
+        return inStep;
+      },
+    );
+
+    // The mirror into a copy here, when it is in step by the same check,
+    // asked of the device running it before the delete ends the streams
+    // into the copy, after which no mirror reads as in step. Its answer
+    // is its last verdict, so the delete there expects what the copy
+    // holds then. Only a mirror running live has a stream here, and a
+    // device that doesn't answer within a probe's time confirms nothing.
+    const mirrorInStepInto = Effect.fn("MirrorLedger.mirrorInStepInto")(
+      function* (worktreeId: string) {
+        const stream = streams
+          .listServing()
+          .find((served) => served.worktreeId === worktreeId);
+        if (stream === undefined) return undefined;
+        const listed = yield* answerWithin(
+          peerMirrorFor(stream.peerDeviceId).list(),
+          PROBE_TIMEOUT_MS,
+        ).pipe(Effect.provideService(PeerReach, reach));
+        if (Option.isNone(listed) || !Exit.isSuccess(listed.value)) {
+          return undefined;
+        }
+        return listed.value.value.sessions.find(
+          (session: MirrorSession) =>
+            session.localWorktreeId === stream.peerWorktreeId &&
+            mirrorStopBlocker(session) === undefined,
+        );
+      },
+    );
+
+    // The sessions on worktrees about to be deleted here, paused, so
+    // nothing crosses while their files go. One that doesn't pause
+    // fails, so the delete doesn't go ahead under it.
+    const pauseMirrorsOn = Effect.fn("MirrorLedger.pauseMirrorsOn")(
+      (localWorktreeIds: readonly string[]) =>
+        withSessionsOn(localWorktreeIds, (daemon, sessions) =>
+          Effect.forEach(
+            sessions.filter((raw) => !raw.paused),
+            (raw) => daemon.pause(raw.session),
+            { concurrency: "unbounded", discard: true },
+          ),
+        ),
+    );
 
     // A delete that didn't go through ends the mirrors of what it kept,
     // both sides left as worktrees of their own, so neither is held to
@@ -159,49 +177,61 @@ export const makeTombstones = ({
         ),
     );
 
-    // The other side of worktrees deleted here: the copy of each session
-    // `inStep` names deleted on its device, then the session ended, and
-    // every other session ended with its copy kept, a worktree of its
-    // own. One whose copy can't be deleted now stays, paused on a root
-    // that is gone, for the sweep to finish when the peer comes. A
-    // daemon that isn't running takes no copy: its sessions end once it
-    // is, their copies kept.
+    // The other side of a worktree deleted here: each session ended,
+    // then the copy of each one `inStep` names deleted on its device if
+    // it still holds what the original held (`holding`, read once the
+    // pause left nothing crossing), and every other copy kept, a
+    // worktree of its own, as is one whose delete fails or is refused
+    // there. A daemon that isn't running takes no copy: its sessions end
+    // once it is, their copies kept.
     const deleteCopiesOf = Effect.fn("MirrorLedger.deleteCopiesOf")(function* (
-      localWorktreeIds: readonly string[],
+      localWorktreeId: string,
       inStep: ReadonlySet<string>,
+      holding: MovedSource | undefined,
     ) {
       const daemon = yield* engineOrNull;
       if (daemon === null) return;
       if ((yield* daemon.status) === "running") {
         yield* Effect.forEach(
-          (yield* mirrorSessions(daemon)).filter((raw) =>
-            localWorktreeIds.includes(marks.worktreeIdNow(raw)),
+          (yield* mirrorSessions(daemon)).filter(
+            (raw) => marks.worktreeIdNow(raw) === localWorktreeId,
           ),
           (raw) =>
-            inStep.has(raw.session)
-              ? Effect.map(ends.deleteCopyThenEnd(daemon, raw), (ended) => {
-                  if (!ended) {
-                    marks.copiesToDelete.set(raw.session, raw.deviceId);
-                  }
-                })
+            holding !== undefined && inStep.has(raw.session)
+              ? ends
+                  .endThenDeleteCopy(daemon, raw, {
+                    ...holding,
+                    // A primary's copy is on mirror/<branch>.
+                    branch: onMirrorBranch(raw)
+                      ? mirrorBranchFor(holding.branch)
+                      : holding.branch,
+                  })
+                  .pipe(
+                    Effect.tap((stayed) =>
+                      stayed === undefined
+                        ? Effect.void
+                        : Effect.sync(() =>
+                            log.warn(
+                              `[mirror] the copy of a deleted worktree stayed: ${stayed}`,
+                            ),
+                          ),
+                    ),
+                    Effect.ignoreCause({
+                      log: "Warn",
+                      message:
+                        "[mirror] the mirror of a deleted worktree didn't end",
+                    }),
+                  )
               : Effect.asVoid(
                   ends.endOnce(raw.session, daemon.terminate(raw.session)),
                 ),
           { concurrency: "unbounded", discard: true },
         );
       } else {
-        for (const id of localWorktreeIds) marks.pendingStops.add(id);
+        marks.pendingStops.add(localWorktreeId);
       }
-      for (const id of localWorktreeIds) daemon.forgetHistory(id);
+      daemon.forgetHistory(localWorktreeId);
     });
-
-    // A peer taking this device's calls again: the copies still to
-    // delete there are looked at again.
-    const lookAgainAt = (deviceId: string) => {
-      for (const [session, peer] of marks.copiesToDelete) {
-        if (peer === deviceId) marks.rootLooks.delete(session);
-      }
-    };
 
     const keepTerminalStop = (worktreeId: string, stopped: Stopped): void => {
       fromTerminal.set(worktreeId, stopped);
@@ -215,11 +245,11 @@ export const makeTombstones = ({
 
     return {
       stopMirrorsForWorktree,
+      mirrorsInStepOn,
+      mirrorInStepInto,
       pauseMirrorsOn,
-      copyInStep,
       endMirrorsOfKept,
       deleteCopiesOf,
-      lookAgainAt,
       holdRootChecks: marks.holdingRoots.hold,
       keepTerminalStop,
       takeTerminalStop,

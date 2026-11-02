@@ -146,10 +146,10 @@ export class Worktrees extends Context.Service<
       Engine.Services
     >;
     // A delete, its scripts stopped first, unless `refuseRunningScripts`.
-    // With `expect`, a transplant's teardown: refused unless the source
-    // is still what moved, checked right before the delete. With
-    // `oneSide`, a delete the other side of its mirror asked for, which
-    // doesn't take that side too.
+    // With `expect`, a transplant's teardown or a mirror's other side:
+    // refused unless the worktree still holds it, checked right before
+    // the delete. With `oneSide`, a delete the other side of its mirror
+    // asked for, which doesn't take that side too.
     readonly remove: (
       input: RemoveInput & {
         readonly refuseRunningScripts?: boolean | undefined;

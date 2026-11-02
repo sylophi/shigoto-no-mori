@@ -4,25 +4,17 @@
 // delete would need a peer no longer on the account to confirm nothing
 // is held here alone, the original wasn't deleted after all or was
 // deleted while the two weren't in step, or there is nothing to delete
-// (the copy is gone, or a re-open replaced the session). Two delete
-// it, each in its own order:
-//   - deleteCopyThenEnd, for an original already deleted here: the copy
-//     goes first, and the session ends only once it has, since the
-//     session, paused on its root, is the one record of the copy left to
-//     delete, kept for the bookkeeping to finish when the peer comes.
-//     Run in the background against a peer that may be away, a delete
-//     that failed counts as done only when the peer said the copy is
-//     gone. Once it is, the session goes even if its terminate fails.
-//   - endThenDeleteCopy, for a person's stop of a live original: the
-//     session ends first, since the other way round the copy's own
-//     delete would stop the session itself, mid-delete (its device
-//     announces the removal). A person waits on it, so a delete that
-//     failed is looked into (copyIsGone) before the copy reads as
-//     stayed.
-// The delete is forced: the copy holds the original's uncommitted state
-// by design.
+// (the copy is gone, or a re-open replaced the session). Two delete it,
+// a person's stop of a live original and the original's delete here
+// while the two were in step, through endThenDeleteCopy: the session
+// ends first, since the other way round the copy's own delete would
+// stop the session itself, mid-delete (its device announces the
+// removal), and a delete that failed is looked into (copyIsGone) before
+// the copy reads as stayed. The delete is forced, since the copy holds
+// the original's uncommitted state by design, and the original's delete
+// has it expect what the original held, so a copy changed since stays.
 import * as Effect from "effect/Effect";
-import { isEntityGoneError } from "@shigomori/contracts/errors";
+import type { MovedSource } from "@shigomori/contracts/schemas";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { PeerReach, peerWorktree, peerWorktreesFor } from "@host/ipc/PeerReach";
 import { log } from "@shared/log";
@@ -67,6 +59,7 @@ export const makeEnds = ({ marks }: { readonly marks: Marks }) =>
     // that failed there, or what `failed` makes of a call that did.
     const deleteCopy = (
       raw: MirrorSessionRaw,
+      expect: MovedSource | undefined,
       failed: (error: unknown) => Effect.Effect<string | undefined>,
     ) =>
       peerWorktreesFor(raw.deviceId)
@@ -75,6 +68,7 @@ export const makeEnds = ({ marks }: { readonly marks: Marks }) =>
           worktreeId: raw.worktreeId,
           force: true,
           oneSide: true,
+          ...(expect === undefined ? {} : { expect }),
         })
         .pipe(
           Effect.map((removed) =>
@@ -86,39 +80,11 @@ export const makeEnds = ({ marks }: { readonly marks: Marks }) =>
           Effect.provideService(PeerReach, reach),
         );
 
-    // True once the copy is gone (deleted now, or already) and the
-    // session ended. The session counts as ending meanwhile, so the
-    // peer's announcement of the copy's removal doesn't end it a second
-    // time.
-    const deleteCopyThenEnd = (daemon: Daemon, raw: MirrorSessionRaw) =>
-      marks.whileEnding(
-        raw.session,
-        Effect.gen(function* () {
-          const stayed = yield* deleteCopy(raw, (error) =>
-            Effect.succeed(
-              isEntityGoneError(error) ? undefined : errorWordsOf(error),
-            ),
-          );
-          if (stayed !== undefined) {
-            log.warn(
-              `[mirror] the copy of a deleted worktree is left to delete later: ${stayed}`,
-            );
-            return false;
-          }
-          yield* Effect.ignoreCause(daemon.terminate(raw.session), {
-            log: "Warn",
-            message: "[mirror] the mirror of a deleted worktree didn't end",
-          });
-          daemon.forgetHistory(raw.localWorktreeId);
-          return true;
-        }),
-      );
-
     // Why the copy stayed, or undefined once it is gone.
     const endThenDeleteCopy = Effect.fn("MirrorLedger.endThenDeleteCopy")(
-      function* (daemon: Daemon, raw: MirrorSessionRaw) {
+      function* (daemon: Daemon, raw: MirrorSessionRaw, expect?: MovedSource) {
         yield* daemon.terminate(raw.session);
-        return yield* deleteCopy(raw, (error) =>
+        return yield* deleteCopy(raw, expect, (error) =>
           Effect.map(copyIsGone(raw), (gone) =>
             gone ? undefined : errorWordsOf(error),
           ),
@@ -237,7 +203,6 @@ export const makeEnds = ({ marks }: { readonly marks: Marks }) =>
       );
 
     return {
-      deleteCopyThenEnd,
       endThenDeleteCopy,
       copyIsGone,
       endMirrorKeepingCopy,

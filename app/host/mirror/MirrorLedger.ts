@@ -17,6 +17,7 @@ import type {
   MirrorSession,
   MirrorStarting,
 } from "@shigomori/contracts/modules/mirror";
+import type { MovedSource } from "@shigomori/contracts/schemas";
 import type { Stopped } from "@shigomori/engine/MirrorsOnDelete";
 import type * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import type * as Views from "@host/lib/Views";
@@ -26,7 +27,7 @@ import { type Copy, makeEnds } from "./ledger/ends";
 import { makeChanges, makeListing } from "./ledger/listing";
 import { makeMarks } from "./ledger/marks";
 import { makeMoves } from "./ledger/moves";
-import { makePeers, type Original } from "./ledger/peers";
+import { makePeers, type Taken } from "./ledger/peers";
 import { makeStreams } from "./ledger/streams";
 import { makeSweep } from "./ledger/sweep";
 import { makeTombstones } from "./ledger/tombstones";
@@ -78,18 +79,21 @@ export class MirrorLedger extends Context.Service<
 
     // ledger/tombstones.ts
     readonly stopMirrorsForWorktree: (id: string) => Effect.Effect<void>;
-    // The sessions found in step before the pause.
+    readonly mirrorsInStepOn: (
+      ids: readonly string[],
+    ) => Effect.Effect<ReadonlySet<string>>;
+    readonly mirrorInStepInto: (
+      worktreeId: string,
+    ) => Effect.Effect<MirrorSession | undefined>;
     readonly pauseMirrorsOn: (
       ids: readonly string[],
-    ) => Effect.Effect<ReadonlySet<string>, MirrorError>;
-    readonly copyInStep: (worktreeId: string) => Effect.Effect<boolean>;
+    ) => Effect.Effect<void, MirrorError>;
     readonly endMirrorsOfKept: (ids: readonly string[]) => Effect.Effect<void>;
     readonly deleteCopiesOf: (
-      ids: readonly string[],
+      id: string,
       inStep: ReadonlySet<string>,
+      holding: MovedSource | undefined,
     ) => Effect.Effect<void>;
-    // A peer taking this device's calls again.
-    readonly lookAgainAt: (deviceId: string) => void;
     // The original's root vanishing is this delete or move's, not one
     // behind the app's back, until the release.
     readonly holdRootChecks: (worktreeIds: readonly string[]) => () => void;
@@ -139,7 +143,7 @@ export class MirrorLedger extends Context.Service<
     readonly endMirrorsOnPeerRemoval: (
       deviceId: string,
       payload: unknown,
-    ) => Effect.Effect<readonly Original[]>;
+    ) => Effect.Effect<readonly Taken[]>;
   }
 >()("sm/host/MirrorLedger") {}
 

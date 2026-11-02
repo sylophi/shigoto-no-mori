@@ -10,24 +10,27 @@
 //     stop and before any teardown,
 //   - a refusal at the plan stops nothing and leaves no marks,
 //   - deleting a mirrored worktree pauses its mirror before any file
-//     goes, then deletes the copy on its device and ends the mirror,
+//     goes, then ends the mirror and deletes the copy on its device,
+//     expecting it to hold what the original held,
 //   - one not in step with its copy (paused, the copy's device away,
 //     git diverged, a file changed on both sides) goes alone, its
 //     mirror ended and its copy kept,
 //   - a refused delete, here or of the copy on its device, leaves the
 //     mirror running,
-//   - a copy whose device went away before its delete is deleted once
-//     it comes,
+//   - a copy whose delete fails or is refused on its device stays, and
+//     is never asked again,
 //   - a delete from the terminal stops the mirror through the app
 //     before its files go, and the copy goes after,
-//   - a worktree whose mirror doesn't pause is kept, a copy whose
-//     cleanup failed on its device is deleted again, and a copy found
+//   - a worktree whose mirror doesn't pause is kept, and a copy found
 //     gone before its device says both sides went still takes the
 //     original,
-//   - only a copy's delete of both sides takes the original (not a
-//     move's teardown or a nuke's removal there, nor a delete the
-//     original's device asked for), and a copy's delete takes both
-//     sides only of a mirror its peer runs in step.
+//   - only a copy's delete of both sides takes the original, if it
+//     still holds what the copy held (not a move's teardown or a nuke's
+//     removal there, nor a delete the original's device asked for, nor
+//     an older build's word for both sides), and the original that
+//     stays says why on its thread,
+//   - a copy's delete takes both sides only of a mirror its peer runs
+//     in step, expecting what the copy held.
 //
 // Run: pnpm test worktree-removals.
 import assert from "node:assert/strict";
@@ -309,9 +312,11 @@ it("a refusal at the plan marks nothing and stops nothing", async () => {
 const synced: MirrorGitStatus = { status: "synced", detail: "" };
 
 // A worktree fox mirrored to a peer's copy, in step unless `session`
-// and `gitStatus` say otherwise, against a recording daemon and a peer whose
-// copy's delete `deleteCopy` answers. `calls` says, in order, what the
-// mirror was asked and whether fox's folder was still there.
+// and `gitStatus` say otherwise, against a recording daemon and a peer
+// whose copy's delete `deleteCopy` answers. `calls` says, in order, what
+// the mirror was asked and whether fox's folder was still there,
+// `deletes` what each delete of the copy expected, and `noted` what
+// fox's thread was told.
 const mirroredFox = async (
   name: string,
   deleteCopy: () => Promise<unknown>,
@@ -328,6 +333,8 @@ const mirroredFox = async (
   const { project } = await repoAt(name);
   const fox = await create(project, { worktreeName: "fox" });
   const calls: string[] = [];
+  const deletes: unknown[] = [];
+  const noted: string[] = [];
   const at = () => (existsSync(fox.path) ? "there" : "gone");
   const live = new Map<string, MirrorSessionRaw>([
     [
@@ -357,6 +364,10 @@ const mirroredFox = async (
       status: Effect.succeed("running"),
       sessions: Effect.sync(() => [...live.values()]),
       gitStatus: () => gitStatus,
+      refreshGit: () => Effect.succeed(gitStatus),
+      noteEvent: (worktreeId, _, detail) => {
+        if (worktreeId === fox.id) noted.push(detail);
+      },
       pause: (id) =>
         pauseFails
           ? Effect.fail(new MirrorError({ reason: "the daemon didn't answer" }))
@@ -379,7 +390,7 @@ const mirroredFox = async (
   let peer = deleteCopy;
   standInPeers({
     // Its worktrees list without the copy, which a look then finds gone.
-    invoke: (_, channel) =>
+    invoke: (_, channel, input) =>
       channel === "worktrees:list"
         ? Effect.succeed([])
         : channel !== "worktrees:delete"
@@ -387,6 +398,7 @@ const mirroredFox = async (
           : Effect.tryPromise({
               try: () => {
                 calls.push(`delete copy, fox ${at()}`);
+                deletes.push((input as { expect?: unknown }).expect);
                 return peer();
               },
               catch: callFailureOf,
@@ -405,28 +417,30 @@ const mirroredFox = async (
       () => "removed",
       () => "refused",
     );
-  return {
-    project,
-    fox,
-    calls,
-    remove,
-    peerAnswers: (next: () => Promise<unknown>) => {
-      peer = next;
-    },
-  };
+  return { project, fox, calls, deletes, noted, remove };
 };
 
-it("deleting a mirrored worktree pauses its mirror first, then deletes the copy", async () => {
-  const { fox, calls, remove } = await mirroredFox("mirrored", async () => ({
-    ok: true,
-  }));
+// What a worktree holds as a delete's expect: its branch at its tip, and
+// nothing uncommitted.
+const holding = (worktree: Worktree) => ({
+  branch: worktree.branch,
+  branchTip: git(worktree.path, "rev-parse", "HEAD").trim(),
+});
+
+it("deleting a mirrored worktree pauses its mirror first, then deletes the copy if it still holds what the original did", async () => {
+  const { fox, calls, deletes, remove } = await mirroredFox(
+    "mirrored",
+    async () => ({ ok: true }),
+  );
+  const held = holding(fox);
   assert.equal(await remove(false), "removed");
-  await waitFor(() => calls.includes("terminate"), "the mirror ended");
+  await waitFor(() => calls.length === 3, "the copy's delete was asked");
   assert.deepEqual(calls, [
     "pause there",
-    "delete copy, fox gone",
     "terminate",
+    "delete copy, fox gone",
   ]);
+  assert.deepEqual(deletes, [held]);
   assert.ok(!existsSync(fox.path));
 });
 
@@ -490,18 +504,24 @@ const settleBookkeeping = Effect.flatMap(
   (ledger) => ledger.settleMirrorBookkeeping,
 );
 
-// The copy's device announcing its delete in `state`.
-const announced = (state: string, bothSides?: boolean) =>
+// The copy's device announcing its delete in `state`, with what else
+// it says.
+const announced = (state: string, said: object = {}) =>
   runHost(
     Effect.flatMap(MirrorLedger, (ledger) =>
       ledger.endMirrorsOnPeerRemoval("peer", {
         projectId: "far",
         worktreeId: "copy",
         state,
-        ...(bothSides === undefined ? {} : { bothSides }),
+        ...said,
       }),
     ),
   );
+
+const copyHeld = {
+  branch: "fox",
+  branchTip: "0123456789abcdef0123456789abcdef01234567",
+};
 
 it("a mirrored worktree whose mirror doesn't pause is kept", async () => {
   const { fox, calls, remove } = await mirroredFox(
@@ -514,27 +534,32 @@ it("a mirrored worktree whose mirror doesn't pause is kept", async () => {
   assert.ok(existsSync(fox.path));
 });
 
-it("a copy whose cleanup failed on its device is deleted again once the device comes back", async () => {
-  const { calls, remove, peerAnswers } = await mirroredFox(
-    "mirrored-copy-stayed",
-    async () => ({
-      ok: false,
-      cleanupError: { phase: "teardown", exitCode: 1, runId: "run" },
-    }),
-  );
-  assert.equal(await remove(true), "removed");
-  await waitFor(() => calls.length === 2, "the copy's delete was asked");
-  peerAnswers(async () => ({ ok: true }));
-  await waitFor(async () => {
+// The copy's device refuses a copy that changed since the look
+// (Worktrees.remove's expect), and nothing asks it again later, so a
+// delete can't go through on a copy no look has seen.
+it("a copy whose delete fails or is refused on its device stays, never asked again", async () => {
+  const failures: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
+    ["refused", () => Promise.reject(new Error("fox changed since"))],
+    ["away", () => Promise.reject(new Error("no direct connection to peer"))],
+    [
+      "cleanup-failed",
+      async () => ({
+        ok: false,
+        cleanupError: { phase: "teardown", exitCode: 1, runId: "run" },
+      }),
+    ],
+  ];
+  for (const [why, answer] of failures) {
+    const { calls, remove } = await mirroredFox(`copy-stays-${why}`, answer);
+    assert.equal(await remove(true), "removed");
+    await waitFor(() => calls.length === 3, `the ${why} copy's delete`);
     await runHost(settleBookkeeping);
-    return calls.includes("terminate");
-  }, "the copy was deleted");
-  assert.deepEqual(calls, [
-    "pause there",
-    "delete copy, fox gone",
-    "delete copy, fox gone",
-    "terminate",
-  ]);
+    assert.deepEqual(
+      calls,
+      ["pause there", "terminate", "delete copy, fox gone"],
+      why,
+    );
+  }
 });
 
 it("a copy whose delete was refused on its device keeps the original and its mirror", async () => {
@@ -545,28 +570,6 @@ it("a copy whose delete was refused on its device keeps the original and its mir
   assert.deepEqual(await announced("kept"), []);
   assert.deepEqual(calls, []);
   assert.ok(existsSync(fox.path));
-});
-
-it("a copy whose device went away before its delete is deleted once it comes", async () => {
-  const { calls, remove, peerAnswers } = await mirroredFox(
-    "mirrored-away",
-    () => Promise.reject(new Error("no direct connection to peer")),
-  );
-  assert.equal(await remove(true), "removed");
-  await waitFor(() => calls.length === 2, "the copy's delete was asked");
-  assert.deepEqual(calls, ["pause there", "delete copy, fox gone"]);
-  peerAnswers(async () => ({ ok: true }));
-  // Its look waits until the delete has given up on the copy.
-  await waitFor(async () => {
-    await runHost(settleBookkeeping);
-    return calls.includes("terminate");
-  }, "the copy was deleted");
-  assert.deepEqual(calls, [
-    "pause there",
-    "delete copy, fox gone",
-    "delete copy, fox gone",
-    "terminate",
-  ]);
 });
 
 // `sm rm` runs the engine in its own process, which asks the app
@@ -580,11 +583,11 @@ it("a delete from the terminal stops the mirror through the app first, then dele
   await runHost(controlHandlers.stopMirrorForDelete(worktree));
   git(project.path, "worktree", "remove", "--force", fox.path);
   await runHost(controlHandlers.mirrorDeleteDone({ ...worktree, gone: true }));
-  await waitFor(() => calls.includes("terminate"), "the mirror ended");
+  await waitFor(() => calls.length === 3, "the copy's delete was asked");
   assert.deepEqual(calls, [
     "pause there",
-    "delete copy, fox gone",
     "terminate",
+    "delete copy, fox gone",
   ]);
 });
 
@@ -604,24 +607,74 @@ it("a copy found gone before its device said both sides went still takes the ori
     ),
   );
   assert.deepEqual(calls, ["terminate"]);
-  assert.deepEqual(await announced("removed", true), [
-    { projectId: project.id, worktreeId: fox.id },
+  assert.deepEqual(await announced("removed", { expect: copyHeld }), [
+    { projectId: project.id, worktreeId: fox.id, expect: copyHeld },
   ]);
 });
 
-it("only a copy's delete of both sides takes the original", async () => {
-  const moved = await mirroredFox("mirrored-copy-moved", async () => ({
+it("only a copy's delete of both sides takes the original, and one that stays says why", async () => {
+  const alone = await mirroredFox("mirrored-copy-alone", async () => ({
     ok: true,
   }));
   assert.deepEqual(await announced("removed"), []);
-  assert.deepEqual(moved.calls, ["terminate"]);
+  assert.deepEqual(alone.calls, ["terminate"]);
+  assert.deepEqual(alone.noted, [
+    "The copy on the other device was deleted or moved, so the mirror ended. This worktree stays unless the copy was deleted with the two in step.",
+  ]);
+  // An older build said both sides with no word of what the copy held.
+  const older = await mirroredFox("mirrored-copy-older", async () => ({
+    ok: true,
+  }));
+  assert.deepEqual(await announced("removed", { bothSides: true }), []);
+  assert.deepEqual(older.calls, ["terminate"]);
   const deleted = await mirroredFox("mirrored-copy-deleted", async () => ({
     ok: true,
   }));
-  assert.deepEqual(await announced("removed", true), [
-    { projectId: deleted.project.id, worktreeId: deleted.fox.id },
+  assert.deepEqual(await announced("removed", { expect: copyHeld }), [
+    {
+      projectId: deleted.project.id,
+      worktreeId: deleted.fox.id,
+      expect: copyHeld,
+    },
   ]);
   assert.deepEqual(deleted.calls, ["terminate"]);
+});
+
+// What the original's device does with a copy's delete of both sides
+// (host/process/handlers.ts deleteOriginals): the original goes only if
+// it still holds what the copy held, so an edit since the look keeps it.
+it("an original taken by its copy's delete goes only if it still holds what the copy held", async () => {
+  const { project } = await repoAt("original-taken");
+  const fox = await create(project, { worktreeName: "fox" });
+  const held = holding(fox);
+  const take = () =>
+    runHost(
+      Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
+        worktrees.remove(
+          {
+            projectId: project.id,
+            worktreeId: fox.id,
+            force: true,
+            oneSide: true,
+            expect: held,
+          },
+          () => {},
+        ),
+      ),
+    ).then(
+      () => "removed",
+      () => "refused",
+    );
+  writeFileSync(join(fox.path, "since.txt"), "an edit after the look\n");
+  assert.equal(await take(), "refused");
+  assert.ok(existsSync(join(fox.path, "since.txt")));
+  git(fox.path, "add", "since.txt");
+  git(fox.path, "commit", "-q", "-m", "since");
+  assert.equal(await take(), "refused");
+  assert.ok(existsSync(fox.path));
+  git(fox.path, "reset", "-q", "--hard", "HEAD~1");
+  assert.equal(await take(), "removed");
+  assert.ok(!existsSync(fox.path));
 });
 
 // What a delete's device announces once the delete is over.
@@ -651,8 +704,9 @@ const removalAnnounced = (input: {
 // A mirror's stop, or the original's own delete, asks the copy's device
 // to delete the copy: that delete mustn't take the original back. The
 // copy's own delete takes it only when the peer running the mirror says
-// the two are in step, asked while the stream into the copy is up.
-it("a copy's delete takes both sides only of a mirror in step, and a delete the other device asked for never does", async () => {
+// the two are in step, asked while the stream into the copy is up, and
+// only if it still holds what the copy held.
+it("a copy's delete takes both sides only of a mirror in step, expecting what the copy held, and a delete the other device asked for never does", async () => {
   const { project } = await repoAt("one-side");
   const asked = await create(project, { worktreeName: "asked" });
   const own = await create(project, { worktreeName: "own" });
@@ -718,14 +772,15 @@ it("a copy's delete takes both sides only of a mirror in step, and a delete the 
     await removalAnnounced({ ...of(asked), oneSide: true }),
     Option.some({ ...of(asked), state: "removed" }),
   );
+  const ownHeld = holding(own);
   assert.deepEqual(
     await removalAnnounced(of(own)),
-    Option.some({ ...of(own), state: "removed", bothSides: true }),
+    Option.some({ ...of(own), state: "removed", expect: ownHeld }),
   );
   for (const kept of [diverged, paused]) {
     assert.deepEqual(
       await removalAnnounced(of(kept)),
-      Option.some({ ...of(kept), state: "removed", bothSides: false }),
+      Option.some({ ...of(kept), state: "removed" }),
       kept.name,
     );
   }

@@ -5,12 +5,10 @@
 //     the app was not running, neither of which passes the delete that
 //     stops its mirror): every session's root is looked at on every
 //     snapshot, and one whose root is missing ends with its copy kept.
-//     One a delete here left its copy to (copiesToDelete) deletes it
-//     once the peer takes this device's calls, then ends. One whose
-//     original moved (the move recorded) re-opens there instead, once
-//     its peer takes this device's calls, and ends if another worktree
-//     takes the old folder first, if the worktree it became is mirrored
-//     meanwhile, or if the peer comes too late.
+//     One whose original moved (the move recorded) re-opens there
+//     instead, once its peer takes this device's calls, and ends if
+//     another worktree takes the old folder first, if the worktree it
+//     became is mirrored meanwhile, or if the peer comes too late.
 //     The engine has more than one word for a root that went (a halt
 //     when the copy stood still, a conflict at the root when the copy
 //     had changed too, a problem at the root when the parent folder
@@ -31,7 +29,6 @@ import { MIRROR_LABEL_REPLACES } from "@shigomori/contracts/modules/mirror";
 import { ageOf, stamp } from "@shigomori/engine/keptAnswers";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as Worktrees from "@shigomori/engine/Worktrees";
-import { PeerReach } from "@host/ipc/PeerReach";
 import type { MirrorEngine } from "../MirrorEngine";
 import {
   type MirrorSessionRaw,
@@ -88,13 +85,11 @@ export const makeSweep = ({
   readonly ends: Ends;
   readonly moves: Moves;
 }) =>
-  Effect.gen(function* () {
-    const reach = yield* PeerReach;
+  Effect.sync(() => {
     const {
       pendingStops,
       endingSessions,
       rootLooks,
-      copiesToDelete,
       waitingOnPeer,
       recreating,
       holdingRoots,
@@ -221,15 +216,7 @@ export const makeSweep = ({
         rootLooks.delete(raw.session);
         return;
       }
-      if (!copiesToDelete.has(raw.session)) {
-        yield* end(ORIGINAL_GONE_DETAIL);
-        return;
-      }
-      // A peer away keeps the session, paused on the root that is
-      // gone, until it comes (MirrorEngineLayer's admissions).
-      if (reach.admits(raw.deviceId)) {
-        yield* ends.deleteCopyThenEnd(daemon, raw);
-      }
+      yield* end(ORIGINAL_GONE_DETAIL);
     });
 
     const settleMirrorBookkeeping = Effect.gen(function* () {
@@ -248,9 +235,6 @@ export const makeSweep = ({
       const reopening = new Set<string>();
       const live = new Set(sessions.map((raw) => raw.session));
       for (const id of rootLooks) if (!live.has(id)) rootLooks.delete(id);
-      for (const id of copiesToDelete.keys()) {
-        if (!live.has(id)) copiesToDelete.delete(id);
-      }
       for (const id of waitingOnPeer.keys()) {
         if (!live.has(id)) waitingOnPeer.delete(id);
       }

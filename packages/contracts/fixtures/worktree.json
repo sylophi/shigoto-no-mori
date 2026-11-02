@@ -1218,6 +1218,16 @@
         "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
         "worktreeId": "e0f76c6cc80a",
         "state": "kept"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "state": "removed",
+        "expect": {
+          "branch": "remote-ui-flows",
+          "branchTip": "0123456789abcdef0123456789abcdef01234567",
+          "captureTree": "89abcdef0123456789abcdef0123456789abcdef"
+        }
       }
     ],
     "normalizes": [
@@ -1227,6 +1237,19 @@
           "worktreeId": "e0f76c6cc80a",
           "state": "removed",
           "reason": "mirror stopped"
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "state": "removed"
+        }
+      },
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "state": "removed",
+          "bothSides": true
         },
         "output": {
           "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",

@@ -11,7 +11,7 @@ import type { MirrorSessionRaw } from "../registry";
 // stack's delete holds several at once. Two holds are kept, and they
 // stay apart. The roots a delete or a move holds (holdingRoots below)
 // cover the sessions this device runs on its originals, for a move too,
-// and last until a delete's copy is gone on its device. The streams a
+// and last until a delete's copies are dealt with. The streams a
 // delete holds (streams.ts) cover what this device serves into its
 // copies, end those at once, and last only until the files went. A move
 // holds no stream: what this device serves a copy follows it by the id
@@ -55,14 +55,6 @@ export const makeMarks = () => {
   // end, and a peer's announcement that the copy is gone still ends a
   // session the sweep is only looking at.
   const rootLooks = new Set<string>();
-
-  // The sessions of an original deleted here in step whose copy is still
-  // to delete (its peer gone since, or the delete failed there), each
-  // with its peer, kept until the engine stops listing them. Their look
-  // waits for the peer's next admission (lookAgainAt), rather than ask
-  // the peer again on every snapshot. A quit forgets them, and their
-  // copies are then kept as a root gone by hand keeps its.
-  const copiesToDelete = new Map<string, string>();
 
   // The sessions of a moved original whose re-open waits for the peer to
   // take this device's calls, each with the id of the worktree the
@@ -115,7 +107,6 @@ export const makeMarks = () => {
     pendingStops,
     endingSessions,
     rootLooks,
-    copiesToDelete,
     waitingOnPeer,
     recreating,
     holdingRoots,

@@ -16,7 +16,9 @@ import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig"
 import { hygieneContract } from "@shigomori/contracts/modules/hygiene";
 import { launchersContract } from "@shigomori/contracts/modules/launchers";
 import { servedHub } from "@shared/hub/bridgeHandlers";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
@@ -63,6 +65,7 @@ import { hygieneHandlers } from "@host/ipc/modules/hygiene";
 import { launchersHandlers } from "@host/ipc/modules/launchers";
 import { mirrorHandlers, mirrorViews } from "@host/ipc/modules/mirror";
 import { MirrorLedger } from "@host/mirror/MirrorLedger";
+import type { Taken } from "@host/mirror/ledger/peers";
 import * as HostWorktrees from "@host/lib/Worktrees";
 import { MirrorEngine } from "@host/mirror/MirrorEngine";
 import * as MirrorEngineLayer from "@host/mirror/MirrorEngineLayer";
@@ -231,30 +234,56 @@ export const mirrorEngineLayer = MirrorEngineLayer.layer({
     broadcastAll(gitContract, "projectChanged", { projectId }),
 });
 
+const ORIGINAL_KEPT_DETAIL =
+  "The two were in step when the copy was deleted, but this worktree changed since or couldn't be deleted, so it stays.";
+
+const ORIGINAL_CONTROL_OFF_DETAIL =
+  "The two were in step when the copy was deleted, but control from other devices is off here, so this worktree stays.";
+
 // A mirror is one worktree on two devices: the originals here whose
 // copy was deleted on its device while the two were in step go too,
-// forced, since that delete stood for both. Only under the command
-// switch, as the peer's own delete call here would be.
-const deleteOriginals = (
-  originals: ReadonlyArray<{ projectId: string; worktreeId: string }>,
-) =>
-  Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
-    Effect.forEach(
+// forced, since that delete stood for both, each only if it still holds
+// what the copy held (`expect`, checked right before its files go). Only
+// under the command switch, as the peer's own delete call here would be.
+// One that stays says why on its thread.
+const deleteOriginals = (originals: readonly Taken[]) =>
+  Effect.gen(function* () {
+    const engine = yield* MirrorEngine;
+    const stays = (worktreeId: string, detail: string) =>
+      engine.noteEvent(worktreeId, "stopped", detail);
+    if (!acceptsPeerCommands()) {
+      for (const original of originals) {
+        stays(original.worktreeId, ORIGINAL_CONTROL_OFF_DETAIL);
+      }
+      return;
+    }
+    const worktrees = yield* HostWorktrees.Worktrees;
+    yield* Effect.forEach(
       originals,
       (original) =>
-        Effect.ignoreCause(
-          worktrees.remove(
-            { ...original, force: true, oneSide: true },
-            () => {},
+        Effect.map(
+          Effect.exit(
+            worktrees.remove(
+              { ...original, force: true, oneSide: true },
+              () => {},
+            ),
           ),
-          {
-            log: "Warn",
-            message: "[mirror] the original of a deleted copy stayed",
+          (removed) => {
+            const stayed = Exit.isFailure(removed)
+              ? errorWordsOf(Cause.squash(removed.cause))
+              : removed.value.ok
+                ? undefined
+                : `its ${removed.value.cleanupError.phase} step failed`;
+            if (stayed === undefined) return;
+            log.warn(
+              `[mirror] the original of a deleted copy stayed: ${stayed}`,
+            );
+            stays(original.worktreeId, ORIGINAL_KEPT_DETAIL);
           },
         ),
       { discard: true },
-    ),
-  );
+    );
+  });
 
 // Every daemon snapshot and status change, to every window.
 export const mirrorDaemonChangesLayer = Layer.effectDiscard(
@@ -478,11 +507,7 @@ export function registerHostHandlers(): void {
       void Graph.run(
         Effect.flatMap(MirrorLedger, (ledger) =>
           ledger.endMirrorsOnPeerRemoval(push.deviceId, push.payload),
-        ).pipe(
-          Effect.flatMap((originals) =>
-            acceptsPeerCommands() ? deleteOriginals(originals) : Effect.void,
-          ),
-        ),
+        ).pipe(Effect.flatMap(deleteOriginals)),
       ).catch(() => {});
     }
   });
