@@ -6,7 +6,7 @@
 // holds either side.
 import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import { useCopyOff, type WorktreeMirrorLink } from "@/hooks/remote/useMirrors";
-import { useDeviceProperName } from "@/hooks/remote/useRemoteDevices";
+import { useDeviceProperName } from "@/hooks/remote/useDevices";
 import { describeMirror } from "@shigomori/ui/views/worktreeDetail/mirror/mirrorStatus.ts";
 import { useApi } from "@/lib/runtime/pageApi";
 

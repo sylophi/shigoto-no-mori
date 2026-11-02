@@ -18,15 +18,9 @@ import type { RunningScript, Terminal } from "@shigomori/contracts/schemas";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 import { useEveryHostMirrors } from "@/hooks/remote/useMirrors";
 import { usePortForwardCount } from "@/hooks/remote/usePortForwards";
-import { useAtomValue } from "@effect/atom-react";
-import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
-import {
-  useEveryHost,
-  useRemoteDevices,
-} from "@/hooks/remote/useRemoteDevices";
-import { remoteDevicesAtom } from "@/lib/remote/devices";
+import { useDevice, useHostDevices } from "@/hooks/remote/useDevices";
+import { commandAccessOf, liveApi } from "@/lib/remote/devices";
 import { terminalsAtom } from "@/hooks/terminals/useTerminals";
-import { useApi } from "@/lib/runtime/pageApi";
 import { hostViewAtom } from "@/lib/runtime/atoms";
 import { useView, useViews, viewsOf } from "@/lib/runtime/viewHooks";
 
@@ -50,33 +44,16 @@ const runningScriptsAtom = Atom.family((deviceId: string) =>
   }),
 );
 
-// Whether this device may read a device's runs: its own always, a
-// peer's while that peer runs commands from here (its registry entry),
-// or before the registry says. A peer that refuses lists none, settled,
-// rather than a view the refusal keeps asking.
-function readsRunsOf(
-  localDeviceId: string,
-  deviceId: string,
-  accepts: boolean | undefined,
-) {
-  return commandAccessOf(localDeviceId, deviceId, { acceptsCommands: accepts })
-    .canCommand;
-}
-
 // One device's runs, nothing while it has no api or refuses commands
-// from here.
+// from here. Whether this device may read a device's runs is its
+// command access: a peer that refuses lists none, settled, rather than
+// a view the refusal keeps asking.
 export function useDeviceRunningScripts(
   deviceId: string,
   api: HostApi | undefined,
 ): readonly RunningScript[] | undefined {
-  const localDeviceId = useApi().deviceId;
-  const accepts = useAtomValue(
-    remoteDevicesAtom,
-    (devices) =>
-      devices.find((entry) => entry.deviceId === deviceId)?.acceptsCommands,
-  );
-  const reads =
-    api !== undefined && readsRunsOf(localDeviceId, deviceId, accepts);
+  const access = commandAccessOf(useDevice(deviceId));
+  const reads = api !== undefined && access.canCommand;
   return useView(reads ? runningScriptsAtom(deviceId) : null).data?.runs;
 }
 
@@ -89,20 +66,14 @@ const hostsTerminalsAtom = viewsOf((deviceId) => terminalsAtom(deviceId));
 // Nor does one that runs no commands from here (the views are gated),
 // settled.
 function useCommandedHosts() {
-  const hosts = useEveryHost();
-  const localDeviceId = useApi().deviceId;
-  const registry = useRemoteDevices();
-  return hosts.map(({ deviceId, api }) => ({
-    deviceId,
-    api,
-    reads:
-      api !== undefined &&
-      readsRunsOf(
-        localDeviceId,
-        deviceId,
-        registry.find((entry) => entry.deviceId === deviceId)?.acceptsCommands,
-      ),
-  }));
+  return useHostDevices().map((device) => {
+    const api = liveApi(device);
+    return {
+      deviceId: device.deviceId,
+      api,
+      reads: api !== undefined && commandAccessOf(device).canCommand,
+    };
+  });
 }
 
 // Every host's running scripts. A peer whose app predates the view ends

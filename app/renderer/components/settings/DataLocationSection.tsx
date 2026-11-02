@@ -2,7 +2,7 @@ import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useState } from "react";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useScopedDeviceLabel } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { getBrowseParentPath } from "@shigomori/contracts/projectPaths";
 import { notifyError, toast } from "@/lib/toast";

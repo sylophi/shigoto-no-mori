@@ -1,15 +1,20 @@
-// The account's devices with their live status, an atom
+// The account's devices with their live status: the peers, an atom
 // remoteDeviceSync rebuilds wholesale from the device list and the
-// hub's status.
+// hub's status, and the shape every reader sees them in, this machine
+// among them (hooks/remote/useDevices.ts).
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import type { CommandAccess } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import type { HostApi } from "@/lib/runtime/Api";
-import type { RemoteDeviceStatus } from "@shigomori/ui/lib/deviceStatus.ts";
+import type { RendererApi } from "@/lib/runtime/pageApi";
+import { hostsProjects } from "@shigomori/ui/lib/deviceTraits.ts";
+import {
+  type DeviceStatusView,
+  deviceStatusView,
+  type RemoteDeviceStatus,
+  THIS_DEVICE_NOT_RESPONDING_VIEW,
+} from "@shigomori/ui/lib/deviceStatus.ts";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-
-// A peer's api over the hub hop: its host modules (lib/runtime/Api.ts,
-// peerApi).
-export type RemoteDeviceApi = HostApi;
 
 export type RemoteDevice = {
   // The remote host's device id, from the account registry (always
@@ -33,14 +38,87 @@ export type RemoteDevice = {
   // session is established and its dial's answer says. What every
   // read-only note and disabled control reads (useCommandAccess).
   acceptsCommands?: boolean;
-  // Set while the peer's session is up and it shares, or while it's
-  // rostered with no session: a call while the direct plane's keeper
-  // (shared/hub/directKeeper.ts) dials joins the dial, and
-  // remoteDeviceSync refetches when the session lands. Host calls route
-  // over the hub bridge onto the device link. Client-scoped calls reject
-  // (lib/runtime/Api.ts, peerApi).
-  api?: RemoteDeviceApi;
 };
+
+// Any device as a surface reads it: this machine (its own name and
+// icon, connected while its host answers the window and stopped while
+// it doesn't) or a peer off the list above.
+export type Device = Omit<RemoteDevice, "platform"> & {
+  isThisDevice: boolean;
+  // Whether a host stands behind it to read a forest, settings or runs
+  // from: this machine on the desktop, a peer that is a machine.
+  hostsProjects: boolean;
+  // Its host modules: the page's for this machine, a peer's over the
+  // hub hop (lib/runtime/Api.ts, peerApi), one object per device for
+  // the window's life. Set whatever the status, which says whether it
+  // is worth asking (isLive).
+  api: HostApi;
+};
+
+// A peer off the list, as a surface reads it.
+export function peerOf(page: RendererApi, peer: RemoteDevice): Device {
+  const { platform, ...rest } = peer;
+  return {
+    ...rest,
+    isThisDevice: false,
+    hostsProjects: hostsProjects(platform),
+    api: page.peerApi(peer.deviceId),
+  };
+}
+
+// Whether a device can be asked now: this machine always, a peer while
+// its session is up, or while it's rostered with no session yet, since
+// a call made while the direct plane's keeper (shared/hub/directKeeper.ts)
+// dials joins the dial and remoteDeviceSync refetches when it lands.
+export function isLive(device: Device): boolean {
+  return (
+    device.isThisDevice ||
+    device.status.phase === "connected" ||
+    device.status.phase === "online"
+  );
+}
+
+// Its api while it can be asked, the shape the fan-outs hand on.
+export function liveApi(device: Device): HostApi | undefined {
+  return isLive(device) ? device.api : undefined;
+}
+
+// Its state where a surface tags it. This machine shows none while its
+// host answers (the glyph alone) and Not responding while it doesn't.
+export function statusViewOf(device: Device): DeviceStatusView | null {
+  if (!device.isThisDevice) return deviceStatusView(device.status);
+  return device.status.phase === "connected"
+    ? null
+    : THIS_DEVICE_NOT_RESPONDING_VIEW;
+}
+
+const GRANTED: CommandAccess = {
+  granted: true,
+  isLoading: false,
+  canCommand: true,
+};
+const PENDING: CommandAccess = {
+  granted: false,
+  isLoading: true,
+  canCommand: true,
+};
+const REFUSED: CommandAccess = {
+  granted: false,
+  isLoading: false,
+  canCommand: false,
+};
+
+// Whether this device may command a device, given its entry (undefined
+// for a peer the list no longer knows). This machine commands itself,
+// and a peer is pending until its session says.
+export function commandAccessOf(
+  device: Pick<Device, "isThisDevice" | "acceptsCommands"> | undefined,
+): CommandAccess {
+  if (device?.isThisDevice === true) return GRANTED;
+  const accepts = device?.acceptsCommands;
+  if (accepts === undefined) return PENDING;
+  return accepts ? GRANTED : REFUSED;
+}
 
 // The list: a stable reference between changes, a new one on every
 // change, which is what a reader's selector compares.
@@ -59,9 +137,6 @@ function sameStatus(a: RemoteDeviceStatus, b: RemoteDeviceStatus): boolean {
   );
 }
 
-// The api is compared by reference on purpose: remoteDeviceSync builds
-// one api per deviceId and keeps it, so a changed reference is a real
-// change.
 function sameDevice(a: RemoteDevice, b: RemoteDevice): boolean {
   return (
     a.deviceId === b.deviceId &&
@@ -69,7 +144,6 @@ function sameDevice(a: RemoteDevice, b: RemoteDevice): boolean {
     a.icon === b.icon &&
     a.appVersion === b.appVersion &&
     a.acceptsCommands === b.acceptsCommands &&
-    a.api === b.api &&
     sameStatus(a.status, b.status)
   );
 }

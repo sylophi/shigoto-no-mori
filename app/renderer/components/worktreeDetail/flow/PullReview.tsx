@@ -25,7 +25,7 @@ import {
   useDestinationScope,
   useHostScope,
 } from "@/hooks/remote/useHostScope";
-import { useDeviceIcon } from "@/hooks/remote/useRemoteDevices";
+import { useDeviceIcon } from "@/hooks/remote/useDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";

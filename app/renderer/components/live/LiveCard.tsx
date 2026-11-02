@@ -9,7 +9,6 @@ import type { Worktree } from "@shigomori/contracts/schemas";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { PortsDialog } from "@/components/worktreeDetail/ports/PortsDialog";
 import { useWorktreePorts } from "@/hooks/ports/useWorktreePorts";
-import { useThisDeviceStatus } from "@/lib/runtime/hostAnswering";
 import {
   pullRequestsKey,
   somePullRequestsAtom,
@@ -23,17 +22,15 @@ import {
   usePortForwardControl,
 } from "@/hooks/remote/usePortForwards";
 import {
+  useDevice,
   useDeviceIcon,
   useDeviceProperName,
-  useRemoteDevice,
-} from "@/hooks/remote/useRemoteDevices";
+} from "@/hooks/remote/useDevices";
+import { statusViewOf } from "@/lib/remote/devices";
 import { useViewsWanted } from "@/hooks/remote/useRemoteForests";
 import { useDeviceWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useHasLocalHost } from "@/lib/localHost";
-import {
-  deviceStatusView,
-  THIS_DEVICE_VIEW,
-} from "@shigomori/ui/lib/deviceStatus.ts";
+import { THIS_DEVICE_VIEW } from "@shigomori/ui/lib/deviceStatus.ts";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import {
   mappedPullRequest,
@@ -66,11 +63,9 @@ export function DeviceHeading({
 }) {
   const icon = useDeviceIcon(deviceId);
   const name = useDeviceProperName(deviceId);
-  const device = useRemoteDevice(deviceId);
-  const thisDeviceStatus = useThisDeviceStatus();
-  const status = device
-    ? deviceStatusView(device.status)
-    : (thisDeviceStatus ?? THIS_DEVICE_VIEW);
+  const device = useDevice(deviceId);
+  const status =
+    (device === undefined ? null : statusViewOf(device)) ?? THIS_DEVICE_VIEW;
   return (
     <DeviceHeadingView
       icon={icon}
@@ -242,16 +237,16 @@ function WorktreeHeader({
 }) {
   const { worktree } = state;
   const deviceName = useDeviceProperName(deviceId);
-  const scope = useDeviceApi(deviceId);
   const project = useDeviceProjects(
     deviceId,
     useHostReachable(deviceId),
   ).data?.find((entry) => entry.id === projectId);
   // What the work is called, as its sidebar row names it: its PR's
   // title, the one `sm describe` gave it, else the branch.
-  const peer = { deviceId, api: scope.api };
   const [prs] = useViews(somePullRequestsAtom, [
-    useViewsWanted([peer])(peer) ? pullRequestsKey(deviceId, projectId) : null,
+    useViewsWanted([deviceId])(deviceId)
+      ? pullRequestsKey(deviceId, projectId)
+      : null,
   ]);
   const workTitle = worktree
     ? worktreeTitle(worktree, mappedPullRequest(prs?.data, worktree))

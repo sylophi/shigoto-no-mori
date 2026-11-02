@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useScopedDeviceLabel } from "@/hooks/remote/useHostScope";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";

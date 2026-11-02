@@ -23,10 +23,7 @@ import { PortsDialog } from "@/components/worktreeDetail/ports/PortsDialog";
 import type { LiveMirror } from "@/hooks/live/useLiveActivity";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { usePortForwardStop } from "@/hooks/remote/usePortForwards";
-import {
-  useDeviceIcon,
-  useDeviceProperName,
-} from "@/hooks/remote/useRemoteDevices";
+import { useDeviceIcon, useDeviceProperName } from "@/hooks/remote/useDevices";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";

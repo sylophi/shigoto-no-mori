@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useScopedDeviceLabel } from "@/hooks/remote/useHostScope";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { DeviceChip } from "@/components/shared/DeviceChip";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";

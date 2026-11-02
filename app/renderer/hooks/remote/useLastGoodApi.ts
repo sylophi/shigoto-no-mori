@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { RemoteDevice, RemoteDeviceApi } from "@/lib/remote/devices";
+import type { HostApi } from "@/lib/runtime/Api";
+import { type Device, liveApi } from "@/lib/remote/devices";
 
 // The api of the last session the registry handed over for a device.
 // A hub or session blip drops device.api while the keeper redials, and
@@ -17,23 +18,22 @@ import type { RemoteDevice, RemoteDeviceApi } from "@/lib/remote/devices";
 // caller that switches devices (the shared device panel) gets the new
 // device's api or none, never the last device's.
 export function useLastGoodApi(
-  device: RemoteDevice | undefined,
-): RemoteDeviceApi | undefined {
+  device: Device | undefined,
+): HostApi | undefined {
+  const api = device === undefined ? undefined : liveApi(device);
   const [kept, setKept] = useState(
-    device === undefined
-      ? undefined
-      : { deviceId: device.deviceId, api: device.api },
+    device === undefined ? undefined : { deviceId: device.deviceId, api },
   );
   if (device === undefined) {
     if (kept !== undefined) setKept(undefined);
     return undefined;
   }
   if (kept?.deviceId !== device.deviceId) {
-    setKept({ deviceId: device.deviceId, api: device.api });
-    return device.api;
+    setKept({ deviceId: device.deviceId, api });
+    return api;
   }
-  if (device.api !== undefined && device.api !== kept.api) {
-    setKept({ deviceId: device.deviceId, api: device.api });
+  if (api !== undefined && api !== kept.api) {
+    setKept({ deviceId: device.deviceId, api });
   }
-  return device.api ?? kept.api;
+  return api ?? kept.api;
 }

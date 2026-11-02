@@ -31,9 +31,9 @@ import {
   queryKeys,
   removeDeviceCache,
 } from "@/lib/queryKeys";
+import type { HostApi } from "@/lib/runtime/Api";
 import {
   type RemoteDevice,
-  type RemoteDeviceApi,
   remoteDevicesAtom,
   setRemoteDevices,
 } from "./devices";
@@ -89,7 +89,7 @@ export function startRemoteDeviceSync({
   // The boot's per-device push wiring (lib/hostWatch.ts), handed in
   // rather than imported, so this module stays below the hooks that
   // wiring writes through.
-  watchPeer: (deviceId: string, peer: RemoteDeviceApi) => () => void;
+  watchPeer: (deviceId: string, peer: HostApi) => () => void;
   followers: readonly PeerFollower[];
   signal: AbortSignal;
 }): void {
@@ -126,12 +126,10 @@ export function startRemoteDeviceSync({
   // never goes stale the way a dead socket does.
   const watched = new Map<string, () => void>();
 
-  const apiFor = (deviceId: string): RemoteDeviceApi => {
-    const peer = api.peerApi(deviceId);
+  const followPeer = (deviceId: string): void => {
     if (!watched.has(deviceId)) {
-      watched.set(deviceId, watchPeer(deviceId, peer));
+      watched.set(deviceId, watchPeer(deviceId, api.peerApi(deviceId)));
     }
-    return peer;
   };
 
   // The list written with each peer's command access as the newest
@@ -211,7 +209,7 @@ export function startRemoteDeviceSync({
       for (const follower of followers) follower.sessionLanded(deviceId);
       // Its pushes are followed from the landing on, ahead of the pass
       // that lists it.
-      apiFor(deviceId);
+      followPeer(deviceId);
     }
     liveSessions = now;
     lastSharing = status.peerSharesData;
@@ -272,19 +270,18 @@ export function startRemoteDeviceSync({
   ): RemoteDevice => {
     const version = current.peerAppVersions[info.deviceId];
     let status: RemoteDeviceStatus;
-    let peer: RemoteDeviceApi | undefined;
     if (
       version !== undefined &&
       current.peerSharesData[info.deviceId] === false
     ) {
-      // Connected, but it serves nothing: no api, so nothing asks it.
+      // Connected, but it serves nothing, so nothing asks it.
       status = { phase: "notSharing" };
     } else if (version !== undefined) {
       // A live direct session is the whole data plane, and it outlives a
       // hub blip on purpose, so it reads connected first, before the
       // socket phase is even consulted.
       status = { phase: "connected" };
-      peer = apiFor(info.deviceId);
+      followPeer(info.deviceId);
     } else if (current.socket.phase === "blocked") {
       // A blocked socket is a verdict on this device, not on the peers,
       // which are as unknown as when the app is offline: off, the
@@ -296,12 +293,12 @@ export function startRemoteDeviceSync({
       status = { phase: "stopped" };
     } else {
       // In the roster but no direct session yet: the direct plane's
-      // keeper is dialing or backing off toward one. The api is present
-      // anyway so a view can stand ready and the invoke that races the
-      // landing dial joins it. When the dial lands a beat later,
-      // noteSessions refetches whatever failed in the meantime.
+      // keeper is dialing or backing off toward one. A view can stand
+      // ready anyway and the invoke that races the landing dial joins
+      // it. When the dial lands a beat later, noteSessions refetches
+      // whatever failed in the meantime.
       status = { phase: "online" };
-      peer = apiFor(info.deviceId);
+      followPeer(info.deviceId);
     }
     return {
       deviceId: info.deviceId,
@@ -311,7 +308,6 @@ export function startRemoteDeviceSync({
       status,
       appVersion: version ?? "",
       acceptsCommands: accessOf(current, info.deviceId),
-      api: peer,
     };
   };
 

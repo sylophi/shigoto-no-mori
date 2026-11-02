@@ -24,7 +24,7 @@ import { useWorktreePorts } from "@/hooks/ports/useWorktreePorts";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useCanForwardPorts } from "@/hooks/remote/usePortForwards";
-import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useRemoteDeviceLabel } from "@/hooks/remote/useDevices";
 import { useWorktreeData } from "@/hooks/worktrees/useWorktreeData";
 import { ForwardAllButton } from "./ForwardAllButton";
 import {

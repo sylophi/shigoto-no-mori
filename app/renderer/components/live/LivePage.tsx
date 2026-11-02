@@ -17,8 +17,8 @@ import {
   useRunningScripts,
 } from "@/hooks/live/useLiveActivity";
 import { useWaitingAgents } from "@/lib/agentWatch";
-import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
-import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { commandAccessOf } from "@/lib/remote/devices";
+import { useDevices } from "@/hooks/remote/useDevices";
 import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { scriptRunsOf } from "@/hooks/scripts/scriptRuns";
 import { useRegistry } from "@/lib/runtime/viewHooks";
@@ -31,7 +31,6 @@ import {
   LivePageView,
 } from "@shigomori/ui/views/live/LivePageView.tsx";
 import { buildLive, summarize } from "./liveModel";
-import { useApi } from "@/lib/runtime/pageApi";
 
 export function LivePage() {
   const hosts = useRunningScripts();
@@ -91,17 +90,13 @@ export function LivePage() {
 // go: the end of a day's work, or a machine bogged down by dev servers
 // left behind. Armed by a first click, like the app's other removals.
 function StopAllScripts({ hosts }: { hosts: readonly HostScripts[] }) {
-  const page = useApi();
   const atoms = useRegistry();
-  const registry = useRemoteDevices();
+  const devices = useDevices();
   const { armed, trigger } = useConfirmTwice();
   const runs = hosts.flatMap(({ deviceId, api, runs: hostRuns }) =>
     api !== undefined &&
-    commandAccessOf(
-      page.deviceId,
-      deviceId,
-      registry.find((device) => device.deviceId === deviceId),
-    ).canCommand
+    commandAccessOf(devices.find((device) => device.deviceId === deviceId))
+      .canCommand
       ? hostRuns.map((run) => ({ deviceId, run }))
       : [],
   );

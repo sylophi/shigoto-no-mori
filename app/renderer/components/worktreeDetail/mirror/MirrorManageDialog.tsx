@@ -21,7 +21,7 @@ import {
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { useDeviceIcon } from "@/hooks/remote/useRemoteDevices";
+import { useDeviceIcon } from "@/hooks/remote/useDevices";
 import {
   useMirrorControls,
   useMirrorHistory,

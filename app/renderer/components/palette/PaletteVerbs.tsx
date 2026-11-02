@@ -7,10 +7,7 @@ import {
   Plus,
   SquarePen,
 } from "lucide-react";
-import {
-  useRemoteDeviceApi,
-  useScopedDeviceLabel,
-} from "@/hooks/remote/useRemoteDevices";
+import { useLiveApi } from "@/hooks/remote/useDevices";
 import { LauncherIconView } from "@shigomori/ui/views/shared/LauncherIconView.tsx";
 import { GithubMark } from "@shigomori/ui/primitives/svgs/github-mark.tsx";
 import { githubPageOf } from "@shigomori/contracts/predicates/remoteUrl";
@@ -19,7 +16,10 @@ import { useBinding, useKeymap } from "@/hooks/ui/useKeymap";
 import { useHasLocalHost } from "@/lib/localHost";
 import { openWorktreeInNewWindow } from "@/lib/newWindow";
 import { useLaunch } from "@/hooks/launchers/useLaunchers";
-import { MaybeHostScope } from "@/hooks/remote/useHostScope";
+import {
+  MaybeHostScope,
+  useScopedDeviceLabel,
+} from "@/hooks/remote/useHostScope";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
@@ -125,7 +125,7 @@ function WorktreeVerbs({
   const { openUrl } = useOutside();
   const { worktree, pr } = entry;
   const changesKeys = useBinding("paletteChanges");
-  const api = useRemoteDeviceApi(entry.device?.deviceId);
+  const api = useLiveApi(entry.device?.deviceId);
   const reachable = entry.device === undefined || api !== undefined;
   const opens: Verb[] = [
     {

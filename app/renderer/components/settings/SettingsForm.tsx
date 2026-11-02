@@ -15,7 +15,7 @@ import { DeviceTabBarView } from "@shigomori/ui/views/shared/DeviceTabBarView.ts
 import { LayoutSectionView } from "@shigomori/ui/views/settings/LayoutSectionView.tsx";
 import { resetLayout } from "@/store/layout";
 import { UpdateMark } from "@shigomori/ui/primitives/status-dot.tsx";
-import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
+import { useHostDevices } from "@/hooks/remote/useDevices";
 import {
   useOutdatedDevices,
   useStagedUpdates,
@@ -135,7 +135,7 @@ function SettingsPage({
   const hasLocalHost = useHasLocalHost();
   const save = useSettingsSave();
   const { setOverride } = useLook();
-  const devices = useHostDevices();
+  const peers = useHostDevices().filter((device) => !device.isThisDevice);
   const roster = useDeviceRoster();
   const activeTab = useActiveSettingsTab();
   const hostTab = isHostTab(activeTab) ? activeTab : undefined;
@@ -384,7 +384,7 @@ function SettingsPage({
         />
       )}
 
-      {devices.map((device) => (
+      {peers.map((device) => (
         // Keyed by device: a different machine is a different form,
         // seeded from that device's own config read. Mounted on its
         // first pick, so opening Settings reads no peer's config.

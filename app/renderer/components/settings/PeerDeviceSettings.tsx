@@ -7,7 +7,7 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
 import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
-import type { RemoteDevice } from "@/lib/remote/devices";
+import type { Device } from "@/lib/remote/devices";
 import { deviceSections } from "./deviceSections";
 import { HostPanels, onEveryHostTab } from "./SettingsPanel";
 import type { HostTab } from "@shigomori/ui/views/settings/settingsSections.ts";
@@ -34,12 +34,12 @@ export function PeerDeviceSettings({
   device,
   active,
 }: {
-  device: RemoteDevice;
+  device: Device;
   active: HostTab | undefined;
 }) {
   const { reachable } = deviceStatusView(device.status);
   const api = useLastGoodApi(device);
-  const offline = !reachable || device.api === undefined;
+  const offline = !reachable;
 
   // Never reached at all: no wire to read the device's config over, so
   // there is nothing honest to render. Say where the settings are
@@ -66,7 +66,7 @@ export function PeerDeviceSettings({
   );
 }
 
-function OfflineNote({ device }: { device: RemoteDevice }) {
+function OfflineNote({ device }: { device: Device }) {
   return (
     <PeerOfflineNoteView
       label={device.label}
@@ -78,7 +78,7 @@ function OfflineNote({ device }: { device: RemoteDevice }) {
 }
 
 // The build the device reported, at the head of its General section.
-function PeerVersion({ device }: { device: RemoteDevice }) {
+function PeerVersion({ device }: { device: Device }) {
   return (
     <VersionSection
       installed={device.appVersion}
@@ -92,7 +92,7 @@ function ReachablePeerSettings({
   offline,
   active,
 }: {
-  device: RemoteDevice;
+  device: Device;
   offline: boolean;
   active: HostTab | undefined;
 }) {
@@ -145,7 +145,7 @@ function PeerSettingsForm({
   offline,
   active,
 }: {
-  device: RemoteDevice;
+  device: Device;
   initialConfig: GlobalConfig;
   offline: boolean;
   active: HostTab | undefined;

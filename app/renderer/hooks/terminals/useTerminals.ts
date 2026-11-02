@@ -29,7 +29,8 @@ export function useTerminals(): readonly Terminal[] | null {
 
 // The sidebar's terminal mark for a worktree: "busy" while a command
 // holds one of its shells, "open" while any is open, read through the
-// row's api (useRowHostApi). Only a row whose mark changes renders again.
+// row's api (useCommandableDeviceApi). Only a row whose mark changes
+// renders again.
 export function useWorktreeTerminalMark(
   worktreeId: string,
   deviceId: string,

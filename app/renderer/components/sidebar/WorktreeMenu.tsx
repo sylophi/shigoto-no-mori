@@ -25,7 +25,7 @@ import {
   type TransferOffers,
 } from "@/components/worktreeDetail/TransferActions";
 import { useProjects } from "@/hooks/projects/useProjects";
-import { useRowHostApi } from "@/hooks/remote/useCommandAccess";
+import { useCommandableDeviceApi } from "@/hooks/remote/useCommandAccess";
 import { MaybeHostScope, useHostScope } from "@/hooks/remote/useHostScope";
 import {
   CONFIRM_DESTRUCTIVE_MS,
@@ -84,7 +84,7 @@ function MenuItems({
   project,
   deleteArm,
 }: WorktreeMenuProps & { deleteArm: DeleteArm }) {
-  const api = useRowHostApi(deviceId);
+  const api = useCommandableDeviceApi(deviceId);
   const goToProject = useGoToProject();
   return (
     <>

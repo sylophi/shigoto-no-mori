@@ -15,9 +15,9 @@ import { HostScopeProvider } from "@/hooks/remote/useHostScope";
 import { useHasLocalHost } from "@/lib/localHost";
 import { useApi } from "@/lib/runtime/pageApi";
 import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
-import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
+import { useDevice } from "@/hooks/remote/useDevices";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
-import type { RemoteDevice } from "@/lib/remote/devices";
+import { type Device, isLive } from "@/lib/remote/devices";
 import { NotSharingView } from "@shigomori/ui/views/remote/NotSharingView.tsx";
 import {
   OpenDevicesButtonView,
@@ -33,7 +33,7 @@ function RemoteScopeGate({
   deviceId: string;
   Page: ComponentType;
 }) {
-  const device = useRemoteDevice(deviceId);
+  const device = useDevice(deviceId);
   // Kept across a blip so the page under it stays mounted (why: the
   // hook). This matters twice here: a page opened on this device's
   // route can be showing ANOTHER device's tab (ProjectDevicePage picks
@@ -63,7 +63,7 @@ function RemoteScopeGate({
     <HostScopeProvider deviceId={deviceId} api={api}>
       <RemoteScopeFrameView
         banner={
-          device.api === undefined && (
+          !isLive(device) && (
             <UnreachableBannerView
               label={unreachableLabel(device)}
               action={<OpenDevicesButton />}
@@ -77,10 +77,7 @@ function RemoteScopeGate({
   );
 }
 
-function unreachableLabel(
-  device: RemoteDevice | undefined,
-  signedIn = true,
-): string {
+function unreachableLabel(device: Device | undefined, signedIn = true): string {
   if (device === undefined) {
     // A deep link or a page left open across a sign-out: signed out,
     // nothing is in any registry.
@@ -95,7 +92,7 @@ function unreachableLabel(
   return `${device.label} is ${deviceStatusView(device.status).label.toLowerCase()}.`;
 }
 
-function UnreachableDevice({ device }: { device: RemoteDevice | undefined }) {
+function UnreachableDevice({ device }: { device: Device | undefined }) {
   const { data: status } = useAccountStatus();
   return (
     <UnreachableDeviceView

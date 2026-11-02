@@ -3,7 +3,7 @@ import type { Worktree } from "@shigomori/contracts/schemas";
 import { ScriptConsole } from "@/components/scriptConsole/ScriptConsole";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useScopedDeviceLabel } from "@/hooks/remote/useHostScope";
 import { useTerminals } from "@/hooks/terminals/useTerminals";
 import { useCloseKeyClosesTab } from "@/hooks/ui/useCloseKey";
 import { notifyError } from "@/lib/toast";

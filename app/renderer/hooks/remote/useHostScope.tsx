@@ -16,7 +16,8 @@
 import type { HostApi } from "@/lib/runtime/Api";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { createContext, use, type ReactNode } from "react";
-import { remoteDeviceById } from "@/lib/remote/devices";
+import { useRemoteDeviceLabel } from "@/hooks/remote/useDevices";
+import { isLive, peerOf, remoteDeviceById } from "@/lib/remote/devices";
 import { queryKeysFor, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 
@@ -88,15 +89,17 @@ function hostScopeFor(
 
 // Any device's scope by id, for a caller outside React (the villager
 // toasts, lib/villagers/moves.ts): this machine's, or a peer's while
-// it has an api. Undefined for a peer without one.
+// it can be asked. Undefined for a peer that can't.
 export function hostScopeOf(
   page: RendererApi,
   registry: AtomRegistry.AtomRegistry,
   deviceId: string,
 ): HostScope | undefined {
   if (deviceId === page.deviceId) return localHostScope(page);
-  const api = remoteDeviceById(registry, deviceId)?.api;
-  return api === undefined ? undefined : hostScopeFor(page, deviceId, api);
+  const peer = remoteDeviceById(registry, deviceId);
+  return peer !== undefined && isLive(peerOf(page, peer))
+    ? hostScopeFor(page, deviceId, page.peerApi(deviceId))
+    : undefined;
 }
 
 export function HostScopeProvider({
@@ -204,4 +207,9 @@ export function DestinationScope({ children }: { children: ReactNode }) {
 export function useHostScope(): HostScope {
   const page = useApi();
   return use(HostScopeContext) ?? localHostScope(page);
+}
+
+// The name of the device the caller's scope reads, for prose.
+export function useScopedDeviceLabel(): string {
+  return useRemoteDeviceLabel(useHostScope().deviceId);
 }

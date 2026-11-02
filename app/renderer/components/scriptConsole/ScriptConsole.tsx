@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useScopedDeviceLabel } from "@/hooks/remote/useHostScope";
 import {
   type TerminalFeed,
   type TerminalScreen,
