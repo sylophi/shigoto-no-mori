@@ -22,6 +22,7 @@ import {
   syncedProjectSettingValue,
   withSharedSetting,
 } from "@shigomori/contracts/sharedSettings";
+import { isAnchoredPath } from "@shigomori/contracts/projectPaths";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -450,7 +451,6 @@ const parseValue = (
   key: ConfigKey,
   kind: Exclude<ConfigKey["kind"], "list">,
   raw: string,
-  expandHome: (raw: string) => string,
 ) => {
   const invalid = (reason: InvalidConfigValue["reason"]) =>
     Effect.fail(
@@ -476,18 +476,16 @@ const parseValue = (
     case "string": {
       if (key.choices.length > 0 && !key.choices.includes(raw))
         return invalid("enum");
-      if (key.name !== "customWorktreePath") return Effect.succeed(raw);
-      const absolute = expandHome(raw);
-      return absolute.startsWith("/")
-        ? Effect.succeed(absolute)
-        : invalid("absolutePath");
+      return key.name === "customWorktreePath" && !isAnchoredPath(raw)
+        ? invalid("absolutePath")
+        : Effect.succeed(raw);
     }
   }
 };
 
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  const { expandHome, binaryName } = yield* Paths.Paths;
+  const { binaryName } = yield* Paths.Paths;
   const git = yield* Git.Git;
   const identities = yield* Identity.Identity;
   const sharedSettings = yield* SharedSettings.SharedSettings;
@@ -819,7 +817,7 @@ const make = Effect.gen(function* () {
       yield* unset(scope, name);
       return undefined;
     }
-    const value = yield* parseValue(key, key.kind, raw, expandHome);
+    const value = yield* parseValue(key, key.kind, raw);
     yield* update(
       scope,
       (doc) =>

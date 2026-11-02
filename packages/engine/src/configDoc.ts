@@ -3,6 +3,7 @@
 // nesting (scripts.setup).
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
+import { isAnchoredPath } from "@shigomori/contracts/projectPaths";
 import {
   isCarryOverEntry,
   isLauncherCommand,
@@ -226,6 +227,9 @@ function valueProblem(key: ConfigKey, value: unknown): string | undefined {
         : `${key.name} must be a boolean.`;
     case "string":
       if (typeof value !== "string") return `${key.name} must be a string.`;
+      if (key.name === "customWorktreePath" && !isAnchoredPath(value)) {
+        return `${key.name} must be an absolute path.`;
+      }
       return key.required && value.trim() === ""
         ? `${key.name} is required.`
         : undefined;
