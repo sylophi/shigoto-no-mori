@@ -11,6 +11,7 @@ import {
   VoidSchema,
 } from "../schemas/index.ts";
 
+// Where the host listens now, and the device it is (this machine's).
 // The window's id comes from here: the host's store holds it.
 export const HostAddressSchema = strict(
   Schema.Struct({
@@ -19,6 +20,7 @@ export const HostAddressSchema = strict(
     deviceId: DeviceIdSchema,
   }),
 );
+export type HostAddress = typeof HostAddressSchema.Type;
 
 // Why the shell started this machine's host again, pushed to every
 // window as the new host is up: each says it once its link lands there.

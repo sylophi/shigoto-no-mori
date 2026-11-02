@@ -5,12 +5,8 @@
 import { BrowserWindow, dialog } from "electron";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import {
-  BUSY_COPY,
-  type BusyAction,
-  type BusyOperations,
-  busyDetail,
-} from "@shared/busy";
+import type { BusyOperations } from "@shigomori/contracts/modules/session";
+import { BUSY_COPY, type BusyAction, busyDetail } from "@shared/busy";
 import { followBusy } from "../core/host/busyPrompt";
 import { hostBusy, hostBusyAgain } from "../hostProcess";
 

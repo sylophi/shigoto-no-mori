@@ -7,6 +7,7 @@
 // reconnect: calls made meanwhile wait for it, and push subscriptions
 // carry over. A view ends with the link it ran on.
 import { LoopbackGroup } from "@shigomori/contracts/link";
+import type { HostAddress } from "@shigomori/contracts/modules/window";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -20,13 +21,6 @@ import type { Link } from "@shared/ipc/transport";
 import { log } from "@shared/log";
 import { dialDevice, type OpenClientSocket } from "./deviceLink";
 import { pushFanOut } from "./rpcTransport";
-
-// Where the host listens now, and the device it is (this machine's).
-export type HostAddress = {
-  readonly port: number;
-  readonly token: string;
-  readonly deviceId: string;
-};
 
 // How long one dial may take, and the waits between failed ones.
 const DIAL_DEADLINE_MS = 10_000;

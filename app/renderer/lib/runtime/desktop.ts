@@ -8,6 +8,7 @@
 import { isHostSide } from "@shigomori/contracts/link";
 import { callOf, channelOf } from "@shigomori/contracts/contract";
 import {
+  type HostAddress,
   type HostRestartReasonSchema,
   windowContract,
 } from "@shigomori/contracts/modules/window";
@@ -16,7 +17,7 @@ import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import type * as Stream from "effect/Stream";
 import { SHELL_PORT_CHANNEL, shellLink } from "@shared/ipc/shell";
-import { type HostAddress, hostLink } from "@shared/remote/hostLink";
+import { hostLink } from "@shared/remote/hostLink";
 import type { ElectronBridge } from "../../../main/preload";
 import { ClientLinks } from "./ClientLinks";
 import { followHostRestarts, hostAnswering } from "./hostAnswering";
