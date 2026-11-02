@@ -56,7 +56,7 @@ import {
   listenLoopback,
 } from "@host/portForward/bridge";
 import { log } from "@shared/log";
-import { transferInto } from "./registry";
+import { MirrorLedger } from "./MirrorLedger";
 
 // file-sync/engine.go reads this exact name.
 export const MIRROR_GATEWAY_TOKEN_ENV = "SM_MIRROR_GATEWAY_TOKEN";
@@ -178,6 +178,7 @@ export class MirrorGateway extends Context.Service<
 
 const make = Effect.gen(function* () {
   const reach = yield* PeerReach.PeerReach;
+  const ledger = yield* MirrorLedger;
   const listening = yield* Ref.make(Option.none<MirrorGatewayAddress>());
   const streams = new Set<BridgedConn>();
   // The live mirrors' among them.
@@ -222,8 +223,12 @@ const make = Effect.gen(function* () {
           return;
         }
         // A move's files step, told to the peer so it counts the stream
-        // as under way (registry.ts transferInto). A live mirror's is not.
-        const transfer = transferInto(preface.deviceId, preface.worktreeId);
+        // as under way (MirrorLedger's transferInto). A live mirror's is
+        // not.
+        const transfer = ledger.transferInto(
+          preface.deviceId,
+          preface.worktreeId,
+        );
         if (transfer !== undefined) {
           bridge(socket, preface, carried, transfer);
           return;
@@ -248,7 +253,7 @@ const make = Effect.gen(function* () {
     socket: Socket,
     preface: Preface,
     carried: Buffer,
-    transfer: ReturnType<typeof transferInto>,
+    transfer: ReturnType<MirrorLedger["Service"]["transferInto"]>,
   ) => {
     const api = reach.calls(mirrorContract, preface.deviceId);
     const conn = bridgeSocket(socket, {

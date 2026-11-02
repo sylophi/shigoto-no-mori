@@ -8,7 +8,6 @@ import { join } from "node:path";
 import type {
   MirrorApplyGitStatePayload,
   MirrorOpenStreamPayload,
-  MirrorServing,
   MirrorWorktreePayload,
 } from "@shigomori/contracts/modules/mirror";
 import type { HandlerContext } from "@shared/ipc/transport";
@@ -25,63 +24,20 @@ import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
 import { applyGitState, readGitState, watchIndexFile } from "./gitState";
 import { log } from "@shared/log";
 import { MirrorError } from "./MirrorEngine";
+import { MirrorLedger } from "./MirrorLedger";
 import { MirrorSignals } from "./MirrorSignals";
 
-// The mirror streams this host currently serves, keyed by the calling
-// device and the channel id it minted (unique per connection, so the
-// pair is what identifies a stream host-wide): what mirror:list
-// reports as `serving`, so a worktree shows "mirrored to <device>" on
-// the machine it lives on. Entries live exactly as long as their
-// channel.
-const serving = new Map<string, MirrorServing>();
-// How each of those streams' child is ended, under the same key.
-const stops = new Map<string, () => void>();
-
-// Worktrees being deleted here: the streams into them end, and none
-// opens until the delete is done, so nothing crosses while their files
-// go (the mirror runs on the peer, which this device can't pause).
-// Counted, since a stack's delete holds several at once.
-const held = new Map<string, number>();
-
-export function holdServing(worktreeIds: readonly string[]): () => void {
-  for (const id of worktreeIds) held.set(id, (held.get(id) ?? 0) + 1);
-  for (const [key, entry] of serving) {
-    if (worktreeIds.includes(entry.worktreeId)) stops.get(key)?.();
-  }
-  return () => {
-    for (const id of worktreeIds) {
-      const left = (held.get(id) ?? 1) - 1;
-      if (left > 0) held.set(id, left);
-      else held.delete(id);
-    }
-  };
-}
-
-const refuseHeld = (worktreeId: string) =>
-  held.has(worktreeId)
+// A worktree being deleted here serves no stream and takes no git
+// state (MirrorLedger's holdServing).
+const refuseHeld = (ledger: MirrorLedger["Service"], worktreeId: string) =>
+  ledger.servingHeld(worktreeId)
     ? Effect.fail(
         new MirrorError({ reason: "This worktree is being deleted." }),
       )
     : Effect.void;
 
-export function listMirrorServing(): MirrorServing[] {
-  return [...serving.values()];
-}
-
-// The mirror list changed without a session doing so (a stop's copy
-// removal finished).
-export const announceServingChange = Effect.map(MirrorSignals, (signals) =>
-  signals.servingChanged(),
-);
-
 function servingKey(ctx: HandlerContext, channelId: string): string {
   return `${ctx.callerDeviceId ?? ""}:${channelId}`;
-}
-
-function forgetServing(signals: MirrorSignals["Service"], key: string): void {
-  stops.delete(key);
-  if (!serving.delete(key)) return;
-  signals.servingChanged();
 }
 
 // A mirror stream: the far end is a fresh `file-sync serve` for the
@@ -104,8 +60,9 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
 ) {
   requireChannels(ctx, channelId);
   const signals = yield* MirrorSignals;
+  const ledger = yield* MirrorLedger;
   const { worktree } = yield* findProjectAndWorktree(projectId, worktreeId);
-  yield* refuseHeld(worktree.id);
+  yield* refuseHeld(ledger, worktree.id);
   const worktreePath = worktree.path;
   // The child ends when its channel does.
   const closed = yield* Deferred.make<void>();
@@ -130,7 +87,7 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
       attachFarEnd(ctx, channelId, child.stream, {
         onClosed: () => {
           stopChild();
-          forgetServing(signals, key);
+          ledger.forgetServing(key);
         },
       }),
     // The connection died or the id was claimed during the lookup
@@ -142,20 +99,23 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
     },
   });
   // A delete that began while the child started found nothing to end.
-  if (held.has(worktree.id)) {
+  if (ledger.servingHeld(worktree.id)) {
     stopChild();
-    return yield* refuseHeld(worktree.id);
+    return yield* refuseHeld(ledger, worktree.id);
   }
-  stops.set(key, stopChild);
-  serving.set(key, {
-    channelId,
-    projectId,
-    worktreeId: worktree.id,
-    peerDeviceId: ctx.callerDeviceId ?? "",
-    ...(peerWorktreeId === undefined ? {} : { peerWorktreeId }),
-    // oxlint-disable-next-line shigomori/no-wall-clock -- when serving began, for display
-    since: Date.now(),
-  });
+  ledger.noteServing(
+    key,
+    {
+      channelId,
+      projectId,
+      worktreeId: worktree.id,
+      peerDeviceId: ctx.callerDeviceId ?? "",
+      ...(peerWorktreeId === undefined ? {} : { peerWorktreeId }),
+      // oxlint-disable-next-line shigomori/no-wall-clock -- when serving began, for display
+      since: Date.now(),
+    },
+    stopChild,
+  );
   // A move's files step is under way for as long as the child serves
   // it, so a quit here asks about it as about the landing before it.
   if (transfer !== undefined) {
@@ -183,7 +143,6 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
     Effect.ignore,
     Effect.forkIn(child.scope),
   );
-  signals.servingChanged();
 });
 
 // The git half, read or applied in place.
@@ -209,7 +168,7 @@ export const applyServedGitState = ({
       projectId,
       worktreeId,
     );
-    yield* refuseHeld(worktree.id);
+    yield* refuseHeld(yield* MirrorLedger, worktree.id);
     const result = yield* applyGitState(
       project,
       { id: worktree.id, path: worktree.path },

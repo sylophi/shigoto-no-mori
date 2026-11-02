@@ -20,8 +20,8 @@ import {
 } from "../projects";
 import * as Scripts from "../Scripts";
 import { MirrorsOnDelete } from "@shigomori/engine/MirrorsOnDelete";
+import { MirrorLedger } from "@host/mirror/MirrorLedger";
 import { mirrorsOnDelete } from "@host/mirror/onDelete";
-import { stopMirrorsForWorktree } from "@host/mirror/registry";
 import { bookingScripts, ScriptsRunningError } from "./documents";
 
 // How long a forced removal's cleanup may run before it reads as failed.
@@ -51,15 +51,16 @@ const thisSideOnly = Effect.provideServiceEffect(
   mirrorsOnDelete("this"),
 );
 
-const stopMirrors = (worktreeIds: readonly string[]) =>
-  Effect.forEach(worktreeIds, stopMirrorsForWorktree, {
-    concurrency: "unbounded",
-    discard: true,
-  });
-
 export const makeRemoving = <H>(host: Context.Context<H>) =>
   Effect.gen(function* () {
     const scripts = yield* Scripts.Scripts;
+    const ledger = yield* MirrorLedger;
+
+    const stopMirrors = (worktreeIds: readonly string[]) =>
+      Effect.forEach(worktreeIds, ledger.stopMirrorsForWorktree, {
+        concurrency: "unbounded",
+        discard: true,
+      });
 
     const remove = Effect.fn("Worktrees.remove")(function* (
       input: RemoveInput & {

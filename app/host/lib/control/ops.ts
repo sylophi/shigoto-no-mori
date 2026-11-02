@@ -61,8 +61,8 @@ import { findProject, findProjectAndWorktree } from "@host/lib/projects";
 import { clonePeerProject } from "@host/lib/sync/cloneFromPeer";
 import { progressTo } from "@host/lib/sync/move";
 import * as SharedSettingsStore from "@host/lib/sharedSettings/store";
+import { MirrorLedger } from "@host/mirror/MirrorLedger";
 import {
-  mirrorList,
   startMirrorFrom,
   startMirrorTo,
   stopMirror as stopMirrorSession,
@@ -537,7 +537,7 @@ export const bring = settled<"bring">((input, ctx) =>
     if (input.mirror === true) {
       // Mirrored already: the peer's worktree is the copy of a
       // session run here, or the original of one the peer runs.
-      const { sessions } = yield* mirrorList();
+      const { sessions } = yield* (yield* MirrorLedger).list();
       const own = sessions.find(
         (candidate) =>
           candidate.deviceId === found.device.deviceId &&
@@ -668,7 +668,10 @@ export const clone = (
 export const mirrors: Handler["mirrors"] = () =>
   Effect.gen(function* () {
     const [{ daemon, daemonFailure, sessions }, registry] = yield* Effect.all(
-      [mirrorList(), registryOrEmpty],
+      [
+        Effect.flatMap(MirrorLedger, (ledger) => ledger.list()),
+        registryOrEmpty,
+      ],
       { concurrency: 2 },
     );
     const afar = yield* peerMirrors(registry);

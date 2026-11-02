@@ -46,12 +46,8 @@ import * as HostPushes from "../host/lib/HostPushes.ts";
 import { addProject } from "../host/lib/projects/index.ts";
 import * as Scripts from "../host/lib/Scripts.ts";
 import * as HostWorktrees from "../host/lib/Worktrees.ts";
-import {
-  endMirrorsIntoGoneCopy,
-  endMirrorsOnPeerRemoval,
-  MIRROR_LABEL_LOCAL_PROJECT,
-  settleMirrorBookkeeping,
-} from "../host/mirror/registry.ts";
+import { MirrorLedger } from "../host/mirror/MirrorLedger.ts";
+import { MIRROR_LABEL_LOCAL_PROJECT } from "../host/mirror/registry.ts";
 import type { HandlerContext } from "../shared/ipc/transport.ts";
 import { initDataDirAt } from "../shared/paths.ts";
 import { standInMirror, standInPeers } from "./lib/hostStandIns.mts";
@@ -362,16 +358,19 @@ const mirroredFox = async (
   );
   let peer = deleteCopy;
   standInPeers({
+    // Its worktrees list without the copy, which a look then finds gone.
     invoke: (_, channel) =>
-      channel !== "worktrees:delete"
-        ? Effect.fail(new RemoteCallError({ text: "not here" }))
-        : Effect.tryPromise({
-            try: () => {
-              calls.push(`delete copy, fox ${at()}`);
-              return peer();
-            },
-            catch: callFailureOf,
-          }),
+      channel === "worktrees:list"
+        ? Effect.succeed([])
+        : channel !== "worktrees:delete"
+          ? Effect.fail(new RemoteCallError({ text: "not here" }))
+          : Effect.tryPromise({
+              try: () => {
+                calls.push(`delete copy, fox ${at()}`);
+                return peer();
+              },
+              catch: callFailureOf,
+            }),
     onPush: () => () => {},
     channelsFor: () => () => Promise.reject(new Error("not here")),
     admits: () => true,
@@ -422,15 +421,22 @@ it("a refused delete of a mirrored worktree leaves its mirror running", async ()
   assert.ok(existsSync(join(fox.path, "wip.txt")));
 });
 
+const settleBookkeeping = Effect.flatMap(
+  MirrorLedger,
+  (ledger) => ledger.settleMirrorBookkeeping,
+);
+
 // The copy's device announcing its delete in `state`.
 const announced = (state: string, bothSides?: boolean) =>
   runHost(
-    endMirrorsOnPeerRemoval("peer", {
-      projectId: "far",
-      worktreeId: "copy",
-      state,
-      ...(bothSides === undefined ? {} : { bothSides }),
-    }),
+    Effect.flatMap(MirrorLedger, (ledger) =>
+      ledger.endMirrorsOnPeerRemoval("peer", {
+        projectId: "far",
+        worktreeId: "copy",
+        state,
+        ...(bothSides === undefined ? {} : { bothSides }),
+      }),
+    ),
   );
 
 it("a mirrored worktree whose mirror doesn't pause is kept", async () => {
@@ -456,7 +462,7 @@ it("a copy whose cleanup failed on its device is deleted again once the device c
   await waitFor(() => calls.length === 2, "the copy's delete was asked");
   peerAnswers(async () => ({ ok: true }));
   await waitFor(async () => {
-    await runHost(settleMirrorBookkeeping);
+    await runHost(settleBookkeeping);
     return calls.includes("terminate");
   }, "the copy was deleted");
   assert.deepEqual(calls, [
@@ -488,7 +494,7 @@ it("a mirrored worktree's copy on a device away is deleted once it comes", async
   peerAnswers(async () => ({ ok: true }));
   // Its look waits until the delete has given up on the copy.
   await waitFor(async () => {
-    await runHost(settleMirrorBookkeeping);
+    await runHost(settleBookkeeping);
     return calls.includes("terminate");
   }, "the copy was deleted");
   assert.deepEqual(calls, [
@@ -524,7 +530,15 @@ it("a copy found gone before its device said both sides went still takes the ori
     "mirrored-copy-found-gone",
     async () => ({ ok: true }),
   );
-  await runHost(endMirrorsIntoGoneCopy("peer", "far", "copy"));
+  await runHost(
+    Effect.flatMap(MirrorLedger, (ledger) =>
+      ledger.endMirrorIfCopyGone({
+        deviceId: "peer",
+        projectId: "far",
+        worktreeId: "copy",
+      }),
+    ),
+  );
   assert.deepEqual(calls, ["terminate"]);
   assert.deepEqual(await announced("removed", true), [
     { projectId: project.id, worktreeId: fox.id },

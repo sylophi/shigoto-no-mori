@@ -137,7 +137,6 @@ async function harness(answer: (request: Request) => Answer) {
   trackTest(() => daemonRuntime.dispose());
   const runtime = ManagedRuntime.make(
     MirrorEngineLayer.layer({
-      onChange: () => {},
       projectChanged: () => {},
     }).pipe(
       Layer.provideMerge(HostAccount.layer),
@@ -297,8 +296,8 @@ it("a worktree made where a moved one was ends its mirror when it goes, never re
 // with B not reached yet: the session's root gone and the session
 // trying to connect. The bookkeeping has looked and paused it. `reach`
 // brings B in. The session's id and the worktree's name are the
-// check's own: the bookkeeping's marks (registry.ts) and the data
-// folder outlive a check.
+// check's own: the ledger's marks (host/mirror/ledger/marks.ts) and the
+// data folder outlive a check.
 async function movedOriginalWithPeerAway(id: string) {
   scrubProcessGitEnv();
   const git = sandboxGit();

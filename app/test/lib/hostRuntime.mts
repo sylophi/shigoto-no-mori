@@ -37,6 +37,7 @@ import * as OrphanSweep from "../../host/lib/scripts/OrphanSweep.ts";
 import * as Views from "../../host/lib/Views.ts";
 import * as HostPushes from "../../host/lib/HostPushes.ts";
 import { mirrorsOnDelete } from "../../host/mirror/onDelete.ts";
+import * as MirrorLedger from "../../host/mirror/MirrorLedger.ts";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import { MirrorsOnDelete } from "@shigomori/engine/MirrorsOnDelete";
 import * as Ports from "../../host/lib/Ports.ts";
@@ -136,6 +137,7 @@ const runtime = ManagedRuntime.make(
     ),
     // The engine's deletes stop the mirrors of what they take first.
     Layer.provideMerge(Layer.effect(MirrorsOnDelete, mirrorsOnDelete("both"))),
+    Layer.provideMerge(MirrorLedger.layer),
     Layer.provideMerge(HostPushes.layer),
     Layer.provideMerge(EngineStoreChanges.layer),
     // What the app's root provides from its own wiring.

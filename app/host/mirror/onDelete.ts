@@ -12,34 +12,27 @@ import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { MirrorsOnDelete } from "@shigomori/engine/MirrorsOnDelete";
 import * as Effect from "effect/Effect";
 import * as HostPushes from "@host/lib/HostPushes";
-import { PeerReach } from "@host/ipc/PeerReach";
-import {
-  deleteCopiesOf,
-  endMirrorsOfKept,
-  holdRootChecks,
-  pauseMirrorsOn,
-} from "./registry";
-import { holdServing } from "./serving";
+import { MirrorLedger } from "./MirrorLedger";
 
 export const mirrorsOnDelete = (sides: "both" | "this") =>
   Effect.gen(function* () {
-    const reach = yield* PeerReach;
+    const ledger = yield* MirrorLedger;
     const pushes = yield* HostPushes.HostPushes;
     return MirrorsOnDelete.of({
       stop: ({ projectId, worktreeId }) =>
         Effect.gen(function* () {
           // The root vanishing is this delete, which deals with the
           // mirror itself, not one behind the app's back.
-          const releaseRoots = holdRootChecks([worktreeId]);
-          yield* pauseMirrorsOn([worktreeId]).pipe(
-            Effect.onError(() => Effect.sync(releaseRoots)),
-          );
-          const releaseServing = holdServing([worktreeId]);
+          const releaseRoots = ledger.holdRootChecks([worktreeId]);
+          yield* ledger
+            .pauseMirrorsOn([worktreeId])
+            .pipe(Effect.onError(() => Effect.sync(releaseRoots)));
+          const releaseServing = ledger.holdServing([worktreeId]);
           return (gone: boolean) =>
             Effect.gen(function* () {
               releaseServing();
               if (!gone || sides === "this") {
-                if (!gone) yield* endMirrorsOfKept([worktreeId]);
+                if (!gone) yield* ledger.endMirrorsOfKept([worktreeId]);
                 releaseRoots();
                 return;
               }
@@ -52,10 +45,9 @@ export const mirrorsOnDelete = (sides: "both" | "this") =>
               // The delete is done here: the copy's, a call to another
               // device, doesn't hold it up.
               yield* Effect.forkDetach(
-                deleteCopiesOf([worktreeId]).pipe(
-                  Effect.provideService(PeerReach, reach),
-                  Effect.ensuring(Effect.sync(releaseRoots)),
-                ),
+                ledger
+                  .deleteCopiesOf([worktreeId])
+                  .pipe(Effect.ensuring(Effect.sync(releaseRoots))),
               );
             });
         }),
@@ -65,11 +57,6 @@ export const mirrorsOnDelete = (sides: "both" | "this") =>
 // A delete from the terminal, which runs the engine in its own process
 // and asks the app around the files going (the CLI's MirrorsOnDelete).
 // A terminal gone between the two leaves its worktree's mirror paused.
-const fromTerminal = new Map<
-  string,
-  Effect.Success<ReturnType<MirrorsOnDelete["Service"]["stop"]>>
->();
-
 export const stopMirrorForDelete = (worktree: {
   readonly projectId: string;
   readonly worktreeId: string;
@@ -78,7 +65,10 @@ export const stopMirrorForDelete = (worktree: {
     // One a terminal gone before its answer left, kept.
     yield* mirrorDeleteDone({ worktreeId: worktree.worktreeId, gone: false });
     const mirrors = yield* mirrorsOnDelete("both");
-    fromTerminal.set(worktree.worktreeId, yield* mirrors.stop(worktree));
+    (yield* MirrorLedger).keepTerminalStop(
+      worktree.worktreeId,
+      yield* mirrors.stop(worktree),
+    );
   });
 
 export const mirrorDeleteDone = ({
@@ -88,8 +78,7 @@ export const mirrorDeleteDone = ({
   readonly worktreeId: string;
   readonly gone: boolean;
 }) =>
-  Effect.suspend(() => {
-    const stopped = fromTerminal.get(worktreeId);
-    fromTerminal.delete(worktreeId);
+  Effect.flatMap(MirrorLedger, (ledger) => {
+    const stopped = ledger.takeTerminalStop(worktreeId);
     return stopped === undefined ? Effect.void : stopped(gone);
   });

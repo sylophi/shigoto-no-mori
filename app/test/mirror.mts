@@ -84,7 +84,7 @@ import {
   type MirrorEngine,
   MirrorError,
 } from "@host/mirror/MirrorEngine";
-import { listMirrorServing } from "@host/mirror/serving";
+import { MirrorLedger } from "@host/mirror/MirrorLedger";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { type GitFollower, makeGitFollower } from "@host/mirror/gitFollow";
@@ -92,8 +92,6 @@ import { applyGitState, readGitState } from "@host/mirror/gitState";
 import {
   type MirrorSessionRaw,
   ORIGINAL_GONE_DETAIL,
-  settleMirrorBookkeeping,
-  moveMirrorsOfWorktree,
 } from "@host/mirror/registry";
 import { transferFilesOnce } from "@host/mirror/oneShot";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
@@ -125,7 +123,16 @@ const fileSyncDir = join(repoRoot, "file-sync");
 // projects add).
 
 // The bookkeeping, on the sandbox's engine.
-const settleBookkeeping = () => runHost(settleMirrorBookkeeping);
+const settleBookkeeping = () =>
+  runHost(
+    Effect.flatMap(MirrorLedger, (ledger) => ledger.settleMirrorBookkeeping),
+  );
+
+// Whether this host serves no mirror stream.
+const servesNothing = () =>
+  runHost(
+    Effect.map(MirrorLedger, (ledger) => ledger.listServing().length === 0),
+  );
 
 const fixture = cliSandbox("sm-mirror-check-", {
   // The fsevents binding's deprecation warning would otherwise land in
@@ -293,11 +300,14 @@ beforeAll(async () => {
   // The dialer's half: the real gateway over the real peer client, the real
   // daemon on the freshly built binary, on a device whose switches let a
   // peer mirror into it.
+  // The host's own ledger, whose transfers the gateway tells the peer.
+  const ledger = await runHost(Effect.service(MirrorLedger));
   gateway = ManagedRuntime.make(
     MirrorGateway.layer.pipe(
       Layer.provide(
         Layer.succeed(PeerReach.PeerReach, PeerReach.make(toListener)),
       ),
+      Layer.provide(Layer.succeed(MirrorLedger, ledger)),
       Layer.provideMerge(HostAccount.layer),
       Layer.provide(
         Layer.succeed(
@@ -696,11 +706,7 @@ it("terminate leaves both copies intact", async () => {
     () => daemon.sessions().every((s) => s.session !== session),
     "the session to leave the state stream",
   );
-  await waitFor(
-    () => listMirrorServing().length === 0,
-    "the listener's serving list to empty",
-    15_000,
-  );
+  await waitFor(servesNothing, "the listener's serving list to empty", 15_000);
   assert.equal(read(join(dialerRoot, "src.txt")), "from the listener\n");
   assert.equal(read(join(listenerWorktree, "from-b.txt")), "from the dialer\n");
 });
@@ -751,7 +757,7 @@ it("one-shot transfer: the admitted file crosses, the rule holds, nothing flows 
     "the one-shot session to be gone",
   );
   await waitFor(
-    () => listMirrorServing().length === 0,
+    servesNothing,
     "the listener's serving list to empty after the one-shot",
     15_000,
   );
@@ -832,7 +838,12 @@ it("a moved worktree re-opens only its own mirrors, on the new path under the ne
       }),
   });
   await runHost(
-    moveMirrorsOfWorktree("wt-old", { id: "wt-new", path: "/moved/here" }),
+    Effect.flatMap(MirrorLedger, (ledger) =>
+      ledger.moveMirrorsOfWorktree("wt-old", {
+        id: "wt-new",
+        path: "/moved/here",
+      }),
+    ),
   );
   assert.deepEqual(
     reopened.map(([id, input]) => [

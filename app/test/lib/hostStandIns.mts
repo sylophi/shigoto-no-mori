@@ -151,7 +151,6 @@ const standIns = Layer.mergeAll(
   Layer.succeed(
     MirrorSignals,
     MirrorSignals.of({
-      servingChanged: () => {},
       gitChanged: () => {},
       gitApplied: () => {},
     }),

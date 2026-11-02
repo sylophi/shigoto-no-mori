@@ -9,7 +9,7 @@ import type { Project } from "@shigomori/contracts/schemas";
 import * as Registry from "@shigomori/engine/Registry";
 import * as Terrier from "@shigomori/engine/Terrier";
 import * as Worktrees from "@shigomori/engine/Worktrees";
-import { holdRootChecks } from "@host/mirror/registry";
+import { MirrorLedger } from "@host/mirror/MirrorLedger";
 import * as Ops from "../engineOps";
 import { loadProjects, refresh } from "../projects";
 import { Terminals } from "../terminals/Terminals";
@@ -30,6 +30,7 @@ export const makeRemoving = ({
     const worktrees = yield* Worktrees.Worktrees;
     const registry = yield* Registry.Registry;
     const terrier = yield* Terrier.Terrier;
+    const ledger = yield* MirrorLedger;
 
     // The protocol over the worktrees one mutation removes or moves (a
     // stack cleanup removes several): refuse a concurrent mutation of any
@@ -60,7 +61,7 @@ export const makeRemoving = ({
         // leaves them to `mirrorsAfter` rather than read a move as a
         // removal.
         yield* Effect.acquireRelease(
-          Effect.sync(() => holdRootChecks(worktreeIds)),
+          Effect.sync(() => ledger.holdRootChecks(worktreeIds)),
           (releaseRoots) => Effect.sync(releaseRoots),
         );
         yield* Effect.forEach(worktreeIds, runs.stopWorktree, {
