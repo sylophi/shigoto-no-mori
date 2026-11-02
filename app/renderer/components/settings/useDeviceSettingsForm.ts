@@ -1,6 +1,10 @@
 import { useEffect } from "react";
 import type { GlobalConfig } from "@shigomori/contracts/schemas";
-import { keepTouched, useDirtyForm } from "@shigomori/ui/hooks/useDirtyForm.ts";
+import {
+  changedKeys,
+  keepTouched,
+  useDirtyForm,
+} from "@shigomori/ui/hooks/useDirtyForm.ts";
 import {
   type DeviceFormState,
   fromDeviceConfig,
@@ -50,6 +54,13 @@ export function useDeviceSettingsForm(deviceId: string, config: GlobalConfig) {
 
   useRegisterSettingsEditor(deviceId, {
     isDirty,
+    canSave:
+      Object.keys(
+        changedKeys(
+          storedDeviceSettings(savedSnapshot),
+          storedDeviceSettings(form),
+        ),
+      ).length > 0,
     isPending: save.isPending,
     isSuccess: save.isSuccess,
     save: handleSave,

@@ -226,6 +226,7 @@ function SettingsPage({
   // The device forms, as the footer sees them.
   const { summary: deviceForms, saveAll, discardAll } = editors;
   const anyDirty = isDirty || deviceForms.isDirty;
+  const anyToSave = isDirty || deviceForms.canSave;
   const anyPending = save.isPending || deviceForms.isPending;
   const anySuccess = save.isSuccess || deviceForms.isSuccess;
 
@@ -275,6 +276,7 @@ function SettingsPage({
           isDirty={anyDirty}
           isPending={anyPending}
           isSuccess={anySuccess}
+          canSave={anyToSave}
           onDiscard={handleDiscardAll}
           onSave={() => void handleSaveAll()}
         />
