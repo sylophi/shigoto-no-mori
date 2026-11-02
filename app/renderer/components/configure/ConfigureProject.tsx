@@ -13,7 +13,7 @@ import { ConfigureShared } from "./ConfigureShared";
 import { ConfigureSkeletonView } from "@shigomori/ui/views/configure/ConfigureSkeletonView.tsx";
 
 export function ConfigureProject() {
-  const synced = useProjectSettingsSync(useRoutedProject()?.identity);
+  const synced = useProjectSettingsSync(useRoutedProject().project?.identity);
   const [unsaved, setUnsaved] = useState(false);
   return (
     <ProjectDevicePage

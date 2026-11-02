@@ -17,11 +17,16 @@ function useScopedProjectParams() {
   return useParams({ strict: false }) as { projectId: string };
 }
 
-// The project the route names, once the list holds it.
-export function useRoutedProject(): Project | undefined {
+// The project the route names, once the list holds it, and whether the
+// list is still being read (a reload onto the page), when no project
+// yet is not a project missing.
+export function useRoutedProject(): {
+  project: Project | undefined;
+  isLoading: boolean;
+} {
   const { projectId } = useScopedProjectParams();
-  const { data: projects = [] } = useProjects();
-  return projects.find((p) => p.id === projectId);
+  const { data: projects = [], isLoading } = useProjects();
+  return { project: projects.find((p) => p.id === projectId), isLoading };
 }
 
 export type ProjectPage = keyof typeof PROJECT_ROUTE_PATHS;

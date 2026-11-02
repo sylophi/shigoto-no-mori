@@ -10,7 +10,10 @@
 // scope, never in the page.
 import { useNavigate, useParams } from "@tanstack/react-router";
 import type { ComponentType, ReactElement } from "react";
-import { useAccountStatus } from "@/hooks/account/useAccount";
+import {
+  useAccountDevices,
+  useAccountStatus,
+} from "@/hooks/account/useAccount";
 import { DeviceScope } from "@/hooks/remote/useHostScope";
 import { useHasLocalHost } from "@/lib/localHost";
 import { useApi } from "@/lib/runtime/pageApi";
@@ -71,7 +74,13 @@ function AbsentDevice({ reach }: { reach: DeviceReach }) {
       />
     );
   }
-  return <UnreachableDevice device={reach.device} />;
+  if (reach.kind === "gone") return <UnknownDevice />;
+  return (
+    <UnreachableDeviceView
+      label={unreachableLabel(reach.device)}
+      action={<OpenDevicesButton />}
+    />
+  );
 }
 
 function unreachableLabel(device: Device | undefined, signedIn = true): string {
@@ -89,11 +98,16 @@ function unreachableLabel(device: Device | undefined, signedIn = true): string {
   return `${device.label} is ${deviceStatusView(device.status).label.toLowerCase()}.`;
 }
 
-function UnreachableDevice({ device }: { device: Device | undefined }) {
+// A fresh load opens the route before the account and its device list
+// are read, and a device missing from a list not read yet may well be
+// on it: nothing is said until both are.
+function UnknownDevice() {
   const { data: status } = useAccountStatus();
+  const { isPending } = useAccountDevices();
+  if (status === undefined || isPending) return null;
   return (
     <UnreachableDeviceView
-      label={unreachableLabel(device, status?.signedIn === true)}
+      label={unreachableLabel(undefined, status.signedIn)}
       action={<OpenDevicesButton />}
     />
   );

@@ -72,7 +72,7 @@ export function ProjectDevicePage({
 }) {
   const scope = useHostScope();
   const { toProjectPage } = useProjectNav();
-  const project = useRoutedProject();
+  const { project, isLoading } = useRoutedProject();
   const holders = useDeviceTargets(project).filter(isHolder);
   // The tab the page opens on is the device the route named. A route
   // change remounts the page (remountDeps), so this never goes stale.
@@ -87,7 +87,9 @@ export function ProjectDevicePage({
   if (locked && !allDevicesPicked) setAllDevicesPicked(true);
 
   if (!project) {
-    return <CenteredMessage>Project not found.</CenteredMessage>;
+    return isLoading ? null : (
+      <CenteredMessage>Project not found.</CenteredMessage>
+    );
   }
 
   // A pick only means something with a bar to make it on. Without one
