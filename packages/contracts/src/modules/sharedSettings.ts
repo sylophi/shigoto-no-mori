@@ -44,9 +44,10 @@ export const sharedSettingsContract = defineContract(
     SharedSettingsDocSchema,
     gatedBy("changeApp"),
   ),
-  // This copy moved, carrying it whole. Fired only when a set or a
-  // merge actually changed something, which is what ends the exchange:
-  // a peer that merges this and learns nothing announces nothing back.
+  // This copy moved, carrying it whole. Fired after every commit to the
+  // shared settings, by any writer. A set or a merge that changes
+  // nothing commits nothing, which is what ends the exchange: a peer
+  // that merges this and learns nothing announces nothing back.
   push("changed", SharedSettingsDocSchema, {
     remote: true,
   }),

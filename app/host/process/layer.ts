@@ -345,11 +345,9 @@ export const layer = (options: {
     Layer.provideMerge(
       logged("the synced project settings", ProjectSettingsSync.layer),
     ),
-    // The handlers read this device's copy of the shared settings
-    // synchronously.
-    Layer.provideMerge(
-      logged("the shared settings", SharedSettingsStore.layer),
-    ),
+    // Every commit to the shared settings, by any writer, announced to
+    // every window and peer.
+    Layer.provideMerge(SharedSettingsStore.layer),
     // The moves in flight, each one the quit comes before rolled back.
     Layer.provideMerge(Moves.layer),
     Layer.provideMerge(scriptsAndFoundation(options)),

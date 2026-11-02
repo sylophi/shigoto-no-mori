@@ -84,10 +84,7 @@ import {
   sharedSettingsHandlers,
   sharedSettingsViews,
 } from "@host/ipc/modules/sharedSettings";
-import {
-  onSharedSettingsChange,
-  sharedSettingsCopy,
-} from "@host/lib/sharedSettings/store";
+import * as SharedSettingsStore from "@host/lib/sharedSettings/store";
 import { cliHandlers } from "@host/ipc/modules/cli";
 import { sharingHandlers, sharingViews } from "@host/ipc/modules/sharing";
 import { terminalsHandlers, terminalsViews } from "@host/ipc/modules/terminals";
@@ -341,7 +338,7 @@ export async function applyAccount(next: AccountFacts | null): Promise<void> {
   await refreshHubConnection();
   if (leaving) {
     await teardownStep("dropping the shared settings", () =>
-      sharedSettingsCopy.clear(),
+      Graph.run(SharedSettingsStore.clear),
     );
   }
 }
@@ -443,12 +440,6 @@ const stopPortForwardsTo = (
   );
 
 export function registerHostHandlers(): void {
-  // This device's copy of the shared settings moved (a pick here, or a
-  // peer's entries merged in): every window re-reads it off the push,
-  // and every peer's window folds it into its own copy.
-  onSharedSettingsChange((doc) =>
-    broadcastAll(sharedSettingsContract, "changed", doc),
-  );
   // The windows' bridge onto the host's hub socket: status, invokes
   // over the keeper-held direct sessions, and the peerPush and
   // statusChanged fan-outs. Built in wires.ts, which owns every dep.
