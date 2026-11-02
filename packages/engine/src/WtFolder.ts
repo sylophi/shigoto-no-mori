@@ -1,14 +1,14 @@
 // The one-time move of v2's worktrees into `wt/` that the store's
 // `wtFolder` migration owes (migrations/wtFolder.ts). The first start
 // looks through the v2 roots of every listed project, terrier's
-// included, and records each folder there. Each is then moved as
-// `worktrees move` moves one, whose own record keeps two processes
-// starting together from both taking it and lets a start finish one a
-// crash cut short (worktrees/moving.ts). One that can't be moved keeps
-// its folder and records why, for the doctor to report and retry. The
-// first start's
-// moves are reported to the migration as they go (Migration.ts), and
-// a start that resumes them counts the ones made before.
+// included, and records each worktree git lists there. Each is then
+// moved as `worktrees move` moves one, whose own record keeps two
+// processes starting together from both taking it and lets a start
+// finish one a crash cut short (worktrees/moving.ts). One that can't be
+// moved keeps its folder and records why, for the doctor to report and
+// retry. The first start's moves are reported to the migration as they
+// go (Migration.ts), and a start that resumes them counts the ones made
+// before.
 import { WORKTREES_DIR } from "@shigomori/contracts/git/worktreeLayout";
 import { listed, plural } from "@shigomori/contracts/words";
 import type { WorktreeMoveStep } from "@shigomori/contracts/schemas/migration";
@@ -18,6 +18,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -29,9 +30,11 @@ import {
   externalVolumeRoot,
   isSameOrInside,
 } from "@shigomori/contracts/git/worktreeLayout";
+import { isDirectory } from "./entries.ts";
 import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
 import * as Registry from "./Registry.ts";
+import * as Terrier from "./Terrier.ts";
 import { working, type Working } from "./processes.ts";
 import * as Worktrees from "./Worktrees.ts";
 
@@ -116,6 +119,7 @@ const make = Effect.gen(function* () {
   const { dataDir, dataDirName } = yield* Paths.Paths;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const migration = yield* Migration.Migration;
+  const terrier = yield* Terrier.Terrier;
 
   // Why a move couldn't be made, on its row. A store that refuses even
   // that (busy, or read-only) leaves the row as it was, tried again by
@@ -294,38 +298,67 @@ const make = Effect.gen(function* () {
     ] as const;
   };
 
-  // The folders under the v2 roots, recorded once. A folder git doesn't
-  // list is dropped when its move is tried.
+  // The moves of the worktrees under a project's v2 roots that its git
+  // lists: two projects of one folder name share v2's managed root. None
+  // when they can't be seen, its folder not there (on a drive not
+  // mounted) or its git unable to list them.
+  const v2WorktreesOf = (project: Registry.ListedProject) =>
+    Effect.gen(function* () {
+      if (!(yield* isDirectory(fs, project.path))) return Option.none();
+      const moves: Array<Omit<Row, "error">> = [];
+      for (const [from, to] of rootsOf(project.path)) {
+        const children = yield* fs
+          .readDirectory(from)
+          .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
+        for (const child of children) {
+          // As git spells it (symlinks resolved), which the id it has
+          // now is a hash of.
+          const at = path.join(from, child);
+          moves.push({
+            from_path: yield* fs
+              .realPath(at)
+              .pipe(Effect.orElseSucceed(() => at)),
+            to_path: path.join(to, child),
+            project_id: project.id,
+          });
+        }
+      }
+      if (moves.length === 0) return Option.some(moves);
+      const known = yield* worktrees.identities(project).pipe(Effect.option);
+      return Option.map(known, (ids) => {
+        const paths = new Set(ids.map((id) => id.path));
+        return moves.filter((move) => paths.has(move.from_path));
+      });
+    });
+
+  // The v2 worktrees' moves, recorded once. The scan stays owed until it
+  // has seen the roots of every project, terrier's included, so a start
+  // after the drive is back or terrier lists again records the rest.
   // Read before the write transaction, which takes the lock: almost
   // every start has nothing owed.
   const scanOwed = sql`SELECT id FROM wt_move_scan LIMIT 1`.pipe(
     Effect.map((rows) => rows.length > 0),
   );
-  const scanNow = sql.withTransaction(
-    Effect.gen(function* () {
-      const owed = yield* sql`DELETE FROM wt_move_scan RETURNING id`;
-      if (owed.length === 0) return;
-      for (const project of yield* registry.listed) {
-        for (const [from, to] of rootsOf(project.path)) {
-          const children = yield* fs
-            .readDirectory(from)
-            .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
-          for (const child of children) {
-            // As git spells it (symlinks resolved), which the id it has
-            // now is a hash of.
-            const at = path.join(from, child);
-            yield* sql`INSERT INTO wt_moves ${sql.insert({
-              from_path: yield* fs
-                .realPath(at)
-                .pipe(Effect.orElseSucceed(() => at)),
-              to_path: path.join(to, child),
-              project_id: project.id,
-            })} ON CONFLICT DO NOTHING`;
+  const scanNow = Effect.gen(function* () {
+    const { trouble } = yield* terrier.listing;
+    const projects = yield* Effect.forEach(
+      yield* registry.listed,
+      v2WorktreesOf,
+    );
+    yield* sql.withTransaction(
+      Effect.gen(function* () {
+        for (const moves of projects) {
+          for (const move of Option.getOrElse(moves, () => [])) {
+            yield* sql`INSERT INTO wt_moves ${sql.insert(move)}
+              ON CONFLICT DO NOTHING`;
           }
         }
-      }
-    }),
-  );
+        if (Option.isNone(trouble) && projects.every(Option.isSome)) {
+          yield* sql`DELETE FROM wt_move_scan`;
+        }
+      }),
+    );
+  });
   const scan = Effect.flatMap(scanOwed, (owed) =>
     owed ? scanNow : Effect.void,
   );
@@ -479,8 +512,9 @@ const make = Effect.gen(function* () {
   const retryStuck = retrying
     .withPermit(
       Effect.gen(function* () {
-        // A scan the store's failure stopped is made now, and the moves
-        // it left untried are tried with the stuck ones.
+        // A scan still owed (the store's failure stopped it, or it
+        // couldn't see a project's roots) is made now, and the moves it
+        // left untried are tried with the stuck ones.
         yield* scan;
         const stuck = (yield* migrationRows).filter((row) => row.moved === 0);
         // Nothing to move reads the store and ends, without a running

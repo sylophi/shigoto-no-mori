@@ -5,7 +5,13 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  realpathSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -79,6 +85,61 @@ it("moves v2 worktrees into wt at the first start, and keeps a locked one where 
   assert.equal(unmoved.length, 1);
   assert.equal(unmoved[0]?.fromPath, join(v2, "c"));
   assert.match(unmoved[0]?.error ?? "", /locked/);
+});
+
+it("moves the v2 worktrees of two projects of one folder name, each by its own git", async () => {
+  mkdirSync(join(box.home, "work"));
+  mkdirSync(join(box.home, "personal"));
+  const work = box.repo("work/api", { "README.md": "hi\n" });
+  const personal = box.repo("personal/api", { "README.md": "hi\n" });
+  const dataDir = join(box.home, "engine");
+  const v2 = join(dataDir, "worktrees", "api");
+  const wt = join(dataDir, "wt", "api");
+  box.write("registry.json", {
+    projects: [
+      { id: "P1", name: "api", path: work },
+      { id: "P2", name: "api", path: personal },
+    ],
+  });
+  box.side("engine");
+  box.git(work, "worktree", "add", "-q", "-b", "a", join(v2, "a"));
+  box.git(personal, "worktree", "add", "-q", "-b", "b", join(v2, "b"));
+  const { unmoved } = await state();
+  assert.deepEqual(unmoved, []);
+  assert.ok(listed(work).includes(join(wt, "a")));
+  assert.ok(listed(personal).includes(join(wt, "b")));
+  assert.ok(!existsSync(v2), "the shared v2 root is gone");
+});
+
+it("looks through the v2 roots of a project whose folder was away at the first start once it is back", async () => {
+  const repo = box.repo("repo", { "README.md": "hi\n" });
+  box.write("registry.json", {
+    projects: [{ id: "P1", name: "repo", path: repo }],
+  });
+  box.side("engine");
+  const v2 = join(repo, ".shigomori", "worktrees");
+  box.git(repo, "worktree", "add", "-q", "-b", "a", join(v2, "a"));
+  // On a drive that isn't mounted.
+  renameSync(repo, `${repo}-away`);
+  await state();
+  renameSync(`${repo}-away`, repo);
+  await box.start();
+  assert.ok(listed(repo).includes(join(repo, ".shigomori", "wt", "a")));
+});
+
+it("looks through the v2 roots again on a store whose scan was done before", async () => {
+  const { repo, v2, wt } = v2Project();
+  await state();
+  // A worktree the scan before this step passed over.
+  box.git(repo, "worktree", "add", "-q", "-b", "d", join(v2, "d"));
+  await box.engine(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id >= 18`;
+    }),
+  );
+  await box.start();
+  assert.ok(listed(repo).includes(join(wt, "d")));
 });
 
 it("keeps a worktree something runs in where it is, naming what to close", async () => {
