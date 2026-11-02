@@ -32,9 +32,9 @@ import { readGitBlob, readWorktreeFile } from "@host/lib/worktrees/files";
 import { inAppTerminal } from "@host/lib/terminals/inAppTerminal";
 import type { Terminals } from "@host/lib/terminals/Terminals";
 import { scriptEventNotifier, worktreeNotifiers } from "../scriptRun";
-import * as Ops from "@host/lib/engineOps";
 import * as Engine from "@host/lib/Engine";
 import * as Agents from "@shigomori/engine/Agents";
+import * as Landing from "@shigomori/engine/Landing";
 
 // The changes page's views of one worktree share this key prefix, so
 // a refresh reads them all.
@@ -590,10 +590,25 @@ export const worktreesHandlers = {
     mutateAndDescribe(input, (wt) =>
       withGit((git) => git.abortOperation(wt.path)),
     ),
+  // Not forced: the cleanup box shows for a merged PR, but the branch
+  // can hold commits made since, which only `done`'s own proof refuses
+  // to delete.
   switchToPrimaryAndDeleteBranch: (input) =>
-    Effect.flatMap(findProject(input.projectId), (project) =>
-      Ops.finishWorktree(project, input.worktreeId),
-    ),
+    Engine.asCall(
+      Engine.changing(
+        Effect.gen(function* () {
+          const located = yield* findProjectAndWorktree(
+            input.projectId,
+            input.worktreeId,
+          );
+          return yield* (yield* Landing.Landing).done(located, {
+            force: false,
+          });
+        }),
+        { projectId: input.projectId, worktreeId: input.worktreeId },
+        "finish",
+      ),
+    ).pipe(Effect.map(({ worktree }) => hostWorktree(worktree))),
 } satisfies EffectHandlers<
   typeof worktreesContract,
   HandlerContext,
