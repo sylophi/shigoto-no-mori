@@ -24,7 +24,11 @@ import type { MovedSource } from "@shigomori/contracts/schemas";
 import * as Config from "../Config.ts";
 import * as Dirty from "../Dirty.ts";
 import * as Git from "../Git.ts";
-import { MirrorsOnDelete, type Stopped } from "../MirrorsOnDelete.ts";
+import {
+  type DeleteEnd,
+  MirrorsOnDelete,
+  type Stopped,
+} from "../MirrorsOnDelete.ts";
 import * as Paths from "../Paths.ts";
 import { isNotFound } from "../platformErrors.ts";
 import { ownedLevels } from "../worktreeLayout.ts";
@@ -284,6 +288,55 @@ export const makeRemoving = ({
       return worktree.branch !== (yield* primaryRefOf(project)).primaryBranch;
     });
 
+    // Refused unless the worktree still holds `expect`: HEAD on its
+    // branch, the branch at its tip and its uncommitted work the same
+    // tree, read on this device as `expect` was. What can't be read is
+    // no proof it does.
+    const refuseChangedSince = Effect.fn("Worktrees.refuseChangedSince")(
+      function* ({ project, worktree }: Located, expect: MovedSource) {
+        const change = yield* Effect.gen(function* () {
+          const head = yield* git
+            .run(worktree.path, ["symbolic-ref", "--quiet", "HEAD"])
+            .pipe(
+              Effect.map((out) => out.trim()),
+              Effect.orElseSucceed(() => null),
+            );
+          if (
+            worktree.branch !== expect.branch ||
+            head !== `refs/heads/${expect.branch}`
+          ) {
+            return "moved" as const;
+          }
+          const tip = yield* git.refTip(
+            project.path,
+            `refs/heads/${expect.branch}`,
+          );
+          const fresh = yield* dirty.capture({
+            projectPath: project.path,
+            worktreePath: worktree.path,
+            worktreeId: worktree.id,
+          });
+          return movedSourceChange(expect, {
+            tip: Option.getOrNull(tip),
+            ...(fresh.captured
+              ? { captureTree: yield* git.treeOf(project.path, fresh.commit) }
+              : {}),
+          });
+        }).pipe(
+          Effect.catchTags({
+            NoHead: () => Effect.succeed("unread" as const),
+            CaptureFailed: () => Effect.succeed("unread" as const),
+          }),
+        );
+        if (change !== undefined) {
+          return yield* new WorktreeRefused({
+            reason: "changed-since-move",
+            subject: worktree.path,
+          });
+        }
+      },
+    );
+
     const remove = Effect.fn("Worktrees.remove")(function* (
       located: Located,
       options: {
@@ -294,8 +347,8 @@ export const makeRemoving = ({
         // A clock on each cleanup script: one that runs past it fails the
         // cleanup, as a script that failed does.
         readonly cleanupWithin?: Duration.Input;
-        // A transplant's teardown: what the move took, which the worktree
-        // must still be at the delete.
+        // A transplant's teardown or a mirror's other side: what the
+        // worktree must still hold at the delete.
         readonly expect?: MovedSource;
       },
       reporter: Reporter,
@@ -308,6 +361,16 @@ export const makeRemoving = ({
       // cut short.
       const half = yield* halfRemoved(worktree);
       const deletingBranch = yield* deletesBranch(located, options.keepBranch);
+      // The worktree's mirror stops first, before the cleanup, so nothing
+      // a cleanup script writes crosses to the other device, and is told
+      // once the removal is done how it ended: the files gone once git's
+      // side went, whatever follows, kept by git's step, or never that
+      // far.
+      let end: DeleteEnd = "short";
+      yield* Effect.acquireRelease(
+        stopMirrors(project.id, worktree),
+        (stopped) => Effect.suspend(() => stopped(end)),
+      );
       // Never for an external worktree: no provision ever ran.
       let cleanupRan = false;
       if (!worktree.isExternal && !options.skipCleanup && !half) {
@@ -376,52 +439,22 @@ export const makeRemoving = ({
           }
         }
       }
-      // Asked after the cleanup, right before the delete: a cleanup
-      // script or an editor can write to the source meanwhile, and a
-      // forced delete has no check of git's to stop it.
+      // Asked again after the cleanup (the app asks before it stops any
+      // script), right before the delete: a cleanup script or an editor
+      // can write to the worktree meanwhile, and a forced delete has no
+      // check of git's to stop it.
       if (options.expect !== undefined) {
-        const moved = options.expect;
-        const change = yield* Effect.gen(function* () {
-          const tip = yield* git.refTip(
-            project.path,
-            `refs/heads/${moved.branch}`,
-          );
-          const fresh = yield* dirty.capture({
-            projectPath: project.path,
-            worktreePath: worktree.path,
-            worktreeId: worktree.id,
-          });
-          return movedSourceChange(moved, {
-            tip: Option.getOrNull(tip),
-            ...(fresh.captured
-              ? { captureTree: yield* git.treeOf(project.path, fresh.commit) }
-              : {}),
-          });
-        }).pipe(
-          // What can't be read is no proof the source is what moved.
-          Effect.catchTags({
-            NoHead: () => Effect.succeed("unread" as const),
-            CaptureFailed: () => Effect.succeed("unread" as const),
-          }),
-        );
-        if (change !== undefined) {
-          return yield* new WorktreeRefused({
-            reason: "changed-since-move",
-            subject: worktree.path,
-          });
-        }
+        yield* refuseChangedSince(located, options.expect);
       }
       // Unforced, git checks the tree again at the delete, which covers
       // what a cleanup script wrote since `removable`'s check. Once git's
       // side is done (an orphaned checkout's too), the rest goes before
       // anything can cut in: what is kept under the id, which a worktree
       // made at the same path later would take over, and the branch, which
-      // nothing would remove after an interrupt (a Ctrl-C, a quit). The
-      // worktree's mirror stops first, and is told after whether git's
-      // side went: the files gone, whatever follows.
-      let filesWent = false;
-      const deleting = Effect.uninterruptible(
+      // nothing would remove after an interrupt (a Ctrl-C, a quit).
+      const removed = yield* Effect.uninterruptible(
         Effect.gen(function* () {
+          end = "kept";
           const checkout: Effect.Effect<
             void,
             Git.GitError | OrphanedWorktree | PlatformError.PlatformError
@@ -435,7 +468,7 @@ export const makeRemoving = ({
           ) {
             return outcome;
           }
-          filesWent = true;
+          end = "gone";
           yield* kept.forget(project, worktree.id);
           if (!worktree.isExternal) {
             yield* pruneEmptyParents(worktree.path, project.path);
@@ -448,11 +481,6 @@ export const makeRemoving = ({
           }
           return outcome;
         }),
-      );
-      const removed = yield* Effect.acquireUseRelease(
-        stopMirrors(project.id, worktree),
-        () => deleting,
-        (stopped) => Effect.suspend(() => stopped(filesWent)),
       );
       if (
         Result.isFailure(removed) &&
@@ -481,7 +509,7 @@ export const makeRemoving = ({
         path: worktree.path,
         projectName: project.name,
       };
-    });
+    }, Effect.scoped);
     return {
       requireClean,
       wipe,
@@ -489,6 +517,7 @@ export const makeRemoving = ({
       pruneEmptyParents,
       removable,
       deletesBranch,
+      refuseChangedSince,
       remove,
     };
   });

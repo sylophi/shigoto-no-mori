@@ -17,6 +17,7 @@ import type {
   MirrorSession,
   MirrorStarting,
 } from "@shigomori/contracts/modules/mirror";
+import type { MovedSource } from "@shigomori/contracts/schemas";
 import type { Stopped } from "@shigomori/engine/MirrorsOnDelete";
 import type * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import type * as Views from "@host/lib/Views";
@@ -26,7 +27,7 @@ import { type Copy, makeEnds } from "./ledger/ends";
 import { makeChanges, makeListing } from "./ledger/listing";
 import { makeMarks } from "./ledger/marks";
 import { makeMoves } from "./ledger/moves";
-import { makePeers, type Original } from "./ledger/peers";
+import { makePeers, type Taken } from "./ledger/peers";
 import { makeStreams } from "./ledger/streams";
 import { makeSweep } from "./ledger/sweep";
 import { makeTombstones } from "./ledger/tombstones";
@@ -51,10 +52,14 @@ export class MirrorLedger extends Context.Service<
     readonly holdServing: (worktreeIds: readonly string[]) => () => void;
     readonly servingHeld: (worktreeId: string) => boolean;
     readonly listServing: () => MirrorServing[];
+    readonly mirrorStreamInto: (
+      worktreeId: string,
+    ) => MirrorServing | undefined;
     readonly noteServing: (
       key: string,
       entry: MirrorServing,
       stop: () => void,
+      transfer?: boolean,
     ) => void;
     readonly forgetServing: (key: string) => void;
 
@@ -78,13 +83,28 @@ export class MirrorLedger extends Context.Service<
 
     // ledger/tombstones.ts
     readonly stopMirrorsForWorktree: (id: string) => Effect.Effect<void>;
+    readonly lookAtCopiesOf: (
+      id: string,
+      branch: string,
+      tip: string,
+    ) => Effect.Effect<ReadonlyMap<string, MovedSource>>;
+    readonly lookAtOriginalOf: (
+      id: string,
+      branch: string,
+      tip: string,
+    ) => Effect.Effect<MovedSource | undefined>;
+    // Answers the sessions it paused.
     readonly pauseMirrorsOn: (
       ids: readonly string[],
-    ) => Effect.Effect<void, MirrorError>;
+    ) => Effect.Effect<readonly string[], MirrorError>;
+    readonly resumeMirrors: (
+      sessions: readonly string[],
+    ) => Effect.Effect<void>;
     readonly endMirrorsOfKept: (ids: readonly string[]) => Effect.Effect<void>;
-    readonly deleteCopiesOf: (ids: readonly string[]) => Effect.Effect<void>;
-    // A peer taking this device's calls again.
-    readonly lookAgainAt: (deviceId: string) => void;
+    readonly deleteCopiesOf: (
+      id: string,
+      looks: ReadonlyMap<string, MovedSource>,
+    ) => Effect.Effect<void>;
     // The original's root vanishing is this delete or move's, not one
     // behind the app's back, until the release.
     readonly holdRootChecks: (worktreeIds: readonly string[]) => () => void;
@@ -134,7 +154,7 @@ export class MirrorLedger extends Context.Service<
     readonly endMirrorsOnPeerRemoval: (
       deviceId: string,
       payload: unknown,
-    ) => Effect.Effect<readonly Original[]>;
+    ) => Effect.Effect<readonly Taken[]>;
   }
 >()("sm/host/MirrorLedger") {}
 
@@ -148,7 +168,7 @@ const make = Effect.gen(function* () {
     ...(yield* makeTransfers),
     ...streams,
     ...(yield* makeListing({ changes, streams })),
-    ...(yield* makeTombstones({ marks, ends })),
+    ...(yield* makeTombstones({ marks, ends, streams })),
     ...moves,
     ...(yield* makeSweep({ marks, ends, moves })),
     ...(yield* makePeers({ marks, ends })),

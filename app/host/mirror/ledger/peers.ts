@@ -1,10 +1,12 @@
 // What a peer going or deleting its side does to the mirrors this
 // device runs: the mirrors with a device that left the account ended,
 // and the sessions into a copy it deleted ended, with the originals a
-// delete of both sides takes here too.
+// delete of both sides takes here too, each expected to still hold what
+// this device read of it when the two were found in step.
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import type { MovedSource } from "@shigomori/contracts/schemas";
 import { WorktreeRemovalSchema } from "@shigomori/contracts/schemas/worktree";
 import { ageOf, stamp, type Stamp } from "@shigomori/engine/keptAnswers";
 import {
@@ -15,16 +17,20 @@ import {
 import type { Copy, Ends } from "./ends";
 import type { Marks } from "./marks";
 
-const COPY_GONE_DETAIL = "The copy on the other device was deleted or moved";
+const COPY_GONE_DETAIL =
+  "The copy on the other device was deleted or moved, so the mirror ended. This worktree stays unless the copy was deleted with the two in step.";
 
 const GONE_COPY_MS = 2 * 60_000;
 
 const decodeRemoval = Schema.decodeUnknownOption(WorktreeRemovalSchema);
 
-export type Original = {
+type Original = {
   readonly projectId: string;
   readonly worktreeId: string;
 };
+
+// An original a copy's delete takes, if it still holds `expect`.
+export type Taken = Original & { readonly expect: MovedSource };
 
 export const makePeers = ({
   marks,
@@ -128,14 +134,22 @@ export const makePeers = ({
       if (Option.isNone(removal) || removal.value.state !== "removed") {
         return [];
       }
-      const { projectId, worktreeId, bothSides } = removal.value;
+      const { projectId, worktreeId, expect } = removal.value;
       yield* endMirrorsIntoGoneCopy(deviceId, projectId, worktreeId);
-      if (bothSides !== true) return [];
+      if (expect === undefined) return [];
       const key = `${deviceId}:${projectId}:${worktreeId}`;
       const gone = goneCopies.get(key);
       goneCopies.delete(key);
-      if (gone === undefined) return [];
-      return ageOf(gone.at, yield* stamp) <= GONE_COPY_MS ? gone.originals : [];
+      if (gone === undefined || ageOf(gone.at, yield* stamp) > GONE_COPY_MS) {
+        return [];
+      }
+      return gone.originals.map(
+        (original): Taken => ({
+          projectId: original.projectId,
+          worktreeId: original.worktreeId,
+          expect,
+        }),
+      );
     });
 
     // A copy the peer no longer lists (deleted while this device missed

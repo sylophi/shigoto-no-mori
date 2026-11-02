@@ -344,8 +344,7 @@ const make = (options: {
     // A peer coming to take this device's calls (its link up, both of
     // its switches on): git looks again, the bookkeeping re-opens what
     // waited on the peer (a moved original's sessions, MirrorLedger's
-    // settleMirrorBookkeeping), or ends it past 2 minutes of waiting,
-    // deletes the copies of gone originals left there, and
+    // settleMirrorBookkeeping), or ends it past 2 minutes of waiting, and
     // the sessions into it that wait on the link, that nobody paused and
     // that no re-open holds reconnect at once, not at the engine's next
     // retry. Side by side, each admission on its own: a resume waits on
@@ -354,7 +353,6 @@ const make = (options: {
     const admit = (deviceId: string) =>
       Effect.gen(function* () {
         follower.onPeerAdmitted(deviceId);
-        ledger.lookAgainAt(deviceId);
         runFork(Effect.ignore(withEngine(ledger.settleMirrorBookkeeping)));
         const waiting = (yield* daemon.sessions).filter(
           (raw) =>

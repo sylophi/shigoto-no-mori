@@ -363,6 +363,12 @@
       "gone": true
     }
   },
+  "control:mirrorDeleteStoppedShort": {
+    "payload": {
+      "projectId": "Y",
+      "worktreeId": "2b924683f9a7"
+    }
+  },
   "control:mirrors": {
     "success": {
       "daemon": "\ud800",

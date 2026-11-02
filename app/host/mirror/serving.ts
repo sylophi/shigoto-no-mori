@@ -115,6 +115,7 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
       since: Date.now(),
     },
     stopChild,
+    transfer !== undefined,
   );
   // A move's files step is under way for as long as the child serves
   // it, so a quit here asks about it as about the landing before it.
