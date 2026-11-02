@@ -3,22 +3,23 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { plural, pluralize } from "@shigomori/contracts/words";
-import { parseProcessTable } from "../doctorParse.ts";
 import { LOOPBACK_FILE, LoopbackFile } from "@shigomori/contracts/link";
 import { appFolders } from "../footprint.ts";
 import * as Paths from "../Paths.ts";
 import { byPlatform } from "../platform.ts";
-import { pidAlive, PS_BIRTH_ENV } from "../processes.ts";
+import { pidAlive } from "../processes.ts";
 import * as RunningScripts from "../RunningScripts.ts";
 import { readTunnelPid, TUNNEL_PID_FILE } from "../tunnelPid.ts";
-import { SCRIPT_START_TOLERANCE_MS, check } from "./documents.ts";
+import { check } from "./documents.ts";
 import type { ReadsArea } from "./reads.ts";
 
 export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const { flavor, binaryName } = paths;
     const { capture, readText } = reads;
     // What stops a process the host left behind: its next start.
@@ -79,26 +80,11 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       for (const owner of owners) {
         if (!(yield* pidAlive(owner))) gone.add(owner);
       }
-      const scripts = recorded.filter(({ ownerPid }) => gone.has(ownerPid));
-      if (scripts.length === 0) return [];
-      const pids = scripts.map(({ pid }) => String(pid));
-      // Non-zero when none are alive.
-      const ps = yield* capture(
-        "ps",
-        ["-p", pids.join(","), "-o", "pid=,lstart="],
-        PS_BIRTH_ENV,
-      ).pipe(Effect.option);
-      const live = parseProcessTable(
-        Option.match(ps, { onNone: () => "", onSome: ({ stdout }) => stdout }),
+      const orphans = yield* RunningScripts.survivors(
+        recorded.filter(({ ownerPid }) => gone.has(ownerPid)),
+      ).pipe(
+        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       );
-      const orphans = scripts.filter(({ pid, startedAt }) => {
-        const started = live.get(pid);
-        // A recycled pid started at another time.
-        return (
-          started !== undefined &&
-          Math.abs(started - startedAt) <= SCRIPT_START_TOLERANCE_MS
-        );
-      });
       if (orphans.length === 0) return [];
       const n = orphans.length;
       return [

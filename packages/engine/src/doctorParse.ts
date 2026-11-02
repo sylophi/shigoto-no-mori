@@ -1,9 +1,7 @@
-// The pure pieces of the doctor's checks: the parsers for what git, ps
-// and port-pool print, and the reading of a script's or a launcher's
-// command line.
-import * as Option from "effect/Option";
+// The pure pieces of the doctor's checks: the parsers for what git and
+// port-pool print, and the reading of a script's or a launcher's command
+// line.
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
-import { parseLstart } from "./processes.ts";
 
 // Go's strings.Fields: the words between runs of white space.
 export const fields = (text: string) =>
@@ -122,18 +120,6 @@ export const launcherProgram = (
 // A label as one shell word, for a fix line meant to be pasted.
 export const shellWord = (text: string) =>
   /[ \t'"$`\\]/.test(text) ? shellQuote(text) : text;
-
-// "  1234 Sat Oct 17 03:21:24 2026": each pid's birth (`PS_BIRTH_ENV`).
-export const parseProcessTable = (stdout: string) => {
-  const table = new Map<number, number>();
-  for (const line of stdout.split("\n")) {
-    const match = /^\s*(\d+)\s+(.+)$/.exec(line);
-    if (match === null) continue;
-    const born = parseLstart(match[2] ?? "");
-    if (Option.isSome(born)) table.set(Number(match[1]), born.value);
-  }
-  return table;
-};
 
 export const formatSize = (bytes: number) => {
   if (bytes >= 2 ** 30) return `${(bytes / 2 ** 30).toFixed(1)} GB`;
