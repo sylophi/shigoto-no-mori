@@ -232,9 +232,9 @@ export const mirrorEngineLayer = MirrorEngineLayer.layer({
 });
 
 // A mirror is one worktree on two devices: the originals here whose
-// copy was deleted on its device go too, forced, since that delete
-// stood for both. Only under the command switch, as the peer's own
-// delete call here would be.
+// copy was deleted on its device while the two were in step go too,
+// forced, since that delete stood for both. Only under the command
+// switch, as the peer's own delete call here would be.
 const deleteOriginals = (
   originals: ReadonlyArray<{ projectId: string; worktreeId: string }>,
 ) =>

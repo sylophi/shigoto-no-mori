@@ -78,11 +78,16 @@ export class MirrorLedger extends Context.Service<
 
     // ledger/tombstones.ts
     readonly stopMirrorsForWorktree: (id: string) => Effect.Effect<void>;
+    // The sessions found in step before the pause.
     readonly pauseMirrorsOn: (
       ids: readonly string[],
-    ) => Effect.Effect<void, MirrorError>;
+    ) => Effect.Effect<ReadonlySet<string>, MirrorError>;
+    readonly copyInStep: (worktreeId: string) => Effect.Effect<boolean>;
     readonly endMirrorsOfKept: (ids: readonly string[]) => Effect.Effect<void>;
-    readonly deleteCopiesOf: (ids: readonly string[]) => Effect.Effect<void>;
+    readonly deleteCopiesOf: (
+      ids: readonly string[],
+      inStep: ReadonlySet<string>,
+    ) => Effect.Effect<void>;
     // A peer taking this device's calls again.
     readonly lookAgainAt: (deviceId: string) => void;
     // The original's root vanishing is this delete or move's, not one
@@ -148,7 +153,7 @@ const make = Effect.gen(function* () {
     ...(yield* makeTransfers),
     ...streams,
     ...(yield* makeListing({ changes, streams })),
-    ...(yield* makeTombstones({ marks, ends })),
+    ...(yield* makeTombstones({ marks, ends, streams })),
     ...moves,
     ...(yield* makeSweep({ marks, ends, moves })),
     ...(yield* makePeers({ marks, ends })),

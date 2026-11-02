@@ -2,9 +2,10 @@
 // ends keep the copy, a worktree of its own: it may be all that is left
 // of the work (the original gone, or moved out of the mirror's reach), a
 // delete would need a peer no longer on the account to confirm nothing
-// is held here alone, the original wasn't deleted after all, or there
-// is nothing to delete (the copy is gone, or a re-open replaced the
-// session). Two delete it, each in its own order:
+// is held here alone, the original wasn't deleted after all or was
+// deleted while the two weren't in step, or there is nothing to delete
+// (the copy is gone, or a re-open replaced the session). Two delete
+// it, each in its own order:
 //   - deleteCopyThenEnd, for an original already deleted here: the copy
 //     goes first, and the session ends only once it has, since the
 //     session, paused on its root, is the one record of the copy left to

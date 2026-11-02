@@ -2,10 +2,12 @@
 // mirror stops before its files go, its sessions here paused and the
 // streams this device serves into it ended, so nothing crosses while
 // they go. A mirror is one worktree on two devices, so once they have
-// gone the other side goes too (`both`): the copy of an original here
-// is deleted on its device, and the device holding the original of a
-// copy here hears that both sides go. A worktree whose files didn't go
-// ends its mirror, both sides left as worktrees of their own. A move's
+// gone the other side goes too (`both`) when the two were in step,
+// judged before the pause and the streams' end (ledger/tombstones.ts):
+// the copy of an original here is deleted on its device, and the device
+// holding the original of a copy here hears that both sides go. A
+// mirror not in step ends with the other side kept, a worktree of its
+// own, and so does one whose worktree's files didn't go. A move's
 // teardown, a removal that must happen, and a delete the other side
 // asked for leave the other side alone (`this`).
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
@@ -21,10 +23,12 @@ export const mirrorsOnDelete = (sides: "both" | "this") =>
     return MirrorsOnDelete.of({
       stop: ({ projectId, worktreeId }) =>
         Effect.gen(function* () {
+          const copyInStep =
+            sides === "both" && (yield* ledger.copyInStep(worktreeId));
           // The root vanishing is this delete, which deals with the
           // mirror itself, not one behind the app's back.
           const releaseRoots = ledger.holdRootChecks([worktreeId]);
-          yield* ledger
+          const inStep = yield* ledger
             .pauseMirrorsOn([worktreeId])
             .pipe(Effect.onError(() => Effect.sync(releaseRoots)));
           const releaseServing = ledger.holdServing([worktreeId]);
@@ -40,13 +44,13 @@ export const mirrorsOnDelete = (sides: "both" | "this") =>
                 projectId,
                 worktreeId,
                 state: "removed",
-                bothSides: true,
+                bothSides: copyInStep,
               }).pipe(Effect.provideService(HostPushes.HostPushes, pushes));
               // The delete is done here: the copy's, a call to another
               // device, doesn't hold it up.
               yield* Effect.forkDetach(
                 ledger
-                  .deleteCopiesOf([worktreeId])
+                  .deleteCopiesOf([worktreeId], inStep)
                   .pipe(Effect.ensuring(Effect.sync(releaseRoots))),
               );
             });

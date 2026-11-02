@@ -56,16 +56,13 @@ export const makeMarks = () => {
   // session the sweep is only looking at.
   const rootLooks = new Set<string>();
 
-  // The sessions of an original deleted here whose copy is still to
-  // delete (its peer away, or the delete failed there), each with its
-  // peer, kept until the engine stops listing them. Their look waits for
-  // the peer's next admission (lookAgainAt), rather than ask the peer
-  // again on every snapshot. A quit forgets them, and their copies are
-  // then kept as a root gone by hand keeps its.
+  // The sessions of an original deleted here in step whose copy is still
+  // to delete (its peer gone since, or the delete failed there), each
+  // with its peer, kept until the engine stops listing them. Their look
+  // waits for the peer's next admission (lookAgainAt), rather than ask
+  // the peer again on every snapshot. A quit forgets them, and their
+  // copies are then kept as a root gone by hand keeps its.
   const copiesToDelete = new Map<string, string>();
-  // The worktrees deleted here while the daemon wasn't running, whose
-  // sessions join copiesToDelete once it is.
-  const copiesToDeleteOn = new Set<string>();
 
   // The sessions of a moved original whose re-open waits for the peer to
   // take this device's calls, each with the id of the worktree the
@@ -119,7 +116,6 @@ export const makeMarks = () => {
     endingSessions,
     rootLooks,
     copiesToDelete,
-    copiesToDeleteOn,
     waitingOnPeer,
     recreating,
     holdingRoots,

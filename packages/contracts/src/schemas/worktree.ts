@@ -306,8 +306,9 @@ export const WorktreeRemovalSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   state: Schema.Literals(["removing", "removed", "kept"]),
   // A delete that takes both sides of a mirror: the device holding the
-  // original deletes it too. Not a move's teardown, a removal that must
-  // happen (a nuke), nor one the other device asked for.
+  // original deletes it too. Only a copy's, of a mirror in step, and not
+  // a move's teardown, a removal that must happen (a nuke), nor one the
+  // other device asked for.
   bothSides: Schema.optional(Schema.Boolean),
 });
 export type WorktreeRemoval = typeof WorktreeRemovalSchema.Type;

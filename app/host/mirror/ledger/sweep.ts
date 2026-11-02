@@ -95,7 +95,6 @@ export const makeSweep = ({
       endingSessions,
       rootLooks,
       copiesToDelete,
-      copiesToDeleteOn,
       waitingOnPeer,
       recreating,
       holdingRoots,
@@ -252,12 +251,6 @@ export const makeSweep = ({
       for (const id of copiesToDelete.keys()) {
         if (!live.has(id)) copiesToDelete.delete(id);
       }
-      for (const raw of sessions) {
-        if (copiesToDeleteOn.has(worktreeIdNow(raw))) {
-          copiesToDelete.set(raw.session, raw.deviceId);
-        }
-      }
-      copiesToDeleteOn.clear();
       for (const id of waitingOnPeer.keys()) {
         if (!live.has(id)) waitingOnPeer.delete(id);
       }
