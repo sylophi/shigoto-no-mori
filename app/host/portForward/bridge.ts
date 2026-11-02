@@ -34,14 +34,18 @@ const FAILED_OPEN_LINGER_MS = 1_000;
 // Loopback only, on both users: a forward is for THIS machine's
 // processes and the gateway for this machine's daemon, never a
 // listener other hosts can reach.
-export function listenLoopback(server: Server, port: number): Promise<number> {
+export function listenLoopback(
+  server: Server,
+  port: number,
+  host: "127.0.0.1" | "::1" = "127.0.0.1",
+): Promise<number> {
   return new Promise<number>((resolve, reject) => {
     const onError = (error: Error) => {
       server.close();
       reject(error);
     };
     server.once("error", onError);
-    server.listen(port, "127.0.0.1", () => {
+    server.listen(port, host, () => {
       server.off("error", onError);
       const address = server.address();
       if (address === null || typeof address === "string") {

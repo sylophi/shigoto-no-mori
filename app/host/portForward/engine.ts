@@ -23,6 +23,7 @@ import * as Stream from "effect/Stream";
 import type { forwardContract } from "@shigomori/contracts/modules/forward";
 import {
   callFailureOf,
+  errorCodeOf,
   isForwardConnectFailedError,
 } from "@shigomori/contracts/errors";
 import type {
@@ -48,6 +49,12 @@ export type ForwardApi = PeerCalls<typeof forwardContract>;
 // refused there anyway, but only after a full open round trip, so an
 // accepted socket over the cap is destroyed immediately instead.
 export const MAX_CONNS_PER_DEVICE = 16;
+
+// What binding ::1 fails with on a machine with no IPv6 loopback.
+const NO_IPV6_LOOPBACK = new Set<string | undefined>([
+  "EADDRNOTAVAIL",
+  "EAFNOSUPPORT",
+]);
 
 // The changed signal's window: opens and closes arrive in bursts (one
 // page load moves ~a dozen conns), and each signal triggers a renderer
@@ -187,13 +194,30 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
     // adapter in host/socket/channelStreams.ts ends one direction and
     // keeps the other flowing), but node's default would auto-end the
     // writable side and drop the remote's response.
-    const server = createServer({ allowHalfOpen: true });
+    const v4 = createServer({ allowHalfOpen: true });
+    const v6 = createServer({ allowHalfOpen: true });
     const localPort = yield* Effect.acquireRelease(
       Effect.tryPromise({
-        try: () => listenLoopback(server, input.localPort ?? 0),
+        try: () => listenLoopback(v4, input.localPort ?? 0),
         catch: callFailureOf,
       }),
-      () => Effect.sync(() => server.close()),
+      () => Effect.sync(() => v4.close()),
+    );
+    // The same port on ::1, which a browser opening localhost tries
+    // first: a server of this machine's already there would answer in
+    // the forward's place, so the port is taken. A machine with no IPv6
+    // loopback listens on 127.0.0.1 alone.
+    yield* Effect.acquireRelease(
+      Effect.tryPromise({
+        try: () => listenLoopback(v6, localPort, "::1"),
+        catch: callFailureOf,
+      }).pipe(
+        Effect.catchIf(
+          (error) => NO_IPV6_LOOPBACK.has(errorCodeOf(error)),
+          () => Effect.void,
+        ),
+      ),
+      () => Effect.sync(() => v6.close()),
     );
     // The dedupe scan ran before the probe and the bind, so a
     // concurrent start for the same pair may have bound in the meantime:
@@ -245,10 +269,12 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
       });
       forward.conns.add(conn);
     };
-    server.on("connection", handleConnection);
-    // A bound listener errors only in exotic cases, but an unlistened
-    // 'error' would take the whole process down.
-    server.on("error", () => {});
+    for (const server of [v4, v6]) {
+      server.on("connection", handleConnection);
+      // A bound listener errors only in exotic cases, but an unlistened
+      // 'error' would take the whole process down.
+      server.on("error", () => {});
+    }
     // Registered last, so it is the first undone: the listener stops
     // taking sockets and the conns go before their opens are
     // interrupted.
@@ -260,7 +286,8 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
       () =>
         Effect.sync(() => {
           forwards.delete(forward.forwardId);
-          server.close();
+          v4.close();
+          v6.close();
           // destroy deletes only the conn being visited, which Set
           // iteration tolerates.
           for (const conn of forward.conns) conn.destroy();
