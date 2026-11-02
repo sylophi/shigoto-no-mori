@@ -46,7 +46,7 @@ import { NO_STRUCTURAL_STUB, stubValueFor } from "./stubDefaults";
 // The hand-judged exceptions to the gated:false rule, each saying why a
 // stub is harmless:
 //
-//   - window:previewTheme: fired by ThemeProvider on every applied
+//   - window:previewTheme: fired by LookProvider on every applied
 //     theme change to sync the native window chrome. There is no
 //     native chrome in a browser, so a void resolve is the truthful
 //     answer, and rejecting would surface an unhandled rejection on

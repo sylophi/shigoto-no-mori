@@ -3,8 +3,7 @@ import { clientSetting } from "@shigomori/contracts/schemas";
 import { activeTheme } from "@shigomori/ui/lib/themes.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
-import { usePalette } from "@/hooks/ui/usePalette";
-import { useTheme } from "@/hooks/ui/useTheme";
+import { useLook } from "@/hooks/ui/useLook";
 
 // The terminals' own theme root, the way a Settings swatch is one
 // (DESIGN.md, "Theming"): the window's look, or its dark one while
@@ -12,8 +11,7 @@ import { useTheme } from "@/hooks/ui/useTheme";
 // re-themes in place when either changes.
 export function TerminalScope({ children }: { children: ReactNode }) {
   const { data: config } = useClientConfig();
-  const { applied } = usePalette();
-  const { resolved } = useTheme();
+  const { applied, resolved } = useLook();
   const appearance = clientSetting(config ?? {}, "darkTerminals")
     ? "dark"
     : resolved;

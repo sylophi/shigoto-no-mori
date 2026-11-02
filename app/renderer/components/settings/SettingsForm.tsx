@@ -29,8 +29,7 @@ import {
   keepTouched,
   useDirtyForm,
 } from "@shigomori/ui/hooks/useDirtyForm.ts";
-import { usePalette } from "@/hooks/ui/usePalette";
-import { useTheme } from "@/hooks/ui/useTheme";
+import { useLook } from "@/hooks/ui/useLook";
 import { useHasLocalHost } from "@/lib/localHost";
 import { holdThemeRotation } from "@/lib/themeRotation";
 import type {
@@ -124,8 +123,7 @@ export function SettingsForm({
   const localDeviceId = api.deviceId;
   const hasLocalHost = useHasLocalHost();
   const save = useSettingsSave();
-  const { setOverride } = useTheme();
-  const { setOverride: setPaletteOverride } = usePalette();
+  const { setOverride } = useLook();
   const devices = useHostDevices();
   const roster = useDeviceRoster();
   const activeTab = useActiveSettingsTab();
@@ -153,11 +151,8 @@ export function SettingsForm({
 
   // Drop any staged previews when leaving the settings page so the rest
   // of the app falls back to the saved values. On leaving alone,
-  // whatever the providers hand out for the setters.
-  const dropPreviews = useEffectEvent(() => {
-    setOverride(null);
-    setPaletteOverride(null);
-  });
+  // whatever the provider hands out for the setter.
+  const dropPreviews = useEffectEvent(() => setOverride(null));
   useEffect(() => () => dropPreviews(), []);
 
   const handleSave = async () => {
@@ -180,24 +175,23 @@ export function SettingsForm({
         );
       }
     }
-    // No explicit setOverride(null). The providers clear the override
+    // No explicit setOverride(null). The provider clears the override
     // automatically once `saved` catches up to the staged value.
   };
 
   const handleDiscard = () => {
     setForm(savedSnapshot);
     setOverride(null);
-    setPaletteOverride(null);
   };
 
   const pickTheme = (theme: Theme) => {
     setForm((prev) => ({ ...prev, theme }));
-    setOverride(theme);
+    setOverride({ theme });
   };
 
   const setDoubutsu = (next: boolean) => {
     setForm((prev) => ({ ...prev, doubutsu: next }));
-    setPaletteOverride({ doubutsu: next });
+    setOverride({ doubutsu: next });
   };
 
   // A pick previews at once, like the appearance: the light one shows
@@ -207,17 +201,17 @@ export function SettingsForm({
   // on pairs the dark pick with the light one.
   const pickPair = (lightTheme: LightTheme, darkTheme: DarkTheme) => {
     setForm((prev) => ({ ...prev, lightTheme, darkTheme }));
-    setPaletteOverride({ light: lightTheme, dark: darkTheme });
+    setOverride({ light: lightTheme, dark: darkTheme });
   };
   const pickLightTheme = (lightTheme: LightTheme) => {
     if (form.themeRotation) return pickPair(lightTheme, darkTwin(lightTheme));
     setForm((prev) => ({ ...prev, lightTheme }));
-    setPaletteOverride({ light: lightTheme });
+    setOverride({ light: lightTheme });
   };
   const pickDarkTheme = (darkTheme: DarkTheme) => {
     if (form.themeRotation) return pickPair(lightTwin(darkTheme), darkTheme);
     setForm((prev) => ({ ...prev, darkTheme }));
-    setPaletteOverride({ dark: darkTheme });
+    setOverride({ dark: darkTheme });
   };
   const setThemeRotation = (next: boolean) => {
     setForm((prev) => ({ ...prev, themeRotation: next }));

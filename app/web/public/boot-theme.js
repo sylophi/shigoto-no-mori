@@ -5,9 +5,8 @@
 // guarantee) rather than inline, so the deploy's and the desktop
 // window's Content-Security-Policy (main/electron/contentPolicy.ts) can
 // stay at script-src 'self' with no inline allowance. The desktop page
-// loads it too (vite.renderer.config.ts). Keys must match THEME_STORAGE_KEY in
-// renderer/hooks/ui/useTheme.tsx and STORAGE_KEYS in
-// renderer/hooks/ui/usePalette.tsx, and the palette defaults
+// loads it too (vite.renderer.config.ts). Keys must match STORAGE_KEYS in
+// renderer/hooks/ui/useLook.tsx, and the palette defaults
 // packages/ui/src/lib/themes.ts.
 (function () {
   var root = document.getElementById("root");

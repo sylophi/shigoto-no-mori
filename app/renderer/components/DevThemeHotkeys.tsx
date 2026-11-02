@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { isEditableTarget, isRawKeySurface } from "@/lib/dom";
-import { usePalette } from "@/hooks/ui/usePalette";
-import { useTheme } from "@/hooks/ui/useTheme";
+import { useLook } from "@/hooks/ui/useLook";
 import { DARK_THEMES, LIGHT_THEMES } from "@shigomori/ui/lib/themes.ts";
 import { useApi } from "@/lib/runtime/pageApi";
 
@@ -31,13 +30,13 @@ export function DevThemeHotkeys() {
   // A client fact off the preload bridge, not runtime.info: the hotkeys
   // must key off this build, never the host it talks to.
   const isDev = api.isDev;
-  const { resolved, setOverride: setTheme } = useTheme();
-  // The three primitives, not the picks object: a fresh object each
+  // The three primitives, not the look object: a fresh object each
   // render would re-subscribe the listener on every one.
   const {
+    resolved,
     applied: { doubutsu, light, dark },
-    setOverride: setPalette,
-  } = usePalette();
+    setOverride,
+  } = useLook();
 
   useEffect(() => {
     if (!isDev) return;
@@ -59,31 +58,30 @@ export function DevThemeHotkeys() {
       // program. Everywhere else the event may keep bubbling.
       if (rawSurface) e.stopPropagation();
       if (e.code === "KeyT") {
-        setTheme(resolved === "dark" ? "light" : "dark");
+        setOverride({ theme: resolved === "dark" ? "light" : "dark" });
       } else if (e.code === "KeyD") {
-        setPalette({ doubutsu: !doubutsu });
+        setOverride({ doubutsu: !doubutsu });
       } else if (e.code === "KeyP") {
         if (resolved === "dark") {
           const i = DARK_CYCLE.indexOf(dark);
-          setPalette({
+          setOverride({
             doubutsu: true,
             dark: DARK_CYCLE[(i + 1) % DARK_CYCLE.length],
           });
         } else {
           const i = LIGHT_CYCLE.indexOf(light);
-          setPalette({
+          setOverride({
             doubutsu: true,
             light: LIGHT_CYCLE[(i + 1) % LIGHT_CYCLE.length],
           });
         }
       } else {
-        setTheme(null);
-        setPalette(null);
+        setOverride(null);
       }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [isDev, resolved, doubutsu, light, dark, setTheme, setPalette]);
+  }, [isDev, resolved, doubutsu, light, dark, setOverride]);
 
   return null;
 }

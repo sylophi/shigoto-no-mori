@@ -11,7 +11,7 @@ import {
 } from "@pierre/diffs";
 // oxlint-disable-next-line import/default -- vite's ?worker import is the worker's constructor
 import PatchFilesWorker from "./patchFiles.worker.ts?worker";
-import { useTheme } from "@/hooks/ui/useTheme";
+import { useLook } from "@/hooks/ui/useLook";
 import { useWorktreeName } from "@/hooks/worktrees/useWorktreeTitle";
 import { useOpenInEditor } from "@/hooks/launchers/useLaunchers";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
@@ -195,7 +195,7 @@ export function DiffPage({
   // Pierre's library picks between the `dark`/`light` entries off the
   // shadow root's `color-scheme`, which defaults to the OS preference.
   // Force it to follow the in-app theme instead.
-  const { resolved } = useTheme();
+  const { resolved } = useLook();
 
   // Which of the two views this is. The changes page hands over one
   // file's diff, the one its list picked, so the pane draws what it was
