@@ -2,7 +2,7 @@ import { getFiletypeFromFileName, preloadHighlighter } from "@pierre/diffs";
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { CODE_THEME } from "@shigomori/ui/views/diff/codeTheme.ts";
-import { useTheme } from "@/hooks/ui/useTheme";
+import { useLook } from "@/hooks/ui/useLook";
 import {
   useWorktreeFile,
   useWorktreeImage,
@@ -151,7 +151,7 @@ function placeholderFor(file: WorktreeFile): string {
 function CodeFile({ name, contents }: { name: string; contents: string }) {
   // Pierre picks between its dark and light entries off the shadow
   // root's color-scheme, which follows the OS unless told otherwise.
-  const { resolved } = useTheme();
+  const { resolved } = useLook();
   const lang = getFiletypeFromFileName(name);
   const { isPending } = useQuery({
     queryKey: queryKeys.codeHighlighter(lang),

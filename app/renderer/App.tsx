@@ -4,8 +4,7 @@ import { AppErrorFallback } from "@/components/AppChrome";
 import { DevThemeHotkeys } from "@/components/DevThemeHotkeys";
 import { useCloseKey } from "@/hooks/ui/useCloseKey";
 import { OverlaysProvider } from "@/hooks/ui/useOverlays";
-import { PaletteProvider } from "@/hooks/ui/usePalette";
-import { ThemeProvider } from "@/hooks/ui/useTheme";
+import { LookProvider } from "@/hooks/ui/useLook";
 import type { AppRouter } from "./router";
 
 // The provider tree around the router, one for both shells. Host
@@ -18,22 +17,20 @@ export function App({
 }: {
   router: AppRouter;
   // The window wears its root's theme, set by the page around it, in
-  // place of the settings' (ThemeProvider).
+  // place of the settings' (LookProvider).
   themeFromRoot: boolean;
 }) {
   // Outside the error boundary, so a window that fell over with a
   // terminal focused still closes.
   useCloseKey();
   return (
-    <ThemeProvider fromRoot={themeFromRoot}>
-      <PaletteProvider fromRoot={themeFromRoot}>
-        <ErrorBoundary FallbackComponent={AppErrorFallback}>
-          <OverlaysProvider>
-            <RouterProvider router={router} />
-            <DevThemeHotkeys />
-          </OverlaysProvider>
-        </ErrorBoundary>
-      </PaletteProvider>
-    </ThemeProvider>
+    <LookProvider fromRoot={themeFromRoot}>
+      <ErrorBoundary FallbackComponent={AppErrorFallback}>
+        <OverlaysProvider>
+          <RouterProvider router={router} />
+          <DevThemeHotkeys />
+        </OverlaysProvider>
+      </ErrorBoundary>
+    </LookProvider>
   );
 }

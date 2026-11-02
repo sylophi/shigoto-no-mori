@@ -34,7 +34,7 @@ export function MaterialIcon({
   const dark = iconFor(false);
   const light = iconFor(true);
   // A file with a light variant wears it on the light theme. The theme
-  // is the dark class on the root (ThemeProvider), read here by CSS so
+  // is the dark class on the root (LookProvider), read here by CSS so
   // the icon needs no hook of the app's.
   if (light === dark) return <IconImage name={dark} className={className} />;
   return (

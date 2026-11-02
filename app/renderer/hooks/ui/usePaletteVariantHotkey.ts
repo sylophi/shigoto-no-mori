@@ -9,8 +9,7 @@ import { useClientConfigPatch } from "@/hooks/config/useClientConfigPatch";
 import { isEditableTarget, isOverlayOpen, isRawKeySurface } from "@/lib/dom";
 import { useRegistry } from "@/lib/runtime/viewHooks";
 import { clientConfigNow } from "@/hooks/config/useClientConfig";
-import { usePalette } from "./usePalette";
-import { useTheme } from "./useTheme";
+import { useLook } from "./useLook";
 
 // Ctrl+Alt+Shift+L, the hidden way to a palette's variants
 // (packages/ui/src/lib/themes.ts): steps the saved light pick through its
@@ -23,8 +22,7 @@ import { useTheme } from "./useTheme";
 // back.
 export function usePaletteVariantHotkey(enabled: boolean): void {
   const registry = useRegistry();
-  const { resolved } = useTheme();
-  const { saved, applied } = usePalette();
+  const { resolved, saved, applied } = useLook();
   const { mutate } = useClientConfigPatch(
     (next: LightTheme) => ({ lightTheme: next }),
     "Couldn't switch the palette",

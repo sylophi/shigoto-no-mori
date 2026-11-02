@@ -1,7 +1,7 @@
 /*
  * Doubutsu theme: the default Animal Crossing visual overlay. Opt out
  * via Settings -> Appearance, which restores the plain v1 look.
- * Activated by adding `.doubutsu` to the theme root (via usePalette).
+ * Activated by adding `.doubutsu` to the theme root (via useLook).
  * Orthogonal to .dark:
  * .doubutsu and .doubutsu.dark each remap the shadcn-style tokens every
  * component reads, so components take the palette, radii and font with

@@ -3,7 +3,7 @@ import type {
   LightTheme,
   ThemeOption,
 } from "@shigomori/ui/lib/themes.ts";
-import { usePalette } from "@/hooks/ui/usePalette";
+import { useLook } from "@/hooks/ui/useLook";
 import { ThemePickerView } from "@shigomori/ui/views/settings/ThemePickerView.tsx";
 
 // A palette pick (ThemePickerView) over the palettes last saved.
@@ -14,6 +14,6 @@ export function ThemePicker<Id extends LightTheme | DarkTheme>(props: {
   onChange: (next: Id) => void;
   disabled?: boolean;
 }) {
-  const saved = usePalette().saved[props.appearance] as Id;
+  const saved = useLook().saved[props.appearance] as Id;
   return <ThemePickerView {...props} saved={saved} />;
 }
