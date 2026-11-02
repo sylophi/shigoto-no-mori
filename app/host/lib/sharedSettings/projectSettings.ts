@@ -23,17 +23,29 @@ import * as Effect from "effect/Effect";
 import * as Latch from "effect/Latch";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import * as Ops from "../engineOps";
-import { refresh } from "../projects";
+import * as EngineConfig from "@shigomori/engine/Config";
+import * as Identity from "@shigomori/engine/Identity";
+import * as Registry from "@shigomori/engine/Registry";
+import { findProject, refresh } from "../projects";
 import * as SharedSettingsStore from "./store";
+
+// What the entries of a project's synced settings would hold.
+const syncedValues = (project: Registry.RegisteredProject) =>
+  Effect.flatMap(EngineConfig.Config, (config) =>
+    Effect.map(
+      config.read(EngineConfig.projectScope(project)),
+      EngineConfig.syncedProjectValues,
+    ),
+  );
 
 export const switchSync = Effect.fnUntraced(function* (
   projectId: string,
   on: boolean,
 ) {
-  const identity = yield* Ops.projectRepoIdentity(projectId);
+  const project = yield* findProject(projectId);
+  const { identity } = yield* (yield* Identity.Identity).of(project.path);
   if (identity === null) return;
-  const local = yield* Ops.readSyncedProjectValues(projectId);
+  const local = yield* syncedValues(project);
   const key = sharedSettingKeys.projectSettingsSync(identity);
   const doc = yield* SharedSettingsStore.set(key, on ? true : null);
   const sync = doc.entries[key];
@@ -50,7 +62,8 @@ const level = Effect.fnUntraced(function* (
 ) {
   if (row.identity === null || !row.pathExists) return;
   if (projectSettingsSync(doc, row.identity) === undefined) return;
-  const local = yield* Ops.readSyncedProjectValues(row.id);
+  const project = yield* findProject(row.id);
+  const local = yield* syncedValues(project);
   const { defaultBranch, ...patch } = syncedProjectSettingsPatch(
     doc,
     row.identity,
@@ -63,7 +76,11 @@ const level = Effect.fnUntraced(function* (
     (yield* (yield* Git.Git).hasCommit(row.path, defaultBranch));
   const taken = branchHere ? { ...patch, defaultBranch } : patch;
   if (Object.keys(taken).length === 0) return;
-  yield* Ops.patchProjectConfig(row.id, taken, { stamp: false });
+  yield* (yield* EngineConfig.Config).patchProject(
+    EngineConfig.projectScope(project),
+    taken,
+    { stamp: false },
+  );
 });
 
 // Every project leveled at launch, then again whenever the shared

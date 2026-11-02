@@ -2,16 +2,11 @@
 // and a rename, which the engine commits, held off by the work running
 // in the checkout and by the tombstone, with the mirrors rooted in it
 // re-opened on its new path after.
-import type {
-  Project,
-  Worktree,
-  WorktreeIdentity,
-} from "@shigomori/contracts/schemas";
+import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import { asChange } from "../Engine";
-import * as Ops from "../engineOps";
-import { findProjectAndWorktree } from "../projects";
+import { asCall, changing } from "../Engine";
+import { findProjectAndWorktree, hostWorktree } from "../projects";
 import * as Scripts from "../Scripts";
 import { Terminals } from "../terminals/Terminals";
 import { MirrorLedger } from "@host/mirror/MirrorLedger";
@@ -24,7 +19,7 @@ export const makeMoving = <H>(host: Context.Context<H>) =>
     const ledger = yield* MirrorLedger;
 
     const refuseRunningWork = (
-      worktree: WorktreeIdentity,
+      worktree: EngineWorktrees.WorktreeIdentity,
       verb: RunningWorkError["verb"],
     ) => {
       const running = scripts.runningIn(worktree.id);
@@ -47,15 +42,19 @@ export const makeMoving = <H>(host: Context.Context<H>) =>
       input: { readonly projectId: string; readonly worktreeId: string },
       verb: RunningWorkError["verb"],
       commit: (
-        project: Project,
-        worktreeId: string,
-      ) => Effect.Effect<Worktree, E, R>,
+        located: EngineWorktrees.Located,
+      ) => Effect.Effect<
+        { readonly worktree: EngineWorktrees.WorktreeRow },
+        E,
+        R
+      >,
     ) =>
       Effect.gen(function* () {
-        const { project, worktree } = yield* findProjectAndWorktree(
+        const located = yield* findProjectAndWorktree(
           input.projectId,
           input.worktreeId,
         );
+        const { project, worktree } = located;
         // The engine refuses to move the primary checkout, whatever runs
         // in it, so that is what it hears.
         if (!worktree.isPrimary) yield* refuseRunningWork(worktree, verb);
@@ -65,10 +64,14 @@ export const makeMoving = <H>(host: Context.Context<H>) =>
             kind: "move",
             busy: "This worktree is already being removed or moved.",
           },
-          asChange(
-            commit(project, worktree.id),
-            { projectId: project.id, worktreeId: worktree.id },
-            "move",
+          asCall(
+            changing(
+              Effect.map(commit(located), (moved) =>
+                hostWorktree(moved.worktree),
+              ),
+              { projectId: project.id, worktreeId: worktree.id },
+              "move",
+            ),
           ),
           // A move to where the worktree already is, spelled the same,
           // keeps its id and has no mirrors to carry.
@@ -85,8 +88,13 @@ export const makeMoving = <H>(host: Context.Context<H>) =>
         readonly worktreeId: string;
         readonly destinationPath: string;
       }) {
-        return yield* move(input, "move", (project, worktreeId) =>
-          Ops.moveWorktree(project, worktreeId, input.destinationPath),
+        // `git worktree move`, and what is kept under the worktree's
+        // path-derived id (marks, its data, a pending dirty capture)
+        // carried to the new one.
+        return yield* move(input, "move", (located) =>
+          Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
+            worktrees.move(located, input.destinationPath),
+          ),
         );
       }, Effect.provide(host)),
       rename: Effect.fn("Worktrees.rename")(function* (input: {
@@ -94,8 +102,10 @@ export const makeMoving = <H>(host: Context.Context<H>) =>
         readonly worktreeId: string;
         readonly name: string;
       }) {
-        return yield* move(input, "rename", (project, worktreeId) =>
-          Ops.renameWorktree(project, worktreeId, input.name),
+        return yield* move(input, "rename", ({ project, worktree }) =>
+          Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
+            worktrees.rename(project, worktree.id, input.name),
+          ),
         );
       }, Effect.provide(host)),
     };

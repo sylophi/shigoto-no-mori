@@ -18,10 +18,10 @@ import * as Path from "effect/Path";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import { parseWorktreeKey, worktreeKey } from "./config/project";
 import type * as Engine from "./Engine";
-import * as Ops from "./engineOps";
 import { isLoopbackPortListening } from "./net";
 import { findProject, findWorktreeIdentity } from "./projects";
 import { keptAnswer, keptAnswers } from "@shigomori/engine/keptAnswers";
+import * as WorktreeData from "@shigomori/engine/WorktreeData";
 
 interface Worktree {
   readonly projectId: string;
@@ -137,7 +137,11 @@ const make = Effect.gen(function* () {
               ? Effect.succeed([])
               : poolPorts.get(found.value.path),
           ),
-          read(Ops.readWorktreeData(worktree.projectId, worktree.worktreeId)),
+          read(
+            Effect.flatMap(WorktreeData.WorktreeData, (worktreeData) =>
+              worktreeData.document(worktree.projectId, worktree.worktreeId),
+            ),
+          ),
         ],
         { concurrency: 2 },
       );

@@ -6,7 +6,6 @@
 // shell's config lives.
 import type { ShellIntegrationStatus } from "@shigomori/contracts/modules/cli";
 import { outputUntil } from "@shared/shellEnv";
-import * as Ops from "@host/lib/engineOps";
 import * as Lifecycle from "@shigomori/engine/Lifecycle";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
 import * as Context from "effect/Context";
@@ -110,10 +109,10 @@ const onShell = <A, E>(
     shell: ShellIntegration.HookShell,
   ) => Effect.Effect<A, E>,
 ) =>
-  Effect.flatMap(
-    Effect.flatMap(HookShell, ({ read }) => read),
-    (shell) => Ops.onShell(shell, f),
-  );
+  Effect.gen(function* () {
+    const shell = yield* (yield* HookShell).read;
+    return yield* f(yield* ShellIntegration.ShellIntegration, shell);
+  });
 
 class ShellHookError extends Schema.TaggedError<ShellHookError>()(
   "ShellHookError",

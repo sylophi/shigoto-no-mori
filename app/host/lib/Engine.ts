@@ -10,7 +10,6 @@ import { messageOf } from "@shigomori/engine/errorDocument";
 import * as Git from "@shigomori/engine/Git";
 import * as Store from "@shigomori/engine/Store";
 import { storeErrorOf } from "@shigomori/engine/storeErrors";
-import * as Worktrees from "@shigomori/engine/Worktrees";
 import {
   callFailureOf,
   isEntityGoneError,
@@ -152,7 +151,10 @@ export const engineFailure = (
     ? error
     : new EngineCallError({ reason: messageOf(error), cause: error });
 
-// An engine effect, its failure translated.
+// An engine effect, its failure translated: for a host service whose
+// failure can leave by some other way than a call's transport (a log, a
+// peer's link, a control op), which says the rest in its own words
+// (hostCallFailure).
 export const asCall = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.mapError(engineFailure));
 
@@ -194,30 +196,3 @@ export const changing = <A, E, R>(
       kind,
     ),
   );
-
-// `changing` around an engine verb, its failure translated.
-export const asChange = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-  ids: Ids = {},
-  kind?: ChangeKind,
-) => asCall(changing(effect, ids, kind));
-
-// A registered project by id.
-export const projectById = (projectId: string) =>
-  Effect.gen(function* () {
-    const worktrees = yield* Worktrees.Worktrees;
-    return yield* worktrees.resolveProjectById(
-      yield* worktrees.nowhere,
-      projectId,
-    );
-  });
-
-// A worktree by its project's id and its own.
-export const locate = (projectId: string, worktreeId: string) =>
-  Effect.gen(function* () {
-    const worktrees = yield* Worktrees.Worktrees;
-    return yield* worktrees.resolve(yield* worktrees.nowhere, {
-      projectId,
-      worktreeId,
-    });
-  });

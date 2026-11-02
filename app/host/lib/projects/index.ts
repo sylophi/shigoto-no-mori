@@ -2,25 +2,25 @@
 // (its registry, terrier's repos merged in, each decorated with its
 // path check, repo identity, use stats and icon), so the host reads it
 // as `sm projects list` does and keeps the last answer's projects as a
-// snapshot: the handful of sync callers (the git watcher, the fetch
-// sweep) read the snapshot, and every async lookup that misses it
-// refreshes once before calling the id unknown. The sidebar's
-// projects:list refreshes on every call, and nothing learns a project
-// id except from that list or a CLI verb that just wrote it, so the
-// snapshot is never behind a caller that holds an id.
-import {
-  UnknownProjectError,
-  UnknownWorktreeError,
-} from "@shigomori/contracts/errors";
+// snapshot for the handful of sync callers (the git watcher, the fetch
+// sweep). A lookup by id asks the engine, and the sidebar's
+// projects:list refreshes the snapshot on every call.
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
-import type { Project, ProjectRow } from "@shigomori/contracts/schemas";
+import type {
+  Project,
+  ProjectRow,
+  Worktree,
+} from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import * as Ops from "@host/lib/engineOps";
 import * as Git from "@shigomori/engine/Git";
+import * as Projects from "@shigomori/engine/Projects";
+import * as Registry from "@shigomori/engine/Registry";
+import * as Worktrees from "@shigomori/engine/Worktrees";
 import { handedRemotes, pickCloneUrl } from "@shared/cloneUrl";
 import { toAbsolute } from "@shared/paths";
+import { changing } from "../Engine";
 
 let snapshot: readonly Project[] = [];
 // The last read's rows, which the callers that asked before it began
@@ -45,7 +45,9 @@ export const refresh = Effect.suspend(() => {
   return Effect.suspend(() => {
     if (answered >= ask) return Effect.succeed(lastRows);
     const covers = asked;
-    return Ops.listProjects({ refreshIcons: !iconsRescanned }).pipe(
+    return Effect.flatMap(Registry.Registry, (registry) =>
+      registry.rows({ rescanIconMisses: !iconsRescanned }),
+    ).pipe(
       Effect.tap((rows) =>
         Effect.sync(() => {
           iconsRescanned = true;
@@ -61,9 +63,11 @@ export const refresh = Effect.suspend(() => {
 // The boot's read, of the registry alone: the sync callers need only
 // the projects, and the rows' git probes (each repo's identity and
 // icon) would hold the app's start on every project.
-export const firstList = Effect.map(Ops.listedProjects, (listed) => {
-  snapshot = listed.map(toProject);
-});
+export const firstList = Effect.flatMap(Registry.Registry, (registry) =>
+  Effect.map(registry.listed, (listed) => {
+    snapshot = listed.map(toProject);
+  }),
+);
 
 // Registers a repo with the engine (`sm projects add`, `--terrier` for
 // `terrier`), then re-reads the list so the sync readers (the git
@@ -73,7 +77,7 @@ export const addProject = Effect.fnUntraced(function* (
   path: string,
   terrier?: boolean,
 ) {
-  const project = yield* Ops.addProject(path, terrier);
+  const project = yield* (yield* Projects.Projects).add(path, { terrier });
   yield* refresh;
   return project;
 });
@@ -94,7 +98,17 @@ export const relocateProject = Effect.fnUntraced(function* (
   id: string,
   path: string,
 ) {
-  const project = yield* Ops.relocateProject(id, path);
+  // Its worktrees reconnected too.
+  const project = yield* changing(
+    Effect.gen(function* () {
+      const registered = yield* findProject(id);
+      return yield* (yield* Worktrees.Worktrees).relocateProject(
+        registered,
+        path,
+      );
+    }),
+    { projectId: id },
+  );
   yield* refresh;
   return project;
 });
@@ -138,10 +152,10 @@ class NoLocalBranchesError extends Schema.TaggedError<NoLocalBranchesError>()(
 // answers. `branch` is the local branch it names ("main"), which a clone
 // of the project on another device checks out (sync/cloneFromPeer.ts).
 export const defaultBranchOf = Effect.fnUntraced(function* (project: Project) {
-  const [first] = yield* Ops.listWorktreeIdentities(
-    { projectId: project.id },
-    { primaryRef: true },
-  );
+  const { rows } = yield* (yield* Worktrees.Worktrees).identityList([project], {
+    primaryRef: true,
+  });
+  const [first] = rows;
   if (first?.primaryRef === undefined || first.primaryBranch === undefined) {
     return yield* new NoLocalBranchesError({ path: project.path });
   }
@@ -205,11 +219,11 @@ export function findProjectInsideDataDir(
 
 // The project `projectId` names, or the entity-gone error.
 export const findProject = Effect.fnUntraced(function* (projectId: string) {
-  const known = snapshot.find((p) => p.id === projectId);
-  if (known !== undefined) return known;
-  const fresh = (yield* refresh).find((p) => p.id === projectId);
-  if (fresh === undefined) return yield* new UnknownProjectError({ projectId });
-  return toProject(fresh);
+  const worktrees = yield* Worktrees.Worktrees;
+  return yield* worktrees.resolveProjectById(
+    yield* worktrees.nowhere,
+    projectId,
+  );
 });
 
 // The sidebar asks for every project's rows at once on a refresh, and
@@ -218,22 +232,47 @@ export const findProject = Effect.fnUntraced(function* (projectId: string) {
 // forking hundreds of gits at once.
 const rowLists = Semaphore.makeUnsafe(2);
 
-// A project's rows, primary first.
-export const listWorktrees = (projectId: string) =>
-  Ops.listWorktrees(projectId).pipe(rowLists.withPermits(1));
+// The contract's row: the terminal's project name and its sessions'
+// permission prompts are left out.
+export const hostWorktree = ({
+  projectName: _projectName,
+  agentSessions,
+  ...row
+}: Worktrees.WorktreeRow): Worktree => ({
+  ...row,
+  agentSessions: agentSessions.map(({ waits: _waits, ...session }) => session),
+});
 
-// The checkout `worktreeId` names, or the entity-gone error.
+// A project's rows, primary first: the sidebar's list. A project whose
+// checkouts git can't list reads as having none, as the terminal's
+// listing skips it.
+export const listWorktrees = (projectId: string) =>
+  Effect.gen(function* () {
+    const project = yield* findProject(projectId);
+    const listing = yield* (yield* Worktrees.Worktrees).list([project]);
+    return listing.rows.map(hostWorktree);
+  }).pipe(rowLists.withPermits(1));
+
+// One row, freshly probed: what a change hands back to the renderer.
+export const worktreeRow = (located: Worktrees.Located) =>
+  Effect.map(
+    Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+      worktrees.row(located, { settle: true }),
+    ),
+    hostWorktree,
+  );
+
+// The checkout `worktreeId` names as the contract's identity, or the
+// entity-gone error.
 export const findWorktreeIdentity = Effect.fnUntraced(function* (
   projectId: string,
   worktreeId: string,
   opts: { primaryRef?: boolean } = {},
 ) {
-  const [identity] = yield* Ops.listWorktreeIdentities(
-    { projectId, worktreeId },
-    opts,
-  );
-  if (!identity) return yield* new UnknownWorktreeError({ worktreeId });
-  return identity;
+  const located = yield* findProjectAndWorktree(projectId, worktreeId);
+  return yield* (yield* Worktrees.Worktrees).identityRow(located, {
+    primaryRef: opts.primaryRef === true,
+  });
 });
 
 // The id a worktree has now, for one a peer or a mirror session may
@@ -241,22 +280,26 @@ export const findWorktreeIdentity = Effect.fnUntraced(function* (
 // rename), for a call that keys state by the id: the id itself while it
 // names a worktree, else the one its worktree moved to, else the id.
 export const currentWorktreeId = (projectId: string, worktreeId: string) =>
-  findWorktreeIdentity(projectId, worktreeId).pipe(
-    Effect.map((worktree) => worktree.id),
+  findProjectAndWorktree(projectId, worktreeId).pipe(
+    Effect.map(({ worktree }) => worktree.id),
     Effect.catchTags({
       UnknownWorktreeError: () => Effect.succeed(worktreeId),
     }),
   );
 
-// The preamble every worktree-scoped IPC handler opens with, so a change
-// to how a worktree is resolved lands in one place.
+// The preamble every worktree-scoped handler opens with, so a change to
+// how a worktree is resolved lands in one place: the worktree an id
+// names, or the one it moved to, with its project, which the engine's
+// verbs then run on.
 export const findProjectAndWorktree = Effect.fnUntraced(function* (
   projectId: string,
   worktreeId: string,
 ) {
-  const project = yield* findProject(projectId);
-  const worktree = yield* findWorktreeIdentity(project.id, worktreeId);
-  return { project, worktree };
+  const worktrees = yield* Worktrees.Worktrees;
+  return yield* worktrees.resolveById(yield* worktrees.nowhere, {
+    projectId,
+    worktreeId,
+  });
 });
 
 // The same preamble for the handlers that only need where the worktree

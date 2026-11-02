@@ -40,7 +40,8 @@ import * as Git from "@shigomori/engine/Git";
 import { errnoWords } from "@shigomori/engine/platformErrors";
 import { pidAlive } from "@shigomori/engine/processes";
 import { expandHome } from "@shared/paths";
-import * as Ops from "@host/lib/engineOps";
+import * as EngineConfig from "@shigomori/engine/Config";
+import * as Identity from "@shigomori/engine/Identity";
 import { errorWordsOf } from "@host/lib/errorWords";
 import {
   addProject,
@@ -190,7 +191,8 @@ export const cloneDestination = (
       ),
     );
     if (!there) return "free" as const;
-    return identity !== null && (yield* Ops.repoIdentity(dest)) === identity
+    return identity !== null &&
+      (yield* (yield* Identity.Identity).of(dest)).identity === identity
       ? ("same-repo" as const)
       : ("taken" as const);
   });
@@ -467,8 +469,8 @@ export const clonePeerProject = Effect.fnUntraced(function* (
         Effect.as(true),
         Effect.orElseSucceed(() => false),
       );
-    yield* Ops.patchProjectConfig(
-      project.id,
+    yield* (yield* EngineConfig.Config).patchProject(
+      EngineConfig.projectScope(project),
       settingsPatch(stored, branchHere),
       { stamp: false },
     );

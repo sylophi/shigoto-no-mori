@@ -27,7 +27,8 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as Engine from "../Engine";
-import * as Ops from "../engineOps";
+import * as EngineWorktrees from "@shigomori/engine/Worktrees";
+import { findProject } from "../projects";
 import { keptAnswers } from "@shigomori/engine/keptAnswers";
 
 export type CarryOverCheckout = Pick<
@@ -329,7 +330,14 @@ export const makeCarryOver = Effect.gen(function* () {
       projectId: string,
       projectPath: string,
     ) {
-      const identities = yield* Ops.listWorktreeIdentities({ projectId }).pipe(
+      const identities = yield* Effect.gen(function* () {
+        const project = yield* findProject(projectId);
+        const listing = yield* (yield* EngineWorktrees.Worktrees).identityList(
+          [project],
+          { primaryRef: false },
+        );
+        return listing.rows;
+      }).pipe(
         Effect.orElseSucceed((): readonly WorktreeIdentity[] => []),
         Effect.provide(context),
       );

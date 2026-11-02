@@ -11,8 +11,8 @@ import type {
   WorktreeDescription,
 } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
-import * as Ops from "@host/lib/engineOps";
 import { peerWorktreeDataFor } from "@host/ipc/PeerReach";
+import * as WorktreeData from "@shigomori/engine/WorktreeData";
 
 export type WorktreeRef = { projectId: string; worktreeId: string };
 
@@ -25,6 +25,21 @@ function descriptionOf(
     describedAt: data?.describedAt,
   };
 }
+
+// The title and description as a whole, onto this side's worktree. Only
+// a pair described after the one stored lands, so a carry that read a
+// stale side can't undo a newer describe.
+export const writeDescription = (
+  { projectId, worktreeId }: WorktreeRef,
+  { title, description, describedAt }: WorktreeDescription,
+) =>
+  Effect.flatMap(WorktreeData.WorktreeData, (data) =>
+    data.carry(projectId, worktreeId, {
+      title: title ?? "",
+      description: description ?? "",
+      describedAt: describedAt ?? 0,
+    }),
+  );
 
 // Whichever side was described last, onto the other, answering which
 // side it wrote, if either. A copy a move just landed has nothing of
@@ -39,7 +54,9 @@ export const followDescription = Effect.fnUntraced(function* (
   const [here, there] = yield* Effect.all(
     [
       Effect.map(
-        Ops.readWorktreeData(local.projectId, local.worktreeId),
+        Effect.flatMap(WorktreeData.WorktreeData, (worktreeData) =>
+          worktreeData.document(local.projectId, local.worktreeId),
+        ),
         descriptionOf,
       ),
       Effect.map(api.read(peer), descriptionOf),
@@ -53,11 +70,7 @@ export const followDescription = Effect.fnUntraced(function* (
     return "there" as const;
   }
   if (thereAt > hereAt) {
-    yield* Ops.writeWorktreeDescription(
-      local.projectId,
-      local.worktreeId,
-      there,
-    );
+    yield* writeDescription(local, there);
     return "here" as const;
   }
   // Both described in the same millisecond, differently: this side
@@ -66,11 +79,7 @@ export const followDescription = Effect.fnUntraced(function* (
   // is newer than what the other side holds.
   if (here.title !== there.title || here.description !== there.description) {
     const winner = { ...here, describedAt: hereAt + 1 };
-    yield* Ops.writeWorktreeDescription(
-      local.projectId,
-      local.worktreeId,
-      winner,
-    );
+    yield* writeDescription(local, winner);
     yield* api.describe({ ...peer, description: winner });
     return "there" as const;
   }

@@ -10,7 +10,6 @@ import * as Registry from "@shigomori/engine/Registry";
 import * as Terrier from "@shigomori/engine/Terrier";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import { MirrorLedger } from "@host/mirror/MirrorLedger";
-import * as Ops from "../engineOps";
 import { loadProjects, refresh } from "../projects";
 import { Terminals } from "../terminals/Terminals";
 import type { Mark, RunningScriptWorktree } from "./documents";
@@ -93,12 +92,13 @@ export const makeRemoving = ({
       project: Project,
       candidates: readonly RunningScriptWorktree[],
     ) =>
-      Ops.listWorktreeIdentities({ projectId: project.id }).pipe(
-        Effect.flatMap((identities) => {
-          const liveIds = new Set(identities.map((identity) => identity.id));
+      worktrees.identityList([project], { primaryRef: false }).pipe(
+        Effect.flatMap(({ rows }) => {
+          const liveIds = new Set(rows.map((identity) => identity.id));
           // A repo git can read always lists at least its primary
-          // checkout. An empty result means the read went missing, not
-          // the worktrees.
+          // checkout. An empty result means the read went missing (an
+          // unreachable repo, a mid-rebase index lock), not the
+          // worktrees.
           if (liveIds.size === 0) return Effect.succeed([]);
           return Effect.filter(candidates, (candidate) =>
             liveIds.has(candidate.worktreeId)
@@ -109,10 +109,6 @@ export const makeRemoving = ({
                 ),
           );
         }),
-        // An unreachable repo, a mid-rebase index lock, a transient read
-        // error: a fact about the enumeration, not about the worktrees.
-        Effect.orElseSucceed((): RunningScriptWorktree[] => []),
-        Effect.provideService(Worktrees.Worktrees, worktrees),
       );
 
     // An `sm rm` run in a terminal leaves a dev server the app started

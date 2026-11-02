@@ -41,9 +41,9 @@ import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { controlHandlers } from "../host/ipc/modules/control.ts";
 import { MirrorError } from "../host/mirror/MirrorEngine.ts";
 import { worktreesHandlers } from "../host/ipc/modules/worktrees.ts";
-import * as Ops from "../host/lib/engineOps.ts";
+import * as Fixtures from "./lib/engineFixtures.mts";
 import * as HostPushes from "../host/lib/HostPushes.ts";
-import { addProject } from "../host/lib/projects/index.ts";
+import { addProject, listWorktrees } from "../host/lib/projects/index.ts";
 import * as Scripts from "../host/lib/Scripts.ts";
 import * as HostWorktrees from "../host/lib/Worktrees.ts";
 import { MirrorLedger } from "../host/mirror/MirrorLedger.ts";
@@ -238,7 +238,7 @@ const stackOf = async (
   mkdirSync(run);
   const teardowns = join(run, "teardowns");
   await runHost(
-    Ops.writeProjectConfig(project.id, {
+    Fixtures.writeProjectConfig(project.id, {
       defaultBranch: "main",
       scripts: {
         teardown: `n=$(basename "$PWD"); if kill -0 "$(cat '${run}'/$n.pid)" 2>/dev/null; then echo "$n running"; else echo "$n stopped"; fi >> '${teardowns}'; ${options.teardown ?? "true"}`,
@@ -252,7 +252,7 @@ const stackOf = async (
     "both scripts to start",
   );
   const listed = async () =>
-    (await runHost(Ops.listWorktrees(project.id))).map((w) => w.id);
+    (await runHost(listWorktrees(project.id))).map((w) => w.id);
   const ran = () =>
     existsSync(teardowns)
       ? readFileSync(teardowns, "utf8").split("\n").filter(Boolean)

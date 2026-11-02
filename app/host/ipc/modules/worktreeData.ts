@@ -2,8 +2,9 @@ import type { worktreeDataContract } from "@shigomori/contracts/modules/worktree
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import type * as Engine from "@host/lib/Engine";
-import * as Ops from "@host/lib/engineOps";
+import { writeDescription } from "@host/lib/sync/worktreeDescription";
 import { currentWorktreeId, findProject } from "@host/lib/projects";
+import * as WorktreeData from "@shigomori/engine/WorktreeData";
 
 export const worktreeDataHandlers = {
   // Validate projectId against the project list before any read, so a
@@ -12,12 +13,13 @@ export const worktreeDataHandlers = {
   read: ({ projectId, worktreeId }) =>
     Effect.gen(function* () {
       yield* findProject(projectId);
-      const data = yield* Ops.readWorktreeData(projectId, worktreeId);
+      const worktreeData = yield* WorktreeData.WorktreeData;
+      const data = yield* worktreeData.document(projectId, worktreeId);
       if (data !== null) return data;
       const now = yield* currentWorktreeId(projectId, worktreeId);
       return now === worktreeId
         ? null
-        : yield* Ops.readWorktreeData(projectId, now);
+        : yield* worktreeData.document(projectId, now);
     }),
 
   // The renderer only surfaces a ports editor for managed worktrees
@@ -28,7 +30,9 @@ export const worktreeDataHandlers = {
   patchPorts: ({ projectId, worktreeId, remove, put }) =>
     Effect.andThen(
       findProject(projectId),
-      Ops.patchWorktreePorts(projectId, worktreeId, { remove, put }),
+      Effect.flatMap(WorktreeData.WorktreeData, (data) =>
+        data.patchPorts(projectId, worktreeId, { remove, put }),
+      ),
     ).pipe(Effect.asVoid),
 
   describe: ({ projectId, worktreeId, description }) =>
@@ -37,7 +41,7 @@ export const worktreeDataHandlers = {
       currentWorktreeId(projectId, worktreeId),
     ).pipe(
       Effect.flatMap((id) =>
-        Ops.writeWorktreeDescription(projectId, id, description),
+        writeDescription({ projectId, worktreeId: id }, description),
       ),
       Effect.asVoid,
     ),

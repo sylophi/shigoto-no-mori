@@ -5,7 +5,7 @@
 // which feed the sidebar's recency and frequency sorts.
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import * as Ops from "../engineOps";
+import * as Usage from "@shigomori/engine/Usage";
 import { log } from "@shared/log";
 
 const hasProjectId = Schema.is(
@@ -24,7 +24,9 @@ let usageFailureLogged = false;
 // Best-effort: never let a stats write break the handler.
 export const recordProjectActionUsage = (input: unknown) => {
   if (!hasProjectId(input)) return Effect.succeed(null);
-  return Ops.recordProjectUse(input.projectId).pipe(
+  return Effect.flatMap(Usage.Usage, (usage) =>
+    usage.record("project", input.projectId, ""),
+  ).pipe(
     Effect.as(input.projectId),
     Effect.catchCause((cause) =>
       Effect.sync(() => {

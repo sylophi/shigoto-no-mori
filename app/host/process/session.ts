@@ -12,7 +12,7 @@ import * as Graph from "./graph";
 import type { HostServices } from "./services";
 import * as BackgroundFetch from "@host/lib/BackgroundFetch";
 import * as Tunnel from "@host/direct/Tunnel";
-import { launchGuide } from "@host/lib/engineOps";
+import * as Agents from "@shigomori/engine/Agents";
 import { dirname } from "node:path";
 import * as HostFacts from "@host/lib/HostFacts";
 import {
@@ -22,7 +22,7 @@ import {
 } from "./handlers";
 import * as Shell from "@host/lib/Shell";
 import * as WtFolder from "@shigomori/engine/WtFolder";
-import { asChange } from "@host/lib/Engine";
+import { asCall, changing } from "@host/lib/Engine";
 import {
   broadcastAll,
   probeRemoteConnections,
@@ -75,16 +75,19 @@ export function startHost(options: {
           Effect.sync(() => broadcastAll(updaterContract, "state", state)),
         ),
       ),
-    // A release's agent reads the source at its tag, a dev build's the
-    // checkout it runs from.
+    // The user's agent on a guide session the shell minted for one of its
+    // windows. Like a resume, it writes no state. A release's agent reads
+    // the source at its tag, a dev build's the checkout it runs from.
     guideLaunch: (input) =>
       Effect.flatMap(HostFacts.HostFacts, (facts) =>
-        launchGuide({
-          ...input,
-          source: facts.packaged
-            ? { tag: `v${facts.appVersion}` }
-            : { checkout: dirname(facts.appPath) },
-        }).pipe(
+        Effect.flatMap(Agents.Agents, (agents) =>
+          agents.guide({
+            ...input,
+            source: facts.packaged
+              ? { tag: `v${facts.appVersion}` }
+              : { checkout: dirname(facts.appPath) },
+          }),
+        ).pipe(
           Effect.mapError(callFailureOf),
           Effect.catchDefect((defect) => Effect.fail(callFailureOf(defect))),
         ),
@@ -93,10 +96,12 @@ export function startHost(options: {
     migrationRetry: () =>
       onRoot(() =>
         Graph.run(
-          asChange(
-            Effect.flatMap(WtFolder.WtFolder, (folder) => folder.retryStuck),
-            {},
-            "move",
+          asCall(
+            changing(
+              Effect.flatMap(WtFolder.WtFolder, (folder) => folder.retryStuck),
+              {},
+              "move",
+            ),
           ),
         ),
       ),

@@ -22,9 +22,9 @@ import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as Engine from "@host/lib/Engine";
-import * as Ops from "@host/lib/engineOps";
 import * as PullRequestMaps from "@host/lib/githubCli/PullRequestMaps";
-import { loadProjects } from "@host/lib/projects";
+import { findProject, loadProjects } from "@host/lib/projects";
+import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Scripts from "@host/lib/Scripts";
 import { sweepAutoPull } from "@host/lib/worktrees/autoPullSweep";
 import type { broadcastAll } from "@host/process/wires";
@@ -130,9 +130,13 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
     // read as a failed fetch.
     const autoPullProject = (projectId: string, projectPath: string) =>
       Effect.gen(function* () {
-        const identities = yield* Ops.listWorktreeIdentities({ projectId });
+        const project = yield* findProject(projectId);
+        const identities = yield* (yield* Worktrees.Worktrees).identityList(
+          [project],
+          { primaryRef: false },
+        );
         const { pulled, failed } = yield* sweepAutoPull(
-          identities,
+          identities.rows,
           new Set(scripts.worktrees().map(({ worktreeId }) => worktreeId)),
         );
         for (const { worktree, commits } of pulled) {

@@ -31,7 +31,7 @@ import {
   peerWorktreesFor,
 } from "@host/ipc/PeerReach";
 import { EngineChanges } from "@host/lib/Engine";
-import * as Ops from "@host/lib/engineOps";
+import * as Identity from "@shigomori/engine/Identity";
 import { findProjectAndWorktree } from "@host/lib/projects";
 import { followDescription } from "@host/lib/sync/worktreeDescription";
 import * as Moves from "@host/lib/sync/Moves";
@@ -358,7 +358,7 @@ const sendWorktreeEffect = (
     if (worktree.isPrimary && !mirror) {
       return yield* new MoveRefusedError({ reason: "primary" });
     }
-    const identity = yield* Ops.repoIdentity(project.path);
+    const { identity } = yield* (yield* Identity.Identity).of(project.path);
     if (identity === null) {
       return yield* new MoveRefusedError({ reason: "no-identity" });
     }

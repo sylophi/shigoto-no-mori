@@ -10,12 +10,19 @@ import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import * as Ops from "@host/lib/engineOps";
+import * as Projects from "@shigomori/engine/Projects";
+import * as Registry from "@shigomori/engine/Registry";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { GithubCli } from "@host/lib/githubCli/GithubCli";
 import * as Scripts from "@host/lib/Scripts";
 import { bookingScripts } from "@host/lib/worktrees/documents";
-import { addProject, freshProjects, loadProjects, refresh } from "./index";
+import {
+  addProject,
+  findProject,
+  freshProjects,
+  loadProjects,
+  refresh,
+} from "./index";
 
 // Moves run one at a time: each writes the whole order, so a second
 // drag computed before the first's refresh landed would put the first
@@ -166,7 +173,11 @@ const removing = Effect.fnUntraced(function* <E, R>(
 });
 
 export const removeProject = Effect.fn("projects.remove")((id: string) =>
-  removing(id, () => Ops.removeProject(id)),
+  removing(id, () =>
+    Effect.flatMap(findProject(id), (project) =>
+      Effect.flatMap(Projects.Projects, (projects) => projects.remove(project)),
+    ),
+  ),
 );
 
 // Its scripts are stopped once nothing refuses the delete, as a
@@ -175,14 +186,15 @@ export const removeProject = Effect.fn("projects.remove")((id: string) =>
 export const deleteProject = Effect.fn("projects.delete")(
   (id: string, notify: Scripts.NotifyScriptEvent) =>
     removing(id, (scripts) =>
-      Ops.checkDeletable(id).pipe(
-        Effect.andThen(scripts.stopProject(id)),
-        Effect.andThen(
-          bookingScripts(scripts, notify, (reporter) =>
-            Ops.deleteProject(id, reporter),
-          ),
-        ),
-      ),
+      Effect.gen(function* () {
+        const projects = yield* Projects.Projects;
+        const project = yield* findProject(id);
+        yield* projects.checkDeletable(project);
+        yield* scripts.stopProject(id);
+        yield* bookingScripts(scripts, notify, (reporter) =>
+          projects.removeWithFiles(project, reporter),
+        );
+      }),
     ),
 );
 
@@ -204,6 +216,10 @@ export const reorderProject = Effect.fn("projects.reorder")(function* (input: {
     input.position,
   );
   if (next === current) return;
-  yield* Ops.storeProjectOrder(next.map((p) => p.id));
+  const registry = yield* Registry.Registry;
+  yield* registry.reorder(
+    yield* registry.listed,
+    next.map((p) => p.id),
+  );
   yield* refresh;
 }, reorders.withPermits(1));

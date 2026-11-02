@@ -37,7 +37,6 @@ import * as Semaphore from "effect/Semaphore";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { errorWordsOf } from "@host/lib/errorWords";
-import * as Ops from "@host/lib/engineOps";
 import * as HostAccount from "@host/lib/HostAccount";
 import * as HostFacts from "@host/lib/HostFacts";
 import * as EngineConfig from "@shigomori/engine/Config";
@@ -395,8 +394,10 @@ const make = (options: Options) =>
     // Resolved fresh per start attempt: the probe is one bounded spawn,
     // and any memo here would leave the install-cloudflared recovery
     // path (any config write re-probes) dead for the PATH case.
-    const resolveBinary = Ops.readGlobalConfig().pipe(
-      Effect.orDie,
+    const resolveBinary = Effect.flatMap(
+      EngineConfig.Config,
+      (config) => config.readDevice,
+    ).pipe(
       Effect.flatMap((config) =>
         resolveCloudflaredBinary(
           config.cloudflaredPath,

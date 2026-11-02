@@ -59,7 +59,7 @@ import {
   rescueStrandedMove,
   reviveStore,
 } from "@shigomori/engine/dataDirMoveJournal";
-import * as Ops from "../host/lib/engineOps.ts";
+import * as Fixtures from "./lib/engineFixtures.mts";
 import { addProject } from "../host/lib/projects/index.ts";
 import { initDataDirAt } from "../shared/paths.ts";
 import { engineDataDir, runHost } from "./lib/hostRuntime.mts";
@@ -135,21 +135,17 @@ const clearJournal = async () => {
 const journalLeft = () => existsSync(join(engineDataDir, JOURNAL));
 
 const titleOf = (worktreeId: string) =>
-  runHost(Ops.describeWorktree(projectId, worktreeId)).then(
+  runHost(Fixtures.describeWorktree(projectId, worktreeId)).then(
     (row) => row.title,
     () => undefined,
   );
 
 it("a move to another volume that crashed mid-copy is undone at the next start", async () => {
-  const identity = (
-    await runHost(Ops.listWorktreeIdentities({ projectId }))
-  ).find((row) => row.path === fox);
-  assert.ok(identity !== undefined, "the worktree in the data folder");
-  const project = (await runHost(Ops.listProjects())).find(
-    (one) => one.id === projectId,
+  const identity = (await runHost(Fixtures.worktreeIdentities(projectId))).find(
+    (row) => row.path === fox,
   );
-  assert.ok(project !== undefined);
-  await runHost(Ops.describe(project, identity.id, { title: "Fox" }));
+  assert.ok(identity !== undefined, "the worktree in the data folder");
+  await runHost(Fixtures.setTitle(projectId, identity.id, "Fox"));
   assert.equal(await titleOf(identity.id), "Fox");
 
   const parent = join(elsewhere, "volume");
@@ -208,9 +204,9 @@ it("a move to another volume that crashed mid-copy is undone at the next start",
 });
 
 it("a move whose copy landed but whose pointer was never written is undone, its copy removed", async () => {
-  const identity = (
-    await runHost(Ops.listWorktreeIdentities({ projectId }))
-  ).find((row) => row.path === fox);
+  const identity = (await runHost(Fixtures.worktreeIdentities(projectId))).find(
+    (row) => row.path === fox,
+  );
   assert.ok(identity !== undefined);
   assert.equal(await titleOf(identity.id), "Fox");
   const parent = join(elsewhere, "volume-2");
@@ -249,9 +245,9 @@ it("a move whose copy landed but whose pointer was never written is undone, its 
 });
 
 it("a journal naming this folder with a trailing slash finishes the move, never undoes it", async () => {
-  const identity = (
-    await runHost(Ops.listWorktreeIdentities({ projectId }))
-  ).find((row) => row.path === fox);
+  const identity = (await runHost(Fixtures.worktreeIdentities(projectId))).find(
+    (row) => row.path === fox,
+  );
   assert.ok(identity !== undefined);
   // What a landed copy left: the old tree with the journal it was copied
   // with, and that journal at the new place, which the pointer names with
@@ -387,9 +383,9 @@ it("a finish that can't read the old tree's journal keeps its own, and finishes 
 // re-key ran before a crash took its mark is reversed. A `returned`
 // one never is again, whatever is under its new id since.
 it("an undo reverses a planned entry its re-key reached, and never a returned one", async () => {
-  const identity = (
-    await runHost(Ops.listWorktreeIdentities({ projectId }))
-  ).find((row) => row.path === fox);
+  const identity = (await runHost(Fixtures.worktreeIdentities(projectId))).find(
+    (row) => row.path === fox,
+  );
   assert.ok(identity !== undefined);
   const newPath = join(elsewhere, "marks", "wt", "repo", "fox");
   const entry = (state: "planned" | "returned") => ({
@@ -681,14 +677,10 @@ it.each([
   "a data folder %s, moved through a link, carries its worktrees to the ids git will name them by",
   async (_, spelling) => {
     const identity = (
-      await runHost(Ops.listWorktreeIdentities({ projectId }))
+      await runHost(Fixtures.worktreeIdentities(projectId))
     ).find((row) => row.path === fox);
     assert.ok(identity !== undefined, "the worktree in the data folder");
-    const project = (await runHost(Ops.listProjects())).find(
-      (one) => one.id === projectId,
-    );
-    assert.ok(project !== undefined);
-    await runHost(Ops.describe(project, identity.id, { title: "Fox" }));
+    await runHost(Fixtures.setTitle(projectId, identity.id, "Fox"));
     let dataDir = `${engineDataDir}///`;
     if (spelling === "linked") {
       const linked = join(elsewhere, "linked");
@@ -748,9 +740,9 @@ it.each([
   ["its own comes back", true],
 ])("a move and its undo and a capture: %s", async (_name, own) => {
   const repo = join(elsewhere, "repo");
-  const identity = (
-    await runHost(Ops.listWorktreeIdentities({ projectId }))
-  ).find((row) => row.path === fox);
+  const identity = (await runHost(Fixtures.worktreeIdentities(projectId))).find(
+    (row) => row.path === fox,
+  );
   assert.ok(identity !== undefined);
   const parent = join(elsewhere, `captures-${String(own)}`);
   mkdirSync(parent);
@@ -803,9 +795,9 @@ it.each([
 // is the one the move carries and an undo brings back.
 it("a capture made while a move kills the scripts comes back with its undo", async () => {
   const repo = join(elsewhere, "repo");
-  const identity = (
-    await runHost(Ops.listWorktreeIdentities({ projectId }))
-  ).find((row) => row.path === fox);
+  const identity = (await runHost(Fixtures.worktreeIdentities(projectId))).find(
+    (row) => row.path === fox,
+  );
   assert.ok(identity !== undefined);
   const parent = join(elsewhere, "captures-late");
   mkdirSync(parent);

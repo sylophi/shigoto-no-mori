@@ -8,7 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { uninstallCliEverything } from "@host/lib/cli/install";
 import { errorWordsOf } from "@host/lib/errorWords";
-import * as Ops from "@host/lib/engineOps";
+import * as Agents from "@shigomori/engine/Agents";
 import { leftIf, nukeEverything } from "@host/lib/nuke";
 import * as Terminals from "@host/lib/terminals/Terminals";
 import { moveDataDir, sessionPlace } from "@host/lib/dataDirMove";
@@ -53,7 +53,12 @@ export const nukeHost = Effect.gen(function* () {
           "The terminal command and its shell hooks",
           uninstallCliEverything,
         ),
-        leftIf("The agent hooks", Ops.removeAllAgentHooks),
+        // Every harness's hooks this flavor installed. A harness not set
+        // up here is skipped.
+        leftIf(
+          "The agent hooks",
+          Effect.flatMap(Agents.Agents, (agents) => agents.setHooks([], false)),
+        ),
       ]),
       (lists) => lists.flat(),
     ),
