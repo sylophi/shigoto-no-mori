@@ -5,20 +5,15 @@ import {
 } from "@shigomori/contracts/pullRequestStack";
 import { groupPrefixOf } from "@shigomori/contracts/sharedSettings";
 import {
-  deviceBadgeOf,
+  type ForestItem,
   type LocalSide,
   mirrorBadgeLookup,
   mirrorPairsOf,
   type MirrorLink,
-  type ProjectPullRequestQueries,
-  type ProjectShigomoriConfigQueries,
-  type ProjectWorktreeQueries,
-  type RemoteForestItem,
   remoteWorktreeKey,
   worktreeRowKey,
   worktreeShelfOf,
 } from "../../../lib/forest.ts";
-import { showPrimaryInInbox } from "../../../lib/showPrimaryInInbox.ts";
 import type {
   Project,
   PullRequest,
@@ -34,21 +29,14 @@ import {
 import { byInboxRank, inboxRank, type InboxRank } from "./inboxRank.ts";
 
 interface BuildInboxRowsArgs {
-  projects: readonly Project[];
-  // All three positionally aligned with `projects`.
-  worktreeQueries: ProjectWorktreeQueries;
-  pullRequestQueries: ProjectPullRequestQueries;
-  // Carries each project's showPrimaryInInbox opt-in.
-  configQueries: ProjectShigomoriConfigQueries;
-  // Peers' forests, filed into the same boxes as this machine's:
-  // the inbox is one list of everything in flight, wherever it lives.
-  // Each item already carries the peer's PR map and its primary opt-in,
-  // the same two facts the local queries above answer per project.
-  remote: RemoteForestItem[];
+  // Every device's projects, this machine's first, filed into the same
+  // boxes: the inbox is one list of everything in flight, wherever it
+  // lives.
+  items: readonly ForestItem[];
   // See buildSidebarRows: a mirrored pair files once, as the local row.
   mirrors: readonly MirrorLink[];
   // See buildSidebarRows: this device's sides of pairs whose projects
-  // `projects` leaves out, filed as this machine's own.
+  // `items` leaves out, filed as this machine's own.
   localSides?: ReadonlyMap<string, LocalSide>;
   // Every peer's badge off the device registry (see buildSidebarRows).
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
@@ -108,11 +96,7 @@ function worktreeRow(entry: Entry): SidebarRow {
 // A plain function for the same reason as buildSidebarRows: the queries
 // belong to the Sidebar, so switching views is free.
 export function buildInboxRows({
-  projects,
-  worktreeQueries,
-  pullRequestQueries,
-  configQueries,
-  remote,
+  items,
   mirrors,
   localSides = new Map(),
   deviceBadges,
@@ -124,12 +108,6 @@ export function buildInboxRows({
   pinWaiting,
 }: BuildInboxRowsArgs): SidebarViewModel {
   const { peerRowsFolded, peerOfLocal } = mirrorPairsOf(mirrors);
-  // Failed listings, local or remote, hold the empty message back (the
-  // shell's fan-out toast counts them on its own).
-  const failedCount =
-    worktreeQueries.filter((q) => q.error).length +
-    remote.filter((item) => item.worktreesError).length;
-  const loadingCount = worktreeQueries.filter((q) => q.isLoading).length;
   const mirrorBadgeFor = mirrorBadgeLookup(peerOfLocal, deviceBadges);
 
   const live: Entry[] = [];
@@ -196,25 +174,27 @@ export function buildInboxRows({
       }
     }
   };
-  projects.forEach((project, i) => {
-    if (project.pathExists === false) return;
-    file(
-      project,
-      worktreeQueries[i]?.data ?? [],
-      pullRequestQueries[i]?.data,
-      showPrimaryInInbox(configQueries[i]?.data),
-      undefined,
-    );
-  });
   // A peer's row folds only into a local entry filed in the same box:
   // a local copy on a shelf would take the peer's live worktree off
-  // the list with it. Where `projects` leaves this machine's project
-  // out, its side of a pair with the peer (localSides) files first, as
-  // this machine's own: its own primary opt-in, and the repo's pull
-  // requests and trunk off the peer's listing.
-  for (const item of remote) {
+  // the list with it. Where `items` leaves this machine's project out,
+  // its side of a pair with the peer (localSides) files first, as this
+  // machine's own: its own primary opt-in, and the repo's pull requests
+  // and trunk off the peer's listing.
+  for (const item of items) {
+    if (item.project.pathExists === false) continue;
+    const { device, pullRequests } = item;
+    if (device.isThisDevice) {
+      file(
+        item.project,
+        item.worktrees,
+        pullRequests,
+        item.showPrimaryInInbox,
+        undefined,
+      );
+      continue;
+    }
     const localOf = (worktree: Worktree) =>
-      peerRowsFolded.get(remoteWorktreeKey(item.deviceId, worktree.id));
+      peerRowsFolded.get(remoteWorktreeKey(device.deviceId, worktree.id));
     for (const worktree of item.worktrees) {
       const local = localOf(worktree);
       const side = local === undefined ? undefined : localSides.get(local);
@@ -222,7 +202,7 @@ export function buildInboxRows({
       file(
         side.project,
         [side.worktree],
-        item.pullRequests,
+        pullRequests,
         side.showPrimaryInInbox,
         undefined,
         trunkOf(item.worktrees),
@@ -233,15 +213,15 @@ export function buildInboxRows({
       item.worktrees.filter((worktree) => {
         const local = localOf(worktree);
         if (local === undefined) return true;
-        const pr = item.pullRequests[worktree.branch];
+        const pr = pullRequests[worktree.branch];
         return (
           localShelf.get(local) !==
           worktreeShelfOf(worktree, pr, hiddenPrefixes, allowAgentWorking)
         );
       }),
-      item.pullRequests,
+      pullRequests,
       item.showPrimaryInInbox,
-      deviceBadges.get(item.deviceId) ?? deviceBadgeOf(item),
+      device,
     );
   }
 
@@ -307,10 +287,10 @@ export function buildInboxRows({
     // "still asking", or "couldn't ask". The last two have their own
     // signals already (the skeleton, the fan-out toast), so asserting
     // the first over them is the one wrong answer available.
-    // (The shell gates this on the remote listings still being in
-    // flight, the same way it gates the tree's.)
+    // (The shell gates this on the peers' listings still being in
+    // flight or failed, the same way it gates the tree's.)
     emptyMessage:
-      total === 0 && loadingCount === 0 && failedCount === 0
+      total === 0 && items.every((item) => item.listing === "ready")
         ? "No worktrees yet."
         : null,
     // A page's own entry only: a peer's worktree with none may just be

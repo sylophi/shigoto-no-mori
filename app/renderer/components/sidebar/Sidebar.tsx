@@ -141,6 +141,7 @@ function Forest({
     local,
     localSides,
     shownRemote,
+    shownItems,
     mirrors,
     deviceBadges,
     hiddenPrefixes,
@@ -182,8 +183,7 @@ function Forest({
   };
   const view: SidebarViewModel = inbox
     ? buildInboxRows({
-        ...local,
-        remote: shownRemote,
+        items: shownItems,
         mirrors,
         localSides,
         deviceBadges,
@@ -230,10 +230,10 @@ function Forest({
   // filter shows their rows. Without it a peer's project would
   // silently vanish from the tree, and a narrowed forest must not also
   // mute a failure behind it.
-  useFanOutErrorToast(
+  const failedListings =
     worktreeQueries.filter((q) => q.error).length +
-      remoteItems.filter((item) => item.worktreesError).length,
-  );
+    remoteItems.filter((item) => item.worktreesError).length;
+  useFanOutErrorToast(failedListings);
   useUnreachedDevicesToast(devicesFailed);
 
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -270,6 +270,7 @@ function Forest({
     empty: rows.length === 0 && pinned === undefined,
     noProjects: projects.length === 0,
     viewMessage: view.emptyMessage,
+    failed: failedListings > 0,
     hasLocalHost,
   });
 
@@ -413,13 +414,15 @@ function Forest({
 // projects the rows can still be about to arrive from a peer, and a
 // slow device hub must not read as "no projects". A forest narrowed to
 // one machine with nothing in it says which machine it looked at,
-// since the rows it hides are the obvious thing to go looking for.
+// since the rows it hides are the obvious thing to go looking for. A
+// failed listing has its toast, so the view says nothing over it.
 function emptyForestMessage({
   loading,
   narrowedTo,
   empty,
   noProjects,
   viewMessage,
+  failed,
   hasLocalHost,
 }: {
   loading: boolean;
@@ -428,6 +431,7 @@ function emptyForestMessage({
   empty: boolean;
   noProjects: boolean;
   viewMessage: string | null;
+  failed: boolean;
   hasLocalHost: boolean;
 }): string | null {
   if (loading) return null;
@@ -438,5 +442,5 @@ function emptyForestMessage({
       ? "No projects yet."
       : "No reachable devices with projects yet. Open the Devices page to see this account's machines.";
   }
-  return viewMessage;
+  return failed ? null : viewMessage;
 }

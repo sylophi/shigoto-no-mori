@@ -189,7 +189,7 @@ function forestItems(shell: SceneShell): ForestItem[] {
           worktrees: forest.worktrees[project.id] ?? [],
           listing: "ready",
           pullRequests: unposedPullRequests(project.id),
-          showPrimaryInInbox: undefined,
+          showPrimaryInInbox: false,
         }))
       : [];
   return [
@@ -239,8 +239,7 @@ function localInputs(shell: SceneShell) {
 
 function inboxModel(shell: SceneShell) {
   return buildInboxRows({
-    ...localInputs(shell),
-    remote: remoteForests(shell),
+    items: forestItems(shell),
     mirrors: [],
     deviceBadges: deviceBadges(shell),
     openShelves: new Set(),
