@@ -97,7 +97,7 @@ export function useRowHostApi(deviceId: string): HostApi | undefined {
 // The same for one peer, as a selector (useRemoteDeviceApi's), so a row
 // drawn per worktree doesn't re-render on every other peer's churn.
 // Undefined for undefined.
-export function useCommandableDeviceApi(
+function useCommandableDeviceApi(
   deviceId: string | undefined,
 ): RemoteDeviceApi | undefined {
   const localDeviceId = useApi().deviceId;
