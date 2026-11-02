@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-import { MaybeHostScope } from "@/hooks/remote/useHostScope";
+import { DeviceScope } from "@/hooks/remote/useHostScope";
 import type { ForestItem } from "@shigomori/ui/lib/forest.ts";
 import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
 import {
@@ -93,9 +93,9 @@ function CreatorScope({
   const creator = useGroupCreator(group, target.project.identity);
   if (creator === undefined) return null;
   return (
-    <MaybeHostScope deviceId={creator.deviceId} api={creator.api}>
+    <DeviceScope deviceId={creator.deviceId}>
       {children(creator, icon)}
-    </MaybeHostScope>
+    </DeviceScope>
   );
 }
 

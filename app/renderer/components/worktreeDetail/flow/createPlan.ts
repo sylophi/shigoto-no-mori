@@ -3,7 +3,7 @@
 // setup command, and whether ports get provisioned. The review's
 // cards and the running view's steps read the same answers, so the
 // steps only name what the review already showed. Every hook here
-// reads this machine, so callers sit under LocalHostScope. Under a
+// reads this machine, so callers sit under its scope. Under a
 // project not there yet (the pull clones it first) every answer is
 // empty: nobody has configured the checkout its create goes into.
 import type { CreatePlan } from "@shigomori/ui/views/worktreeDetail/flow/PullProgressView.tsx";

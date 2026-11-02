@@ -32,7 +32,7 @@ import { DeviceMenuRowView } from "@shigomori/ui/views/sidebar/DeviceMenuRowView
 import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
 import { useSetProjectPinned } from "@/hooks/sharedSettings/usePinnedProjects";
 import { useQuickCreateDeviceId } from "@/hooks/sharedSettings/useQuickCreateDevice";
-import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
+import { DeviceScope, type HostApi } from "@/hooks/remote/useHostScope";
 import type { Project } from "@shigomori/contracts/schemas";
 import { AddToDeviceSubmenu } from "./AddToDeviceSubmenu";
 import { WorktreeSortSubmenu } from "./SidebarToolbar";
@@ -228,21 +228,21 @@ export function ProjectGroupActions({
       onOpenChange={onOpenChange}
       quickCreate={
         creator !== undefined && (
-          <MaybeHostScope deviceId={creator.deviceId} api={creator.api}>
+          <DeviceScope deviceId={creator.deviceId}>
             <QuickCreateButton
               project={creator.project}
               isHovered={isHovered}
               deviceLabel={spansDevices ? creator.deviceLabel : undefined}
             />
-          </MaybeHostScope>
+          </DeviceScope>
         )
       }
       menu={
         <>
           {creator !== undefined && (
-            <MaybeHostScope deviceId={creator.deviceId} api={creator.api}>
+            <DeviceScope deviceId={creator.deviceId}>
               <ProjectCreateMenuItems project={creator.project} />
-            </MaybeHostScope>
+            </DeviceScope>
           )}
           {onLocate !== undefined && (
             <>
@@ -264,7 +264,7 @@ export function ProjectGroupActions({
             members={members}
             onOpenChange={onOpenChange}
           />
-          <MaybeHostScope deviceId={primary.deviceId} api={primary.api}>
+          <DeviceScope deviceId={primary.deviceId}>
             <ProjectPageMenuItems project={primary.project} />
             {!spansDevices && (
               <>
@@ -279,7 +279,7 @@ export function ProjectGroupActions({
                 />
               </>
             )}
-          </MaybeHostScope>
+          </DeviceScope>
           {spansDevices && (
             <>
               <RemoveSubmenu
@@ -338,11 +338,7 @@ function RemoveSubmenu({
               />
             </DropdownMenuItem>
           ) : (
-            <MaybeHostScope
-              key={member.deviceId}
-              deviceId={member.deviceId}
-              api={member.api}
-            >
+            <DeviceScope key={member.deviceId} deviceId={member.deviceId}>
               <ProjectRemoveMenuItem
                 project={member.project}
                 removeArm={removeArm}
@@ -353,7 +349,7 @@ function RemoveSubmenu({
                   icon: member.deviceIcon,
                 }}
               />
-            </MaybeHostScope>
+            </DeviceScope>
           ),
         )}
       </DropdownMenuSubContent>

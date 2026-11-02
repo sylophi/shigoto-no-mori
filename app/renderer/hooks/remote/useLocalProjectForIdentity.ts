@@ -1,7 +1,7 @@
 // The identity gate behind every mirror / transplant control: a
 // remote worktree can only land in a LOCAL project that is the same
 // repo. The projects query is explicitly scope-less despite any
-// surrounding HostScopeProvider (the destination is this machine), and
+// surrounding DeviceScope (the destination is this machine), and
 // the web has none, so the controls structurally never render there. The handlers re-verify the match. This is UX, not the wall.
 import type { Project } from "@shigomori/contracts/schemas";
 import { useDeviceProjects } from "@/hooks/projects/useProjects";

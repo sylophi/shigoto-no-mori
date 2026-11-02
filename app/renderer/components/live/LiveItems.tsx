@@ -16,12 +16,11 @@ import type {
   Terminal,
   Worktree,
 } from "@shigomori/contracts/schemas";
-import { RunnerScope } from "@/components/worktreeDetail/mirror/MirrorAction";
 import { MirrorManageDialog } from "@/components/worktreeDetail/mirror/MirrorManageDialog";
 import { useMirrorView } from "@/components/worktreeDetail/mirror/useMirrorView";
 import { PortsDialog } from "@/components/worktreeDetail/ports/PortsDialog";
 import type { LiveMirror } from "@/hooks/live/useLiveActivity";
-import { useHostScope } from "@/hooks/remote/useHostScope";
+import { DeviceScope, useHostScope } from "@/hooks/remote/useHostScope";
 import { usePortForwardStop } from "@/hooks/remote/usePortForwards";
 import { useDeviceIcon, useDeviceProperName } from "@/hooks/remote/useDevices";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
@@ -186,14 +185,14 @@ function SessionItem({
       dialog={
         open &&
         runnerApi !== undefined && (
-          <RunnerScope deviceId={runnerDeviceId} api={runnerApi}>
+          <DeviceScope deviceId={runnerDeviceId}>
             <MirrorManageDialog
               session={session}
               {...managed}
               onClose={() => setOpen(false)}
               onStopped={() => setOpen(false)}
             />
-          </RunnerScope>
+          </DeviceScope>
         )
       }
     />

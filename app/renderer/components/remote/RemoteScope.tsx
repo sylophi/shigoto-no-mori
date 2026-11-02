@@ -1,7 +1,7 @@
 // Route-level device scoping for the /devices/$deviceId/... pages:
 // this machine's id renders the page under the default local scope
 // (the page's api), a peer's resolves the device from the registry, scopes
-// the subtree's queries to its api (HostScopeProvider), and says
+// the subtree's queries to its api (DeviceScope), and says
 // honestly when the device is not reachable. Push refresh is not a
 // scope concern: every device's boot-scoped push watch
 // (renderer/lib/hostWatch.ts) keeps its cache live, so the sidebar

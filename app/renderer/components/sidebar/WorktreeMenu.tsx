@@ -26,7 +26,7 @@ import {
 } from "@/components/worktreeDetail/TransferActions";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useCommandableDeviceApi } from "@/hooks/remote/useCommandAccess";
-import { MaybeHostScope, useHostScope } from "@/hooks/remote/useHostScope";
+import { DeviceScope, useHostScope } from "@/hooks/remote/useHostScope";
 import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,
@@ -95,10 +95,10 @@ function MenuItems({
         branch={worktree.detached ? undefined : worktree.branch}
       />
       {api !== undefined && (
-        <MaybeHostScope deviceId={deviceId} api={api}>
+        <DeviceScope deviceId={deviceId}>
           <TransferItems worktree={worktree} />
           <ManageItems worktree={worktree} deleteArm={deleteArm} />
-        </MaybeHostScope>
+        </DeviceScope>
       )}
     </>
   );

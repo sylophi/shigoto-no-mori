@@ -12,16 +12,11 @@
 // whose session is not in hand. A runner with no session up leaves the
 // button disabled, saying so: nothing to drive the mirror through, but
 // the worktree is still mirrored.
-import { type ReactNode, useEffect, useState, useEffectEvent } from "react";
+import { useEffect, useState, useEffectEvent } from "react";
 import { RefreshCw } from "lucide-react";
 import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import {
-  type HostApi,
-  HostScopeProvider,
-  LocalHostScope,
-  useHostScope,
-} from "@/hooks/remote/useHostScope";
+import { DeviceScope, useHostScope } from "@/hooks/remote/useHostScope";
 import {
   useWorktreeMirrorLinks,
   type WorktreeMirrorLink,
@@ -33,7 +28,6 @@ import { TONE_TEXT } from "@shigomori/ui/primitives/status-dot.tsx";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import { MirrorManageDialog } from "./MirrorManageDialog";
 import { useMirrorView } from "./useMirrorView";
-import { useApi } from "@/lib/runtime/pageApi";
 
 export function MirrorAction({
   worktree,
@@ -122,7 +116,7 @@ function MirrorLinkAction({
         onClick={() => setOpen(true)}
       />
       {open && runnerApi !== undefined && (
-        <RunnerScope deviceId={link.runnerDeviceId} api={runnerApi}>
+        <DeviceScope deviceId={link.runnerDeviceId}>
           <MirrorManageDialog
             session={session}
             {...mirror}
@@ -133,31 +127,8 @@ function MirrorLinkAction({
               }
             }}
           />
-        </RunnerScope>
+        </DeviceScope>
       )}
     </>
-  );
-}
-
-// The runner's scope over the dialog: this machine re-pinned outright
-// (the page may be a peer's, viewed from here), or the peer's
-// provider.
-export function RunnerScope({
-  deviceId,
-  api,
-  children,
-}: {
-  deviceId: string;
-  api: HostApi;
-  children: ReactNode;
-}) {
-  const localDeviceId = useApi().deviceId;
-  if (deviceId === localDeviceId) {
-    return <LocalHostScope>{children}</LocalHostScope>;
-  }
-  return (
-    <HostScopeProvider deviceId={deviceId} api={api}>
-      {children}
-    </HostScopeProvider>
   );
 }

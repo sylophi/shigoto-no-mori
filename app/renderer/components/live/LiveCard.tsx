@@ -15,8 +15,7 @@ import {
 } from "@/hooks/projects/useProjectPullRequests";
 import { useDeviceProjects } from "@/hooks/projects/useProjects";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
-import { useDeviceApi } from "@/hooks/remote/useDeviceApi";
-import { HostScopeProvider, useHostScope } from "@/hooks/remote/useHostScope";
+import { DeviceScope, useHostScope } from "@/hooks/remote/useHostScope";
 import {
   useCanForwardPorts,
   usePortForwardControl,
@@ -26,10 +25,9 @@ import {
   useDeviceIcon,
   useDeviceProperName,
 } from "@/hooks/remote/useDevices";
-import { statusViewOf } from "@/lib/remote/devices";
+import { isLive, statusViewOf } from "@/lib/remote/devices";
 import { useViewsWanted } from "@/hooks/remote/useRemoteForests";
 import { useDeviceWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { useHasLocalHost } from "@/lib/localHost";
 import { THIS_DEVICE_VIEW } from "@shigomori/ui/lib/deviceStatus.ts";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import {
@@ -49,7 +47,6 @@ import {
   PortsStripView,
 } from "@shigomori/ui/views/live/LiveCardView.tsx";
 import type { LiveCard as LiveCardModel } from "./liveModel";
-import { useApi } from "@/lib/runtime/pageApi";
 import { useViews } from "@/lib/runtime/viewHooks";
 
 // A device's heading over its cards: its mark in its connection tone,
@@ -77,21 +74,14 @@ export function DeviceHeading({
   );
 }
 
-// The card under its device's scope, while that device can be reached.
-// A peer out of reach keeps its card (its mirror and forwards are still
-// there), with nothing on it that would need the peer.
+// The card under its device's scope. A peer out of reach keeps its
+// card (its mirror and forwards are still there), with nothing on it
+// that would need the peer.
 export function LiveCard({ card }: { card: LiveCardModel }) {
-  const localDeviceId = useApi().deviceId;
-  const hasLocalHost = useHasLocalHost();
-  const { api } = useDeviceApi(card.deviceId);
-  const local = card.deviceId === localDeviceId;
-  const reachable = local ? hasLocalHost : api !== undefined;
-  const body = <CardBody card={card} reachable={reachable} />;
-  if (local || api === undefined) return body;
   return (
-    <HostScopeProvider deviceId={card.deviceId} api={api}>
-      {body}
-    </HostScopeProvider>
+    <DeviceScope deviceId={card.deviceId}>
+      <CardBody card={card} reachable={useHostReachable(card.deviceId)} />
+    </DeviceScope>
   );
 }
 
@@ -193,13 +183,11 @@ type CardWorktree =
   | { kind: "found"; worktree: Worktree }
   | { kind: "loading" | "missing" | "unreachable"; worktree: undefined };
 
-// Whether a device has a host to read: a peer while it has an api,
-// this machine only where it hosts projects (not the web client).
+// Whether a device has a host to read now: a peer while it can be
+// asked, this machine only where it hosts projects (not the web client).
 function useHostReachable(deviceId: string): boolean {
-  const localDeviceId = useApi().deviceId;
-  const hasLocalHost = useHasLocalHost();
-  const { api } = useDeviceApi(deviceId);
-  return api !== undefined && (deviceId !== localDeviceId || hasLocalHost);
+  const device = useDevice(deviceId);
+  return device !== undefined && device.hostsProjects && isLive(device);
 }
 
 function useCardWorktree(card: LiveCardModel): CardWorktree {

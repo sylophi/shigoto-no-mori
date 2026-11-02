@@ -17,7 +17,7 @@ export const wantsCreateForm = (event: {
 // landing straight on the new worktree's page. Shared by the project
 // row's + button and the inbox sidebar's New worktree menu so the two
 // entry points can't drift on error handling. Scope-aware end to end:
-// under a peer's HostScopeProvider the create runs there and the
+// under a peer's DeviceScope the create runs there and the
 // landing page is that device's.
 export function useQuickCreateWorktree() {
   const { api } = useHostScope();

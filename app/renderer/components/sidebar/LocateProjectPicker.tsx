@@ -9,7 +9,7 @@ import {
   useRelocateProject,
   useRelocatingProject,
 } from "@/hooks/projects/useProjects";
-import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
+import { DeviceScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { getBrowseParentPath } from "@shigomori/contracts/projectPaths";
 import type { Project } from "@shigomori/contracts/schemas";
 import type { GroupMember } from "./ProjectGroupActions";
@@ -46,13 +46,13 @@ export function useLocateProject(
   const picker = locating !== undefined &&
     holder !== undefined &&
     locateApi && (
-      <MaybeHostScope deviceId={holder.deviceId} api={locateApi}>
+      <DeviceScope deviceId={holder.deviceId}>
         <LocateProjectPicker
           project={holder.project}
           from={locating.from}
           onClose={() => setLocating(undefined)}
         />
-      </MaybeHostScope>
+      </DeviceScope>
     );
   return { relocating, onLocate, picker };
 }

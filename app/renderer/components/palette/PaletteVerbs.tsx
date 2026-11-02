@@ -16,10 +16,7 @@ import { useBinding, useKeymap } from "@/hooks/ui/useKeymap";
 import { useHasLocalHost } from "@/lib/localHost";
 import { openWorktreeInNewWindow } from "@/lib/newWindow";
 import { useLaunch } from "@/hooks/launchers/useLaunchers";
-import {
-  MaybeHostScope,
-  useScopedDeviceLabel,
-} from "@/hooks/remote/useHostScope";
+import { DeviceScope, useScopedDeviceLabel } from "@/hooks/remote/useHostScope";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
@@ -194,10 +191,10 @@ function WorktreeVerbs({
         />
       )}
       {settled && reachable && (
-        <MaybeHostScope deviceId={entry.deviceId} api={api}>
+        <DeviceScope deviceId={entry.deviceId}>
           <SyncVerbs entry={entry} query={query} actions={actions} />
           <ScriptVerbs entry={entry} query={query} actions={actions} />
-        </MaybeHostScope>
+        </DeviceScope>
       )}
       <VerbGroupView
         heading="More"
