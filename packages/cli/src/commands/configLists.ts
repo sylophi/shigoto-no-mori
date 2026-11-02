@@ -4,7 +4,7 @@
 // survive an edit.
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { isAbsolute, relative, sep } from "node:path";
+import { relative, resolve as resolvePath, sep } from "node:path";
 import { isSafeRelPath } from "@shigomori/contracts/predicates/relPath";
 import * as Config from "@shigomori/engine/Config";
 import type { ConfigDoc } from "@shigomori/engine/configDoc";
@@ -17,6 +17,7 @@ import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { UsageError } from "../errors.ts";
+import { here } from "../here.ts";
 import { note, out, Output, renderTable, styles } from "../output.ts";
 import { document, type Settings, suffix, usage } from "./config.ts";
 
@@ -205,20 +206,22 @@ const outsideRoot = () =>
     problem: "Carry-over paths must stay within the project root.",
   });
 
-// A path as stored: project-relative with forward slashes, its `.`
-// segments, doubled and trailing slashes gone, so one entry has one
-// spelling. An absolute path inside the project is made relative.
+// A path as stored: relative to a checkout's root with forward slashes,
+// its `.` segments, doubled and trailing slashes gone, so one entry has
+// one spelling. A typed path is read from the cwd when that is in one of
+// the project's checkouts, and from the project's root otherwise.
 const carryOverPath = (project: Registry.ListedProject, raw: string) =>
   Effect.gen(function* () {
-    let path = raw.trim();
-    if (isAbsolute(path)) {
-      const inside = relative(project.path, path);
-      if (inside === ".." || inside.startsWith(`..${sep}`)) {
-        return yield* new UsageError({
-          problem: `${path} is outside the project (${project.path}).`,
-        });
-      }
-      path = inside;
+    const { cwd, current } = yield* here;
+    const checkout =
+      current?.project.id === project.id ? current.worktree.path : undefined;
+    const root = checkout ?? project.path;
+    const typed = resolvePath(checkout === undefined ? root : cwd, raw.trim());
+    const path = relative(root, typed);
+    if (path === ".." || path.startsWith(`..${sep}`)) {
+      return yield* new UsageError({
+        problem: `${typed} is outside ${root}.`,
+      });
     }
     if (!isSafeRelPath(path)) return yield* outsideRoot();
     const kept = path
