@@ -49,11 +49,11 @@ type SidebarRowKinds =
   // `project` is this machine's checkout when `local`, else the first
   // peer's, standing in for the group. `groupId` is what keeps the
   // group's rows apart and what they report their hover to (its key,
-  // forestGroups). `expanded` is the open project, heading the tree on its own.
-  // `devices` lists the peer devices in the group (empty for a purely
-  // local project), for the header's badge cluster, and `members` the
-  // same peers' checkouts, for the header's actions. A peer-only group
-  // may span several devices sharing one repo identity.
+  // forestGroups). `expanded` is the open project, heading the tree on
+  // its own. `devices` lists the peer devices in the group (empty for a
+  // purely local project), for the header's badge cluster, and
+  // `members` the same peers' checkouts, for the header's actions. A
+  // peer-only group may span several devices sharing one repo identity.
   | {
       kind: "project";
       key: string;

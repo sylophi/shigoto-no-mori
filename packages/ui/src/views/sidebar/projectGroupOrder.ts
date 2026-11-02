@@ -3,11 +3,12 @@ import { type ForestItem, forestGroups } from "../../lib/forest.ts";
 import { sortByProject } from "../../lib/sortProjects.ts";
 import { type Owner, ownerOf, type ProjectListRow } from "./sidebarRow.ts";
 
-// Group rank by group id (forestGroups). And owner rank and header label by owner key (ownerOf), for the list
-// split by owner. And the pinned groups' keys (projectGroupKey), which
-// lead the list wherever their rank puts them. And the folder each
-// group is filed in, by group key, which gathers the groups of one
-// owner filed in the same one under a header, and those headers.
+// Group rank by group id (forestGroups). And owner rank and header
+// label by owner key (ownerOf), for the list split by owner. And the
+// pinned groups' keys (projectGroupKey), which lead the list wherever
+// their rank puts them. And the folder each group is filed in, by group
+// key, which gathers the groups of one owner filed in the same one
+// under a header, and those headers.
 export interface ProjectGroupOrder {
   groups: ReadonlyMap<string, number>;
   owners: ReadonlyMap<string, { rank: number; label: string }>;

@@ -89,9 +89,8 @@ export interface BuildSidebarRowsArgs {
   // machines, so the folded side's row folds into the kept side's.
   mirrors: readonly MirrorPair[];
   // Every peer's badge off the device registry (useDeviceBadges),
-  // whether or not its rows are in `items`: the device filter narrows
-  // the rows, and a local row's mirror still names its peer while the
-  // peer's own rows are hidden.
+  // whether or not its rows are in `items`: a kept row's mirror names
+  // the folded side's device, whose own rows the filter may hide.
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
 }
 
@@ -158,6 +157,7 @@ export function buildSidebarRows({
     allowAgentWorking,
     deviceFilter,
     mirrors,
+    pairs,
     deviceBadges,
   });
   // A run of rows per group under its header, so the list's pinned and
@@ -515,6 +515,7 @@ function groupFiler({
   allowAgentWorking,
   deviceFilter,
   mirrors,
+  pairs: { keptOf, foldedOf },
   deviceBadges,
 }: Pick<
   BuildSidebarRowsArgs,
@@ -524,8 +525,10 @@ function groupFiler({
   | "deviceFilter"
   | "mirrors"
   | "deviceBadges"
-> & { groups: readonly ShownGroup[] }): (group: ShownGroup) => FiledGroup {
-  const { keptOf, foldedOf } = mirrorPairsOf(mirrors);
+> & {
+  groups: readonly ShownGroup[];
+  pairs: ReturnType<typeof mirrorPairsOf>;
+}): (group: ShownGroup) => FiledGroup {
   const files = deviceFiling(deviceFilter, mirrors);
   const shelfOf = (worktree: Worktree) =>
     groupShelfOf(worktree, hiddenPrefixes, allowAgentWorking);
@@ -555,18 +558,14 @@ function groupFiler({
   // hide the peer's perfectly healthy worktrees behind a local-only
   // failure. They share the group's folds, so a device showing only
   // peers' work (the web client) can still reach them. This machine's
-  // rows come first, which a tie in the sort keeps.
+  // rows come first (forestGroups), which a tie in the sort keeps.
   const groupRows = (group: ShownGroup): WorktreeRow[] =>
-    [true, false].flatMap((thisDevice) =>
-      group.items.flatMap((item) =>
-        item.device.isThisDevice === thisDevice &&
-        item.listing === "ready" &&
-        item.project.pathExists !== false
-          ? item.worktrees
-              .filter((worktree) => files(item.device.deviceId, worktree.id))
-              .map((worktree) => rowOf(item, worktree, group))
-          : [],
-      ),
+    group.items.flatMap((item) =>
+      item.listing === "ready" && item.project.pathExists !== false
+        ? item.worktrees
+            .filter((worktree) => files(item.device.deviceId, worktree.id))
+            .map((worktree) => rowOf(item, worktree, group))
+        : [],
     );
   const filed = new Map(groups.map((group) => [group, groupRows(group)]));
   const listed = new Map<
@@ -686,6 +685,7 @@ export function projectHeaders({
   const file = groupFiler({
     ...forest,
     groups,
+    pairs: mirrorPairsOf(forest.mirrors),
     openShelves: NO_SHELVES,
     deviceBadges: new Map(),
   });

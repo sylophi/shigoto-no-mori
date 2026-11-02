@@ -54,8 +54,8 @@ export function useForestSources({
   const remote = useRemoteForests({ inboxFacts });
   // Every mirrored pair, so a pair reads as one row.
   const mirrors = useMirrorPairs();
-  // Off the registry, not the rows: a local row mirrored with a peer
-  // the filter hides keeps naming it.
+  // Off the registry, not the rows: a kept row keeps naming the folded
+  // side's device while the filter hides that device's rows.
   const deviceBadges = useDeviceBadges();
   const thisDevice = useThisDevice();
   const hiddenPrefixes = useWorktreePrefixes("hidden");

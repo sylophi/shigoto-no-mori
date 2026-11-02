@@ -8,7 +8,7 @@ import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import type { SidebarDeviceBadge } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
 
 // Every peer on the account as a badge, by device id: the lookup behind
-// a badge that names a device by id alone (a local row's mirror). Off
+// a badge that names a device by id alone (a kept row's mirror). Off
 // the device registry rather than off whichever peers' rows happen to
 // be on screen, so it holds whatever the sidebar's device filter hides.
 export function useDeviceBadges(): ReadonlyMap<string, SidebarDeviceBadge> {
