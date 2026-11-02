@@ -7,9 +7,11 @@
 // revocation protocol.
 //
 // The gate matters as much as the closes: when OUR OWN hub link is
-// down, the roster is not knowledge about the peers, it is knowledge
-// about us, so acting on it would sever perfectly working direct
-// connections during a device-hub outage. Pure and electron-free.
+// down, or came back too recently for its roster to have filled, the
+// roster is not knowledge about the peers, it is knowledge about us, so
+// acting on it would sever perfectly working direct connections during
+// a device-hub outage. Pure and electron-free.
+import type { HubConnectionStatus } from "@shared/hub/connectionTypes";
 import {
   credentialRevoked,
   type SupervisorStatus,
@@ -33,7 +35,8 @@ export type DirectPresenceDeps = {
 
 // What the hub socket's phase says about the direct sessions:
 // - "roster": the socket is up, so the live roster is the verdict on
-//   every peer, and a peer not in it loses its sessions.
+//   every peer once it settled, and a peer not in it loses its
+//   sessions.
 // - "outage": the socket is down for a reason that says nothing about
 //   this device's membership (dialing, backing off, a refused ticket,
 //   a superseded socket, the idle moment before the first dial), so
@@ -55,11 +58,10 @@ export function directPresenceRule(
 }
 
 export function applyDirectPresence(
-  socket: SupervisorStatus,
-  online: readonly string[],
+  status: HubConnectionStatus,
   deps: DirectPresenceDeps,
 ): void {
-  const rule = directPresenceRule(socket);
+  const rule = directPresenceRule(status.socket);
   // No live roster, no verdicts: a downed hub socket reports an empty
   // roster, and closing on that would tear down every working direct
   // session exactly when the device hub cannot help. The keeper DOES
@@ -74,9 +76,16 @@ export function applyDirectPresence(
     deps.reconcilePeers([]);
     return;
   }
+  // A roster still filling (connection.ts) is dialed at once and closes
+  // nothing: after a hub deploy it lacks the peers still dialing back,
+  // whose sessions with us never stopped working.
+  if (rule === "roster" && !status.rosterSettled) {
+    deps.reconcilePeers(status.onlineDeviceIds);
+    return;
+  }
   // "gone" sweeps against an empty roster, whatever the stale link
   // still reports: every session closes.
-  const roster = rule === "roster" ? online : [];
+  const roster = rule === "roster" ? status.onlineDeviceIds : [];
   deps.closeHostPeersNotIn?.(roster);
   deps.dropClientPeersNotIn(roster);
   deps.reconcilePeers(roster);

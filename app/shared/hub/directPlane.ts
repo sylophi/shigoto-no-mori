@@ -205,7 +205,7 @@ export const make = (
         deps.broadcastStatus(buildStatus(current));
         // The rule, its outage gate included, is directPresence.ts's.
         const host = deps.host;
-        applyDirectPresence(current.socket, current.onlineDeviceIds, {
+        applyDirectPresence(current, {
           closeHostPeersNotIn:
             host === undefined
               ? undefined

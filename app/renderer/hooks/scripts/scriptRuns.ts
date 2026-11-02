@@ -34,6 +34,7 @@ import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import * as Stream from "effect/Stream";
 import type { HostApi } from "@/lib/runtime/Api";
+import { inputPieces } from "@/lib/terminalInput";
 import {
   accountsLeftAtom,
   clientAtoms,
@@ -355,7 +356,11 @@ export class ScriptRuns {
   write(key: ScriptKey, data: string): void {
     const runId = this.liveInteractiveRunId(key);
     if (!runId) return;
-    void this.runPromise(this.scripts.write({ runId, data })).catch(() => {});
+    for (const piece of inputPieces(data)) {
+      void this.runPromise(this.scripts.write({ runId, data: piece })).catch(
+        () => {},
+      );
+    }
   }
 
   resize(key: ScriptKey, cols: number, rows: number): void {

@@ -39,4 +39,7 @@ export type HubConnectionStatus = {
   // status surface reports come from the cached direct sessions
   // (shared/hub/directPlane.ts).
   onlineDeviceIds: string[];
+  // Whether the socket has been up long enough for its roster to name
+  // every peer that is there (ROSTER_SETTLE_MS in connection.ts).
+  rosterSettled: boolean;
 };

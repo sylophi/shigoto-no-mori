@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { attachTerminal } from "@/lib/terminalFeed";
+import { inputPieces } from "@/lib/terminalInput";
 import { useApi } from "@/lib/runtime/pageApi";
 import {
   TerminalView,
@@ -25,9 +26,13 @@ export function Terminal({ terminalId }: { terminalId: string }) {
       live={!ended}
       // A keystroke or a size for a shell on its way out is not worth
       // telling: its end shows.
-      onInput={(data) =>
-        void api.run(api.terminals.write({ terminalId, data })).catch(() => {})
-      }
+      onInput={(data) => {
+        for (const piece of inputPieces(data)) {
+          void api
+            .run(api.terminals.write({ terminalId, data: piece }))
+            .catch(() => {});
+        }
+      }}
       onFit={(cols, rows) =>
         void api
           .run(api.terminals.resize({ terminalId, cols, rows }))

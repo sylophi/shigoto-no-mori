@@ -23,6 +23,7 @@ import * as Stream from "effect/Stream";
 import type { forwardContract } from "@shigomori/contracts/modules/forward";
 import {
   callFailureOf,
+  errorCodeOf,
   isForwardConnectFailedError,
 } from "@shigomori/contracts/errors";
 import type {
@@ -45,9 +46,15 @@ export type ForwardApi = PeerCalls<typeof forwardContract>;
 // one browser tab's ~6 keepalive sockets plus an HMR websocket fit
 // with headroom. Per host process, so this count spans ALL forwards to
 // one device, not each forward alone. A conn over the cap would be
-// refused there anyway, but only after a full open round trip, so an
-// accepted socket over the cap is destroyed immediately instead.
+// refused there, so an accepted socket over it waits here instead,
+// until a conn to the device closes.
 export const MAX_CONNS_PER_DEVICE = 16;
+
+// What binding ::1 fails with on a machine with no IPv6 loopback.
+const NO_IPV6_LOOPBACK = new Set<string | undefined>([
+  "EADDRNOTAVAIL",
+  "EAFNOSUPPORT",
+]);
 
 // The changed signal's window: opens and closes arrive in bursts (one
 // page load moves ~a dozen conns), and each signal triggers a renderer
@@ -64,11 +71,13 @@ type Forward = {
   worktree: PortForwardWorktree | undefined;
   // Holds the listener, the conns and their opens.
   scope: Scope.Closeable;
-  // Every accepted socket, for the cap and teardown.
+  // Every bridged socket, for the cap and teardown.
   conns: Set<BridgedConn>;
   // The ones whose far end opened, which is what the summary counts: a
   // dial to a port with nothing behind it never shows as a conn.
   opened: Set<BridgedConn>;
+  // Bridges an accepted socket as one of the conns.
+  bridge: (socket: Socket) => void;
 };
 
 export type PortForwardEngine = Effect.Success<
@@ -86,6 +95,9 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
   // The conns' opens run on the engine's own services, not a caller's.
   const services = yield* Effect.context<never>();
   const forwards = new Map<string, Forward>();
+  // Accepted sockets over their device's cap, in the order they came
+  // across every forward.
+  const waiting = new Map<Socket, Forward>();
   // A change waiting to go out: one is all a burst needs.
   const changes = yield* Queue.sliding<void>(1);
   const changed = () => void Queue.offerUnsafe(changes, undefined);
@@ -113,6 +125,17 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
       if (forward.deviceId === deviceId) count += forward.conns.size;
     }
     return count;
+  }
+
+  // A conn to the device closed: the sockets that have waited longest on
+  // its forwards take the room it left.
+  function admitWaiting(deviceId: string): void {
+    for (const [socket, forward] of waiting) {
+      if (liveConnsTo(deviceId) >= MAX_CONNS_PER_DEVICE) return;
+      if (forward.deviceId !== deviceId) continue;
+      waiting.delete(socket);
+      forward.bridge(socket);
+    }
   }
 
   // A start answered by a forward already held, whether found up front
@@ -187,13 +210,30 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
     // adapter in host/socket/channelStreams.ts ends one direction and
     // keeps the other flowing), but node's default would auto-end the
     // writable side and drop the remote's response.
-    const server = createServer({ allowHalfOpen: true });
+    const v4 = createServer({ allowHalfOpen: true });
+    const v6 = createServer({ allowHalfOpen: true });
     const localPort = yield* Effect.acquireRelease(
       Effect.tryPromise({
-        try: () => listenLoopback(server, input.localPort ?? 0),
+        try: () => listenLoopback(v4, input.localPort ?? 0),
         catch: callFailureOf,
       }),
-      () => Effect.sync(() => server.close()),
+      () => Effect.sync(() => v4.close()),
+    );
+    // The same port on ::1, which a browser opening localhost tries
+    // first: a server of this machine's already there would answer in
+    // the forward's place, so the port is taken. A machine with no IPv6
+    // loopback listens on 127.0.0.1 alone.
+    yield* Effect.acquireRelease(
+      Effect.tryPromise({
+        try: () => listenLoopback(v6, localPort, "::1"),
+        catch: callFailureOf,
+      }).pipe(
+        Effect.catchIf(
+          (error) => NO_IPV6_LOOPBACK.has(errorCodeOf(error)),
+          () => Effect.void,
+        ),
+      ),
+      () => Effect.sync(() => v6.close()),
     );
     // The dedupe scan ran before the probe and the bind, so a
     // concurrent start for the same pair may have bound in the meantime:
@@ -224,31 +264,41 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
       scope,
       conns: new Set(),
       opened: new Set(),
+      bridge: (socket) => {
+        const conn = bridgeSocket(socket, {
+          channels,
+          open: (channelId) =>
+            run(api.open({ port: forward.remotePort, channelId })),
+          onOpened: () => {
+            forward.opened.add(conn);
+            changed();
+          },
+          onClosed: () => {
+            forward.conns.delete(conn);
+            if (forward.opened.delete(conn)) changed();
+            admitWaiting(forward.deviceId);
+          },
+        });
+        forward.conns.add(conn);
+      },
     };
     const handleConnection = (socket: Socket): void => {
-      if (liveConnsTo(forward.deviceId) >= MAX_CONNS_PER_DEVICE) {
-        socket.destroy();
+      if (liveConnsTo(forward.deviceId) < MAX_CONNS_PER_DEVICE) {
+        forward.bridge(socket);
         return;
       }
-      const conn = bridgeSocket(socket, {
-        channels,
-        open: (channelId) =>
-          run(api.open({ port: forward.remotePort, channelId })),
-        onOpened: () => {
-          forward.opened.add(conn);
-          changed();
-        },
-        onClosed: () => {
-          forward.conns.delete(conn);
-          if (forward.opened.delete(conn)) changed();
-        },
-      });
-      forward.conns.add(conn);
+      waiting.set(socket, forward);
+      // 'close' always follows 'error'. The listener must exist or node
+      // treats the socket error as an uncaught throw.
+      socket.on("error", () => {});
+      socket.once("close", () => waiting.delete(socket));
     };
-    server.on("connection", handleConnection);
-    // A bound listener errors only in exotic cases, but an unlistened
-    // 'error' would take the whole process down.
-    server.on("error", () => {});
+    for (const server of [v4, v6]) {
+      server.on("connection", handleConnection);
+      // A bound listener errors only in exotic cases, but an unlistened
+      // 'error' would take the whole process down.
+      server.on("error", () => {});
+    }
     // Registered last, so it is the first undone: the listener stops
     // taking sockets and the conns go before their opens are
     // interrupted.
@@ -260,7 +310,15 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
       () =>
         Effect.sync(() => {
           forwards.delete(forward.forwardId);
-          server.close();
+          v4.close();
+          v6.close();
+          // Out of the queue before the conns go, whose closes admit
+          // from it.
+          for (const [socket, owner] of waiting) {
+            if (owner !== forward) continue;
+            waiting.delete(socket);
+            socket.destroy();
+          }
           // destroy deletes only the conn being visited, which Set
           // iteration tolerates.
           for (const conn of forward.conns) conn.destroy();
