@@ -46,8 +46,8 @@ export type ForwardApi = PeerCalls<typeof forwardContract>;
 // one browser tab's ~6 keepalive sockets plus an HMR websocket fit
 // with headroom. Per host process, so this count spans ALL forwards to
 // one device, not each forward alone. A conn over the cap would be
-// refused there anyway, but only after a full open round trip, so an
-// accepted socket over the cap is destroyed immediately instead.
+// refused there, so an accepted socket over it waits here instead,
+// until a conn to the device closes.
 export const MAX_CONNS_PER_DEVICE = 16;
 
 // What binding ::1 fails with on a machine with no IPv6 loopback.
@@ -71,11 +71,15 @@ type Forward = {
   worktree: PortForwardWorktree | undefined;
   // Holds the listener, the conns and their opens.
   scope: Scope.Closeable;
-  // Every accepted socket, for the cap and teardown.
+  // Every bridged socket, for the cap and teardown.
   conns: Set<BridgedConn>;
   // The ones whose far end opened, which is what the summary counts: a
   // dial to a port with nothing behind it never shows as a conn.
   opened: Set<BridgedConn>;
+  // Accepted sockets over the device's cap, oldest first.
+  waiting: Set<Socket>;
+  // Bridges an accepted socket as one of the conns.
+  bridge: (socket: Socket) => void;
 };
 
 export type PortForwardEngine = Effect.Success<
@@ -120,6 +124,19 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
       if (forward.deviceId === deviceId) count += forward.conns.size;
     }
     return count;
+  }
+
+  // A conn to the device closed: the sockets waiting on its forwards
+  // take the room it left.
+  function admitWaiting(deviceId: string): void {
+    for (const forward of forwards.values()) {
+      if (forward.deviceId !== deviceId) continue;
+      for (const socket of forward.waiting) {
+        if (liveConnsTo(deviceId) >= MAX_CONNS_PER_DEVICE) return;
+        forward.waiting.delete(socket);
+        forward.bridge(socket);
+      }
+    }
   }
 
   // A start answered by a forward already held, whether found up front
@@ -248,26 +265,35 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
       scope,
       conns: new Set(),
       opened: new Set(),
+      waiting: new Set(),
+      bridge: (socket) => {
+        const conn = bridgeSocket(socket, {
+          channels,
+          open: (channelId) =>
+            run(api.open({ port: forward.remotePort, channelId })),
+          onOpened: () => {
+            forward.opened.add(conn);
+            changed();
+          },
+          onClosed: () => {
+            forward.conns.delete(conn);
+            if (forward.opened.delete(conn)) changed();
+            admitWaiting(forward.deviceId);
+          },
+        });
+        forward.conns.add(conn);
+      },
     };
     const handleConnection = (socket: Socket): void => {
-      if (liveConnsTo(forward.deviceId) >= MAX_CONNS_PER_DEVICE) {
-        socket.destroy();
+      if (liveConnsTo(forward.deviceId) < MAX_CONNS_PER_DEVICE) {
+        forward.bridge(socket);
         return;
       }
-      const conn = bridgeSocket(socket, {
-        channels,
-        open: (channelId) =>
-          run(api.open({ port: forward.remotePort, channelId })),
-        onOpened: () => {
-          forward.opened.add(conn);
-          changed();
-        },
-        onClosed: () => {
-          forward.conns.delete(conn);
-          if (forward.opened.delete(conn)) changed();
-        },
-      });
-      forward.conns.add(conn);
+      forward.waiting.add(socket);
+      // 'close' always follows 'error'. The listener must exist or node
+      // treats the socket error as an uncaught throw.
+      socket.on("error", () => {});
+      socket.once("close", () => forward.waiting.delete(socket));
     };
     for (const server of [v4, v6]) {
       server.on("connection", handleConnection);
@@ -291,6 +317,7 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
           // destroy deletes only the conn being visited, which Set
           // iteration tolerates.
           for (const conn of forward.conns) conn.destroy();
+          for (const socket of forward.waiting) socket.destroy();
           changed();
         }),
     );
