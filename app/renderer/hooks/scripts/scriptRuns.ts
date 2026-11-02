@@ -301,17 +301,28 @@ export class ScriptRuns {
     }
   }
 
+  // The run's events wait in the pre-bind buffer while the attach is out,
+  // as an attach's do, and are drained after the backlog.
   private async rejoin(key: ScriptKey, runId: string): Promise<void> {
+    this.runIdToKey.delete(runId);
+    this.attaching.add(runId);
     const joined = await this.runPromise(this.scripts.attach({ runId })).catch(
       () => null,
     );
-    if (joined === null || this.current.states.get(key)?.runId !== runId) {
+    this.attaching.delete(runId);
+    if (this.current.states.get(key)?.runId !== runId) {
+      this.pendingByRunId.delete(runId);
       return;
     }
-    // What of the run came before the answer is in the backlog too.
-    const { output } = joined;
-    this.buffers.set(key, { chunks: [output], bytes: output.length });
-    this.outputSubs.notify(key, { data: output, reset: true });
+    if (joined !== null) {
+      // This connection heard the run already (another window on it
+      // attached first), so what it buffered is in the backlog too.
+      if (joined.streaming) this.pendingByRunId.delete(runId);
+      const { output } = joined;
+      this.buffers.set(key, { chunks: [output], bytes: output.length });
+      this.outputSubs.notify(key, { data: output, reset: true });
+    }
+    this.bindRunIdAndDrain(key, runId);
   }
 
   // Stops a run the host lists, whether these runs hold it (its
@@ -375,6 +386,11 @@ export class ScriptRuns {
 
   private lost(runId: string): void {
     setTimeout(() => {
+      // An attach still out for it may yet bind it.
+      if (this.attaching.has(runId)) {
+        this.lost(runId);
+        return;
+      }
       const key = this.runIdToKey.get(runId);
       if (!key) {
         this.pendingByRunId.delete(runId);
