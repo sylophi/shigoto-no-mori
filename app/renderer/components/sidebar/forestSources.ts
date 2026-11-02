@@ -17,10 +17,15 @@ import { usePinnedProjects } from "@/hooks/sharedSettings/usePinnedProjects";
 import { useProjectFolders } from "@/hooks/sharedSettings/useProjectFolders";
 import { useWorktreePrefixes } from "@/hooks/sharedSettings/useWorktreePrefixes";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { type LocalSide, localSidesWith } from "@shigomori/ui/lib/forest.ts";
+import {
+  type ForestItem,
+  type LocalSide,
+  localSidesWith,
+} from "@shigomori/ui/lib/forest.ts";
+import { showPrimaryInInbox } from "@shigomori/ui/lib/showPrimaryInInbox.ts";
 import { sortProjects } from "@shigomori/ui/lib/sortProjects.ts";
 import { projectGroupOrder } from "@shigomori/ui/views/sidebar/projectGroupOrder.ts";
-import { useDeviceBadges } from "./deviceBadges";
+import { useDeviceBadges, useThisDevice } from "./deviceBadges";
 import { useDeviceFilter } from "./deviceFilter";
 import { useApi } from "@/lib/runtime/pageApi";
 
@@ -65,6 +70,7 @@ export function useForestSources({
   // Off the registry, not the rows: a local row mirrored with a peer
   // the filter hides keeps naming it.
   const deviceBadges = useDeviceBadges();
+  const thisDevice = useThisDevice();
   const hiddenPrefixes = useWorktreePrefixes("hidden");
   const groupedPrefixes = useWorktreePrefixes("grouped");
   const allowAgentWorking = useClientFlag("allowAgentWorking");
@@ -108,6 +114,43 @@ export function useForestSources({
     activeFilter === null
       ? remoteItems
       : remoteItems.filter((item) => item.deviceId === activeFilter.deviceId);
+  // Every device's projects as one list, this machine's first. Only
+  // this machine's listing reports loading or failing, and only it keeps
+  // a project whose folder is gone, which the peers' reads leave out.
+  const items: ForestItem[] = [
+    ...orderedProjects.map((project, i): ForestItem => {
+      const query = worktreeQueries[i];
+      return {
+        device: thisDevice,
+        project,
+        worktrees: query?.data ?? [],
+        listing: query?.isLoading
+          ? "loading"
+          : query?.error
+            ? "error"
+            : "ready",
+        pullRequests: pullRequestQueries[i]?.data ?? {},
+        showPrimaryInInbox: showPrimaryInInbox(configQueries[i]?.data),
+      };
+    }),
+    ...remoteItems.map(
+      (item): ForestItem => ({
+        device: {
+          deviceId: item.deviceId,
+          label: item.deviceLabel,
+          icon: item.deviceIcon,
+          tone: item.tone,
+          reachable: item.reachable,
+          isThisDevice: false,
+        },
+        project: item.project,
+        worktrees: item.worktrees,
+        listing: "ready",
+        pullRequests: item.pullRequests,
+        showPrimaryInInbox: item.showPrimaryInInbox,
+      }),
+    ),
+  ];
   return {
     // The stored order, which dragging writes.
     projects,
@@ -130,6 +173,14 @@ export function useForestSources({
     local,
     localSides,
     shownRemote,
+    items,
+    // What the device filter leaves of them, whole items.
+    shownItems:
+      activeFilter === null
+        ? items
+        : items.filter(
+            (item) => item.device.deviceId === activeFilter.deviceId,
+          ),
     mirrors,
     deviceBadges,
     hiddenPrefixes,

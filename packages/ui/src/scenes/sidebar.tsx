@@ -58,7 +58,11 @@ import { WorktreeRowView } from "../views/sidebar/WorktreeRowView.tsx";
 import { ProjectIconView } from "../views/shared/ProjectIconView.tsx";
 import type { DeviceRosterEntry } from "../lib/deviceRoster.ts";
 import type { SidebarMarks } from "../views/sidebar/WorktreeEntryView.tsx";
-import { projectGroupKey, type RemoteForestItem } from "../lib/forest.ts";
+import {
+  type ForestItem,
+  projectGroupKey,
+  type RemoteForestItem,
+} from "../lib/forest.ts";
 import { deviceStatusView } from "../lib/deviceStatus.ts";
 import { assertNever } from "../lib/utils.ts";
 import {
@@ -166,6 +170,50 @@ function remoteForests(shell: SceneShell): RemoteForestItem[] {
   });
 }
 
+// Every device's projects as the forest's items, this machine's first.
+function forestItems(shell: SceneShell): ForestItem[] {
+  const local = accountDevices.find((d) => d.deviceId === LOCAL_DEVICE_ID);
+  const forest = forests[LOCAL_DEVICE_ID];
+  const here: ForestItem[] =
+    shell === "desktop" && local && forest
+      ? forest.projects.map((project) => ({
+          device: {
+            deviceId: LOCAL_DEVICE_ID,
+            label: local.name,
+            icon: local.icon ?? "desktop",
+            tone: "emerald",
+            reachable: true,
+            isThisDevice: true,
+          },
+          project,
+          worktrees: forest.worktrees[project.id] ?? [],
+          listing: "ready",
+          pullRequests: unposedPullRequests(project.id),
+          showPrimaryInInbox: undefined,
+        }))
+      : [];
+  return [
+    ...here,
+    ...remoteForests(shell).map(
+      (item): ForestItem => ({
+        device: {
+          deviceId: item.deviceId,
+          label: item.deviceLabel,
+          icon: item.deviceIcon,
+          tone: item.tone,
+          reachable: item.reachable,
+          isThisDevice: false,
+        },
+        project: item.project,
+        worktrees: item.worktrees,
+        listing: "ready",
+        pullRequests: item.pullRequests,
+        showPrimaryInInbox: item.showPrimaryInInbox,
+      }),
+    ),
+  ];
+}
+
 const settled = <T,>(data: T) => ({
   data,
   error: null,
@@ -262,6 +310,7 @@ export function sceneGrid() {
     byOwner: true,
     remote,
     mirrors: [],
+    items: forestItems("desktop"),
     deviceBadges: deviceBadges("desktop"),
     visits: {},
   });

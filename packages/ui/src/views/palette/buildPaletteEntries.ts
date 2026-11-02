@@ -5,14 +5,12 @@ import type {
 } from "./paletteEntries.ts";
 import { isCloneableRemote } from "@shigomori/contracts/predicates/remoteUrl";
 import {
-  deviceBadgeOf,
+  type ForestItem,
+  groupKeyOf,
   mirrorBadgeLookup,
   mirrorPairsOf,
   type MirrorLink,
-  type ProjectPullRequestQueries,
-  type ProjectWorktreeQueries,
   projectGroupKey,
-  type RemoteForestItem,
   worktreeRowKey,
   worktreeShelfOf,
 } from "../../lib/forest.ts";
@@ -36,12 +34,7 @@ export interface PaletteList {
 }
 
 interface BuildPaletteEntriesArgs {
-  projects: readonly Project[];
-  // Positionally aligned with `projects`.
-  worktreeQueries: ProjectWorktreeQueries;
-  // Positionally aligned with `projects` too.
-  pullRequestQueries: ProjectPullRequestQueries;
-  remote: RemoteForestItem[];
+  items: readonly ForestItem[];
   mirrors: readonly MirrorLink[];
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
   hiddenPrefixes: readonly string[];
@@ -60,10 +53,7 @@ interface BuildPaletteEntriesArgs {
 // Worktrees under a hidden prefix wait for a query, the way the
 // sidebar keeps them behind a fold.
 export function buildPaletteEntries({
-  projects,
-  worktreeQueries,
-  pullRequestQueries,
-  remote,
+  items,
   mirrors,
   deviceBadges,
   hiddenPrefixes,
@@ -73,44 +63,30 @@ export function buildPaletteEntries({
   const { peerRowsFolded, peerOfLocal } = mirrorPairsOf(mirrors);
   const mirrorBadgeFor = mirrorBadgeLookup(peerOfLocal, deviceBadges);
   const entries: PaletteEntry[] = [];
-  const localIds = new Set<string>();
+  const localIds = new Set(
+    items.flatMap((item) =>
+      item.device.isThisDevice ? item.worktrees.map((w) => w.id) : [],
+    ),
+  );
   const folds = new Map<string, string>();
 
-  projects.forEach((project, i) => {
-    const trees = worktreeQueries[i]?.data ?? [];
-    const pullRequests = pullRequestQueries[i]?.data;
-    for (const worktree of trees) {
-      localIds.add(worktree.id);
-      const pr = pullRequests?.[worktree.branch];
-      entries.push({
-        key: worktreeRowKey(undefined, worktree.id),
-        worktree,
-        project,
-        device: undefined,
-        mirror: mirrorBadgeFor(worktree),
-        pr,
-        hidden: isHiddenByPrefix(worktree, hiddenPrefixes),
-        shelf: worktreeShelfOf(worktree, pr, [], allowAgentWorking),
-      });
-    }
-  });
-  for (const item of remote) {
-    const device = deviceBadgeOf(item);
-    for (const worktree of item.worktrees) {
-      const key = worktreeRowKey(item.deviceId, worktree.id);
+  for (const { device, project, worktrees, pullRequests } of items) {
+    const peer = device.isThisDevice ? undefined : device;
+    for (const worktree of worktrees) {
+      const key = worktreeRowKey(peer?.deviceId, worktree.id);
       // The local row of a mirrored pair stands for both copies.
-      const folded = peerRowsFolded.get(key);
+      const folded = peer && peerRowsFolded.get(key);
       if (folded !== undefined && localIds.has(folded)) {
         folds.set(key, worktreeRowKey(undefined, folded));
         continue;
       }
-      const pr = item.pullRequests[worktree.branch];
+      const pr = pullRequests[worktree.branch];
       entries.push({
         key,
         worktree,
-        project: item.project,
-        device,
-        mirror: undefined,
+        project,
+        device: peer,
+        mirror: peer ? undefined : mirrorBadgeFor(worktree),
         pr,
         hidden: isHiddenByPrefix(worktree, hiddenPrefixes),
         shelf: worktreeShelfOf(worktree, pr, [], allowAgentWorking),
@@ -221,12 +197,14 @@ export interface ProjectGroupEntries {
 // the home page's tiles (home/gridModel.ts) are these.
 export function projectGroups(
   entries: readonly PaletteEntry[],
-  projects: readonly Project[],
-  remote: readonly RemoteForestItem[],
+  items: readonly ForestItem[],
 ): Map<string, ProjectGroupEntries> {
   const groups = new Map<string, ProjectGroupEntries>();
-  const join = (project: Project, device: SidebarDeviceBadge | undefined) => {
-    const key = projectGroupKey(project, device?.deviceId);
+  for (const item of items) {
+    if (item.project.pathExists === false) continue;
+    const { project } = item;
+    const device = item.device.isThisDevice ? undefined : item.device;
+    const key = groupKeyOf(item);
     const group = groups.get(key);
     if (!group) {
       groups.set(key, {
@@ -235,18 +213,14 @@ export function projectGroups(
         trees: [],
         devices: new Set([device?.deviceId]),
       });
-      return;
+      continue;
     }
     group.devices.add(device?.deviceId);
     if (group.device && !group.device.reachable && device?.reachable) {
       group.project = project;
       group.device = device;
     }
-  };
-  for (const project of projects) {
-    if (project.pathExists !== false) join(project, undefined);
   }
-  for (const item of remote) join(item.project, deviceBadgeOf(item));
   for (const entry of entries) {
     const key = projectGroupKey(entry.project, entry.device?.deviceId);
     groups.get(key)?.trees.push(entry);
@@ -260,11 +234,10 @@ export function projectGroups(
 export function rankPaletteProjects(
   query: string,
   entries: readonly PaletteEntry[],
-  projects: readonly Project[],
-  remote: readonly RemoteForestItem[],
+  forest: readonly ForestItem[],
 ): PaletteProject[] {
   if (!query) return [];
-  const items = [...projectGroups(entries, projects, remote)].map(
+  const items = [...projectGroups(entries, forest)].map(
     ([key, { project, device, trees, devices }]): PaletteProject => ({
       key: `project:${key}`,
       project,

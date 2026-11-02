@@ -39,6 +39,33 @@ export type ProjectPullRequestQueries = ProjectReads<
 export type ProjectShigomoriConfigQueries =
   ProjectReads<ShigomoriConfig | null>;
 
+// A device as the forest's items carry it: its badge, and whether it
+// is the machine this window runs on.
+export interface ForestDevice extends SidebarDeviceBadge {
+  isThisDevice: boolean;
+}
+
+// One project on one device, with what every view reads off it. The
+// same shape for this machine's projects and every peer's, so a
+// builder files them alike.
+export interface ForestItem {
+  device: ForestDevice;
+  project: Project;
+  // What the device last listed. Kept through a failed refetch, which
+  // the tree answers with its error row and the inbox looks past.
+  worktrees: readonly Worktree[];
+  // Whether the listing is in. Only this machine's answers anything but
+  // ready: a peer's rows are its last known state either way.
+  listing: "ready" | "loading" | "error";
+  // Branch -> PR, what the pills, the stacks and the inbox's merged
+  // shelf read. Empty until it lands.
+  pullRequests: Record<string, PullRequest>;
+  // The project's inbox opt-in for its primary checkout
+  // (ShigomoriConfigSchema.showPrimaryInInbox). Undefined while unread,
+  // which for a peer is whenever the inbox isn't showing.
+  showPrimaryInInbox: boolean | undefined;
+}
+
 // One remote project's slice, flat because that is exactly the unit
 // the row builder merges by repo identity.
 export interface RemoteForestItem {
@@ -226,6 +253,10 @@ export function projectGroupKey(
     return claimsPeers(project) ? project.identity : project.id;
   return project.identity ?? peerProjectKey(deviceId, project.id);
 }
+
+// The key an item's project groups under (projectGroupKey).
+export const groupKeyOf = ({ project, device }: ForestItem) =>
+  projectGroupKey(project, device.isThisDevice ? undefined : device.deviceId);
 
 // A peer-only group's id: its key (projectGroupKey) behind a prefix,
 // so it can never collide with a local project's id and the shell can

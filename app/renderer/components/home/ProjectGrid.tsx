@@ -61,6 +61,7 @@ export function ProjectGrid() {
     remote: sources.shownRemote,
     mirrors: sources.mirrors,
     localSides: sources.localSides,
+    items: sources.shownItems,
     deviceBadges: sources.deviceBadges,
     visits,
   });
