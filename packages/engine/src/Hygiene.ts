@@ -221,14 +221,19 @@ const make = Effect.gen(function* () {
         return base;
       }
       // The first candidate that contains the work wins, and the facts
-      // name it. Contained rows are checked for untracked files last.
+      // name it. Contained rows are checked for untracked files last. The
+      // branch by its full name, since git reads a bare one as a tag first.
       let fallback: WorktreeHygiene | null = null;
       for (const candidate of candidates) {
         const unique = yield* uniqueCommits(identity.path, candidate.ref);
         if (unique === null) continue;
         if (
           unique === 0 ||
-          (yield* contentAlreadyIn(repo, candidate, identity.branch))
+          (yield* contentAlreadyIn(
+            repo,
+            candidate,
+            `refs/heads/${identity.branch}`,
+          ))
         ) {
           return {
             ...base,
