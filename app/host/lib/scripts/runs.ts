@@ -25,12 +25,7 @@ import type { Marks } from "./marks";
 import { OrphanSweep } from "./OrphanSweep";
 import { signalPidTree } from "./process";
 import { ScriptChanges } from "./ScriptChanges";
-import {
-  type PtyHandle,
-  ScriptRuns,
-  type Stopping,
-  UNKILLABLE_WAIT_MS,
-} from "./ScriptRuns";
+import { type PtyHandle, ScriptRuns, UNKILLABLE_WAIT_MS } from "./ScriptRuns";
 import {
   type NotifyScriptEvent,
   type RunArgs,
@@ -146,6 +141,8 @@ interface Killable {
   // SIGTERM, then SIGKILL past the grace, then a bounded wait for the
   // tree to go.
   stop: (graceMs: number) => Effect.Effect<void>;
+  // One SIGTERM to the tree, not waited on: a hurried quit's.
+  signal: Effect.Effect<void>;
   // Sends whatever output is pooled for the next frame (see
   // OUTPUT_FLUSH_MS). Anything else that emits into the run's stream
   // must call it first so it lands after the output that preceded it.
@@ -154,9 +151,6 @@ interface Killable {
 
 interface RunRecord extends Killable {
   pty: PtyHandle;
-  // Closes the run's scope (./ScriptRuns.ts): the kill chain, a hurried quit's
-  // SIGTERM and no wait, or nothing for a run already over.
-  close: (stopping: Stopping) => Effect.Effect<void>;
   projectId: string;
   worktreeId: string;
   slot: ScriptRunSlot;
@@ -171,8 +165,8 @@ interface RunRecord extends Killable {
 // A lifecycle script an engine run started (a create's setup, an rm's
 // teardown), which streams through the same events but has no PTY here.
 // Booked from its "started" document and dropped on its "exit", and
-// recorded for the sweep like a PTY run: a quit ends it with the engine
-// run that started it, but a host killed outright leaves it running.
+// recorded for the sweep like a PTY run: a quit stops it with the rest
+// (stopAll), but a host killed outright leaves it running.
 interface LifecycleRun extends Killable {
   settle: () => void;
   projectId: string;
@@ -287,6 +281,12 @@ export const makeRuns = ({
               done,
               stream: createRunStream(notify),
               stop: (graceMs) => stopPidTree(pid, done, graceMs),
+              signal: signalPidTree(pid, "SIGTERM").pipe(
+                Effect.provideService(
+                  ChildProcessSpawner.ChildProcessSpawner,
+                  spawner,
+                ),
+              ),
               flushOutput: () => {},
               settle,
               projectId: event.projectId,
@@ -427,8 +427,9 @@ export const makeRuns = ({
         cancelling: false,
         done,
         stream,
-        close,
+        // Closing the run's scope (./ScriptRuns.ts) is its kill chain.
         stop: (graceMs) => close({ graceMs, wait: true }),
+        signal: Effect.suspend(() => close({ graceMs: 0, wait: false })),
         flushOutput,
       };
       ptyRuns.set(runId, record);
@@ -504,17 +505,29 @@ export const makeRuns = ({
     });
 
     const live = () => [...ptyRuns.values()].filter((r) => !r.exited);
+    // Every live run, for a stop of them all (a quit, a nuke, a
+    // data-folder move): the lifecycle scripts too, since one left to its
+    // engine run's scope goes by its shell alone (it leads no group), and
+    // what it started (an install, a build) would run on.
+    const everyRun = (): ReadonlyArray<Killable> => [
+      ...live(),
+      ...lifecycle.values(),
+    ];
 
-    const stopMatching = (
-      predicate: (record: RunRecord) => boolean,
+    const stopEach = (
+      records: ReadonlyArray<Killable>,
       reason: string,
       graceMs?: number,
     ) =>
       Effect.forEach(
-        live().filter(predicate),
+        records,
         (record) => killRecord(record, { reason, graceMs }),
         { concurrency: "unbounded", discard: true },
       );
+    const stopMatching = (
+      predicate: (record: RunRecord) => boolean,
+      reason: string,
+    ) => stopEach(live().filter(predicate), reason);
 
     const worktrees = (): ReadonlyArray<RunningScriptWorktree> => {
       const byWorktree = new Map<string, RunningScriptWorktree>();
@@ -582,17 +595,15 @@ export const makeRuns = ({
       ),
       stopAll: Effect.fn("Scripts.stopAll")(
         (options: { readonly graceMs?: number } = {}) =>
-          stopMatching(() => true, "App quit", options.graceMs),
+          stopEach(everyRun(), "App quit", options.graceMs),
       ),
       // One SIGTERM to every run's tree and no waiting, for the
       // update-install quit: the kill chain would hold up the installer
       // waiting on this process to exit.
       signalAll: Effect.suspend(() =>
-        Effect.forEach(
-          live(),
-          (record) => record.close({ graceMs: 0, wait: false }),
-          { discard: true },
-        ),
+        Effect.forEach(everyRun(), (record) => record.signal, {
+          discard: true,
+        }),
       ),
       count: () => ptyRuns.size + lifecycle.size,
     };

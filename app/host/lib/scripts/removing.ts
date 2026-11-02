@@ -70,7 +70,9 @@ export const makeRemoving = ({
           discard: true,
         });
         const result = yield* run;
-        yield* terminals.closeMissing;
+        // A project gone has its terminals closed as its removal is
+        // reaped (reapRemovedProjects).
+        yield* terminals.closeMissing(() => false);
         yield* mirrorsAfter(result);
         return result;
       },
@@ -193,7 +195,7 @@ export const makeRemoving = ({
             .map(({ runId }) => runId),
         ),
       );
-      yield* terminals.closeMissing;
+      yield* terminals.closeMissing(gone);
     }).pipe(Effect.withSpan("Scripts.reapRemovedProjects"));
 
     return {

@@ -41,8 +41,8 @@ export function ScriptConsole({
   const feed: TerminalFeed = (next) => {
     screen.current = next;
     next.replay(scriptRuns.readOutput(key).join(""), true);
-    const unsubscribe = scriptRuns.subscribeOutput(key, (chunk) =>
-      next.write(chunk),
+    const unsubscribe = scriptRuns.subscribeOutput(key, ({ data, reset }) =>
+      reset ? next.replay(data, true) : next.write(data),
     );
     return () => {
       unsubscribe();
