@@ -170,12 +170,18 @@ export const hostCallFailure = (error: unknown) => {
   );
 };
 
-// An operation that changes something, run only while no data-folder
-// move can start (`DataDirLock`): every hold of the lock the host takes
-// passes here. Counted while it runs (Scripts.busy) when it is work a
-// quit should wait on, which `kind` names: something a person started,
-// or an auto-pull's fast-forward. A write that ends in moments (a
-// setting, a mark, the order) and the background's work name none.
+// An operation that changes a worktree on disk, run only while no
+// data-folder move can start (`DataDirLock`): every hold of the lock the
+// host takes passes here. Its one home is where the work is asked for:
+// a call that changes code is held by the link that serves it
+// (socket/DeviceLink.ts), and what the host runs past such a call or
+// apart from one (a create's whole run, a removal, a move, a landing, a
+// capture, an auto-pull) is held by the service that runs it. A write
+// that only touches the store holds nothing (DataDirLock.ts). Counted
+// while it runs (Scripts.busy) when it is work a quit should wait on,
+// which `kind` names: something a person started, or an auto-pull's
+// fast-forward. `ids` name the worktree or project it changes, so a
+// change of one being removed or moved counts as that removal or move.
 export const changing = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
   ids: Ids,
@@ -189,8 +195,7 @@ export const changing = <A, E, R>(
     ),
   );
 
-// `changing`, its failure translated: every change the host makes
-// through the engine.
+// `changing` around an engine verb, its failure translated.
 export const asChange = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
   ids: Ids = {},

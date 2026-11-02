@@ -61,7 +61,6 @@ import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import {
   asCall,
   asChange,
-  changing,
   engineFailure,
   locate,
   projectById,
@@ -84,11 +83,9 @@ function guardRefusal(error: unknown): ConvertRefusedError | null {
   return null;
 }
 
-type Ids = { projectId: string; worktreeId?: string };
-
-// A create's or an adopt's run, as a change, its guard's refusal kept.
-const asCreate = <A, E, R>(effect: Effect.Effect<A, E, R>, ids: Ids) =>
-  changing(effect, ids, "create").pipe(
+// A create's or an adopt's run, its guard's refusal kept.
+const asCreate = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
     Effect.mapError((error) => guardRefusal(error) ?? engineFailure(error)),
   );
 
@@ -128,7 +125,6 @@ export const createWorktree = (
         reporter,
       );
     }),
-    { projectId: project.id },
   );
 
 // force only once the user has seen the changes the convert wipes.
@@ -149,7 +145,6 @@ export const adoptWorktree = (
         reporter,
       );
     }),
-    { projectId: project.id, worktreeId },
   );
 
 // A removal's account of a cleanup script that failed, which left the
@@ -200,11 +195,7 @@ export const deleteWorktree = Effect.fnUntraced(function* (
         }),
       );
   });
-  return yield* asChange(
-    removal,
-    { projectId: project.id, worktreeId: input.worktreeId },
-    "remove",
-  );
+  return yield* asCall(removal);
 });
 
 // The merged layers of a stack under the worktree `worktreeId` names,
@@ -319,12 +310,11 @@ export const setShelved = Effect.fnUntraced(function* (
   worktreeId: string,
   shelved: boolean,
 ) {
-  yield* asChange(
+  yield* asCall(
     Effect.gen(function* () {
       const located = yield* locate(project.id, worktreeId);
       yield* (yield* Worktrees.Worktrees).setShelved(located.worktree, shelved);
     }),
-    { projectId: project.id, worktreeId },
   );
 });
 
@@ -332,7 +322,7 @@ export const addProject = Effect.fnUntraced(function* (
   path: string,
   terrier?: boolean,
 ) {
-  const project = yield* asChange(
+  const project = yield* asCall(
     Effect.flatMap(Projects.Projects, (projects) =>
       projects.add(path, { terrier }),
     ),
@@ -351,7 +341,7 @@ export const packageScriptLaunch = Effect.fnUntraced(function* (args: {
   worktreeId: string;
   scriptName: string;
 }) {
-  return yield* asChange(
+  return yield* asCall(
     Effect.gen(function* () {
       const scripts = yield* Scripts.Scripts;
       const located = yield* locate(args.projectId, args.worktreeId);
@@ -374,7 +364,6 @@ export const packageScriptLaunch = Effect.fnUntraced(function* (args: {
         },
       };
     }),
-    { projectId: args.projectId, worktreeId: args.worktreeId },
   );
 });
 
@@ -383,7 +372,7 @@ export const packageScriptLaunch = Effect.fnUntraced(function* (args: {
 export const patchGlobalConfig = Effect.fnUntraced(function* (
   patch: DeviceSettingsPatch,
 ) {
-  yield* asChange(
+  yield* asCall(
     Effect.flatMap(EngineConfig.Config, (engineConfig) =>
       engineConfig.patch(patch),
     ),
@@ -403,12 +392,11 @@ export const patchProjectConfig = Effect.fnUntraced(function* (
   patch: ProjectSettingsPatch,
   options?: EngineConfig.WriteOptions,
 ) {
-  yield* asChange(
+  yield* asCall(
     Effect.gen(function* () {
       const scope = yield* projectScope(projectId);
       yield* (yield* EngineConfig.Config).patchProject(scope, patch, options);
     }),
-    { projectId },
   );
 });
 
@@ -435,7 +423,7 @@ export const writeProjectConfig = Effect.fnUntraced(function* (
   projectId: string,
   config: ShigomoriConfig,
 ) {
-  yield* asChange(
+  yield* asCall(
     Effect.gen(function* () {
       const scope = yield* projectScope(projectId);
       const engineConfig = yield* EngineConfig.Config;
@@ -445,7 +433,6 @@ export const writeProjectConfig = Effect.fnUntraced(function* (
         (yield* engineConfig.read(scope)) ?? {},
       );
     }),
-    { projectId },
   );
 });
 
@@ -453,12 +440,11 @@ export const writeProjectConfig = Effect.fnUntraced(function* (
 // extras (script reaping, icon cache) stay with the caller because
 // those registries live in the app's process.
 export const removeProject = Effect.fnUntraced(function* (projectId: string) {
-  yield* asChange(
+  yield* asCall(
     Effect.gen(function* () {
       const project = yield* projectById(projectId);
       yield* (yield* Projects.Projects).remove(project);
     }),
-    { projectId },
   );
 });
 
@@ -477,12 +463,11 @@ export const deleteProject = Effect.fnUntraced(function* (
   projectId: string,
   reporter: Worktrees.Reporter,
 ) {
-  yield* asChange(
+  yield* asCall(
     Effect.gen(function* () {
       const project = yield* projectById(projectId);
       yield* (yield* Projects.Projects).removeWithFiles(project, reporter);
     }),
-    { projectId },
   );
 });
 
@@ -516,14 +501,13 @@ const setMark = Effect.fnUntraced(function* (
   worktreeId: string,
   on: boolean,
 ) {
-  const row = yield* asChange(
+  const row = yield* asCall(
     Effect.gen(function* () {
       const worktrees = yield* Worktrees.Worktrees;
       const located = yield* locate(project.id, worktreeId);
       yield* set(worktrees)(located.worktree, on);
       return yield* worktrees.row(located);
     }),
-    { projectId: project.id, worktreeId },
   );
   return decodeWorktree(row);
 });
@@ -545,13 +529,12 @@ const rowAfter = Effect.fnUntraced(function* (
   worktreeId: string,
   edit: (located: Worktrees.Located) => Effect.Effect<void, unknown, Services>,
 ) {
-  const row = yield* asChange(
+  const row = yield* asCall(
     Effect.gen(function* () {
       const located = yield* locate(project.id, worktreeId);
       yield* edit(located);
       return yield* (yield* Worktrees.Worktrees).row(located);
     }),
-    { projectId: project.id, worktreeId },
   );
   return decodeWorktree(row);
 });
@@ -644,7 +627,7 @@ export const setAgentHooks = Effect.fnUntraced(function* (
 ) {
   return [
     ...decodeHarnesses(
-      yield* asChange(
+      yield* asCall(
         Effect.gen(function* () {
           const agents = yield* Agents.Agents;
           yield* agents.setHooks([harness], install);
@@ -658,7 +641,7 @@ export const setAgentHooks = Effect.fnUntraced(function* (
 // Removes every harness's hooks this flavor installed (a nuke). A
 // harness not set up here is skipped.
 export const removeAllAgentHooks = Effect.suspend(() =>
-  asChange(
+  asCall(
     Effect.flatMap(Effect.service(Agents.Agents), (agents) =>
       agents.setHooks([], false),
     ),
@@ -674,13 +657,11 @@ export const moveWorktree = Effect.fnUntraced(function* (
   worktreeId: string,
   destinationPath: string,
 ) {
-  const moved = yield* asChange(
+  const moved = yield* asCall(
     Effect.gen(function* () {
       const located = yield* locate(project.id, worktreeId);
       return yield* (yield* Worktrees.Worktrees).move(located, destinationPath);
     }),
-    { projectId: project.id, worktreeId },
-    "move",
   );
   return decodeWorktree(moved.worktree);
 });
@@ -692,18 +673,16 @@ export const renameWorktree = Effect.fnUntraced(function* (
   worktreeId: string,
   name: string,
 ) {
-  const renamed = yield* asChange(
+  const renamed = yield* asCall(
     Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
       worktrees.rename(project, worktreeId, name),
     ),
-    { projectId: project.id, worktreeId },
-    "move",
   );
   return decodeWorktree(renamed.worktree);
 });
 
 export const storeProjectOrder = Effect.fnUntraced(function* (ids: string[]) {
-  yield* asChange(
+  yield* asCall(
     Effect.gen(function* () {
       const registry = yield* Registry.Registry;
       yield* registry.reorder(yield* registry.listed, ids);
@@ -1002,7 +981,7 @@ export const dirtyApply = Effect.fnUntraced(function* (
   project: Project,
   worktreeId: string,
 ) {
-  const applied = yield* asChange(
+  const applied = yield* asCall(
     Effect.gen(function* () {
       const { worktree } = yield* locate(project.id, worktreeId);
       return yield* (yield* Dirty.Dirty).apply(
@@ -1014,7 +993,6 @@ export const dirtyApply = Effect.fnUntraced(function* (
         { force: false },
       );
     }),
-    { projectId: project.id, worktreeId },
   );
   return { applied: true, ...applied };
 });
@@ -1067,12 +1045,11 @@ export const openLauncher = Effect.fnUntraced(function* (
   worktreeId: string,
   launcherId: string,
 ) {
-  yield* asChange(
+  yield* asCall(
     Effect.gen(function* () {
       const located = yield* locate(project.id, worktreeId);
       yield* (yield* Open.Open).open(located, launcherId);
     }),
-    { projectId: project.id, worktreeId },
   );
 });
 
@@ -1125,7 +1102,7 @@ export const patchWorktreePorts = (
     readonly put?: ReadonlyArray<CustomPort> | undefined;
   },
 ) =>
-  asChange(
+  asCall(
     Effect.flatMap(WorktreeData.WorktreeData, (data) =>
       data.patchPorts(projectId, worktreeId, patch),
     ),
@@ -1137,7 +1114,7 @@ export const writeWorktreeData = (
   worktreeId: string,
   { ports }: Pick<ShigomoriWorktreeData, "ports">,
 ) =>
-  asChange(
+  asCall(
     Effect.flatMap(WorktreeData.WorktreeData, (data) =>
       data.setPorts(projectId, worktreeId, ports ?? []),
     ),
@@ -1151,7 +1128,7 @@ export const writeWorktreeDescription = (
   worktreeId: string,
   { title, description, describedAt }: WorktreeDescription,
 ) =>
-  asChange(
+  asCall(
     Effect.flatMap(WorktreeData.WorktreeData, (data) =>
       data.carry(projectId, worktreeId, {
         title: title ?? "",
@@ -1194,5 +1171,4 @@ export const onShell = <A, E>(
 
 export const onScripts = <A>(
   f: (scripts: Scripts.Scripts["Service"]) => Effect.Effect<A>,
-  change = false,
-) => (change ? asChange : asCall)(Effect.flatMap(Scripts.Scripts, f));
+) => asCall(Effect.flatMap(Scripts.Scripts, f));

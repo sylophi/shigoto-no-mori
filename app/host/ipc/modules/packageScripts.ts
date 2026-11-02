@@ -62,7 +62,7 @@ export const packageScriptsHandlers = {
   // the stored entry instead of writing it.
   setSort: ({ projectId, mode }) =>
     Effect.flatMap(findProject(projectId), (project) =>
-      Ops.onScripts((scripts) => scripts.setSort(project.id, mode), true),
+      Ops.onScripts((scripts) => scripts.setSort(project.id, mode)),
     ).pipe(Effect.asVoid),
 
   getOrder: ({ projectId }) =>
@@ -77,7 +77,7 @@ export const packageScriptsHandlers = {
   // cached copy, which another window may have written past.
   setOrder: ({ projectId, arranged }) =>
     Effect.flatMap(findProject(projectId), (project) =>
-      Ops.onScripts((scripts) => scripts.arrange(project.id, arranged), true),
+      Ops.onScripts((scripts) => scripts.arrange(project.id, arranged)),
     ).pipe(Effect.asVoid),
 
   // One script on or off the row, applied against the stored row rather
@@ -85,9 +85,8 @@ export const packageScriptsHandlers = {
   // different scripts both land.
   setLaunchRow: ({ projectId, scriptName, onRow }) =>
     Effect.flatMap(findProject(projectId), (project) =>
-      Ops.onScripts(
-        (scripts) => scripts.setOnLaunchRow(project.id, scriptName, onRow),
-        true,
+      Ops.onScripts((scripts) =>
+        scripts.setOnLaunchRow(project.id, scriptName, onRow),
       ),
     ).pipe(Effect.asVoid),
 

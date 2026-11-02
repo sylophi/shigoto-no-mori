@@ -8,13 +8,14 @@
 //
 // The entry points: every call that changes code (what a peer needs the
 // `changeCode` grant for), a landing's create, capture and apply as one
-// change wherever it is asked from, every change the host makes through
-// the engine (`asChange`), the auto-pull's fast-forward, and each
-// terminal command that changes a worktree on disk (`changing`, and
-// `changingWithFix` for the doctor's `--fix`). A write that only touches
-// the store holds nothing: from before the journal's first write until
-// after it is gone, the store refuses every write but the move's
-// (`dataDirMoveJournal.ts`).
+// change wherever it is asked from, the host's own runs of what changes
+// a worktree on disk (a create's whole run, a removal, a move, a
+// relocate, a capture, an unpack, the doctor's repairs), the auto-pull's
+// fast-forward, and each terminal command that changes a worktree on
+// disk (`changing`, and `changingWithFix` for the doctor's `--fix`). A
+// write that only touches the store holds nothing: from before the
+// journal's first write until after it is gone, the store refuses every
+// write but the move's (`dataDirMoveJournal.ts`).
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";

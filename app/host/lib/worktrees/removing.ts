@@ -11,6 +11,7 @@ import type { MovedSource } from "@shigomori/contracts/schemas";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import { asChange } from "../Engine";
 import * as Ops from "../engineOps";
 import * as HostPushes from "../HostPushes";
 import {
@@ -97,15 +98,19 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
           [worktreeId],
           { kind: "remove", busy },
           bookingScripts(scripts, notifyScript, (reporter) =>
-            Ops.deleteWorktree(
-              project,
-              {
-                worktreeId,
-                force: input.force,
-                skipCleanup: input.skipCleanup,
-                expect: input.expect,
-              },
-              reporter,
+            asChange(
+              Ops.deleteWorktree(
+                project,
+                {
+                  worktreeId,
+                  force: input.force,
+                  skipCleanup: input.skipCleanup,
+                  expect: input.expect,
+                },
+                reporter,
+              ),
+              { projectId: project.id, worktreeId },
+              "remove",
             ).pipe(
               moved || input.oneSide === true
                 ? thisSideOnly
@@ -212,18 +217,22 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
           scripts,
           () => {},
           (reporter) =>
-            Ops.deleteWorktree(
-              project,
-              {
-                worktreeId,
-                force: true,
-                ...(options.skipCleanup
-                  ? { skipCleanup: true }
-                  : {
-                      cleanupWithin: input.cleanupWithin ?? FORCED_CLEANUP_MS,
-                    }),
-              },
-              reporter,
+            asChange(
+              Ops.deleteWorktree(
+                project,
+                {
+                  worktreeId,
+                  force: true,
+                  ...(options.skipCleanup
+                    ? { skipCleanup: true }
+                    : {
+                        cleanupWithin: input.cleanupWithin ?? FORCED_CLEANUP_MS,
+                      }),
+                },
+                reporter,
+              ),
+              { projectId: project.id, worktreeId },
+              "remove",
             ).pipe(thisSideOnly),
         );
       return yield* scripts

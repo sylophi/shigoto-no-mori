@@ -9,6 +9,7 @@ import type {
 } from "@shigomori/contracts/schemas";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import { asChange } from "../Engine";
 import * as Ops from "../engineOps";
 import { findProjectAndWorktree } from "../projects";
 import * as Scripts from "../Scripts";
@@ -64,7 +65,11 @@ export const makeMoving = <H>(host: Context.Context<H>) =>
             kind: "move",
             busy: "This worktree is already being removed or moved.",
           },
-          commit(project, worktree.id),
+          asChange(
+            commit(project, worktree.id),
+            { projectId: project.id, worktreeId: worktree.id },
+            "move",
+          ),
           // A move to where the worktree already is, spelled the same,
           // keeps its id and has no mirrors to carry.
           (moved) =>

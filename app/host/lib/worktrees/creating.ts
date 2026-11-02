@@ -82,13 +82,14 @@ export const makeCreating = (removing: {
       start: (
         reporter: EngineWorktrees.Reporter,
       ) => Effect.Effect<unknown, CreateFailure, Engine.Services>,
-      projectId: string,
+      ids: { readonly projectId: string; readonly worktreeId?: string },
       notify: CreateNotifiers,
       options: {
         readonly resolveOn: "created" | "exit";
         readonly cancelled: Effect.Effect<void>;
       },
     ) {
+      const { projectId } = ids;
       const { scope } = yield* Engine.EngineRuns;
       const made = yield* Deferred.make<Worktree, CreateFailure>();
       let created: Worktree | null = null;
@@ -157,7 +158,15 @@ export const makeCreating = (removing: {
           }),
         color: true,
       };
-      const running = Effect.result(start(reporter)).pipe(
+      // Held and counted as a create for the whole run, which outlives
+      // the call that started it.
+      const held = Engine.changing(start(reporter), ids, "create").pipe(
+        Effect.catchTag(
+          ["DataDirMoving", "DataDirMoved", "DataDirLockUnavailable"],
+          (error) => Effect.fail(Engine.engineFailure(error)),
+        ),
+      );
+      const running = Effect.result(held).pipe(
         Effect.onExit((exit) =>
           Effect.sync(() => {
             booked.end();
@@ -202,7 +211,7 @@ export const makeCreating = (removing: {
       const project = yield* findProject(input.projectId);
       return yield* run(
         (reporter) => Ops.createWorktree(project, input, reporter),
-        project.id,
+        { projectId: project.id },
         notify,
         { resolveOn: options.resolveOn ?? "created", cancelled: Effect.never },
       );
@@ -220,7 +229,7 @@ export const makeCreating = (removing: {
       return yield* run(
         (reporter) =>
           Ops.adoptWorktree(project, input.worktreeId, input.force, reporter),
-        project.id,
+        { projectId: project.id, worktreeId: input.worktreeId },
         notify,
         { resolveOn: "created", cancelled: Effect.never },
       );
@@ -275,7 +284,7 @@ export const makeCreating = (removing: {
       const created = yield* Effect.acquireRelease(
         run(
           (reporter) => Ops.createWorktree(project, input, reporter),
-          project.id,
+          { projectId: project.id },
           notify,
           { resolveOn: "exit", cancelled: Deferred.await(cancelled) },
         ).pipe(Effect.forkScoped),
