@@ -42,9 +42,8 @@ const TEXT_OUT = join(OUT_DIR, "THIRD-PARTY-LICENSES.txt");
 
 const execFileP = promisify(execFile);
 
-// The Bun the release workflow compiles the terminal sm with
-// (.github/workflows/release.yml, setup-bun).
-const BUN_VERSION = "1.4.0";
+// The Bun CI compiles the terminal sm with (.github/actions/setup-toolchains).
+const BUN_VERSION = readFileSync(join(repoRoot, ".bun-version"), "utf8").trim();
 
 // Whose production dependencies ship: the app's, the ui package's, which
 // the renderer bundles, and the terminal sm's, which Bun compiles into
