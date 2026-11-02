@@ -227,7 +227,12 @@ function valueProblem(key: ConfigKey, value: unknown): string | undefined {
         : `${key.name} must be a boolean.`;
     case "string":
       if (typeof value !== "string") return `${key.name} must be a string.`;
-      if (key.name === "customWorktreePath" && !isAnchoredPath(value)) {
+      // An empty one reads as no custom base, as an unset one does.
+      if (
+        key.name === "customWorktreePath" &&
+        value.trim() !== "" &&
+        !isAnchoredPath(value.trim())
+      ) {
         return `${key.name} must be an absolute path.`;
       }
       return key.required && value.trim() === ""
