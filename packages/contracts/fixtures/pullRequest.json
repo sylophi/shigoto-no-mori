@@ -569,10 +569,6 @@
       }
     ]
   },
-  "MergeOutcomeSchema": {
-    "accepts": ["merged", "queued", "auto-merge"],
-    "rejects": ["closed"]
-  },
   "MergePullRequestResultSchema": {
     "accepts": [
       {

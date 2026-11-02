@@ -24,6 +24,7 @@ import {
   type LandError,
   LandingRefused,
   type MergeError,
+  type Merged,
   type RemoveOptions,
   type RemoveStackError,
   type Reporter,
@@ -32,8 +33,10 @@ export {
   LandingRefused,
   MergePollInterval,
   doneDocument,
+  mergeDocument,
+  mergedEvent,
 } from "./landing/documents.ts";
-export type { Document, Done, Reporter } from "./landing/documents.ts";
+export type { Document, Done, Merged, Reporter } from "./landing/documents.ts";
 export type { StackRemoval } from "./landing/verbs.ts";
 
 export class Landing extends Context.Service<
@@ -61,7 +64,7 @@ export class Landing extends Context.Service<
         readonly stack: boolean;
       },
       reporter: Reporter,
-    ) => Effect.Effect<Document, MergeError>;
+    ) => Effect.Effect<Merged, MergeError>;
     // `sm land`: merge, catch the base branch's checkout up, clean up.
     readonly land: (
       located: Worktrees.Located,

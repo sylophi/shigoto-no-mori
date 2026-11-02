@@ -15,7 +15,6 @@ import {
   MAX_STACK_DEPTH,
   type Reporter,
   SETTLE_TIMEOUT_MS,
-  mergedEvent,
   stackBelow,
 } from "./documents.ts";
 import type { PullRequestsArea } from "./pullRequests.ts";
@@ -147,7 +146,7 @@ export const makeStacks = ({
     ) =>
       Effect.gen(function* () {
         const report = (pr: PullRequestSummary) =>
-          reporter.merged?.(mergedEvent(pr, method), pr) ?? Effect.void;
+          reporter.merged?.(pr, method) ?? Effect.void;
         if (Option.isSome(lookups.stack)) {
           const queued = yield* pullRequests.mergeStackAsync(
             project.path,

@@ -132,14 +132,10 @@ const landingReporter = Effect.gen(function* () {
       person(mergeLine({ ...outcome, number: pr.number }, pr.title)),
     waiting: (line) => note(dim(line)),
     note: (line) => person(note(dim(line))),
-    merged: (event: Doc, pr: { readonly title: string }) =>
+    merged: (pr, method) =>
       json
-        ? emit(event)
-        : out(
-            green(
-              `merged PR #${String(event.number)} (${event.method ?? ""}): ${pr.title}`,
-            ),
-          ),
+        ? emit(Landing.mergedEvent(pr, method))
+        : out(green(`merged PR #${pr.number} (${method}): ${pr.title}`)),
     landing: (pr, method) =>
       person(
         method === undefined
@@ -270,17 +266,24 @@ export const merge = Command.make(
           });
         }
         const project = yield* resolveProject(input);
-        const doc = yield* landing.merge({ project, number }, options, report);
+        const merged = yield* landing.merge(
+          { project, number },
+          options,
+          report,
+        );
         // A person was told how it ended (landingReporter).
-        if (json) yield* emit(doc);
+        if (json) yield* emit(Landing.mergeDocument(merged));
         return;
       }
       const { located } = yield* resolveWorktree(input);
-      const doc = yield* landing.merge({ located }, options, report);
-      if (json) return yield* emit(doc);
+      const merged = yield* landing.merge({ located }, options, report);
+      if (json) return yield* emit(Landing.mergeDocument(merged));
       // A stack's layers were said as they merged.
-      if (input.stack) return;
-      yield* mergeLine(docOutcome(doc), doc.title ?? "");
+      if (merged.kind !== "branch") return;
+      yield* mergeLine(
+        { ...merged, number: merged.pr.number },
+        merged.pr.title,
+      );
       yield* note(
         styles(stderrColor).dim(
           `next: \`${binaryName} done\` (primary checkout) or \`${binaryName} rm ${located.worktree.name}\` (managed worktree)`,

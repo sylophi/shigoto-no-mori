@@ -240,6 +240,20 @@ export type MergeOutcome = {
   readonly alreadyArmed?: boolean;
 };
 
+// What `merge` did: GitHub's merge of a stack, a PR merged by number
+// (the app's), or the worktree's own PR, which merge waits on until it
+// merges.
+export type Merged = MergeOutcome &
+  (
+    | { readonly kind: "stack" }
+    | { readonly kind: "number"; readonly number: number }
+    | {
+        readonly kind: "branch";
+        readonly pr: PullRequestSummary;
+        readonly branch: string;
+      }
+  );
+
 // How long the wait for GitHub to merge sleeps between reads.
 export const MergePollInterval = Context.Reference<Duration.Duration>(
   "sm/engine/Landing/MergePollInterval",
@@ -298,11 +312,10 @@ export const doneDocument = (done: Done) => doneFields(done, {});
 // Where a land's steps go as they happen: the merged layers of a stack,
 // the cleanup's, the scripts of a removal.
 export type Reporter = Worktrees.Reporter & {
-  // A layer of a stack merged: its document, and the PR, whose title a
-  // person's line names.
+  // A layer of a stack merged.
   readonly merged?: (
-    event: Document,
     pr: PullRequestSummary,
+    method: MergeMethod,
   ) => Effect.Effect<void>;
   // How a merge by number ended, and its PR, whose title the document
   // leaves out and a person's line names.
@@ -380,7 +393,7 @@ export const mergeResultFields = (
   pr: PullRequestSummary,
   branch: string,
   method: MergeMethod | undefined,
-): Document => ({
+) => ({
   number: pr.number,
   title: pr.title,
   branch,
@@ -388,21 +401,41 @@ export const mergeResultFields = (
   ...(method === undefined ? { alreadyMerged: true } : { method }),
 });
 
-export const outcomeFields = (o: MergeOutcome) => ({
+const outcomeFields = (o: MergeOutcome) => ({
   outcome: o.outcome,
   queued: o.outcome === "queued",
 });
 
-// The document of a merge that went through, landed or not.
-export const mergeDocument = (
+// The document of a PR's merge that went through, landed or not.
+export const pullRequestMerged = (
   pr: PullRequestSummary,
   branch: string,
   o: MergeOutcome,
-): Document => ({
+) => ({
   ...mergeResultFields(pr, branch, o.method),
   ok: true,
   ...outcomeFields(o),
 });
+
+// `sm merge --json`. A stack's names an outcome only when a merge queue
+// took it.
+export const mergeDocument = (merged: Merged) => {
+  switch (merged.kind) {
+    case "stack":
+      return merged.outcome === "queued"
+        ? { ok: true, method: merged.method, outcome: merged.outcome }
+        : { ok: true, method: merged.method };
+    case "number":
+      return {
+        ok: true,
+        number: merged.number,
+        method: merged.method,
+        ...outcomeFields(merged),
+      };
+    case "branch":
+      return pullRequestMerged(merged.pr, merged.branch, merged);
+  }
+};
 
 // The chain from the bottom of the stack up to `number`, or just that PR
 // when nothing sits under it: a PR whose base is another PR's head is
@@ -444,6 +477,7 @@ export function stackBelow(
 export const projectScope = (project: RegisteredProject) =>
   ({ kind: "project", projectId: project.id, path: project.path }) as const;
 
+// The document `sm --json` prints as a layer of a stack merges.
 export const mergedEvent = (pr: PullRequestSummary, method: MergeMethod) => ({
   event: "merged",
   number: pr.number,

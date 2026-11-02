@@ -220,12 +220,7 @@ export const RepoMergeConfigSchema = Schema.Struct({
 export type RepoMergeConfig = typeof RepoMergeConfigSchema.Type;
 
 // "merged" leads so a schema-derived stub picks it.
-export const MergeOutcomeSchema = Schema.Literals([
-  "merged",
-  "queued",
-  "auto-merge",
-]);
-export type MergeOutcome = typeof MergeOutcomeSchema.Type;
+const MergeOutcomeSchema = Schema.Literals(["merged", "queued", "auto-merge"]);
 
 export const MergePullRequestResultSchema = Schema.Struct({
   outcome: MergeOutcomeSchema,

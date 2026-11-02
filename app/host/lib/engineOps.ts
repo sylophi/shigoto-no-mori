@@ -42,8 +42,6 @@ import {
   type DeleteStackResult,
   type DeviceSettingsPatch,
   type MergeMethod,
-  type MergeOutcome,
-  MergeOutcomeSchema,
   type Project,
   ProjectSchema,
   type MovedSource,
@@ -304,7 +302,7 @@ export const mergePullRequest = Effect.fnUntraced(function* (
   method: MergeMethod,
   options: { stack?: boolean } = {},
 ) {
-  const doc = yield* asChange(
+  const merged = yield* asChange(
     Effect.gen(function* () {
       const registered = yield* projectById(project.id);
       return yield* (yield* Landing.Landing).merge(
@@ -316,16 +314,8 @@ export const mergePullRequest = Effect.fnUntraced(function* (
     { projectId: project.id },
     "merge",
   );
-  return { outcome: mergeOutcomeOf(doc) };
+  return { outcome: merged.outcome };
 });
-
-const isMergeOutcome = Schema.is(MergeOutcomeSchema);
-
-// The document spells the outcome the way MergeOutcomeSchema does. A
-// document without one (a stack merge's) landed.
-function mergeOutcomeOf(doc: Landing.Document): MergeOutcome {
-  return isMergeOutcome(doc.outcome) ? doc.outcome : "merged";
-}
 
 export const setShelved = Effect.fnUntraced(function* (
   project: Project,

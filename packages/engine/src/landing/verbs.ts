@@ -12,12 +12,12 @@ import {
   type Done,
   LandingRefused,
   MERGE_FIELDS,
+  type Merged,
   MergeUnverified,
   type RemoveOptions,
   type Reporter,
-  mergeDocument,
   mergeResultFields,
-  outcomeFields,
+  pullRequestMerged,
 } from "./documents.ts";
 import type { PullRequestsArea } from "./pullRequests.ts";
 import type { StacksArea } from "./stacks.ts";
@@ -140,11 +140,12 @@ export const makeVerbs = ({
           reporter,
         );
         yield* persistMethod(project, method);
-        // A stack a merge queue took (or one layer of it) is still open:
-        // the app reads a document with no outcome as merged.
-        return queued
-          ? { ok: true, method, outcome: "queued" as const }
-          : { ok: true, method };
+        // A stack a merge queue took, or one layer of it, is still open.
+        return {
+          kind: "stack",
+          method,
+          outcome: queued ? "queued" : "merged",
+        } satisfies Merged;
       });
 
     const merge = Effect.fn("Landing.merge")(function* (
@@ -204,12 +205,7 @@ export const makeVerbs = ({
         if (reporter.outcome !== undefined) {
           yield* reporter.outcome(pr, outcome);
         }
-        return {
-          ok: true,
-          number,
-          method: outcome.method,
-          ...outcomeFields(outcome),
-        };
+        return { kind: "number", number, ...outcome } satisfies Merged;
       }
       const { located } = target;
       const branch = yield* branchOf(located, "merge");
@@ -247,7 +243,13 @@ export const makeVerbs = ({
         reporter,
       );
       yield* awaitMerge(located.project.path, pr, outcome, "merge", reporter);
-      return mergeDocument(pr, branch, { ...outcome, outcome: "merged" });
+      return {
+        kind: "branch",
+        pr,
+        branch,
+        ...outcome,
+        outcome: "merged",
+      } satisfies Merged;
     });
 
     const land = Effect.fn("Landing.land")(function* (
@@ -358,7 +360,10 @@ export const makeVerbs = ({
           );
           yield* persistMethod(project, method);
           if (queued) {
-            return mergeDocument(pr, branch, { method, outcome: "queued" });
+            return pullRequestMerged(pr, branch, {
+              method,
+              outcome: "queued",
+            });
           }
           yield* guardAfterMerge;
           plan = yield* planCleanup;
