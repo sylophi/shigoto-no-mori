@@ -146,9 +146,12 @@ export function groupByProject(entries: TidyEntry[]): TidyGroup[] {
 // rule that decides it. Nothing dirty, unmerged or detached is ever in
 // here. That is the whole safety guarantee of the page, so the page
 // reads its "safe to remove" count off this same list rather than
-// re-filtering with its own copy of the predicate.
+// re-filtering with its own copy of the predicate. A worktree on the
+// default branch loses nothing either, but it is no leftover.
 export function safeToRemove(entries: TidyEntry[]): TidyEntry[] {
-  return entries.filter((entry) => entry.verdict.safe);
+  return entries.filter(
+    (entry) => entry.verdict.safe && entry.verdict.kind !== "defaultBranch",
+  );
 }
 
 // How many distinct projects a set of rows reaches into. The headline

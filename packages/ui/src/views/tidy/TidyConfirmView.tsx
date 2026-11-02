@@ -57,8 +57,10 @@ export function TidyConfirmView({
         Each one&apos;s directory is deleted from disk along with everything
         inside it: node_modules, build output, and any file that was never
         committed. Teardown scripts run first
-        {deleteBranches ? ", and the local branch is deleted too" : ""}. This
-        cannot be undone.
+        {deleteBranches
+          ? ", and the local branch is deleted too, unless it is the project's default branch"
+          : ""}
+        . This cannot be undone.
       </p>
 
       <ul className="mt-4 min-h-24 space-y-2 overflow-y-auto">

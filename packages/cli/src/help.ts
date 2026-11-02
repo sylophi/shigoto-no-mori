@@ -160,7 +160,7 @@ const catalog = (names: Names) => {
       [
         "worktrees rm [<name>] [--stack] [-f] [--keep-branch]",
         "Remove a worktree",
-        "Teardown, release port, delete the branch per app settings. --stack also removes the worktrees of the merged layers under it in its PR stack (the cleanup half of land --stack, for a stack that has landed, and an open PR is refused). The removal guards cover all of them first.",
+        "Teardown, release port, delete the branch per app settings (never the project's default branch). --stack also removes the worktrees of the merged layers under it in its PR stack (the cleanup half of land --stack, for a stack that has landed, and an open PR is refused). The removal guards cover all of them first.",
       ],
       [
         "worktrees done [<name>] [-f]",

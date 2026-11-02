@@ -49,7 +49,7 @@ export function WorktreeTogglesView({
         checked={form.deleteBranchOnRemove}
         onCheckedChange={setField("deleteBranchOnRemove")}
         label="Delete branch when removing worktree"
-        description="Force-deletes the local branch the worktree had checked out. Remote branches aren't touched. Skipped when the branch is still in use elsewhere or is the repo's primary HEAD."
+        description="Force-deletes the local branch the worktree had checked out. Remote branches aren't touched. Skipped when the branch is still in use elsewhere or is the project's default branch."
       />
       <ToggleRowView
         checked={form.autoPullNew}
