@@ -29,6 +29,8 @@ export interface DiffChangesControls {
   // file's diff.
   selectedKey: string | null;
   onSelect: (key: string) => void;
+  // Starts reading a row's diff once the pointer rests on it.
+  onWarm?: (file: ChangedFile) => void;
   // A commit or discard is in flight: checkboxes and discard controls
   // hold still until the tree settles.
   busy: boolean;
@@ -43,4 +45,10 @@ export interface DiffChangesControls {
 // a stray untracked file.
 export function changedFilePaths(file: ChangedFile): string[] {
   return file.prevPath ? [file.prevPath, file.path] : [file.path];
+}
+
+// Only a modified file ticks by hunk: the others are whole-file changes
+// (an addition, a removal, a rename) or a conflict.
+export function ticksByHunk(file: ChangedFile): boolean {
+  return file.kind === "modified" && !file.conflicted;
 }

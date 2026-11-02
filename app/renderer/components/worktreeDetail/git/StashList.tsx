@@ -4,6 +4,7 @@ import {
   useStashChanges,
   useWorktreeStashes,
 } from "@/hooks/worktrees/useGitHistory";
+import { useWarmGitPages } from "@/hooks/worktrees/useWarmGitPages";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { StashListView } from "@shigomori/ui/views/worktreeDetail/git/StashListView.tsx";
@@ -17,6 +18,7 @@ export function StashList({
   selected: string | undefined;
 }) {
   const nav = useWorktreeNav();
+  const warm = useWarmGitPages(worktree);
   const { data: listed } = useWorktreeStashes(worktree);
   const stashes = listed ?? [];
   const stashChanges = useStashChanges();
@@ -65,6 +67,7 @@ export function StashList({
       pending={stashChanges.isPending}
       onSubmit={submit}
       onPick={(hash) => nav.toStash(projectId, worktreeId, hash, true)}
+      warm={warm.stash}
     />
   );
 }

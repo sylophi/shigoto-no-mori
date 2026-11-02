@@ -9,6 +9,7 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
+import { useWarmFilesPage } from "@/hooks/worktrees/useWarmFilesPage";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreeName } from "@/hooks/worktrees/useWorktreeTitle";
 import { peerFilesHiddenNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
@@ -73,6 +74,7 @@ function WorktreeFilesPage({
     writeStored(HIDE_IGNORED_STORAGE_KEY, String(next));
   };
   const openInEditor = useOpenInEditor(worktree);
+  const warm = useWarmFilesPage(worktree);
   const phone = usePhoneLayout();
   const backLabel = useWorktreeName(worktree);
   const [treeSheetOpen, setTreeSheetOpen] = useState(false);
@@ -103,6 +105,7 @@ function WorktreeFilesPage({
     onToggleFolder: toggleFolder,
     onSelectFile: selectFile,
     onOpenFile: openInEditor,
+    warm,
   };
   const hideIgnoredToggle = (
     <HideIgnoredToggleView hidden={hideIgnored} onToggle={toggleHideIgnored} />

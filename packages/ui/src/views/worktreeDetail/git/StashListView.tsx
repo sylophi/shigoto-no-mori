@@ -3,6 +3,7 @@ import { Button } from "../../../primitives/button.tsx";
 import { Input } from "../../../primitives/input.tsx";
 import { RelativeDate } from "../../../primitives/relative-date.tsx";
 import { cn } from "../../../lib/utils.ts";
+import { opensOnPress, warmOnRest } from "../../../lib/pointerIntent.ts";
 import type { StashEntry } from "@shigomori/contracts/schemas";
 
 // The Git page's Stashes tab: the way to stash the uncommitted changes
@@ -20,6 +21,7 @@ export function StashListView({
   pending,
   onSubmit,
   onPick,
+  warm,
 }: {
   stashes: readonly StashEntry[];
   // The stash shown beside the list, by hash.
@@ -34,6 +36,8 @@ export function StashListView({
   pending: boolean;
   onSubmit: () => void;
   onPick: (hash: string) => void;
+  // Starts reading a stash once the pointer rests on its row.
+  warm?: (hash: string) => void;
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -79,9 +83,10 @@ export function StashListView({
               <button
                 type="button"
                 aria-current={picked || undefined}
-                onClick={() => onPick(stash.hash)}
+                {...opensOnPress(() => onPick(stash.hash))}
+                {...warmOnRest(warm && (() => warm(stash.hash)))}
                 className={cn(
-                  "flex w-full items-start gap-2 rounded-md px-1.5 py-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-ring",
+                  "flex w-full items-start gap-2 rounded-md px-1.5 py-1.5 text-left focus-visible:outline-2 focus-visible:outline-ring",
                   picked
                     ? "bg-accent text-accent-foreground"
                     : "hover:bg-accent/50",

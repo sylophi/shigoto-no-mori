@@ -45,6 +45,31 @@ interface WorktreePageParams {
   scriptKey?: string;
 }
 
+// The file each worktree's Files page last showed this session, which
+// the page opens on again unless it is asked for another.
+const lastFiles = new Map<string, string>();
+const lastFileKey = (deviceId: string, projectId: string, worktreeId: string) =>
+  `${deviceId}\n${projectId}\n${worktreeId}`;
+
+export function rememberFile(
+  deviceId: string,
+  projectId: string,
+  worktreeId: string,
+  path: string | null,
+): void {
+  const key = lastFileKey(deviceId, projectId, worktreeId);
+  if (path === null) lastFiles.delete(key);
+  else lastFiles.set(key, path);
+}
+
+export function rememberedFile(
+  deviceId: string,
+  projectId: string,
+  worktreeId: string,
+): string | undefined {
+  return lastFiles.get(lastFileKey(deviceId, projectId, worktreeId));
+}
+
 export function useWorktreeNav() {
   const navigate = useNavigate();
   const matchRoute = useMatchRoute();
@@ -73,6 +98,10 @@ export function useWorktreeNav() {
         worktreeId: params.worktreeId,
       });
       return;
+    }
+    if (page === "files" && search?.["path"] === undefined) {
+      const last = rememberedFile(on, params.projectId, params.worktreeId);
+      if (last !== undefined) search = { ...search, path: last };
     }
     void navigate({
       to: WORKTREE_ROUTE_PATHS[page],

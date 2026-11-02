@@ -20,6 +20,7 @@ import {
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { useRepoDescription } from "@/hooks/projects/useRepoDescription";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
+import { useWarmWorktreePage } from "@/hooks/worktrees/useWarmWorktreePage";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { readWorktreeVisits } from "@/lib/recentWorktrees";
 import { useClientFlag } from "@/hooks/config/useSidebarMarks";
@@ -215,6 +216,7 @@ function ProjectTile({
   // A missing project's tile locates it, as its sidebar row does.
   const { relocating, onLocate, picker } = useLocateProject(group, missing);
   const lead = work?.lead;
+  const warm = useWarmWorktreePage();
   // A pinned one leads the grid outside the folders. A filed one is
   // dropped on through its folder's section.
   const drag = useFolderDrag({
@@ -238,6 +240,7 @@ function ProjectTile({
       // row has no count then either.
       unlisted={!missing && lead === undefined && branches === undefined}
       onOpen={onOpen}
+      warm={lead && (() => warm(lead.device?.deviceId, lead.worktree))}
       onHover={setHovered}
       triggerRef={triggerRef}
       icon={<ProjectIcon {...icon} name={project.name} className="size-8" />}

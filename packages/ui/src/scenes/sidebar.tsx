@@ -257,6 +257,7 @@ function entryOf(
       isDeleting: false,
     },
     open: noop,
+    warm: noop,
     resident: null,
     forwardTip: forwarded ? "Forwarding 5173 to localhost:5173" : undefined,
     marks: MARKS,

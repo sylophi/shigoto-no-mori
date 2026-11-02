@@ -5,6 +5,7 @@
 // that could only say no.
 import { FolderSearch } from "lucide-react";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
+import { useWarmFilesPage } from "@/hooks/worktrees/useWarmFilesPage";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { FooterActionButtonView } from "@shigomori/ui/views/worktreeDetail/FooterActionButtonView.tsx";
@@ -13,6 +14,7 @@ import { LABEL_RANK } from "@shigomori/ui/views/worktreeDetail/FooterVerbView.ts
 export function FilesButton({ worktree }: { worktree: Worktree }) {
   const { toFiles } = useWorktreeNav();
   const { canCommand } = useCommandAccess();
+  const warm = useWarmFilesPage(worktree);
   if (!canCommand) return null;
   return (
     <FooterActionButtonView
@@ -20,6 +22,7 @@ export function FilesButton({ worktree }: { worktree: Worktree }) {
       icon={<FolderSearch />}
       label="Files"
       onClick={() => toFiles(worktree.projectId, worktree.id)}
+      warm={warm.page}
     />
   );
 }

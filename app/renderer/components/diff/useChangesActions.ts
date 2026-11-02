@@ -12,6 +12,7 @@ import {
   useWorktreeChanges,
 } from "@/hooks/worktrees/useWorktreeChanges";
 import { useAmendDraft } from "@/hooks/worktrees/useAmendDraft";
+import { useWarmGitPages } from "@/hooks/worktrees/useWarmGitPages";
 import {
   updatePicks,
   useChangesPicks,
@@ -31,11 +32,7 @@ import {
   useRunningSyncs,
   useSyncMoveMutations,
 } from "@/hooks/worktrees/useWorktreeSync";
-import {
-  changeKey,
-  isUntracked,
-  type Worktree,
-} from "@shigomori/contracts/schemas";
+import { changeKey, type Worktree } from "@shigomori/contracts/schemas";
 import {
   afterCommit,
   commitPicksOf,
@@ -46,8 +43,8 @@ import {
   setHunksTicked,
 } from "@shigomori/ui/views/diff/changesPicks.ts";
 import {
-  changedFilePaths,
   type DiffChangesControls,
+  ticksByHunk,
 } from "@shigomori/ui/views/diff/changesControls.ts";
 import type { CommitComposerView } from "@shigomori/ui/views/diff/CommitComposerView.tsx";
 import type { LastCommitStripView } from "@shigomori/ui/views/diff/LastCommitStripView.tsx";
@@ -62,6 +59,7 @@ export function useChangesActions(
 ) {
   const { canCommand } = useCommandAccess();
   const { deviceId } = useHostScope();
+  const warm = useWarmGitPages(worktree);
   const { projectId, id: worktreeId } = worktree;
   const { data: files, error: statusError } = useWorktreeChanges(
     projectId,
@@ -84,10 +82,7 @@ export function useChangesActions(
   // and no hunk to act on stands from the last read.
   const picked =
     list.find((file) => changeKey(file) === pickedKey) ?? list[0] ?? null;
-  // Only a modified file ticks by hunk: the others are whole-file
-  // changes (an addition, a removal, a rename) or a conflict.
-  const hunkPath =
-    picked?.kind === "modified" && !picked.conflicted ? picked.path : undefined;
+  const hunkPath = picked && ticksByHunk(picked) ? picked.path : undefined;
   const { data: fileHunks } = useFileHunks(
     projectId,
     worktreeId,
@@ -106,12 +101,7 @@ export function useChangesActions(
   }, [deviceId, projectId, worktreeId, files, paneKey, fileHunks]);
   const { mutate: discardHunks, isPending: discardingHunks } =
     useDiscardHunks();
-  const diff = useFileDiff(
-    projectId,
-    worktreeId,
-    picked ? changedFilePaths(picked) : [],
-    picked ? isUntracked(picked) : false,
-  );
+  const diff = useFileDiff(projectId, worktreeId, picked);
   const commit = useCommitChanges();
   const { mutate: discardPaths, isPending: discarding } = useDiscardChanges();
   const { mutate: restore, isPending: restoring } = useRestoreDiscard();
@@ -211,6 +201,7 @@ export function useChangesActions(
     readOnly: !canCommand,
     selectedKey: paneKey,
     onSelect: setPickedKey,
+    onWarm: warm.file,
     picks,
     onSetTicked: (rows, ticked) =>
       setPicks((current) =>

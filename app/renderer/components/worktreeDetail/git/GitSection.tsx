@@ -4,6 +4,7 @@
 import { useBranchHistory } from "@/hooks/git/useBranchCommits";
 import { useWorktreeStashes } from "@/hooks/worktrees/useGitHistory";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
+import { useWarmGitPages } from "@/hooks/worktrees/useWarmGitPages";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { canSyncFromPrimary } from "@shigomori/ui/lib/syncState.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";
@@ -18,6 +19,7 @@ const SHOWN_COMMITS = 3;
 
 export function GitSection({ worktree }: { worktree: Worktree }) {
   const nav = useWorktreeNav();
+  const warm = useWarmGitPages(worktree);
   const { projectId, id: worktreeId } = worktree;
   const { data: files = [] } = useWorktreeChanges(projectId, worktreeId);
   const { data: stashes = [] } = useWorktreeStashes(worktree);
@@ -58,6 +60,7 @@ export function GitSection({ worktree }: { worktree: Worktree }) {
         toCommit: (hash) => nav.toCommit(projectId, worktreeId, hash),
         toBranchDiff: () => nav.toBranchDiff(projectId, worktreeId),
       }}
+      warm={warm}
     />
   );
 }

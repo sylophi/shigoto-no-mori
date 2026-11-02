@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useWorktreeStashes } from "@/hooks/worktrees/useGitHistory";
+import { useWarmGitPages } from "@/hooks/worktrees/useWarmGitPages";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { HistoryList } from "./HistoryList";
@@ -26,6 +27,7 @@ export function GitPageSidebar({
   changes?: ReactNode;
 }) {
   const nav = useWorktreeNav();
+  const warm = useWarmGitPages(worktree);
   const { projectId, id: worktreeId } = worktree;
   const head = worktree.recentCommits[0]?.hash;
   const { data: stashes = [] } = useWorktreeStashes(worktree);
@@ -45,6 +47,11 @@ export function GitPageSidebar({
             nav.toStashes(projectId, worktreeId, true);
           }
         }
+      }}
+      warmTab={(next) => {
+        if (next === "changes") warm.changes();
+        else if (next === "history" && head) warm.commit(head);
+        else if (next === "stashes" && newestStash) warm.stash(newestStash);
       }}
       changedCount={worktree.changedCount}
       stashCount={stashes.length}

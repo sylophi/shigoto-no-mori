@@ -1,8 +1,10 @@
 import { getFiletypeFromFileName, preloadHighlighter } from "@pierre/diffs";
 import { useQuery } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CODE_THEME } from "@shigomori/ui/views/diff/codeTheme.ts";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLook } from "@/hooks/ui/useLook";
+import { rememberFile } from "@/hooks/worktrees/useWorktreeNav";
 import {
   useWorktreeFile,
   useWorktreeImage,
@@ -44,6 +46,15 @@ export function FileViewer({
     worktreeId,
     path,
   );
+  // The page opens on the file it last showed, while there is one.
+  const { deviceId } = useHostScope();
+  const read = data !== undefined;
+  const missing = data?.kind === "missing";
+  useEffect(() => {
+    if (read) {
+      rememberFile(deviceId, projectId, worktreeId, missing ? null : path);
+    }
+  }, [deviceId, projectId, worktreeId, path, read, missing]);
   const remoteImage = useRemoteImage(projectId);
   const localImage = useWorktreeImage(projectId, worktreeId, path);
   const name = path.slice(path.lastIndexOf("/") + 1);

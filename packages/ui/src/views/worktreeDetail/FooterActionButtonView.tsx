@@ -5,6 +5,7 @@
 // place). Each gives up its label on a narrow footer at its own rank
 // (the app's worktreeDetail/footerFit.ts).
 import type { ReactNode } from "react";
+import { warmOnRest } from "../../lib/pointerIntent.ts";
 import { FooterVerbView } from "./FooterVerbView.tsx";
 
 export function FooterActionButtonView({
@@ -15,6 +16,7 @@ export function FooterActionButtonView({
   disabledReason,
   expanded,
   onClick,
+  warm,
 }: {
   rank: number;
   icon: ReactNode;
@@ -25,6 +27,8 @@ export function FooterActionButtonView({
   // Set for a toggle of what it shows (the terminal drawer).
   expanded?: boolean;
   onClick: () => void;
+  // The reads the page it opens starts on, once the pointer rests on it.
+  warm?: () => void;
 }) {
   return (
     <FooterVerbView
@@ -38,6 +42,7 @@ export function FooterActionButtonView({
       disabled={disabledReason !== undefined}
       aria-expanded={expanded}
       onClick={onClick}
+      {...warmOnRest(warm)}
     />
   );
 }

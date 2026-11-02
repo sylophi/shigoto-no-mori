@@ -33,6 +33,7 @@ import { ModalShell } from "../../primitives/modal-shell.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../lib/utils.ts";
+import { warmOnRest } from "../../lib/pointerIntent.ts";
 import { getBrowseLeafSegment } from "@shigomori/contracts/projectPaths";
 import { changeKey, type ChangedFile } from "@shigomori/contracts/schemas";
 import {
@@ -145,6 +146,7 @@ export function DiffFileIndexView({
       collapsed={collapsedKeys.has(entry.key)}
       menuOpen={menu?.open === true && menu.key === entry.key}
       onSelect={selectRow}
+      onWarm={changes?.onWarm}
       busy={changes?.busy ?? false}
       ticked={
         // A conflict goes in by being resolved, from its menu, so it
@@ -560,6 +562,7 @@ function IndexRow({
   collapsed,
   menuOpen,
   onSelect,
+  onWarm,
   busy,
   ticked,
   onSetTicked,
@@ -572,6 +575,7 @@ function IndexRow({
   // Its context menu is up: the row stays lit while it is.
   menuOpen: boolean;
   onSelect: (key: string) => void;
+  onWarm: ((file: ChangedFile) => void) | undefined;
   busy: boolean;
   ticked: Ticked | undefined;
   onSetTicked: DiffChangesControls["onSetTicked"] | undefined;
@@ -599,6 +603,7 @@ function IndexRow({
       data-slot="diff-index-row"
       data-row-key={entry.key}
       onClick={select}
+      {...warmOnRest(onWarm && row ? () => onWarm(row) : undefined)}
       className={cn(
         "flex w-full items-center gap-1.5 rounded-md px-2 transition-colors",
         active

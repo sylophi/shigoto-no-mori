@@ -1,4 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
+import { mergeProps } from "@base-ui/react/merge-props";
+import { opensOnPress, warmOnRest } from "../../lib/pointerIntent.ts";
 import { cn } from "../../lib/utils.ts";
 import { worktreeTitle } from "../../lib/worktreeTitle.ts";
 import { BranchLabel } from "../../primitives/branch-label.tsx";
@@ -42,6 +44,9 @@ export interface SidebarMarks {
 export interface WorktreeEntry {
   look: WorktreeRowLook;
   open: () => void;
+  // Starts the reads the worktree's page opens on, once the pointer
+  // rests on the row.
+  warm: () => void;
   // The villager whose home the worktree is, under Village life.
   resident: Resident | null;
   // This machine's forwards of a peer's worktree, for its mark.
@@ -98,10 +103,9 @@ export function WorktreeEntryView({
   context,
   className,
   children,
-  onClick,
   ...button
 }: WorktreeEntryProps) {
-  const { look, open, resident, forwardTip, marks } = entry;
+  const { look, open, warm, resident, forwardTip, marks } = entry;
   const { isSelected, isDeleting } = look;
   // The tree's row, which has no context line to carry these marks.
   const inline = context === undefined;
@@ -110,13 +114,9 @@ export function WorktreeEntryView({
   return (
     <button
       type="button"
-      {...button}
-      onClick={(event) => {
-        onClick?.(event);
-        open();
-      }}
+      {...mergeProps<"button">(button, opensOnPress(open), warmOnRest(warm))}
       className={cn(
-        "relative flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors",
+        "relative flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left",
         // data-popup-open is Base UI's mark on a trigger whose menu is
         // up (the inbox row's): keep the row lit so it's clear whose
         // menu this is.

@@ -1,13 +1,13 @@
-import { useQuery, skipToken } from "@tanstack/react-query";
+import { queryOptions, skipToken, useQuery } from "@tanstack/react-query";
 import type { PackageScriptsResult } from "@shigomori/contracts/schemas";
-import { useHostScope } from "@/hooks/remote/useHostScope";
+import { type HostScope, useHostScope } from "@/hooks/remote/useHostScope";
 
-export function usePackageScripts(
+export function packageScriptsQuery(
+  { api, keys }: Pick<HostScope, "api" | "keys">,
   projectId: string | null,
   worktreeId: string | null,
 ) {
-  const { api, keys } = useHostScope();
-  return useQuery<PackageScriptsResult | null>({
+  return queryOptions<PackageScriptsResult | null>({
     queryKey: keys.packageScripts(projectId, worktreeId),
     queryFn:
       projectId !== null && worktreeId !== null
@@ -23,4 +23,11 @@ export function usePackageScripts(
     refetchOnReconnect: false,
     meta: { errorTitle: "Couldn't read scripts" },
   });
+}
+
+export function usePackageScripts(
+  projectId: string | null,
+  worktreeId: string | null,
+) {
+  return useQuery(packageScriptsQuery(useHostScope(), projectId, worktreeId));
 }

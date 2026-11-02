@@ -63,6 +63,21 @@ const treeViewAtom = Atom.family((key: string) => {
   });
 });
 
+export function treeView<A>(
+  deviceId: string,
+  view: TreeView,
+  input: { readonly worktreeId: string; readonly [key: string]: unknown },
+) {
+  return treeViewAtom(
+    JSON.stringify({
+      deviceId,
+      view,
+      input,
+      generation: worktreeViewGeneration(deviceId, input.worktreeId),
+    }),
+  ) as Atom.Atom<AsyncResult.AsyncResult<A, unknown>>;
+}
+
 // The view `view` of the scoped device's worktree, `input` its payload
 // (null while there is nothing to read), its failure a toast titled
 // `failed`.
@@ -77,16 +92,7 @@ export function useTreeView<A>(
   const { deviceId, hasHost } = useHostScope();
   const registry = useRegistry();
   const atom =
-    hasHost && input !== null
-      ? (treeViewAtom(
-          JSON.stringify({
-            deviceId,
-            view,
-            input,
-            generation: worktreeViewGeneration(deviceId, input.worktreeId),
-          }),
-        ) as Atom.Atom<AsyncResult.AsyncResult<A, unknown>>)
-      : null;
+    hasHost && input !== null ? treeView<A>(deviceId, view, input) : null;
   const state = useView(atom);
   useViewErrorToast(state, failed);
   // A view whose reads kept failing ends: the window coming back asks

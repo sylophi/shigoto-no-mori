@@ -14,6 +14,7 @@ import {
   FindButtonView,
   type FindToggle,
 } from "../shared/FindBarView.tsx";
+import { SHOWS_LATE } from "../../primitives/skeleton.tsx";
 
 // Past this many lines a file shows as plain text: highlighting it
 // would hold the window for seconds, all at once on the main thread.
@@ -105,7 +106,7 @@ export function FileViewerView({
       {findBar && <FindBarView {...findBar} />}
       <div ref={bodyRef} className="min-h-0 flex-1 overflow-auto">
         {reading ? (
-          <CenteredMessage>
+          <CenteredMessage className={SHOWS_LATE}>
             <Loader2 aria-hidden className="mr-2 size-3.5 animate-spin" />
             Reading file…
           </CenteredMessage>
