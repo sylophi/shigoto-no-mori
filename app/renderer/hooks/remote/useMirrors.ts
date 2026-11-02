@@ -47,7 +47,9 @@ import {
   useDeviceName,
   useEveryHost,
   useRemoteDeviceApi,
+  useRemoteDevices,
 } from "@/hooks/remote/useRemoteDevices";
+import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import { useHasLocalHost } from "@/lib/localHost";
 import { useViewsWanted } from "@/hooks/remote/useRemoteForests";
 import { invalidateHostDevice } from "@/lib/queryKeys";
@@ -158,15 +160,30 @@ export function useCopyOff(
 // attention. A stream the copy's host serves pairs the copy with its
 // original, when the runner named it, so the pair holds while the
 // runner's list is unread. The kept side is this machine's when it
-// holds one, else the original: what a window here reads as the pair's
-// row is its own worktree, and one holding neither side (the web
-// client, a pair between two peers) reads the original.
+// holds one: what a window here reads as the pair's row is its own
+// worktree. One holding neither side (the web client, a pair between
+// two peers) reads the side whose device can be reached, so a sleeping
+// machine's faded row doesn't stand for a live copy, and the original
+// when both or neither can.
 export function useMirrorPairs(): MirrorPair[] {
   const thisDeviceId = useApi().deviceId;
   const hosts = useEveryHostMirrors();
+  // Off the registry the rows' badges read (useDeviceBadges).
+  const reachable = new Set(
+    useRemoteDevices()
+      .filter((device) => deviceStatusView(device.status).reachable)
+      .map((device) => device.deviceId),
+  );
+  const keptOf = (original: WorktreeAt, copy: WorktreeAt) => {
+    if (original.deviceId === thisDeviceId) return original;
+    if (copy.deviceId === thisDeviceId) return copy;
+    return reachable.has(original.deviceId) || !reachable.has(copy.deviceId)
+      ? original
+      : copy;
+  };
   const pairs = new Map<string, MirrorPair>();
   const add = (original: WorktreeAt, copy: WorktreeAt) => {
-    const kept = copy.deviceId === thisDeviceId ? copy : original;
+    const kept = keptOf(original, copy);
     pairs.set(
       `${worktreeAt(original.deviceId, original.worktreeId)}>${worktreeAt(copy.deviceId, copy.worktreeId)}`,
       { kept, folded: kept === copy ? original : copy },
