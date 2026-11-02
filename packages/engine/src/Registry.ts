@@ -1,4 +1,5 @@
 import type { ProjectRow } from "@shigomori/contracts/schemas/project";
+import { UnknownProjectError } from "@shigomori/contracts/errors";
 import { isMintedDeviceId } from "@shigomori/contracts/hubProtocol";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -45,15 +46,6 @@ export class ProjectAlreadyAdded extends Schema.TaggedError<ProjectAlreadyAdded>
   }
 }
 
-export class UnknownProject extends Schema.TaggedError<UnknownProject>()(
-  "UnknownProject",
-  { projectId: Schema.String },
-) {
-  override get message(): string {
-    return `Unknown project: ${this.projectId}`;
-  }
-}
-
 // Another registered project already sits at the path.
 export class ProjectPathTaken extends Schema.TaggedError<ProjectPathTaken>()(
   "ProjectPathTaken",
@@ -96,7 +88,7 @@ export class Registry extends Context.Service<
     // worktree data.
     readonly unregister: (
       project: ListedProject,
-    ) => Effect.Effect<void, UnknownProject | Terrier.TerrierRefused>;
+    ) => Effect.Effect<void, UnknownProjectError | Terrier.TerrierRefused>;
     // Points the project at where its repo is now, under the new folder's
     // name, keeping its id: a terrier project, which has no entry, gets
     // one under its id. Its place in the manual order moves with it, and
@@ -105,7 +97,10 @@ export class Registry extends Context.Service<
       project: ListedProject,
       path: string,
       name: string,
-    ) => Effect.Effect<RegisteredProject, UnknownProject | ProjectPathTaken>;
+    ) => Effect.Effect<
+      RegisteredProject,
+      UnknownProjectError | ProjectPathTaken
+    >;
     // The sidebar's manual order, as project paths.
     readonly order: Effect.Effect<ReadonlyArray<string>>;
     // Stores `listed` (the merged list as it reads now) with `ids` moved
@@ -283,7 +278,7 @@ const make = Effect.gen(function* () {
             const [entry] =
               yield* sql`SELECT 1 FROM projects WHERE id = ${project.id}`;
             if (!entry) {
-              return yield* new UnknownProject({ projectId: project.id });
+              return yield* new UnknownProjectError({ projectId: project.id });
             }
             yield* sql`DELETE FROM projects WHERE id = ${project.id}`;
           } else {
@@ -603,7 +598,7 @@ const make = Effect.gen(function* () {
           } else {
             const [entry] =
               yield* sql`SELECT 1 FROM projects WHERE id = ${projectId}`;
-            if (!entry) return yield* new UnknownProject({ projectId });
+            if (!entry) return yield* new UnknownProjectError({ projectId });
             yield* sql`UPDATE projects SET name = ${name}, path = ${path}
               WHERE id = ${projectId}`;
           }

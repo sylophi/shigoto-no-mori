@@ -7,22 +7,28 @@
 // a removal that must happen end the mirror after instead, and a delete
 // the other side asked for (`oneSide`) leaves that side to it.
 import { isEntityGoneError } from "@shigomori/contracts/errors";
-import type { MovedSource } from "@shigomori/contracts/schemas";
+import {
+  type CleanupError,
+  CleanupErrorSchema,
+  type DeleteStackResult,
+  type MovedSource,
+} from "@shigomori/contracts/schemas";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Ops from "../engineOps";
+import * as Schema from "effect/Schema";
+import * as Landing from "@shigomori/engine/Landing";
+import * as EngineWorktrees from "@shigomori/engine/Worktrees";
+import { asCall, changing } from "../Engine";
 import * as HostPushes from "../HostPushes";
-import {
-  currentWorktreeId,
-  findProject,
-  findProjectAndWorktree,
-} from "../projects";
+import { currentWorktreeId, findProjectAndWorktree } from "../projects";
 import * as Scripts from "../Scripts";
 import { MirrorsOnDelete } from "@shigomori/engine/MirrorsOnDelete";
 import { MirrorLedger } from "@host/mirror/MirrorLedger";
 import { mirrorsOnDelete } from "@host/mirror/onDelete";
 import { bookingScripts, ScriptsRunningError } from "./documents";
+
+const decodeCleanupError = Schema.decodeUnknownSync(CleanupErrorSchema);
 
 // How long a forced removal's cleanup may run before it reads as failed.
 const FORCED_CLEANUP_MS = 60_000;
@@ -33,6 +39,92 @@ export type RemoveInput = {
   readonly force?: boolean | undefined;
   readonly skipCleanup?: boolean | undefined;
 };
+
+// A removal's account of a cleanup script that failed, which left the
+// worktree in place.
+type Removal =
+  | { ok: true; cleanupError?: undefined }
+  | { ok: false; cleanupError: CleanupError };
+
+// The engine's removal, the scripts it runs to `reporter`, each cleanup
+// script on a clock of `cleanupWithin` ms when given.
+const removeWorktree = (
+  projectId: string,
+  input: {
+    readonly worktreeId: string;
+    readonly force?: boolean | undefined;
+    readonly skipCleanup?: boolean | undefined;
+    readonly cleanupWithin?: number | undefined;
+    readonly expect?: MovedSource | undefined;
+  },
+  reporter: EngineWorktrees.Reporter,
+) =>
+  Effect.gen(function* () {
+    const located = yield* findProjectAndWorktree(projectId, input.worktreeId);
+    return yield* (yield* EngineWorktrees.Worktrees)
+      .remove(
+        located,
+        {
+          force: input.force === true,
+          keepBranch: false,
+          skipCleanup: input.skipCleanup === true,
+          ...(input.cleanupWithin === undefined
+            ? {}
+            : { cleanupWithin: input.cleanupWithin }),
+          ...(input.expect === undefined ? {} : { expect: input.expect }),
+        },
+        reporter,
+      )
+      .pipe(
+        Effect.as<Removal>({ ok: true }),
+        Effect.catchTag("CleanupFailed", (failed) =>
+          Effect.succeed<Removal>({
+            ok: false,
+            cleanupError: decodeCleanupError(
+              EngineWorktrees.cleanupErrorOf(failed),
+            ),
+          }),
+        ),
+      );
+  });
+
+// The worktrees a stack's plan names, removed together, and on a
+// cleanup failure whatever went before it. `removedOther` hears each of
+// the others as it goes, so a removal cut short still tells what went.
+const removeStackWorktrees = (
+  removal: Landing.StackRemoval,
+  reporter: EngineWorktrees.Reporter,
+  removedOther: (worktreeId: string) => void,
+) =>
+  Effect.gen(function* () {
+    const cleanup = yield* (yield* Landing.Landing).removeStack(removal, {
+      ...reporter,
+      removedOther: (removed) => Effect.sync(() => removedOther(removed.id)),
+    });
+    // The lower layers first and the worktree it ran from last, the order
+    // they were removed in.
+    const removed = (cleanup.stack?.removed ?? []).map((entry) => entry.id);
+    switch (cleanup.kind) {
+      case "done":
+        return { ok: true, removed } satisfies DeleteStackResult;
+      case "removed":
+        return {
+          ok: true,
+          removed: [...removed, cleanup.removed.id],
+        } satisfies DeleteStackResult;
+      case "failed":
+        if (cleanup.error instanceof EngineWorktrees.CleanupFailed) {
+          return {
+            ok: false,
+            removed,
+            cleanupError: decodeCleanupError(
+              EngineWorktrees.cleanupErrorOf(cleanup.error),
+            ),
+          } satisfies DeleteStackResult;
+        }
+        return yield* Effect.fail(cleanup.error);
+    }
+  });
 
 const announce = (
   projectId: string,
@@ -73,10 +165,12 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
       },
       notifyScript: Scripts.NotifyScriptEvent,
     ) {
-      const project = yield* findProject(input.projectId);
       // A mirror's stop names its copy by the id it may have had before
       // a move.
-      const worktreeId = yield* currentWorktreeId(project.id, input.worktreeId);
+      const worktreeId = yield* currentWorktreeId(
+        input.projectId,
+        input.worktreeId,
+      );
       if (input.refuseRunningScripts === true) {
         const running = scripts.runningIn(worktreeId);
         if (running > 0) {
@@ -87,7 +181,7 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
       // can't close the first one's removal under every viewer.
       const busy = "This worktree is already being removed.";
       yield* scripts.assertWorktreeMutable(worktreeId, busy);
-      yield* announce(project.id, worktreeId, "removing");
+      yield* announce(input.projectId, worktreeId, "removing");
       let removed = false;
       // A move's teardown: the worktree lives on on the device it went
       // to, so the copy of its mirror stays.
@@ -97,15 +191,21 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
           [worktreeId],
           { kind: "remove", busy },
           bookingScripts(scripts, notifyScript, (reporter) =>
-            Ops.deleteWorktree(
-              project,
-              {
-                worktreeId,
-                force: input.force,
-                skipCleanup: input.skipCleanup,
-                expect: input.expect,
-              },
-              reporter,
+            asCall(
+              changing(
+                removeWorktree(
+                  input.projectId,
+                  {
+                    worktreeId,
+                    force: input.force,
+                    skipCleanup: input.skipCleanup,
+                    expect: input.expect,
+                  },
+                  reporter,
+                ),
+                { projectId: input.projectId, worktreeId },
+                "remove",
+              ),
             ).pipe(
               moved || input.oneSide === true
                 ? thisSideOnly
@@ -124,7 +224,11 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
         .pipe(
           Effect.ensuring(
             Effect.suspend(() =>
-              announce(project.id, worktreeId, removed ? "removed" : "kept"),
+              announce(
+                input.projectId,
+                worktreeId,
+                removed ? "removed" : "kept",
+              ),
             ),
           ),
         );
@@ -136,15 +240,20 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
       input: RemoveInput,
       notifyScript: Scripts.NotifyScriptEvent,
     ) {
-      const { project, worktree } = yield* findProjectAndWorktree(
+      const located = yield* findProjectAndWorktree(
         input.projectId,
         input.worktreeId,
       );
-      const removal = yield* Ops.planStack(project, {
-        worktreeId: worktree.id,
-        force: input.force,
-        skipCleanup: input.skipCleanup,
-      });
+      const { project } = located;
+      const removal = yield* asCall(
+        Effect.flatMap(Landing.Landing, (landing) =>
+          landing.planRemoveStack(located, {
+            force: input.force === true,
+            keepBranch: false,
+            skipCleanup: input.skipCleanup === true,
+          }),
+        ),
+      );
       const ids = removal.worktrees.map(({ id }) => id);
       const busy = "A worktree of this stack is already being removed.";
       for (const id of ids) yield* scripts.assertWorktreeMutable(id, busy);
@@ -157,11 +266,16 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
           ids,
           { kind: "remove", busy },
           bookingScripts(scripts, notifyScript, (reporter) =>
-            Ops.deleteStack(
-              project,
-              removal,
-              reporter,
-              (id) => void removed.add(id),
+            asCall(
+              changing(
+                removeStackWorktrees(
+                  removal,
+                  reporter,
+                  (id) => void removed.add(id),
+                ),
+                { projectId: project.id, worktreeId: located.worktree.id },
+                "remove",
+              ),
             ),
           ).pipe(
             Effect.tap((outcome) =>
@@ -203,27 +317,36 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
       readonly worktreeId: string;
       readonly cleanupWithin?: number | undefined;
     }) {
-      const project = yield* findProject(input.projectId);
-      const worktreeId = yield* currentWorktreeId(project.id, input.worktreeId);
-      yield* announce(project.id, worktreeId, "removing");
+      const worktreeId = yield* currentWorktreeId(
+        input.projectId,
+        input.worktreeId,
+      );
+      yield* announce(input.projectId, worktreeId, "removing");
       let removed = false;
       const once = (options: { readonly skipCleanup: boolean }) =>
         bookingScripts(
           scripts,
           () => {},
           (reporter) =>
-            Ops.deleteWorktree(
-              project,
-              {
-                worktreeId,
-                force: true,
-                ...(options.skipCleanup
-                  ? { skipCleanup: true }
-                  : {
-                      cleanupWithin: input.cleanupWithin ?? FORCED_CLEANUP_MS,
-                    }),
-              },
-              reporter,
+            asCall(
+              changing(
+                removeWorktree(
+                  input.projectId,
+                  {
+                    worktreeId,
+                    force: true,
+                    ...(options.skipCleanup
+                      ? { skipCleanup: true }
+                      : {
+                          cleanupWithin:
+                            input.cleanupWithin ?? FORCED_CLEANUP_MS,
+                        }),
+                  },
+                  reporter,
+                ),
+                { projectId: input.projectId, worktreeId },
+                "remove",
+              ),
             ).pipe(thisSideOnly),
         );
       return yield* scripts
@@ -252,7 +375,11 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
         .pipe(
           Effect.ensuring(
             Effect.suspend(() =>
-              announce(project.id, worktreeId, removed ? "removed" : "kept"),
+              announce(
+                input.projectId,
+                worktreeId,
+                removed ? "removed" : "kept",
+              ),
             ),
           ),
         );

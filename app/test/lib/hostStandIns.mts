@@ -13,7 +13,7 @@ import * as AccountPeers from "../../host/lib/control/AccountPeers.ts";
 import * as DeviceId from "../../host/lib/config/DeviceId.ts";
 import { DataDirHolders } from "../../host/lib/DataDirHolders.ts";
 import * as HostFacts from "../../host/lib/HostFacts.ts";
-import * as Ops from "../../host/lib/engineOps.ts";
+import * as Registry from "@shigomori/engine/Registry";
 import * as Shell from "../../host/lib/Shell.ts";
 import * as PeerReach from "../../host/ipc/PeerReach.ts";
 import { MirrorEngine } from "../../host/mirror/MirrorEngine.ts";
@@ -103,12 +103,14 @@ const standIns = Layer.mergeAll(
   ),
   Layer.effect(
     DeviceId.DeviceId,
-    Effect.map(Ops.deviceId, (stored) =>
-      DeviceId.DeviceId.of({
-        get id() {
-          return deviceId ?? stored;
-        },
-      }),
+    Effect.map(
+      Effect.flatMap(Registry.Registry, (registry) => registry.deviceId),
+      (stored) =>
+        DeviceId.DeviceId.of({
+          get id() {
+            return deviceId ?? stored;
+          },
+        }),
     ),
   ),
   Layer.succeed(

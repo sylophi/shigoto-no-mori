@@ -25,9 +25,9 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
-import * as Ops from "./engineOps";
+import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import * as Git from "@shigomori/engine/Git";
-import { findProjectInsideDataDir, freshProjects } from "./projects";
+import { findProjectInsideDataDir, listedProjects } from "./projects";
 import * as Scripts from "./Scripts";
 import * as Worktrees from "./Worktrees";
 import { dataDir } from "@shared/paths";
@@ -98,7 +98,7 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
   readonly teardownTimeoutMs?: number;
 }) {
   const { onProgress } = options;
-  const projects = yield* freshProjects;
+  const projects = yield* listedProjects;
   // Refuse up front, before any script is stopped or worktree removed.
   const trap = nukeTrap(projects, dataDir(), options.home ?? homedir());
   if (trap !== null) return yield* new NukeRefusedError({ reason: trap });
@@ -122,26 +122,16 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
   // Every project's worktrees the app made, listed up front so all of
   // them are marked delete-inflight for the whole removal. Externals
   // were never the app's to delete.
-  const perProject = yield* Effect.forEach(
+  const { rows } = yield* (yield* EngineWorktrees.Worktrees).identityList(
     projects,
-    (project) =>
-      Ops.listWorktreeIdentities({ projectId: project.id }).pipe(
-        Effect.map((identities) => ({
-          project,
-          targets: identities.filter((i) => !i.isPrimary && !i.isExternal),
-        })),
-        Effect.catch((error) =>
-          Effect.sync(() => {
-            left.push({
-              what: `The worktrees of ${project.name}`,
-              why: errorWordsOf(error),
-            });
-            return { project, targets: [] };
-          }),
-        ),
-      ),
-    { concurrency: "unbounded" },
+    { primaryRef: false },
   );
+  const perProject = projects.map((project) => ({
+    project,
+    targets: rows.filter(
+      (i) => i.projectId === project.id && !i.isPrimary && !i.isExternal,
+    ),
+  }));
   const marked = perProject.flatMap(({ targets }) => targets.map((t) => t.id));
   const scripts = yield* Scripts.Scripts;
   const worktrees = yield* Worktrees.Worktrees;

@@ -10,7 +10,9 @@ import {
 } from "@shigomori/contracts/schemas";
 import * as Git from "@shigomori/engine/Git";
 import * as GitHub from "@shigomori/engine/GitHub";
-import * as Ops from "../engineOps";
+import * as Landing from "@shigomori/engine/Landing";
+import { asCall, changing } from "../Engine";
+import { findProject } from "../projects";
 import { GH_TIMEOUT_MS, GithubCli } from "./GithubCli";
 import * as PullRequestMaps from "./PullRequestMaps";
 import { remoteNameForUrl } from "./remote";
@@ -210,20 +212,37 @@ export const setPullRequestDraft = Effect.fn("GithubActions.setDraft")(
   },
 );
 
-// The engine runs the gh merge and keeps the method for next time. An
-// armed or queued PR is still open, and the map doesn't carry either
-// flag, so only a landed merge moves it.
+const quiet: Landing.Reporter = { report: () => Effect.void, color: true };
+
+// The engine runs the gh merge and keeps the method for next time.
+// `stack`: the PR and every open PR under it in its stack, which the
+// engine resolves and merges bottom first. An armed or queued PR is
+// still open, and the map doesn't carry either flag, so only a landed
+// merge moves it.
 export const mergePullRequest = Effect.fn("GithubActions.merge")(function* (
   project: Project,
   number: number,
   method: MergeMethod,
   options: { stack?: boolean },
 ) {
-  const result = yield* Ops.mergePullRequest(project, number, method, options);
-  if (result.outcome === "merged") {
+  const { outcome } = yield* asCall(
+    changing(
+      Effect.gen(function* () {
+        const registered = yield* findProject(project.id);
+        return yield* (yield* Landing.Landing).merge(
+          { project: registered, number },
+          { method, stack: options.stack === true },
+          quiet,
+        );
+      }),
+      { projectId: project.id },
+      "merge",
+    ),
+  );
+  if (outcome === "merged") {
     yield* (yield* PullRequestMaps.PullRequestMaps).moved(project);
   }
-  return result;
+  return { outcome };
 });
 
 // Turns an armed auto-merge off again, so the PR waits for a person.

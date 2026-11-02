@@ -5,7 +5,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Ops from "../engineOps";
+import * as Registry from "@shigomori/engine/Registry";
 
 export class DeviceId extends Context.Service<
   DeviceId,
@@ -14,7 +14,9 @@ export class DeviceId extends Context.Service<
 
 export const layer = Layer.effect(
   DeviceId,
-  Effect.map(Ops.deviceId, (id) => DeviceId.of({ id })),
+  Effect.flatMap(Registry.Registry, (registry) =>
+    Effect.map(registry.deviceId, (id) => DeviceId.of({ id })),
+  ),
 );
 
 // The id, for an effect.

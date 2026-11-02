@@ -26,10 +26,11 @@
 // snapshot.
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
 import { MIRROR_LABEL_REPLACES } from "@shigomori/contracts/modules/mirror";
 import { ageOf, stamp } from "@shigomori/engine/keptAnswers";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
-import * as Ops from "@host/lib/engineOps";
+import * as Worktrees from "@shigomori/engine/Worktrees";
 import { PeerReach } from "@host/ipc/PeerReach";
 import type { MirrorEngine } from "../MirrorEngine";
 import {
@@ -69,8 +70,13 @@ const PEER_WAIT_MS = 2 * 60_000;
 // failure rather than fail, and a look that can't read the record leaves
 // the session to the next one.
 const recordedMove = (path: string) =>
-  Effect.map(Effect.exit(Ops.worktreeMovedTo(path)), (read) =>
-    Exit.isSuccess(read) ? read.value : undefined,
+  Effect.map(
+    Effect.exit(
+      Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+        worktrees.movedTo(path),
+      ),
+    ),
+    (read) => (Exit.isSuccess(read) ? Option.getOrNull(read.value) : undefined),
   );
 
 export const makeSweep = ({

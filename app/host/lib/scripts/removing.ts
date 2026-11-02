@@ -10,8 +10,6 @@ import * as Registry from "@shigomori/engine/Registry";
 import * as Terrier from "@shigomori/engine/Terrier";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import { MirrorLedger } from "@host/mirror/MirrorLedger";
-import * as Ops from "../engineOps";
-import { loadProjects, refresh } from "../projects";
 import { Terminals } from "../terminals/Terminals";
 import type { Mark, RunningScriptWorktree } from "./documents";
 import type { Marks } from "./marks";
@@ -31,6 +29,9 @@ export const makeRemoving = ({
     const registry = yield* Registry.Registry;
     const terrier = yield* Terrier.Terrier;
     const ledger = yield* MirrorLedger;
+    // Where each project came from as the last list read said, for a
+    // project gone from one terrier couldn't answer for.
+    let sources = sourcesOf(yield* registry.listed);
 
     // The protocol over the worktrees one mutation removes or moves (a
     // stack cleanup removes several): refuse a concurrent mutation of any
@@ -93,12 +94,13 @@ export const makeRemoving = ({
       project: Project,
       candidates: readonly RunningScriptWorktree[],
     ) =>
-      Ops.listWorktreeIdentities({ projectId: project.id }).pipe(
-        Effect.flatMap((identities) => {
-          const liveIds = new Set(identities.map((identity) => identity.id));
+      worktrees.identityList([project], { primaryRef: false }).pipe(
+        Effect.flatMap(({ rows }) => {
+          const liveIds = new Set(rows.map((identity) => identity.id));
           // A repo git can read always lists at least its primary
-          // checkout. An empty result means the read went missing, not
-          // the worktrees.
+          // checkout. An empty result means the read went missing (an
+          // unreachable repo, a mid-rebase index lock), not the
+          // worktrees.
           if (liveIds.size === 0) return Effect.succeed([]);
           return Effect.filter(candidates, (candidate) =>
             liveIds.has(candidate.worktreeId)
@@ -109,10 +111,6 @@ export const makeRemoving = ({
                 ),
           );
         }),
-        // An unreachable repo, a mid-rebase index lock, a transient read
-        // error: a fact about the enumeration, not about the worktrees.
-        Effect.orElseSucceed((): RunningScriptWorktree[] => []),
-        Effect.provideService(Worktrees.Worktrees, worktrees),
       );
 
     // An `sm rm` run in a terminal leaves a dev server the app started
@@ -134,7 +132,7 @@ export const makeRemoving = ({
       if (candidates.length === 0) return [];
       for (const { worktreeId } of candidates) reaping.add(worktreeId);
       return yield* Effect.gen(function* () {
-        const projects = loadProjects();
+        const projects = yield* registry.listed;
         const byProject = new Map<string, RunningScriptWorktree[]>();
         for (const candidate of candidates) {
           const group = byProject.get(candidate.projectId);
@@ -173,36 +171,28 @@ export const makeRemoving = ({
     // A project gone takes its scripts and terminals, whoever removed it:
     // the app (projects.remove), the doctor's repair, or a terminal's `sm
     // projects unregister`, which the store's change tells
-    // (host/process/layer.ts). Gone is what a fresh list no longer names.
-    // A list that can't be read takes nothing, and neither does a terrier
-    // project missing from a list terrier couldn't answer for (it lists
-    // none then). The runs are the ones there before the list was read,
-    // so a project added again meanwhile keeps a run started since. It
-    // re-reads the list the sync readers (the git watcher, the fetch
-    // sweep) hold.
+    // (host/process/layer.ts). Gone is what a fresh list no longer names,
+    // but for a terrier project missing from a list terrier couldn't
+    // answer for (it lists none then). The runs are the ones there before
+    // the list was read, so a project added again meanwhile keeps a run
+    // started since.
     const reapRemovedProjects = Effect.gen(function* () {
       const runsBefore = runs.list().filter(({ interactive }) => interactive);
-      const sourceOf = new Map(
-        loadProjects().map(({ id, source }) => [id, source ?? "registry"]),
+      const projects = yield* registry.listed;
+      const sourceOf = sources;
+      sources = sourcesOf(projects);
+      const listed = new Set(projects.map(({ id }) => id));
+      const terrierTold = Option.isNone((yield* terrier.listing).trouble);
+      const gone = (projectId: string) =>
+        !listed.has(projectId) &&
+        (terrierTold || sourceOf.get(projectId) === "registry");
+      yield* runs.stopRuns(
+        new Set(
+          runsBefore
+            .filter(({ projectId }) => gone(projectId))
+            .map(({ runId }) => runId),
+        ),
       );
-      const listed = yield* refresh.pipe(
-        Effect.map((projects) => new Set(projects.map(({ id }) => id))),
-        Effect.option,
-        Effect.provideService(Registry.Registry, registry),
-      );
-      if (Option.isSome(listed)) {
-        const terrierTold = Option.isNone((yield* terrier.listing).trouble);
-        const gone = (projectId: string) =>
-          !listed.value.has(projectId) &&
-          (terrierTold || sourceOf.get(projectId) === "registry");
-        yield* runs.stopRuns(
-          new Set(
-            runsBefore
-              .filter(({ projectId }) => gone(projectId))
-              .map(({ runId }) => runId),
-          ),
-        );
-      }
       yield* terminals.closeMissing;
     }).pipe(Effect.withSpan("Scripts.reapRemovedProjects"));
 
@@ -212,3 +202,6 @@ export const makeRemoving = ({
       reapRemoved,
     };
   });
+
+const sourcesOf = (projects: ReadonlyArray<Registry.ListedProject>) =>
+  new Map(projects.map(({ id, source }) => [id, source ?? "registry"]));

@@ -45,7 +45,7 @@ const DoctorFindingSchema = Schema.Struct({
 });
 export type DoctorFinding = typeof DoctorFindingSchema.Type;
 
-export const DoctorReportSchema = Schema.Struct({
+const DoctorReportSchema = Schema.Struct({
   summary: Schema.Struct({
     ok: Schema.Finite,
     warn: Schema.Finite,

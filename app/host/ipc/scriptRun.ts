@@ -18,11 +18,14 @@ import type {
   ShigomoriConfig,
   WorktreeIdentity,
 } from "@shigomori/contracts/schemas";
-import * as Ops from "@host/lib/engineOps";
+import * as EngineConfig from "@shigomori/engine/Config";
+import type * as Registry from "@shigomori/engine/Registry";
+import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import { findProject } from "@host/lib/projects";
 import type { NotifyScriptEvent, ScriptEnvValues } from "@host/lib/Scripts";
 import { scriptEnvOf } from "@shigomori/contracts/scriptEnv";
 import type { Start } from "@host/lib/terminals/Terminals";
+import * as WorktreeData from "@shigomori/engine/WorktreeData";
 
 interface ScriptRunContext {
   config: ShigomoriConfig | null;
@@ -39,16 +42,16 @@ export const prepareScriptRun = Effect.fnUntraced(function* (
   // dropped below for an external worktree, which keeps none (the
   // engine's describedOf). A broken one costs the run its title, not
   // the run.
+  const registered = yield* findProject(project.id);
   const [config, identities, data] = yield* Effect.all(
     [
-      Ops.readProjectConfig(project.id),
-      Ops.listWorktreeIdentities(
-        { projectId: project.id },
-        { primaryRef: true },
+      Effect.flatMap(EngineConfig.Config, (engineConfig) =>
+        engineConfig.readProject(EngineConfig.projectScope(registered)),
       ),
-      Ops.readWorktreeData(project.id, worktreeId).pipe(
-        Effect.orElseSucceed(() => null),
-      ),
+      identitiesOf(registered, true),
+      Effect.flatMap(WorktreeData.WorktreeData, (worktreeData) =>
+        worktreeData.document(project.id, worktreeId),
+      ).pipe(Effect.orElseSucceed(() => null)),
     ],
     { concurrency: 3 },
   );
@@ -112,6 +115,20 @@ export const terminalStart = (owner: {
     ),
   );
 
+// A project's identities, primary first.
+const identitiesOf = (
+  project: Registry.RegisteredProject,
+  primaryRef: boolean,
+) =>
+  Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
+    Effect.map(
+      worktrees.identityList([project], { primaryRef }),
+      ({ rows }) => rows,
+    ),
+  );
+
 // The worktrees a project's terminals may stay in.
 export const terminalWorktrees = (projectId: string) =>
-  Ops.listWorktreeIdentities({ projectId });
+  Effect.flatMap(findProject(projectId), (project) =>
+    identitiesOf(project, false),
+  );

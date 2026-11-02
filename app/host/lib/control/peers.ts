@@ -39,7 +39,7 @@ import {
 import * as DeviceId from "@host/lib/config/DeviceId";
 import * as AccountPeers from "./AccountPeers";
 import type { DirectPeer } from "./AccountPeers";
-import * as Ops from "@host/lib/engineOps";
+import * as Identity from "@shigomori/engine/Identity";
 import { MirrorLedger } from "@host/mirror/MirrorLedger";
 import {
   listed,
@@ -214,7 +214,9 @@ export const projectsOnPeers = (
 // A checkout git can't read (its folder moved away) has no identity
 // to match on, the same as one with no shared identity.
 export const repoIdentityOf = (project: Project) =>
-  Ops.repoIdentity(project.path).pipe(Effect.orElseSucceed(() => null));
+  Effect.flatMap(Identity.Identity, (identity) =>
+    Effect.map(identity.of(project.path), (repo) => repo.identity),
+  );
 
 // The peers a transfer of this repo could run against: the named one,
 // or every one. Each comes back with its standing, blocked or not,

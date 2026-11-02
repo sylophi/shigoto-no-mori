@@ -12,14 +12,17 @@ import type { EffectHandlers, ViewHandlers } from "@shigomori/contracts/types";
 import * as Views from "@host/lib/Views";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
-import type { Project, WorktreeIdentity } from "@shigomori/contracts/schemas";
+import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 import * as Git from "@shigomori/engine/Git";
+import type * as Registry from "@shigomori/engine/Registry";
 import {
   findProject,
   findProjectAndWorktree,
   findWorktreeIdentity,
   findWorktreePath,
+  hostWorktree,
   listWorktrees,
+  worktreeRow,
 } from "@host/lib/projects";
 import type * as Scripts from "@host/lib/Scripts";
 import * as HostWorktrees from "@host/lib/Worktrees";
@@ -29,8 +32,9 @@ import { readGitBlob, readWorktreeFile } from "@host/lib/worktrees/files";
 import { inAppTerminal } from "@host/lib/terminals/inAppTerminal";
 import type { Terminals } from "@host/lib/terminals/Terminals";
 import { scriptEventNotifier, worktreeNotifiers } from "../scriptRun";
-import * as Ops from "@host/lib/engineOps";
-import type * as Engine from "@host/lib/Engine";
+import * as Engine from "@host/lib/Engine";
+import * as Agents from "@shigomori/engine/Agents";
+import * as Landing from "@shigomori/engine/Landing";
 
 // The changes page's views of one worktree share this key prefix, so
 // a refresh reads them all.
@@ -250,8 +254,10 @@ export const worktreesHandlers = {
     ),
 
   setShelved: ({ projectId, worktreeId, shelved }) =>
-    mutateAndDescribe({ projectId, worktreeId }, (target, project) =>
-      Ops.setShelved(project, target.id, shelved),
+    mutateAndDescribe({ projectId, worktreeId }, (target) =>
+      Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
+        worktrees.setShelved(target, shelved),
+      ),
     ),
 
   // A flag flip only, like setShelved, answered with the refreshed row.
@@ -260,44 +266,55 @@ export const worktreesHandlers = {
   // git:refreshProject so the first pull happens right away, through
   // the same path as every later one.
   setAutoPull: ({ projectId, worktreeId, autoPull }) =>
-    Effect.flatMap(findProject(projectId), (project) =>
-      Ops.setAutoPull(project, worktreeId, autoPull),
-    ),
-
-  idleAgents: ({ projectId, worktreeId }) =>
-    Effect.flatMap(findProject(projectId), (project) =>
-      Ops.idleAgents(project, worktreeId),
-    ),
-
-  unbindAgent: ({ projectId, worktreeId, harness, session }) =>
-    Effect.flatMap(findProject(projectId), (project) =>
-      Ops.unbindAgent(project, worktreeId, harness, session),
-    ),
-
-  resumeAgent: ({ projectId, worktreeId, harness, session }) =>
-    inAppTerminal(
-      Effect.flatMap(findProject(projectId), (project) =>
-        Ops.resumeAgent(project, worktreeId, harness, session),
+    rowAfter({ projectId, worktreeId }, (located) =>
+      Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
+        worktrees.setAutoPull(located.worktree, autoPull),
       ),
     ),
 
-  // An edit made to the open PR's title moves the project's PR map.
+  // Every agent session bound to the worktree goes idle.
+  idleAgents: ({ projectId, worktreeId }) =>
+    rowAfter({ projectId, worktreeId }, (located) =>
+      Effect.flatMap(Agents.Agents, (agents) => agents.idle(located.worktree)),
+    ),
+
+  unbindAgent: ({ projectId, worktreeId, harness, session }) =>
+    rowAfter({ projectId, worktreeId }, () =>
+      Effect.flatMap(Agents.Agents, (agents) =>
+        agents.unbind({ harness, session }),
+      ),
+    ),
+
+  // In the user's terminal. It writes no state, so it is no change the
+  // busy prompt counts, while macOS may hold it on an Automation prompt.
+  resumeAgent: ({ projectId, worktreeId, harness, session }) =>
+    inAppTerminal(
+      Effect.gen(function* () {
+        const located = yield* findProjectAndWorktree(projectId, worktreeId);
+        yield* (yield* Agents.Agents).resume(located, { harness, session });
+      }),
+    ),
+
+  // The open pull request's title or description while one holds them,
+  // else the worktree's own (`sm describe`). A gh that fails says so in
+  // the words `sm` prints. An edit made to the open PR's title moves the
+  // project's PR map.
   describe: ({ projectId, worktreeId, title, description }) =>
     Effect.gen(function* () {
-      const project = yield* findProject(projectId);
-      const { worktree, editedPullRequest } = yield* Ops.describe(
-        project,
-        worktreeId,
-        {
+      const located = yield* findProjectAndWorktree(projectId, worktreeId);
+      const worktrees = yield* EngineWorktrees.Worktrees;
+      const { pullRequest } = yield* Engine.asCall(
+        worktrees.describe(located, {
           ...(title === undefined ? {} : { title }),
           ...(description === undefined ? {} : { description }),
-        },
+        }),
       );
-      if (editedPullRequest) {
+      const worktree = hostWorktree(yield* worktrees.row(located));
+      if (pullRequest) {
         yield* (yield* PullRequestMaps.PullRequestMaps).retitled(
-          project,
+          located.project,
           worktree.branch,
-          editedPullRequest.title,
+          pullRequest.title,
         );
       }
       return worktree;
@@ -573,10 +590,25 @@ export const worktreesHandlers = {
     mutateAndDescribe(input, (wt) =>
       withGit((git) => git.abortOperation(wt.path)),
     ),
+  // Not forced: the cleanup box shows for a merged PR, but the branch
+  // can hold commits made since, which only `done`'s own proof refuses
+  // to delete.
   switchToPrimaryAndDeleteBranch: (input) =>
-    Effect.flatMap(findProject(input.projectId), (project) =>
-      Ops.finishWorktree(project, input.worktreeId),
-    ),
+    Engine.asCall(
+      Engine.changing(
+        Effect.gen(function* () {
+          const located = yield* findProjectAndWorktree(
+            input.projectId,
+            input.worktreeId,
+          );
+          return yield* (yield* Landing.Landing).done(located, {
+            force: false,
+          });
+        }),
+        { projectId: input.projectId, worktreeId: input.worktreeId },
+        "finish",
+      ),
+    ).pipe(Effect.map(({ worktree }) => hostWorktree(worktree))),
 } satisfies EffectHandlers<
   typeof worktreesContract,
   HandlerContext,
@@ -608,8 +640,8 @@ function branchBaseOf(identity: WorktreeIdentity): string | undefined {
 // The ref a sync from primary takes in, refusing the worktrees it has
 // no meaning for.
 const primaryRefToSync = Effect.fnUntraced(function* (
-  target: WorktreeIdentity,
-  project: Project,
+  target: EngineWorktrees.WorktreeIdentity,
+  project: Registry.RegisteredProject,
 ) {
   if (target.isPrimary) {
     return yield* new Git.GitRefusedError({
@@ -648,12 +680,14 @@ const atPath = <A, E, R>(
 // replace its cached row in one round trip. The `With` form also hands
 // back what the action produced (a commit hash, a snapshot ref) for the
 // calls that have one. The id resolved names the worktree throughout,
-// so a call by one it had before a move describes it too.
+// so a call by one it had before a move describes it too. The row is
+// read off the worktree resolved again, as the action can have moved
+// its branch.
 const mutateAndDescribeWith = <T, E, R>(
   { projectId, worktreeId }: { projectId: string; worktreeId: string },
   action: (
-    target: WorktreeIdentity,
-    project: Project,
+    target: EngineWorktrees.WorktreeIdentity,
+    project: Registry.RegisteredProject,
   ) => Effect.Effect<T, E, R>,
 ) =>
   Effect.gen(function* () {
@@ -664,14 +698,28 @@ const mutateAndDescribeWith = <T, E, R>(
     const result = yield* action(worktree, project);
     return {
       result,
-      worktree: yield* Ops.describeWorktree(project.id, worktree.id),
+      worktree: yield* worktreeRow(
+        yield* findProjectAndWorktree(project.id, worktree.id),
+      ),
     };
   });
 
 const mutateAndDescribe = <T, E, R>(
   scope: { projectId: string; worktreeId: string },
   action: (
-    target: WorktreeIdentity,
-    project: Project,
+    target: EngineWorktrees.WorktreeIdentity,
+    project: Registry.RegisteredProject,
   ) => Effect.Effect<T, E, R>,
 ) => Effect.map(mutateAndDescribeWith(scope, action), (done) => done.worktree);
+
+// A worktree's row after `edit` changed what is kept for it, its shelf
+// left unsettled.
+const rowAfter = <E, R>(
+  { projectId, worktreeId }: { projectId: string; worktreeId: string },
+  edit: (located: EngineWorktrees.Located) => Effect.Effect<void, E, R>,
+) =>
+  Effect.gen(function* () {
+    const located = yield* findProjectAndWorktree(projectId, worktreeId);
+    yield* edit(located);
+    return hostWorktree(yield* (yield* EngineWorktrees.Worktrees).row(located));
+  });

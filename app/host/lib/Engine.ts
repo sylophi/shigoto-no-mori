@@ -6,16 +6,16 @@ import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import * as DataDirLock from "@shigomori/engine/DataDirLock";
 import type { Flavor } from "@shigomori/engine/flavor";
 import { migratingEngineLayer } from "@shigomori/engine/layer";
-import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import * as Git from "@shigomori/engine/Git";
 import * as Store from "@shigomori/engine/Store";
 import { storeErrorOf } from "@shigomori/engine/storeErrors";
-import * as Worktrees from "@shigomori/engine/Worktrees";
 import {
   callFailureOf,
+  isEntityGoneError,
   RemoteCallError,
-  UnknownProjectError,
-  UnknownWorktreeError,
+  type UnknownProjectError,
+  type UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
 import type { ChangeKind } from "@shigomori/contracts/modules/session";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -141,48 +141,58 @@ export class EngineCallError extends Schema.TaggedError<EngineCallError>()(
 }
 
 // An engine failure the way the host's callers branch on it: a project
-// or worktree that is gone as the contract's error, which the renderer
-// reads by tag, and anything else in the words `sm` prints for it.
-export function engineFailure(
+// or worktree that is gone as the contract's error the engine fails
+// with, which the renderer reads by tag, and anything else in the words
+// `sm` prints for it.
+export const engineFailure = (
   error: unknown,
-  ids: Ids = {},
-): UnknownProjectError | UnknownWorktreeError | EngineCallError {
-  const code = codeOf(error);
-  if (code === "unknown-project" && ids.projectId !== undefined) {
-    return new UnknownProjectError({ projectId: ids.projectId });
-  }
-  if (code === "unknown-worktree" && ids.worktreeId !== undefined) {
-    return new UnknownWorktreeError({ worktreeId: ids.worktreeId });
-  }
-  return new EngineCallError({ reason: messageOf(error), cause: error });
-}
+): UnknownProjectError | UnknownWorktreeError | EngineCallError =>
+  isEntityGoneError(error)
+    ? error
+    : new EngineCallError({ reason: messageOf(error), cause: error });
 
-// An engine effect, its failure translated.
-export const asCall = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-  ids: Ids = {},
-) => effect.pipe(Effect.mapError((error) => engineFailure(error, ids)));
+// An engine effect, its failure translated: for a host service whose
+// failure can leave by some other way than a call's transport (a log, a
+// peer's link, a control op), which says the rest in its own words
+// (hostCallFailure).
+export const asCall = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(Effect.mapError(engineFailure));
 
 // What a host call's failure crosses a wire as: a git the engine ran
-// in the words errorWordsOf gives it, and anything else as
-// callFailureOf makes it.
+// in the words errorWordsOf gives it, a store's refusal in the store's
+// words, and anything else as callFailureOf makes it. The host's store
+// refuses as moved only while the host's own move runs or is still
+// unsettled, which is what the move's lock refuses a change with.
 export const hostCallFailure = (error: unknown) => {
   const store = storeErrorOf(error);
   return callFailureOf(
     error instanceof Git.GitCommandError
       ? new RemoteCallError({ text: errorWordsOf(error) })
       : store !== undefined
-        ? new RemoteCallError({ text: store.message })
+        ? new RemoteCallError({
+            text:
+              store.category === "moved"
+                ? new DataDirLock.DataDirMoving().message
+                : store.message,
+          })
         : error,
   );
 };
 
-// An operation that changes something, run only while no data-folder
-// move can start (`DataDirLock`): every hold of the lock the host takes
-// passes here. Counted while it runs (Scripts.busy) when it is work a
-// quit should wait on, which `kind` names: something a person started,
-// or an auto-pull's fast-forward. A write that ends in moments (a
-// setting, a mark, the order) and the background's work name none.
+// An operation that changes a worktree on disk, run only while no
+// data-folder move can start (`DataDirLock`): every hold of the lock the
+// host takes passes here. A call that changes code is held by the link
+// that serves it (socket/DeviceLink.ts), and what the host runs past
+// such a call or apart from one (a create's whole run, a removal, a
+// move, a landing, a capture, an auto-pull, a project added or removed)
+// is held by the service that runs it. A create, removal or move asked
+// over such a call is held by both, the second joining the first's
+// hold. A write that only touches the store holds nothing: a move's
+// store refuses it (DataDirLock.ts, hostCallFailure). Counted
+// while it runs (Scripts.busy) when it is work a quit should wait on,
+// which `kind` names: something a person started, or an auto-pull's
+// fast-forward. `ids` name the worktree or project it changes, so a
+// change of one being removed or moved counts as that removal or move.
 export const changing = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
   ids: Ids,
@@ -195,31 +205,3 @@ export const changing = <A, E, R>(
       kind,
     ),
   );
-
-// `changing`, its failure translated: every change the host makes
-// through the engine.
-export const asChange = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-  ids: Ids = {},
-  kind?: ChangeKind,
-) => asCall(changing(effect, ids, kind), ids);
-
-// A registered project by id.
-export const projectById = (projectId: string) =>
-  Effect.gen(function* () {
-    const worktrees = yield* Worktrees.Worktrees;
-    return yield* worktrees.resolveProjectById(
-      yield* worktrees.nowhere,
-      projectId,
-    );
-  });
-
-// A worktree by its project's id and its own.
-export const locate = (projectId: string, worktreeId: string) =>
-  Effect.gen(function* () {
-    const worktrees = yield* Worktrees.Worktrees;
-    return yield* worktrees.resolve(yield* worktrees.nowhere, {
-      projectId,
-      worktreeId,
-    });
-  });

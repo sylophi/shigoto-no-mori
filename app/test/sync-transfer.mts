@@ -49,7 +49,7 @@ import { runHost } from "./lib/hostRuntime.mts";
 import * as Effect from "effect/Effect";
 import { callFailureOf, RemoteCallError } from "@shigomori/contracts/errors";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
-import * as Ops from "@host/lib/engineOps";
+import * as Fixtures from "./lib/engineFixtures.mts";
 import * as Scripts from "@host/lib/Scripts";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import {
@@ -67,20 +67,21 @@ import { pidIn } from "../../test/testProcesses.mts";
 // The host's engine reads and moves as Promises, on the sandbox's
 // engine (runHost).
 const readShigomoriConfig = (projectId: string) =>
-  runHost(Ops.readProjectConfig(projectId));
+  runHost(Fixtures.readProjectConfig(projectId));
 const readWorktreeData = (projectId: string, worktreeId: string) =>
-  runHost(Ops.readWorktreeData(projectId, worktreeId));
-const writeWorktreeData = (...args: Parameters<typeof Ops.writeWorktreeData>) =>
-  runHost(Ops.writeWorktreeData(...args));
+  runHost(Fixtures.readWorktreeData(projectId, worktreeId));
+const writeWorktreeData = (
+  ...args: Parameters<typeof Fixtures.writeWorktreeData>
+) => runHost(Fixtures.writeWorktreeData(...args));
 const writeProjectConfig = (
-  ...args: Parameters<typeof Ops.writeProjectConfig>
-) => runHost(Ops.writeProjectConfig(...args));
+  ...args: Parameters<typeof Fixtures.writeProjectConfig>
+) => runHost(Fixtures.writeProjectConfig(...args));
 const pullWorktree = (...args: Parameters<typeof syncHandlers.pullWorktree>) =>
   runHost(syncHandlers.pullWorktree(...args));
 const sendWorktreeHere = (
   ...args: Parameters<typeof syncHandlers.sendWorktree>
 ) => runHost(syncHandlers.sendWorktree(...args));
-const repoIdentityOf = (path: string) => runHost(Ops.repoIdentity(path));
+const repoIdentityOf = (path: string) => runHost(Fixtures.repoIdentity(path));
 
 // The sandbox, the scrubbed process.env with pinned idents, the git
 // wrappers, and the engine on the sandbox's data dir

@@ -1,6 +1,6 @@
 import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
 import type { EffectHandlers } from "@shigomori/contracts/types";
-import { findProject, findWorktreeIdentity } from "@host/lib/projects";
+import { findProject, findProjectAndWorktree } from "@host/lib/projects";
 import * as Scripts from "@host/lib/Scripts";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type {
@@ -8,20 +8,16 @@ import type {
   PackageScriptsDoc,
   ScriptGroup,
 } from "@shigomori/contracts/schemas";
-import * as Ops from "@host/lib/engineOps";
+import * as EngineScripts from "@shigomori/engine/Scripts";
 import { scriptEventNotifier } from "../scriptRun";
 import type { HostServices } from "@host/process/services";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 
-class UndefinedScriptError extends Schema.TaggedError<UndefinedScriptError>()(
-  "UndefinedScriptError",
-  { scriptName: Schema.String },
-) {
-  override get message(): string {
-    return `No script named "${this.scriptName}" in this worktree`;
-  }
-}
+// A call on the engine's Scripts, which keeps each project's
+// arrangement of them.
+const withScripts = <A, E, R>(
+  call: (scripts: EngineScripts.Scripts["Service"]) => Effect.Effect<A, E, R>,
+) => Effect.flatMap(EngineScripts.Scripts, call);
 
 export const packageScriptsHandlers = {
   // The worktree's scripts in file order (an object keeps that order),
@@ -30,7 +26,18 @@ export const packageScriptsHandlers = {
   // package.json, justfile or Makefile, or none of them reads.
   list: ({ projectId, worktreeId }) =>
     Effect.gen(function* () {
-      const doc = yield* Ops.packageScripts(projectId, worktreeId);
+      const located = yield* findProjectAndWorktree(projectId, worktreeId);
+      // Missing and unparseable read the same: no scripts to offer.
+      const doc = yield* withScripts((scripts) =>
+        scripts.list({
+          projectId: located.project.id,
+          worktreePath: located.worktree.path,
+        }),
+      ).pipe(
+        Effect.catchTag(["NoScripts", "UnreadableScripts"], () =>
+          Effect.succeed(null),
+        ),
+      );
       if (doc === null) return null;
       return {
         scripts: Object.fromEntries(
@@ -42,8 +49,8 @@ export const packageScriptsHandlers = {
         // The scripts put on the launch row by hand, which the row limits
         // itself to under the "manual" sort. Project-wide like the order,
         // so it can name scripts a given worktree lacks.
-        launchRow: yield* Ops.onScripts((scripts) =>
-          scripts.launchRow(projectId),
+        launchRow: yield* withScripts((scripts) =>
+          scripts.launchRow(located.project.id),
         ),
       };
     }),
@@ -51,7 +58,7 @@ export const packageScriptsHandlers = {
   getSort: ({ projectId, knowsManual }) =>
     Effect.gen(function* () {
       const project = yield* findProject(projectId);
-      const { sort } = yield* Ops.onScripts((scripts) =>
+      const { sort } = yield* withScripts((scripts) =>
         scripts.arrangement(project.id),
       );
       const mode = sort as PackageScriptSortMode;
@@ -62,12 +69,12 @@ export const packageScriptsHandlers = {
   // the stored entry instead of writing it.
   setSort: ({ projectId, mode }) =>
     Effect.flatMap(findProject(projectId), (project) =>
-      Ops.onScripts((scripts) => scripts.setSort(project.id, mode), true),
+      withScripts((scripts) => scripts.setSort(project.id, mode)),
     ).pipe(Effect.asVoid),
 
   getOrder: ({ projectId }) =>
     Effect.flatMap(findProject(projectId), (project) =>
-      Ops.onScripts((scripts) =>
+      withScripts((scripts) =>
         Effect.map(scripts.arrangement(project.id), ({ order }) => [...order]),
       ),
     ),
@@ -77,7 +84,7 @@ export const packageScriptsHandlers = {
   // cached copy, which another window may have written past.
   setOrder: ({ projectId, arranged }) =>
     Effect.flatMap(findProject(projectId), (project) =>
-      Ops.onScripts((scripts) => scripts.arrange(project.id, arranged), true),
+      withScripts((scripts) => scripts.arrange(project.id, arranged)),
     ).pipe(Effect.asVoid),
 
   // One script on or off the row, applied against the stored row rather
@@ -85,45 +92,19 @@ export const packageScriptsHandlers = {
   // different scripts both land.
   setLaunchRow: ({ projectId, scriptName, onRow }) =>
     Effect.flatMap(findProject(projectId), (project) =>
-      Ops.onScripts(
-        (scripts) => scripts.setOnLaunchRow(project.id, scriptName, onRow),
-        true,
+      withScripts((scripts) =>
+        scripts.setOnLaunchRow(project.id, scriptName, onRow),
       ),
     ).pipe(Effect.asVoid),
 
   run: ({ projectId, worktreeId, scriptName }, handlerCtx) =>
     Effect.gen(function* () {
-      const project = yield* findProject(projectId);
-      const [worktree, doc] = yield* Effect.all(
-        [
-          findWorktreeIdentity(project.id, worktreeId),
-          Ops.packageScripts(project.id, worktreeId),
-        ],
-        { concurrency: 2 },
-      );
-
-      // Validated here even though the engine validates again: a missing
-      // script should fail this IPC call, not surface as error output in
-      // an already-opened console run.
-      if (!doc?.scripts.some((script) => script.name === scriptName)) {
-        return yield* new UndefinedScriptError({ scriptName });
-      }
-
-      // The engine picks the manager and counts the run in the use log;
-      // the app's registry spawns the command with the SHIGOMORI_* env.
-      const { command, scriptEnv } = yield* Ops.packageScriptLaunch({
-        projectId,
-        worktreeId,
+      const located = yield* findProjectAndWorktree(projectId, worktreeId);
+      const runId = yield* (yield* Scripts.Scripts).startPackage(
+        located,
         scriptName,
-      });
-      const runId = yield* (yield* Scripts.Scripts).start({
-        command,
-        slot: { kind: "package", name: scriptName },
-        worktree,
-        project,
-        scriptEnv,
-        notify: scriptEventNotifier(handlerCtx),
-      });
+        scriptEventNotifier(handlerCtx),
+      );
       return { runId };
     }),
 } satisfies EffectHandlers<

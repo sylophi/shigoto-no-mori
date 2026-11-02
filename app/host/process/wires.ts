@@ -51,7 +51,6 @@ import * as HubConnectionNode from "@host/hub/connection";
 import { LayerDownError, layerLatch } from "@shared/layerLatch";
 import * as DeviceId from "@host/lib/config/DeviceId";
 import * as Engine from "@host/lib/Engine";
-import * as Ops from "@host/lib/engineOps";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import { dataDir } from "@shared/paths";
 import * as Sharing from "@host/lib/Sharing";
@@ -60,6 +59,7 @@ import * as Loopback from "@host/socket/Loopback";
 import * as DeviceLink from "@host/socket/DeviceLink";
 import { acceptsPeerCommands, allowedWebOrigin, hubAccount } from "./account";
 import { hostFacts } from "./facts";
+import * as EngineConfig from "@shigomori/engine/Config";
 
 // The device link's listener. A peer's socket opens with one of the
 // single-use connect tickets connectInfo mints over the device hub and
@@ -437,7 +437,9 @@ export async function refreshDirectHost(): Promise<void> {
           if (inputs === null) return null;
           // The device-scoped opt-out: absent means enrolled, explicit
           // false stops the listener.
-          const config = await Graph.run(Ops.readGlobalConfig());
+          const config = await Graph.run(
+            Effect.flatMap(EngineConfig.Config, (engine) => engine.readDevice),
+          );
           if (config.directConnections === false) return null;
           return {
             bindAddress: "::",

@@ -8,6 +8,7 @@ import type {
   WorktreeDiskUsage,
   WorktreeHygiene,
 } from "@shigomori/contracts/schemas/hygiene";
+import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -45,10 +46,7 @@ export class Hygiene extends Context.Service<
     readonly diskUsage: (
       project: RegisteredProject,
       worktreeId: string,
-    ) => Effect.Effect<
-      WorktreeDiskUsage,
-      Worktrees.UnknownWorktree | Git.GitError
-    >;
+    ) => Effect.Effect<WorktreeDiskUsage, UnknownWorktreeError | Git.GitError>;
   }
 >()("sm/engine/Hygiene") {}
 
@@ -402,7 +400,7 @@ const make = Effect.gen(function* () {
     const listed = yield* identitiesOf(project);
     const worktree = listed.find((identity) => identity.id === worktreeId);
     if (worktree === undefined) {
-      return yield* new Worktrees.UnknownWorktree({ worktreeId });
+      return yield* new UnknownWorktreeError({ worktreeId });
     }
     // Under the in-project layout a project's worktrees live inside its
     // primary. Each is measured as its own row, so the enclosing walk

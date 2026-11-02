@@ -1,5 +1,9 @@
 // Worktrees' resolving: the worktree or project a command means, from
 // where it runs, a name, a path or an id.
+import {
+  UnknownProjectError,
+  UnknownWorktreeError,
+} from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -13,7 +17,6 @@ import {
   type Located,
   type Target,
   TargetError,
-  UnknownWorktree,
   isPrimaryKeyword,
   looksLikePath,
 } from "./documents.ts";
@@ -172,7 +175,7 @@ export const makeResolving = ({
     const resolveProjectById = Effect.fn("Worktrees.resolveProjectById")(
       function* (here: Here, projectId: string) {
         const found = here.projects.find((project) => project.id === projectId);
-        if (!found) return yield* new Registry.UnknownProject({ projectId });
+        if (!found) return yield* new UnknownProjectError({ projectId });
         return found;
       },
     );
@@ -195,21 +198,31 @@ export const makeResolving = ({
       return { project, worktree };
     });
 
+    const resolveById = Effect.fn("Worktrees.resolveById")(function* (
+      here: Here,
+      ids: { readonly projectId?: string; readonly worktreeId: string },
+    ) {
+      const scope = ids.projectId
+        ? [yield* resolveProjectById(here, ids.projectId)]
+        : here.projects;
+      const located = yield* worktreeWithId(scope, ids.worktreeId);
+      if (located) return located;
+      const now = (yield* kept.movedIds).get(ids.worktreeId);
+      const moved =
+        now === undefined ? undefined : yield* worktreeWithId(scope, now);
+      if (moved) return moved;
+      return yield* new UnknownWorktreeError({ worktreeId: ids.worktreeId });
+    });
+
     const resolve = Effect.fn("Worktrees.resolve")(function* (
       here: Here,
       target: Target,
     ) {
       if (target.worktreeId) {
-        const scope = target.projectId
-          ? [yield* resolveProjectById(here, target.projectId)]
-          : here.projects;
-        const located = yield* worktreeWithId(scope, target.worktreeId);
-        if (located) return located;
-        const now = (yield* kept.movedIds).get(target.worktreeId);
-        const moved =
-          now === undefined ? undefined : yield* worktreeWithId(scope, now);
-        if (moved) return moved;
-        return yield* new UnknownWorktree({ worktreeId: target.worktreeId });
+        return yield* resolveById(here, {
+          projectId: target.projectId,
+          worktreeId: target.worktreeId,
+        });
       }
 
       const ref = target.ref ?? "";
@@ -306,6 +319,7 @@ export const makeResolving = ({
       resolveProject,
       resolveProjectById,
       resolveProjectRef,
+      resolveById,
       resolve,
     };
   });

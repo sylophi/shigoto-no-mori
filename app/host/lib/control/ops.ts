@@ -57,7 +57,11 @@ import {
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as DeviceId from "@host/lib/config/DeviceId";
 import type { DirectPeer } from "./AccountPeers";
-import { findProject, findProjectAndWorktree } from "@host/lib/projects";
+import {
+  findProject,
+  findProjectAndWorktree,
+  listWorktrees,
+} from "@host/lib/projects";
 import { clonePeerProject } from "@host/lib/sync/cloneFromPeer";
 import { progressTo } from "@host/lib/sync/move";
 import * as SharedSettingsStore from "@host/lib/sharedSettings/store";
@@ -70,7 +74,7 @@ import {
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { scriptEventNotifier } from "@host/ipc/scriptRun";
 import * as Worktrees from "@host/lib/Worktrees";
-import * as Ops from "@host/lib/engineOps";
+import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import {
   BLOCK_REASON,
   blockWords,
@@ -307,7 +311,7 @@ const alreadyMirrored = Effect.fnUntraced(function* (
         session.projectId,
         session.worktreeId,
       )
-    : (yield* Ops.listWorktrees(session.projectId)).find(
+    : (yield* listWorktrees(session.projectId)).find(
         (worktree) => worktree.id === session.worktreeId,
       );
   if (copy === undefined) {
@@ -448,7 +452,9 @@ export const send = settled<"send">((input, ctx) =>
     return {
       moved: { ...sent, device, copySide: "remote" as const },
       settle: {
-        shelve: Ops.setShelved(project, worktree.id, true),
+        shelve: Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
+          worktrees.setShelved(worktree, true),
+        ),
         teardown: syncHandlers.teardownSource(
           {
             direction: "send",

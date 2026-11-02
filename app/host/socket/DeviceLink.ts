@@ -109,7 +109,8 @@ import {
   HELLO_TIMEOUT_MS,
   HOST_LIVENESS_TIMEOUT_MS,
 } from "@shared/remote/link";
-import { changing } from "@host/lib/Engine";
+import { changing, hostCallFailure } from "@host/lib/Engine";
+import { storeErrorOf } from "@shigomori/engine/storeErrors";
 import * as HostPushes from "@host/lib/HostPushes";
 import { secretsMatch } from "@host/lib/util/secretCompare";
 import * as Sharing from "@host/lib/Sharing";
@@ -368,7 +369,17 @@ const serve =
               ),
             )
           : call
-      ).pipe(Effect.provideContext(context));
+      ).pipe(
+        // The engine reads the store as a given, so a write the store
+        // refuses (a data-folder move holding it still, a full disk)
+        // ends the call as a defect, which crosses in the store's words.
+        Effect.catchDefect((defect) =>
+          storeErrorOf(defect) === undefined
+            ? Effect.die(defect)
+            : Effect.fail(hostCallFailure(defect)),
+        ),
+        Effect.provideContext(context),
+      );
     }).pipe(Effect.annotateSpans({ channel }));
 
 // The answer for a call the link carries and nothing here serves.

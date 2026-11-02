@@ -16,7 +16,6 @@ import * as DeviceId from "@host/lib/config/DeviceId";
 import * as HostAccount from "@host/lib/HostAccount";
 import { DataDirHolders } from "@host/lib/DataDirHolders";
 import * as Loopback from "@host/socket/Loopback";
-import { firstList } from "@host/lib/projects";
 import * as ProjectSettingsSync from "@host/lib/sharedSettings/projectSettings";
 import * as SharedSettingsStore from "@host/lib/sharedSettings/store";
 import * as Scripts from "@host/lib/Scripts";
@@ -75,10 +74,6 @@ import * as Migration from "@shigomori/engine/Migration";
 import { hostFacts } from "./facts";
 import * as Graph from "./graph";
 import * as MigrationShell from "./migration";
-
-// The sweeps and watchers read the project list synchronously, from the
-// snapshot host/lib/projects keeps of the engine's list.
-const firstProjectList = Layer.effectDiscard(firstList);
 
 // A store write, the terminal's or the app's own, reaches every window
 // and every viewing device as an explicit invalidation broadcast.
@@ -344,7 +339,6 @@ export const layer = (options: {
     Layer.provideMerge(
       starts("the CLI link repair", () => void repairCliLinks(hostFacts())),
     ),
-    Layer.provideMerge(firstProjectList),
     Layer.provideMerge(
       logged("the synced project settings", ProjectSettingsSync.layer),
     ),

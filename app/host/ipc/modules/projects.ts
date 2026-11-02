@@ -28,7 +28,9 @@ import * as CarryOver from "@shigomori/engine/CarryOver";
 import type { HostServices } from "@host/process/services";
 import * as Worktrees from "@host/lib/Worktrees";
 import type * as Engine from "@host/lib/Engine";
-import * as Ops from "@host/lib/engineOps";
+import * as EngineWorktrees from "@shigomori/engine/Worktrees";
+import * as Icons from "@shigomori/engine/Icons";
+import * as Option from "effect/Option";
 
 // Every checkout of the project, the primary first, for what is carried
 // over into a new worktree.
@@ -107,7 +109,14 @@ export const projectsHandlers = {
 
   // The name the engine would pick for a new worktree right now.
   pickWorktreeName: ({ projectId }) =>
-    Effect.map(Ops.worktreeDestination(projectId), ({ name }) => name),
+    Effect.gen(function* () {
+      const project = yield* findProject(projectId);
+      const { name } = yield* (yield* EngineWorktrees.Worktrees).destination(
+        project,
+        "",
+      );
+      return name;
+    }),
 
   worktreeIncludeStatus: ({ projectId }) =>
     Effect.flatMap(
@@ -129,8 +138,18 @@ export const projectsHandlers = {
       ([checkouts, worktrees]) => worktrees.carryOverStats(checkouts, paths),
     ),
 
-  // The engine resolves icons through its shared cache (Icons.ts).
-  icon: ({ projectId }) => Ops.projectIcon(projectId),
+  // The icon's bytes, or null, through the engine's shared cache
+  // (Icons.ts). A remembered miss is scanned again: the renderer asks
+  // once per project per session, and an icon added since the miss was
+  // cached must show.
+  icon: ({ projectId }) =>
+    Effect.gen(function* () {
+      const project = yield* findProject(projectId);
+      const icon = yield* (yield* Icons.Icons).bytes(project.path, {
+        rescanMisses: true,
+      });
+      return Option.getOrNull(icon);
+    }),
 
   remoteImage: ({ projectId, url }) =>
     Effect.gen(function* () {

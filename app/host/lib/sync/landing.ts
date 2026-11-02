@@ -24,13 +24,14 @@ import {
   pullFolderCollision,
 } from "@shared/pullCollision";
 import { type Project } from "@shigomori/contracts/schemas";
-import { changing } from "@host/lib/Engine";
-import * as Ops from "@host/lib/engineOps";
+import { asCall, changing } from "@host/lib/Engine";
 import * as Worktrees from "@host/lib/Worktrees";
 import { incomingRef as incomingRefFor } from "@shigomori/engine/Bundle";
-import { dirtyRef } from "@shigomori/engine/Dirty";
+import * as Dirty from "@shigomori/engine/Dirty";
+import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import * as Git from "@shigomori/engine/Git";
 import {
+  findProject,
   findProjectByIdentity,
   findProjectByIdentityOrFail,
 } from "@host/lib/projects";
@@ -75,7 +76,14 @@ const refuseLandingCollision = Effect.fnUntraced(function* (
   const [{ local }, existing] = yield* Effect.all(
     [
       Effect.flatMap(Git.Git, (git) => git.listBranches(project.path)),
-      Ops.listWorktreeIdentities({ projectId: project.id }),
+      Effect.flatMap(findProject(project.id), (registered) =>
+        Effect.map(
+          Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
+            worktrees.identityList([registered], { primaryRef: false }),
+          ),
+          ({ rows }) => rows,
+        ),
+      ),
     ],
     { concurrency: 2 },
   );
@@ -100,9 +108,11 @@ const refuseLandingCollision = Effect.fnUntraced(function* (
   // the create, after the bundle crossed. The engine's destination read
   // makes the same two checks here, before a byte moves.
   if (worktreeName !== undefined) {
-    const { path, taken } = yield* Ops.worktreeDestination(
-      project.id,
-      worktreeName,
+    const registered = yield* findProject(project.id);
+    const { path, taken } = yield* asCall(
+      Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
+        worktrees.destination(registered, worktreeName),
+      ),
     );
     if (taken) {
       return yield* new LandingCollisionError({
@@ -235,7 +245,7 @@ export const landWorktree = (
     const tipIsLocal = yield* git.hasCommit(project.path, branchTip);
     const wantRefs = [
       ...(tipIsLocal ? [] : [`refs/heads/${branch}`]),
-      ...(captured ? [dirtyRef(sourceWorktreeId)] : []),
+      ...(captured ? [Dirty.dirtyRef(sourceWorktreeId)] : []),
     ];
     const incomingRef = incomingRefFor(branch);
     return yield* Effect.gen(function* () {
@@ -474,8 +484,8 @@ const landWhole = (
     let dirtyApplied = false;
     const { capture } = input;
     if (capture !== undefined) {
-      const sourceDirtyRef = dirtyRef(capture.sourceWorktreeId);
-      const localDirtyRef = dirtyRef(worktree.id);
+      const sourceDirtyRef = Dirty.dirtyRef(capture.sourceWorktreeId);
+      const localDirtyRef = Dirty.dirtyRef(worktree.id);
       const git = yield* Git.Git;
       yield* git.updateRef({
         repo: project.path,
@@ -485,7 +495,16 @@ const landWhole = (
       if (localDirtyRef !== sourceDirtyRef) {
         yield* git.deleteRef(project.path, sourceDirtyRef);
       }
-      dirtyApplied = yield* Ops.dirtyApply(project, worktree.id).pipe(
+      dirtyApplied = yield* Effect.flatMap(Dirty.Dirty, (dirty) =>
+        dirty.apply(
+          {
+            projectPath: project.path,
+            worktreePath: worktree.path,
+            worktreeId: worktree.id,
+          },
+          { force: false },
+        ),
+      ).pipe(
         Effect.withSpan("Landing.apply"),
         Effect.as(true),
         Effect.catch((error) =>

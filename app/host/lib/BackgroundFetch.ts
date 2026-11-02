@@ -22,9 +22,9 @@ import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as Engine from "@host/lib/Engine";
-import * as Ops from "@host/lib/engineOps";
 import * as PullRequestMaps from "@host/lib/githubCli/PullRequestMaps";
-import { loadProjects } from "@host/lib/projects";
+import { findProject, listedProjects } from "@host/lib/projects";
+import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Scripts from "@host/lib/Scripts";
 import { sweepAutoPull } from "@host/lib/worktrees/autoPullSweep";
 import type { broadcastAll } from "@host/process/wires";
@@ -130,9 +130,13 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
     // read as a failed fetch.
     const autoPullProject = (projectId: string, projectPath: string) =>
       Effect.gen(function* () {
-        const identities = yield* Ops.listWorktreeIdentities({ projectId });
+        const project = yield* findProject(projectId);
+        const identities = yield* (yield* Worktrees.Worktrees).identityList(
+          [project],
+          { primaryRef: false },
+        );
         const { pulled, failed } = yield* sweepAutoPull(
-          identities,
+          identities.rows,
           new Set(scripts.worktrees().map(({ worktreeId }) => worktreeId)),
         );
         for (const { worktree, commits } of pulled) {
@@ -255,24 +259,24 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
     // One pass over every project. The timer and the window-focus handler
     // take the fetch freshness default. A peer's request passes the sweep
     // interval: what it wants is the timer's guarantee, not a fresh fetch.
-    // The last-read project list (host/lib/projects): every list the UI
-    // reads refreshes it.
     const sweepProjects = (refsMaxAgeMs = FRESHNESS_MS) =>
-      Effect.forEach(
-        loadProjects(),
-        (project) =>
-          Effect.all(
-            [
-              FiberSet.run(
-                runs,
-                maybeFetchProject(project.id, project.path, refsMaxAgeMs),
-              ),
-              FiberSet.run(runs, sweepProjectPullRequests(project)),
-            ],
-            { discard: true },
-          ),
-        { discard: true },
-      );
+      Effect.flatMap(listedProjects, (projects) =>
+        Effect.forEach(
+          projects,
+          (project) =>
+            Effect.all(
+              [
+                FiberSet.run(
+                  runs,
+                  maybeFetchProject(project.id, project.path, refsMaxAgeMs),
+                ),
+                FiberSet.run(runs, sweepProjectPullRequests(project)),
+              ],
+              { discard: true },
+            ),
+          { discard: true },
+        ),
+      ).pipe(Effect.provide(context));
 
     yield* Effect.forkScoped(
       Effect.forever(
@@ -298,21 +302,16 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
 
     // Every project's rows read again, for an edit the working trees'
     // watch missed (GitWatcher.ts), as a window here gains focus, or a
-    // peer's window asks a sweep that is no renewal. An unreadable
-    // registry has nothing to read again.
-    const rereadRows = () => {
-      let projects: ReturnType<typeof loadProjects> = [];
-      try {
-        projects = loadProjects();
-      } catch {
-        return;
-      }
-      for (const project of projects) {
-        broadcastAll(worktreesContract, "filesChanged", {
-          projectId: project.id,
-        });
-      }
-    };
+    // peer's window asks a sweep that is no renewal.
+    const rereadRows = Effect.flatMap(listedProjects, (projects) =>
+      Effect.sync(() => {
+        for (const project of projects) {
+          broadcastAll(worktreesContract, "filesChanged", {
+            projectId: project.id,
+          });
+        }
+      }),
+    ).pipe(Effect.provide(context));
 
     return BackgroundFetch.of({
       refreshProject: Effect.fn("BackgroundFetch.refreshProject")(function* (
@@ -325,7 +324,7 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
       sweepForPeer: Effect.fn("BackgroundFetch.sweepForPeer")(function* (
         renewal: boolean,
       ) {
-        if (!renewal) rereadRows();
+        if (!renewal) yield* rereadRows;
         attendedUntil = now() + ATTENTION_LEASE_MS;
         yield* sweepProjects(SWEEP_INTERVAL_MS);
         return { leaseMs: ATTENTION_LEASE_MS };
@@ -334,7 +333,7 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
         const wasFocused = windowFocused;
         windowFocused = focused;
         if (!focused) return;
-        rereadRows();
+        Queue.offerUnsafe(inbox, rereadRows);
         // A pass only as the app comes back, not as focus moves between
         // its windows.
         if (!wasFocused) Queue.offerUnsafe(inbox, sweepProjects());

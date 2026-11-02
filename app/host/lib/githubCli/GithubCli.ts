@@ -13,7 +13,6 @@ import type {
   RepoMergeConfig,
 } from "@shigomori/contracts/schemas";
 import { GhUnavailableError } from "@shigomori/contracts/errors";
-import { DEVICE_SETTINGS_DEFAULTS } from "@shigomori/contracts/schemas";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -24,7 +23,6 @@ import * as EngineConfig from "@shigomori/engine/Config";
 import * as Git from "@shigomori/engine/Git";
 import * as GitHub from "@shigomori/engine/GitHub";
 import { isCommandError } from "@shigomori/engine/processes";
-import * as Ops from "../engineOps";
 import { keptAnswer, keptAnswers } from "@shigomori/engine/keptAnswers";
 import { type GithubRepoInfo, parseRemoteUrl } from "./remote";
 
@@ -289,11 +287,7 @@ const make = Effect.gen(function* () {
   );
 
   const unavailableReason = Effect.gen(function* () {
-    const config = yield* Ops.readGlobalConfig().pipe(
-      Effect.provideService(EngineConfig.Config, engineConfig),
-      Effect.orDie,
-    );
-    if (!(config.githubCli ?? DEVICE_SETTINGS_DEFAULTS.githubCli)) {
+    if (!(yield* engineConfig.device("githubCli"))) {
       return "integration-off" as const;
     }
     const { installed, authed } = yield* probe;

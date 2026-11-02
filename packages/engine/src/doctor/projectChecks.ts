@@ -91,11 +91,11 @@ export const makeProjectChecks = ({
                 destructive: true,
                 writesStore: true,
                 // The app may have dropped it already.
-                apply: registry
-                  .unregister(project)
-                  .pipe(
-                    Effect.catchTags({ UnknownProject: () => Effect.void }),
-                  ),
+                apply: registry.unregister(project).pipe(
+                  Effect.catchTags({
+                    UnknownProjectError: () => Effect.void,
+                  }),
+                ),
               },
             ),
           );

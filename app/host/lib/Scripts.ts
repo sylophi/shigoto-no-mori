@@ -10,6 +10,8 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
+import type * as EngineScripts from "@shigomori/engine/Scripts";
+import type * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import type {
   Mark,
   NotifyScriptEvent,
@@ -19,6 +21,10 @@ import type {
   WorktreeBusyError,
 } from "./scripts/documents";
 import { type MarkKind, makeMarks } from "./scripts/marks";
+import {
+  makePackageRuns,
+  type UndefinedScriptError,
+} from "./scripts/packageRuns";
 import { makeRemoving } from "./scripts/removing";
 import { type LifecycleRuns, makeRuns } from "./scripts/runs";
 import type { PtySpawnError } from "./scripts/ScriptRuns";
@@ -39,6 +45,12 @@ export class Scripts extends Context.Service<
     readonly start: (
       args: RunArgs,
     ) => Effect.Effect<string, ScriptRefusedError | PtySpawnError>;
+    // A PTY run of one of the worktree's package scripts, by name.
+    readonly startPackage: (
+      located: EngineWorktrees.Located,
+      scriptName: string,
+      notify: NotifyScriptEvent,
+    ) => Effect.Effect<string, PackageRunError>;
     // The console's keystrokes and viewport size, for a PTY run.
     readonly write: (runId: string, data: string) => void;
     readonly resize: (runId: string, cols: number, rows: number) => void;
@@ -120,6 +132,7 @@ const make = (options: Options) =>
     const marks = yield* makeMarks;
     const runs = yield* makeRuns({ marks, env: options.env });
     const removing = yield* makeRemoving({ marks, runs });
+    const packageRuns = yield* makePackageRuns(runs);
     const { busy, quit } = yield* makeUnderWay({ marks, runs });
     yield* Effect.addFinalizer(() =>
       Effect.suspend(() => quit(options.hurried())).pipe(
@@ -137,8 +150,17 @@ const make = (options: Options) =>
       removingProject: marks.removingProject,
       refuseNew: marks.refuseNew,
       ...removing,
+      ...packageRuns,
       busy,
     });
   });
 
 export const layer = (options: Options) => Layer.effect(Scripts, make(options));
+
+type PackageRunError =
+  | UndefinedScriptError
+  | EngineScripts.NoScripts
+  | EngineScripts.UnreadableScripts
+  | EngineScripts.ScriptRefused
+  | ScriptRefusedError
+  | PtySpawnError;

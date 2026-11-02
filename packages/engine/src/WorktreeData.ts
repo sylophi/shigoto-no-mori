@@ -8,6 +8,7 @@ import {
   MAX_CUSTOM_PORTS,
   patchedPorts,
 } from "@shigomori/contracts/schemas/ports";
+import type { ShigomoriWorktreeData } from "@shigomori/contracts/schemas";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -43,6 +44,12 @@ export class WorktreeData extends Context.Service<
       projectId: string,
       worktreeId: string,
     ) => Effect.Effect<Description>;
+    // The ports and the pair as one document, each field there only
+    // when set, null when nothing is: the contract's worktree data.
+    readonly document: (
+      projectId: string,
+      worktreeId: string,
+    ) => Effect.Effect<ShigomoriWorktreeData | null>;
     // Sets what `change` names from the pair as stored when the write
     // lands, so a describe in between isn't undone, and stamps it.
     // An empty value clears its field. Answers what it wrote.
@@ -308,8 +315,28 @@ const make = Effect.gen(function* () {
       WHERE project_id = ${from}`;
   }, Effect.orDie);
 
+  const document = Effect.fn("WorktreeData.document")(function* (
+    projectId: string,
+    worktreeId: string,
+  ) {
+    const [described, custom] = yield* Effect.all([
+      description(projectId, worktreeId),
+      ports(projectId, worktreeId),
+    ]);
+    const doc: ShigomoriWorktreeData = {
+      ...(custom.length > 0 && { ports: [...custom] }),
+      ...(described.title !== "" && { title: described.title }),
+      ...(described.description !== "" && {
+        description: described.description,
+      }),
+      ...(described.describedAt > 0 && { describedAt: described.describedAt }),
+    };
+    return Object.keys(doc).length === 0 ? null : doc;
+  });
+
   return WorktreeData.of({
     description,
+    document,
     describe,
     carry,
     ports,

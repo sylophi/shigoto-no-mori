@@ -1,5 +1,6 @@
 // Worktrees' relocating: a project moved or renamed by hand, pointed at
 // where it is now, its worktrees re-linked.
+import { UnknownProjectError } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -266,7 +267,7 @@ export const makeRelocating = ({
       const rows = yield* registry.rows();
       const found = rows.find((listed) => listed.id === project.id);
       if (!found)
-        return yield* new Registry.UnknownProject({ projectId: project.id });
+        return yield* new UnknownProjectError({ projectId: project.id });
       return found;
     });
 

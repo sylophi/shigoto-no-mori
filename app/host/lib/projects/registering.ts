@@ -10,15 +10,17 @@ import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import * as Ops from "@host/lib/engineOps";
+import * as Projects from "@shigomori/engine/Projects";
+import * as Registry from "@shigomori/engine/Registry";
+import { changing } from "@host/lib/Engine";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { GithubCli } from "@host/lib/githubCli/GithubCli";
 import * as Scripts from "@host/lib/Scripts";
 import { bookingScripts } from "@host/lib/worktrees/documents";
-import { addProject, freshProjects, loadProjects, refresh } from "./index";
+import { addProject, findProject, listedProjects } from "./index";
 
 // Moves run one at a time: each writes the whole order, so a second
-// drag computed before the first's refresh landed would put the first
+// drag computed before the first's write landed would put the first
 // one's project back.
 const reorders = Semaphore.makeUnsafe(1);
 
@@ -157,7 +159,7 @@ const removing = Effect.fnUntraced(function* <E, R>(
   id: string,
   removal: (scripts: Scripts.Scripts["Service"]) => Effect.Effect<void, E, R>,
 ) {
-  if (!(yield* freshProjects).some((p) => p.id === id)) return;
+  if (!(yield* listedProjects).some((p) => p.id === id)) return;
   const scripts = yield* Scripts.Scripts;
   yield* scripts.removingProject(
     id,
@@ -166,7 +168,16 @@ const removing = Effect.fnUntraced(function* <E, R>(
 });
 
 export const removeProject = Effect.fn("projects.remove")((id: string) =>
-  removing(id, () => Ops.removeProject(id)),
+  removing(id, () =>
+    changing(
+      Effect.flatMap(findProject(id), (project) =>
+        Effect.flatMap(Projects.Projects, (projects) =>
+          projects.remove(project),
+        ),
+      ),
+      { projectId: id },
+    ),
+  ),
 );
 
 // Its scripts are stopped once nothing refuses the delete, as a
@@ -175,28 +186,29 @@ export const removeProject = Effect.fn("projects.remove")((id: string) =>
 export const deleteProject = Effect.fn("projects.delete")(
   (id: string, notify: Scripts.NotifyScriptEvent) =>
     removing(id, (scripts) =>
-      Ops.checkDeletable(id).pipe(
-        Effect.andThen(scripts.stopProject(id)),
-        Effect.andThen(
-          bookingScripts(scripts, notify, (reporter) =>
-            Ops.deleteProject(id, reporter),
-          ),
-        ),
-      ),
+      Effect.gen(function* () {
+        const projects = yield* Projects.Projects;
+        const project = yield* findProject(id);
+        yield* projects.checkDeletable(project);
+        yield* scripts.stopProject(id);
+        yield* bookingScripts(scripts, notify, (reporter) =>
+          projects.removeWithFiles(project, reporter),
+        );
+      }),
     ),
 );
 
 // Over the whole list, terrier-only projects included: the engine stores
 // the order apart from the registry entries, so any project can hold
-// any place. Each move goes over the list the previous one left (see
-// reorders), and the engine checks the ids against its own read (one
-// added meanwhile lands last, a stale id is ignored).
+// any place. Each move goes over the list as the previous one left it
+// (see reorders).
 export const reorderProject = Effect.fn("projects.reorder")(function* (input: {
   readonly draggedId: string;
   readonly targetId: string;
   readonly position: Parameters<typeof reorderProjects>[3];
 }) {
-  const current = loadProjects();
+  const registry = yield* Registry.Registry;
+  const current = yield* registry.listed;
   const next = reorderProjects(
     current,
     input.draggedId,
@@ -204,6 +216,8 @@ export const reorderProject = Effect.fn("projects.reorder")(function* (input: {
     input.position,
   );
   if (next === current) return;
-  yield* Ops.storeProjectOrder(next.map((p) => p.id));
-  yield* refresh;
+  yield* registry.reorder(
+    current,
+    next.map((p) => p.id),
+  );
 }, reorders.withPermits(1));

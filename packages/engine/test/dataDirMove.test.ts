@@ -310,3 +310,59 @@ it("refuses a move past a project git can't list whose folder is there", async (
   assert.equal(existsSync(join(dataDir, JOURNAL)), false);
   assert.equal(existsSync(to), false);
 });
+
+// A project registered inside the data dir would go with it and leave
+// its recorded path behind. One registered as the app's last checks run
+// is refused too, before anything moved.
+it("refuses a move past a project registered inside the data dir", async () => {
+  const dataDir = box.side("engine");
+  const to = join(box.home, "moved", basename(dataDir));
+  const inside = join(dataDir, "inside");
+  mkdirSync(inside, { recursive: true });
+  let copied = false;
+  const result = (await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const { pointerFile } = yield* Paths.Paths;
+      const refused = yield* Effect.flip(
+        moveDataDir(
+          {
+            from: dataDir,
+            spellings: [dataDir],
+            to,
+            toReal: to,
+            pointerFile,
+            legacyPointerFile: null,
+            toDefault: false,
+          },
+          {
+            ready: Effect.asVoid(
+              registry.register({ name: "inside", path: inside }),
+            ),
+            holding: () => Effect.void,
+            releasing: Effect.void,
+            copy: () =>
+              Effect.sync(() => {
+                copied = true;
+              }),
+          },
+        ),
+      );
+      return {
+        message: refused.message,
+        staged: readdirSync(dirname(pointerFile)).filter((name) =>
+          name.startsWith(`${basename(pointerFile)}.tmp`),
+        ),
+        writes: !(yield* retired),
+      };
+    }).pipe(Effect.provide(NodeServices.layer)),
+  )) as { message: string; staged: ReadonlyArray<string>; writes: boolean };
+  assert.deepEqual(result, {
+    message: `Refusing to move: project "inside" lives inside ${dataDir} and would be moved with it. Move the repository out first.`,
+    staged: [],
+    writes: true,
+  });
+  assert.equal(copied, false);
+  assert.equal(existsSync(join(dataDir, JOURNAL)), false);
+  assert.equal(existsSync(to), false);
+});

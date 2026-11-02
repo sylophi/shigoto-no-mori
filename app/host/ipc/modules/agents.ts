@@ -1,9 +1,16 @@
 import { agentsContract } from "@shigomori/contracts/modules/agents";
 import type { EffectHandlers } from "@shigomori/contracts/types";
+import * as Agents from "@shigomori/engine/Agents";
+import * as Effect from "effect/Effect";
 import type * as Engine from "@host/lib/Engine";
-import * as Ops from "@host/lib/engineOps";
 
 export const agentsHandlers = {
-  status: () => Ops.agentHarnesses(),
-  setHooks: ({ harness, install }) => Ops.setAgentHooks(harness, install),
+  status: () => Effect.flatMap(Agents.Agents, (agents) => agents.statuses),
+  // Answered with every harness's status.
+  setHooks: ({ harness, install }) =>
+    Effect.gen(function* () {
+      const agents = yield* Agents.Agents;
+      yield* agents.setHooks([harness], install);
+      return yield* agents.statuses;
+    }),
 } satisfies EffectHandlers<typeof agentsContract, unknown, Engine.Services>;

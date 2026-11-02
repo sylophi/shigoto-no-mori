@@ -12,7 +12,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as DataDirMove from "@shigomori/engine/dataDirMove";
-import { findProjectInsideDataDir, freshProjects } from "./projects";
 import { busyRefusal } from "@shared/busy";
 import { hostCallFailure } from "./Engine";
 import * as Scripts from "./Scripts";
@@ -217,18 +216,6 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
         throw err;
       }),
     );
-    // Same trap as nukeEverything: a project repo registered from inside
-    // the data dir would be dragged along, breaking its recorded path.
-    // Read holding the lock, so no project is added after.
-    const trapped = findProjectInsideDataDir(yield* freshProjects, spellings);
-    if (trapped) {
-      return yield* new DataDirMoveError({
-        reason:
-          `Refusing to move: project "${trapped.name}" lives inside ` +
-          `${oldDir} and would be moved with it. Move the repository ` +
-          "out first.",
-      });
-    }
     // The last check: an install under way restarts the app out of this
     // folder, and refuses. Past it, no check or install starts.
     const updating = yield* opts.holdUpdater;

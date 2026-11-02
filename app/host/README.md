@@ -3,7 +3,9 @@
 What a machine serves: its projects, worktrees, scripts, mirrors, port
 forwards and device link, run as the app's utility process (below).
 Its data model is the engine's (`packages/engine`), which it runs
-in-process (`lib/Engine.ts`, `lib/engineOps.ts`).
+in-process (`lib/Engine.ts`): the handlers and services resolve the
+ids a call names once (`lib/projects`) and call the engine's services
+on what that found.
 
 - `process/`: the composition root. `run.ts` is the host's run,
   whichever shell started it, and `host.ts` the Electron shell's entry

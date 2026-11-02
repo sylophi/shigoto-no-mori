@@ -2,10 +2,10 @@
 // an adopt, run by the engine with the host's create mark tied to the
 // run's phases and its lifecycle scripts booked, and a landing's create,
 // undone unless the landing keeps it.
-import type {
+import {
   ConvertRefusedError,
-  UnknownProjectError,
-  UnknownWorktreeError,
+  type UnknownProjectError,
+  type UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
 import {
   CarryOverReportSchema,
@@ -16,8 +16,10 @@ import {
   WorktreeLifecyclePhaseSchema,
   WorktreeSchema,
 } from "@shigomori/contracts/schemas";
+import { codeOf } from "@shigomori/engine/errorDocument";
 import * as Git from "@shigomori/engine/Git";
-import type * as EngineWorktrees from "@shigomori/engine/Worktrees";
+import type * as Registry from "@shigomori/engine/Registry";
+import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -26,8 +28,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { log } from "@shared/log";
 import * as Engine from "../Engine";
-import * as Ops from "../engineOps";
-import { findProject } from "../projects";
+import { findProject, findProjectAndWorktree } from "../projects";
 import * as Scripts from "../Scripts";
 import { scriptEventOf } from "./documents";
 
@@ -43,13 +44,54 @@ export type CreateNotifiers = {
 
 export type CreateInput = {
   readonly projectId: string;
-} & Parameters<typeof Ops.createWorktree>[1];
+  readonly worktreeName?: string | undefined;
+  readonly branchName?: string | undefined;
+  readonly base?: string | undefined;
+  readonly checkout?: boolean | undefined;
+  // false has git write every tracked file instead of cloning them.
+  readonly cloneFiles?: boolean | undefined;
+  // Leave the project's setup script out (carry-over and port provision
+  // still run): a mirror or transplant told not to set the copy up.
+  readonly skipSetup?: boolean | undefined;
+  readonly ignoredFilesFollow?: readonly string[] | undefined;
+};
 
 export type CreateFailure =
   | ConvertRefusedError
   | UnknownProjectError
   | UnknownWorktreeError
   | Engine.EngineCallError;
+
+// An unforced adopt stopped by its guard (the worktree's uncommitted
+// changes, untracked files included, or a status that can't be read)
+// as the contract's ConvertRefusedError, and any other failure of a
+// run as the engine's words say it.
+const createFailure = (error: unknown): CreateFailure => {
+  const code = codeOf(error);
+  return code === "uncommitted-changes" || code === "status-unreadable"
+    ? new ConvertRefusedError({ refusal: code })
+    : Engine.engineFailure(error);
+};
+
+// The engine's create, every event of its run to `reporter`.
+const createIn =
+  (project: Registry.RegisteredProject, input: CreateInput) =>
+  (reporter: EngineWorktrees.Reporter) =>
+    Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
+      worktrees.create(
+        project,
+        {
+          name: input.worktreeName || undefined,
+          branch: input.branchName || undefined,
+          base: input.base || undefined,
+          checkout: input.checkout,
+          skipSetup: input.skipSetup,
+          clone: input.cloneFiles !== false,
+          ignoredFilesFollow: input.ignoredFilesFollow,
+        },
+        reporter,
+      ),
+    );
 
 const decodeWorktree = Schema.decodeUnknownSync(WorktreeSchema);
 const decodeCarryOverReport = Schema.decodeUnknownSync(CarryOverReportSchema);
@@ -81,14 +123,15 @@ export const makeCreating = (removing: {
     const run = Effect.fnUntraced(function* (
       start: (
         reporter: EngineWorktrees.Reporter,
-      ) => Effect.Effect<unknown, CreateFailure, Engine.Services>,
-      projectId: string,
+      ) => Effect.Effect<unknown, unknown, Engine.Services>,
+      ids: { readonly projectId: string; readonly worktreeId?: string },
       notify: CreateNotifiers,
       options: {
         readonly resolveOn: "created" | "exit";
         readonly cancelled: Effect.Effect<void>;
       },
     ) {
+      const { projectId } = ids;
       const { scope } = yield* Engine.EngineRuns;
       const made = yield* Deferred.make<Worktree, CreateFailure>();
       let created: Worktree | null = null;
@@ -148,7 +191,7 @@ export const makeCreating = (removing: {
               if (created === null) {
                 Deferred.doneUnsafe(
                   made,
-                  Exit.fail(Engine.engineFailure(error, { projectId })),
+                  Exit.fail(Engine.engineFailure(error)),
                 );
               } else {
                 log.warn("[engine] mid-run event failed validation", error);
@@ -157,7 +200,12 @@ export const makeCreating = (removing: {
           }),
         color: true,
       };
-      const running = Effect.result(start(reporter)).pipe(
+      // Held and counted as a create for the whole run, which outlives
+      // the call that started it.
+      const held = Engine.changing(start(reporter), ids, "create").pipe(
+        Effect.mapError(createFailure),
+      );
+      const running = Effect.result(held).pipe(
         Effect.onExit((exit) =>
           Effect.sync(() => {
             booked.end();
@@ -201,10 +249,13 @@ export const makeCreating = (removing: {
     ) {
       const project = yield* findProject(input.projectId);
       return yield* run(
-        (reporter) => Ops.createWorktree(project, input, reporter),
-        project.id,
+        createIn(project, input),
+        { projectId: project.id },
         notify,
-        { resolveOn: options.resolveOn ?? "created", cancelled: Effect.never },
+        {
+          resolveOn: options.resolveOn ?? "created",
+          cancelled: Effect.never,
+        },
       );
     });
 
@@ -216,11 +267,18 @@ export const makeCreating = (removing: {
       },
       notify: CreateNotifiers,
     ) {
-      const project = yield* findProject(input.projectId);
+      // force only once the user has seen the changes the convert
+      // wipes. Unforced, the engine refuses a dirty worktree.
+      const located = yield* findProjectAndWorktree(
+        input.projectId,
+        input.worktreeId,
+      );
       return yield* run(
         (reporter) =>
-          Ops.adoptWorktree(project, input.worktreeId, input.force, reporter),
-        project.id,
+          Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
+            worktrees.adopt(located, { force: input.force }, reporter),
+          ),
+        { projectId: located.project.id, worktreeId: located.worktree.id },
         notify,
         { resolveOn: "created", cancelled: Effect.never },
       );
@@ -273,12 +331,10 @@ export const makeCreating = (removing: {
       const cancelled = yield* Deferred.make<void>();
       let kept = false;
       const created = yield* Effect.acquireRelease(
-        run(
-          (reporter) => Ops.createWorktree(project, input, reporter),
-          project.id,
-          notify,
-          { resolveOn: "exit", cancelled: Deferred.await(cancelled) },
-        ).pipe(Effect.forkScoped),
+        run(createIn(project, input), { projectId: project.id }, notify, {
+          resolveOn: "exit",
+          cancelled: Deferred.await(cancelled),
+        }).pipe(Effect.forkScoped),
         (fiber, exit) =>
           kept && !Exit.hasInterrupts(exit)
             ? Effect.void

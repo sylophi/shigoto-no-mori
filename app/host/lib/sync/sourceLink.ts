@@ -24,10 +24,9 @@
 // git follower pushing). So the device asked always holds the grant,
 // and neither end ever needs the other's.
 //
-// Bundles are built and unpacked by the engine's Bundle (engineOps'
-// bundleCreate and bundleUnpack), refs landing only under
-// refs/shigomori/, in a temp dir (mkdtemp, 0700) of their own that the
-// ask removes whatever happens. The channel is the flow control end to
+// Bundles are built and unpacked by the engine's Bundle, refs landing
+// only under refs/shigomori/, in a temp dir (mkdtemp, 0700) of their own
+// that the ask removes whatever happens. The channel is the flow control end to
 // end: the sender waits once its queue is full, and the receiver takes
 // a piece only once the bytes are on disk. A link whose other end goes
 // away (a reset, a revoked grant, the device link dropping) fails
@@ -62,9 +61,9 @@ import {
   type Project,
 } from "@shigomori/contracts/schemas";
 import { strict } from "@shigomori/contracts/schemas/strict";
-import type * as Engine from "@host/lib/Engine";
-import * as Ops from "@host/lib/engineOps";
-import { incomingRef } from "@shigomori/engine/Bundle";
+import * as Engine from "@host/lib/Engine";
+import * as Bundle from "@shigomori/engine/Bundle";
+import * as Dirty from "@shigomori/engine/Dirty";
 import * as Git from "@shigomori/engine/Git";
 import { PeerReach, peerChannelsFor, peerSyncFor } from "@host/ipc/PeerReach";
 import { mintHexId } from "@host/lib/hexId";
@@ -379,7 +378,7 @@ const decodeCloneFacts = Schema.decodeUnknownSync(CloneFactsSchema);
 // names.
 export function landingRefOf(ref: string): string {
   if (ref.startsWith("refs/shigomori/")) return ref;
-  return incomingRef(
+  return Bundle.incomingRef(
     ref.startsWith("refs/heads/")
       ? ref.slice("refs/heads/".length)
       : ref.slice("refs/".length),
@@ -424,10 +423,26 @@ export function localSource(project: Project, worktreeId: string): SourceFacts {
         git.refTip(project.path, `refs/heads/${branch}`),
       ).pipe(Effect.map(Option.getOrNull)),
     capture: Effect.gen(function* () {
-      const capture = yield* Ops.dirtyCapture(project, worktreeId);
-      if (!capture.captured || capture.commit === undefined) {
-        return { captured: false };
-      }
+      // The worktree's uncommitted changes as a commit under
+      // refs/shigomori/dirty/<id>, for the move to carry. A clean
+      // worktree captures nothing.
+      const capture = yield* Engine.asCall(
+        Engine.changing(
+          Effect.gen(function* () {
+            const { worktree } = yield* findProjectAndWorktree(
+              project.id,
+              worktreeId,
+            );
+            return yield* (yield* Dirty.Dirty).capture({
+              projectPath: project.path,
+              worktreePath: worktree.path,
+              worktreeId: worktree.id,
+            });
+          }),
+          { projectId: project.id, worktreeId },
+        ),
+      );
+      if (!capture.captured) return { captured: false };
       return {
         captured: true,
         commit: capture.commit,
@@ -491,11 +506,10 @@ const sendBundle = (
   inTempDir("sm-sync-", (dir) =>
     Effect.gen(function* () {
       const path = join(dir, "transfer.bundle");
-      const bytes = yield* Ops.bundleCreate(
-        project,
-        path,
-        [...refs],
-        [...haves],
+      const bytes = yield* Engine.asCall(
+        Effect.flatMap(Bundle.Bundle, (bundle) =>
+          bundle.create(project.path, path, [...refs], [...haves]),
+        ),
       );
       yield* Effect.acquireUseRelease(
         onFiles("read the bundle", () => openFile(path, "r")),
@@ -838,11 +852,22 @@ function askSource(
               },
               (file) => Effect.promise(() => file.close()),
             );
-            return yield* Ops.bundleUnpack(
-              into,
-              path,
-              refs.map((ref) => `${ref}:${landingRefOf(ref)}`),
+            // Into a registered project, or into a repository by path:
+            // the clone from a peer (cloneFromPeer.ts) unpacks into a
+            // folder it registers only once it is a checkout.
+            const fetched = yield* Engine.asCall(
+              Engine.changing(
+                Effect.flatMap(Bundle.Bundle, (bundle) =>
+                  bundle.unpack(
+                    into.path,
+                    path,
+                    refs.map((ref) => `${ref}:${landingRefOf(ref)}`),
+                  ),
+                ),
+                "id" in into ? { projectId: into.id } : {},
+              ),
             );
+            return { fetched: [...fetched] };
           }),
         );
       }),
