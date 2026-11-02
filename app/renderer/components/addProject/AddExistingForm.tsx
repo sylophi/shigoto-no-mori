@@ -112,6 +112,8 @@ export function AddExistingForm({
   const openAdded = useOpenAddedProject();
 
   const addAndOpen = async (path: string) => {
+    // Enter and a row's Add stay live while one is out.
+    if (addProject.isPending) return;
     try {
       const project = await addProject.mutateAsync({ path, terrier });
       onClose();
