@@ -36,7 +36,7 @@ export const login = Command.make("login", { rest }, () =>
     if (status.signedIn) {
       if (json) return yield* emit({ ok: true, ...status });
       return yield* out(
-        `Already signed in. This machine is "${status.deviceName}" on your app.`,
+        `Already signed in. This machine is "${status.deviceName}" on your account.`,
       );
     }
     const code = yield* app.start();
@@ -51,7 +51,7 @@ export const login = Command.make("login", { rest }, () =>
     if (json) return yield* emit({ ok: true, ...signedIn });
     const { green } = styles(stdoutColor);
     yield* out(
-      `${green("Signed in.")} This machine is "${signedIn.deviceName}" on your app.`,
+      `${green("Signed in.")} This machine is "${signedIn.deviceName}" on your account.`,
     );
   }),
 );
@@ -79,7 +79,7 @@ const rename = Command.make(
       const app = (yield* Control.Control).client(loginContract);
       const status = yield* app.rename(name);
       if (json) return yield* emit({ ok: true, ...status });
-      yield* out(`This machine is "${status.deviceName}" on your app.`);
+      yield* out(`This machine is "${status.deviceName}" on your account.`);
     }),
 );
 
@@ -130,7 +130,7 @@ const remove = Command.make(
       const app = (yield* Control.Control).client(loginContract);
       const removed = yield* app.removeDevice(device);
       if (json) return yield* emit({ ok: true, removed });
-      yield* out(`Removed "${removed}" from your app.`);
+      yield* out(`Removed "${removed}" from your account.`);
     }),
 );
 

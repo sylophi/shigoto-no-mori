@@ -24,7 +24,11 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { afterEach, beforeEach, it } from "vitest";
 import * as DataDirLock from "../src/DataDirLock.ts";
-import { finishMove, resumeDataDirMove } from "../src/dataDirMove.ts";
+import {
+  finishMove,
+  moveDataDir,
+  resumeDataDirMove,
+} from "../src/dataDirMove.ts";
 import { JOURNAL, retired, retireStore } from "../src/dataDirMoveJournal.ts";
 import { flavorNames } from "../src/flavor.ts";
 import * as Paths from "../src/Paths.ts";
@@ -254,4 +258,55 @@ it("keeps a copied move's old tree until the store is opened at the new place", 
   assert.ok(existsSync(old), "the old tree kept by the moving process");
   await settleAt(dataDir);
   assert.equal(existsSync(old), false, "removed at the new place's open");
+});
+
+// A project git can't list whose folder is still there refuses the move
+// before anything moved, or its worktrees would land with what they
+// keep left under their old ids.
+it("refuses a move past a project git can't list whose folder is there", async () => {
+  const dataDir = box.side("engine");
+  const repo = box.repo("broken", { "README.md": "hi\n" });
+  const to = join(box.home, "moved", basename(dataDir));
+  const result = (await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      yield* registry.register({ name: "broken", path: repo });
+      rmSync(join(repo, ".git"), { recursive: true });
+      const { pointerFile } = yield* Paths.Paths;
+      const refused = yield* Effect.flip(
+        moveDataDir(
+          {
+            from: dataDir,
+            spellings: [dataDir],
+            to,
+            toReal: to,
+            pointerFile,
+            legacyPointerFile: null,
+            toDefault: false,
+          },
+          {
+            ready: Effect.void,
+            holding: () => Effect.void,
+            releasing: Effect.void,
+            copy: () => Effect.void,
+          },
+        ),
+      );
+      return {
+        message: refused.message,
+        staged: readdirSync(dirname(pointerFile)).filter((name) =>
+          name.startsWith(`${basename(pointerFile)}.tmp`),
+        ),
+        writes: !(yield* retired),
+      };
+    }).pipe(Effect.provide(NodeServices.layer)),
+  )) as { message: string; staged: ReadonlyArray<string>; writes: boolean };
+  assert.deepEqual(result, {
+    message:
+      "Couldn't list the worktrees of \"broken\", so what they keep couldn't follow them. Try again.",
+    staged: [],
+    writes: true,
+  });
+  assert.equal(existsSync(join(dataDir, JOURNAL)), false);
+  assert.equal(existsSync(to), false);
 });

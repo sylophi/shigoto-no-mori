@@ -40,7 +40,8 @@
 //     write; after it, an undo with nothing to reverse.
 //  3. The plan: git's listing of each project's worktrees, made holding
 //     the lock alone, so no create, adopt or move can change it. A
-//     project git can't list is left out. As 2.
+//     listing that fails refuses the move, unless the project's folder
+//     is gone. As 2.
 //  4. The preflight: nothing kept under any entry's new id (marks,
 //     sessions, shelf, data rows, a capture read strictly), or the move
 //     is refused. As 2.
@@ -480,6 +481,17 @@ class EarlierMoveUnfinished extends Schema.TaggedError<EarlierMoveUnfinished>()(
   }
 }
 
+// A move refused before anything moved: a project whose folder is there
+// that git can't list.
+class ProjectUnlisted extends Schema.TaggedError<ProjectUnlisted>()(
+  "ProjectUnlisted",
+  { project: Schema.String, cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return `Couldn't list the worktrees of "${this.project}", so what they keep couldn't follow them. Try again.`;
+  }
+}
+
 // A move refused before anything moved: something kept under the id the
 // worktree at `oldPath` would take.
 class KeptUnderNewId extends Schema.TaggedError<KeptUnderNewId>()(
@@ -603,9 +615,22 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
 
     // The managed worktrees whose checkout sits under the data dir. The
     // listing's own writes (an idle worktree shelved) are the move's.
-    const { rows } = yield* asMoveOwner(
+    const { rows, skipped } = yield* asMoveOwner(
       worktrees.identityList(projects, { primaryRef: false }),
     );
+    // A project whose folder is gone has nothing to carry. One that is
+    // there but can't be listed would have its worktrees land with what
+    // they keep left under their old ids.
+    for (const { project, error } of skipped) {
+      if (
+        yield* fs.exists(project.path).pipe(Effect.orElseSucceed(() => true))
+      ) {
+        return yield* new ProjectUnlisted({
+          project: project.name,
+          cause: error,
+        });
+      }
+    }
     const entries = rows.flatMap((i): Array<Entry & { oldId: string }> => {
       const under = underFrom(i.path);
       if (i.isPrimary || under === undefined) return [];

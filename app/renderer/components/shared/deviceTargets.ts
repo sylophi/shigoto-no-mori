@@ -48,11 +48,13 @@ export function isHolder(
 
 // Where a quick create lands: the designated device (the Configure
 // page's "Create on" pick) when it can take one now, else the first
-// candidate that can. The sidebar's `+`, the inbox's New worktree and
-// the pick's own fallback line all land by it.
-export function quickCreateTarget<
-  T extends Pick<ViewTarget, "deviceId" | "block">,
->(candidates: readonly T[], designatedId: string | undefined): T | undefined {
+// candidate that can. The pick's own fallback line reads it, and the
+// sidebar's `+` and the inbox's New worktree land by the same rule
+// (useGroupCreator).
+export function quickCreateTarget(
+  candidates: readonly DeviceTarget[],
+  designatedId: string | undefined,
+): DeviceTarget | undefined {
   const ready = candidates.filter((candidate) => candidate.block === undefined);
   return (
     ready.find((candidate) => candidate.deviceId === designatedId) ?? ready[0]
