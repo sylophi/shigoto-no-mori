@@ -7,7 +7,7 @@ import {
   ShigomoriConfigSchema,
 } from "@shigomori/contracts/schemas/config";
 import * as Config from "@shigomori/engine/Config";
-import { messageOf } from "@shigomori/engine/errorDocument";
+import { messageOf, withHint } from "@shigomori/engine/errorDocument";
 import * as Icons from "@shigomori/engine/Icons";
 import * as Projects from "@shigomori/engine/Projects";
 import * as Registry from "@shigomori/engine/Registry";
@@ -399,12 +399,17 @@ const relocate = Command.make(
           project,
           destination,
         );
+      // A relocate asked again won't move them, since the project is
+      // already where it went.
       const warning = styles(stderrColor).yellow("warning:");
       yield* Effect.forEach(
         stayed,
-        (left) =>
+        ({ worktree, destination: to, error }) =>
           note(
-            `${warning} couldn't move ${left.worktree.name} to ${left.destination}: ${messageOf(left.error)}`,
+            `${warning} ${withHint(
+              `couldn't move ${worktree.name} to ${to}: ${messageOf(error)}`,
+              `Fix that, then run \`${binaryName} worktrees move -p ${row.name} ${worktree.name} ${to}\`.`,
+            )}`,
           ),
         { discard: true },
       );
