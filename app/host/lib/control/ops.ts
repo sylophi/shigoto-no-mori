@@ -60,7 +60,7 @@ import type { DirectPeer } from "./AccountPeers";
 import { findProject, findProjectAndWorktree } from "@host/lib/projects";
 import { clonePeerProject } from "@host/lib/sync/cloneFromPeer";
 import { progressTo } from "@host/lib/sync/move";
-import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
+import * as SharedSettingsStore from "@host/lib/sharedSettings/store";
 import {
   mirrorList,
   startMirrorFrom,
@@ -137,18 +137,19 @@ const pickDevice = (project: Project, query: string | undefined) =>
       ),
   );
 
-function presetSelection(identity: string | null): IgnoreSelection {
-  return selectionOfPreset(
-    parseLeaveOutPreset(
-      identity === null
-        ? undefined
-        : sharedStringSetting(
-            sharedSettingsCopy.read(),
-            sharedSettingKeys.leaveOutPreset(identity),
-          ),
+const presetSelection = (identity: string | null) =>
+  Effect.map(SharedSettingsStore.read, (doc) =>
+    selectionOfPreset(
+      parseLeaveOutPreset(
+        identity === null
+          ? undefined
+          : sharedStringSetting(
+              doc,
+              sharedSettingKeys.leaveOutPreset(identity),
+            ),
+      ),
     ),
   );
-}
 
 const NO_EXCEPTIONS: ReadonlySet<string> = new Set();
 
@@ -163,7 +164,7 @@ const choiceFor = <E, R>(
   Effect.gen(function* () {
     const selection: IgnoreSelection =
       options.leaveOut === undefined
-        ? presetSelection(identity)
+        ? yield* presetSelection(identity)
         : {
             base: options.leaveOut === "nothing" ? "everything" : "gitignored",
             leftOut: NO_EXCEPTIONS,

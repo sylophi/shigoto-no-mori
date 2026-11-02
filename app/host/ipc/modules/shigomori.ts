@@ -1,5 +1,6 @@
 import type { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
 import type { EffectHandlers } from "@shigomori/contracts/types";
+import type * as DeviceId from "@host/lib/config/DeviceId";
 import type * as Engine from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
 import { switchSync } from "@host/lib/sharedSettings/projectSettings";
@@ -12,4 +13,8 @@ export const shigomoriHandlers = {
   // effect and refuses an unknown project the same way.
   patch: ({ projectId, patch }) => Ops.patchProjectConfig(projectId, patch),
   syncSettings: ({ projectId, on }) => switchSync(projectId, on),
-} satisfies EffectHandlers<typeof shigomoriContract, unknown, Engine.Services>;
+} satisfies EffectHandlers<
+  typeof shigomoriContract,
+  unknown,
+  Engine.Services | DeviceId.DeviceId
+>;

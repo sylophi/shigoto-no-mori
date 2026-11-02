@@ -31,7 +31,6 @@ import * as Launchers from "@shigomori/engine/Launchers";
 import * as Projects from "@shigomori/engine/Projects";
 import * as Registry from "@shigomori/engine/Registry";
 import * as Scripts from "@shigomori/engine/Scripts";
-import * as SharedSettings from "@shigomori/engine/SharedSettings";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
 import * as Usage from "@shigomori/engine/Usage";
 import * as WorktreeData from "@shigomori/engine/WorktreeData";
@@ -60,8 +59,6 @@ import {
   WorktreeSchema,
 } from "@shigomori/contracts/schemas";
 import { DoctorReportSchema } from "@shigomori/contracts/modules/cli";
-import type { SharedSettingsDoc } from "@shigomori/contracts/schemas/sharedSettings";
-import { mergeSharedSettings } from "@shigomori/contracts/sharedSettings";
 import { ConvertRefusedError } from "@shigomori/contracts/errors";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import {
@@ -1197,7 +1194,7 @@ export const writeWorktreeDescription = (
     ),
   );
 
-// ---- This device, its usage log and its shared settings ----
+// ---- This device and its usage log ----
 
 export const deviceId = Effect.flatMap(
   Registry.Registry,
@@ -1208,23 +1205,6 @@ export const deviceId = Effect.flatMap(
 export const recordProjectUse = (projectId: string) =>
   Effect.flatMap(Usage.Usage, (usage) =>
     usage.record("project", projectId, ""),
-  );
-
-export const readSharedSettings = Effect.flatMap(
-  SharedSettings.SharedSettings,
-  (settings) => settings.read,
-);
-
-// Merged into what the store holds, which the terminal stamps a project
-// edit into. An empty copy is a device leaving the account, which
-// replaces it.
-export const storeSharedSettings = (doc: SharedSettingsDoc) =>
-  Effect.flatMap(SharedSettings.SharedSettings, (settings) =>
-    settings.update((stored) =>
-      Object.keys(doc.entries).length === 0
-        ? doc
-        : mergeSharedSettings(stored, doc),
-    ),
   );
 
 // ---- The terminal's shell integration (host/lib/cli/shell.ts) ----

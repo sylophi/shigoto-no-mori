@@ -6,7 +6,10 @@
 // and each device takes the entries of its projects' repos into their
 // settings. Matched by repo identity, so two checkouts of one repo here
 // take the same settings too.
-import type { ProjectRow } from "@shigomori/contracts/schemas";
+import type {
+  ProjectRow,
+  SharedSettingsDoc,
+} from "@shigomori/contracts/schemas";
 import {
   anyProjectSettingsSync,
   projectSettingsSnapshot,
@@ -22,30 +25,30 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as Ops from "../engineOps";
 import { refresh } from "../projects";
-import {
-  onSharedSettingsChange,
-  sharedSettingsCopy,
-  sharedSettingsLoaded,
-} from "./store";
+import * as SharedSettingsStore from "./store";
 
 export const switchSync = Effect.fnUntraced(function* (
   projectId: string,
   on: boolean,
 ) {
-  yield* sharedSettingsLoaded;
   const identity = yield* Ops.projectRepoIdentity(projectId);
   if (identity === null) return;
   const local = yield* Ops.readSyncedProjectValues(projectId);
   const key = sharedSettingKeys.projectSettingsSync(identity);
-  const sync = sharedSettingsCopy.set(key, on ? true : null).entries[key];
+  const doc = yield* SharedSettingsStore.set(key, on ? true : null);
+  const sync = doc.entries[key];
   if (on && sync !== undefined) {
-    sharedSettingsCopy.merge(projectSettingsSnapshot(identity, local, sync));
+    yield* SharedSettingsStore.merge(
+      projectSettingsSnapshot(identity, local, sync),
+    );
   }
 });
 
-const level = Effect.fnUntraced(function* (row: ProjectRow) {
+const level = Effect.fnUntraced(function* (
+  row: ProjectRow,
+  doc: SharedSettingsDoc,
+) {
   if (row.identity === null || !row.pathExists) return;
-  const doc = sharedSettingsCopy.read();
   if (projectSettingsSync(doc, row.identity) === undefined) return;
   const local = yield* Ops.readSyncedProjectValues(row.id);
   const { defaultBranch, ...patch } = syncedProjectSettingsPatch(
@@ -63,8 +66,8 @@ const level = Effect.fnUntraced(function* (row: ProjectRow) {
   yield* Ops.patchProjectConfig(row.id, taken, { stamp: false });
 });
 
-// Every project leveled once the copy is read, then again whenever the
-// copy moves or a project comes or goes, while any repo's sync is on.
+// Every project leveled at launch, then again whenever the shared
+// settings move or a project comes or goes, while any repo's sync is on.
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const changes = yield* (yield* StoreChanges.StoreChanges).subscribe;
@@ -73,55 +76,49 @@ export const layer = Layer.effectDiscard(
     // read again only when the projects change.
     let relist = true;
     let rows: readonly ProjectRow[] = [];
-    yield* Effect.acquireRelease(
-      Effect.sync(() => onSharedSettingsChange(() => wake.openUnsafe())),
-      (stop) => Effect.sync(stop),
-    );
     yield* changes.pipe(
-      Stream.filter((tables) => tables.has("projects")),
-      Stream.runForEach(() =>
+      Stream.filter(
+        (tables) => tables.has("projects") || tables.has("shared_settings"),
+      ),
+      Stream.runForEach((tables) =>
         Effect.sync(() => {
-          relist = true;
+          if (tables.has("projects")) relist = true;
           wake.openUnsafe();
         }),
       ),
       Effect.forkScoped,
     );
-    yield* sharedSettingsLoaded.pipe(
-      Effect.andThen(
-        Effect.forever(
-          Effect.gen(function* () {
-            yield* wake.await;
-            yield* wake.close;
-            if (!anyProjectSettingsSync(sharedSettingsCopy.read())) return;
-            if (relist) {
-              rows = yield* refresh;
-              relist = false;
-            }
-            yield* Effect.forEach(
-              rows,
-              (row) =>
-                level(row).pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.logWarning(
-                      `[settings] couldn't level ${row.name}'s synced settings`,
-                      cause,
-                    ),
-                  ),
+    yield* Effect.forever(
+      Effect.gen(function* () {
+        yield* wake.await;
+        yield* wake.close;
+        const doc = yield* SharedSettingsStore.read;
+        if (!anyProjectSettingsSync(doc)) return;
+        if (relist) {
+          rows = yield* refresh;
+          relist = false;
+        }
+        yield* Effect.forEach(
+          rows,
+          (row) =>
+            level(row, doc).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning(
+                  `[settings] couldn't level ${row.name}'s synced settings`,
+                  cause,
                 ),
-              { discard: true },
-            );
-          }).pipe(
-            Effect.catchCause((cause) =>
-              Effect.logWarning(
-                "[settings] couldn't list the projects to level",
-                cause,
               ),
             ),
+          { discard: true },
+        );
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning(
+            "[settings] couldn't list the projects to level",
+            cause,
           ),
         ),
       ),
-      Effect.forkScoped,
-    );
+    ).pipe(Effect.forkScoped);
   }),
 );

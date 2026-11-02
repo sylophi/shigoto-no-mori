@@ -10,18 +10,14 @@ import {
 import { exchangeSharedSettings } from "@shigomori/contracts/sharedSettings";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import {
-  sharedSettingsCopy,
-  sharedSettingsLoaded,
-} from "@host/lib/sharedSettings/store";
+import * as SharedSettingsStore from "@host/lib/sharedSettings/store";
+import * as Graph from "@host/process/graph";
 import { hubHandlers, onHubStatus, onPeerPush } from "@host/process/wires";
 
 const decodeDoc = Schema.decodeUnknownPromise(SharedSettingsDocSchema);
 
-const mergeHere = async (doc: SharedSettingsDoc) => {
-  await Effect.runPromise(sharedSettingsLoaded);
-  return sharedSettingsCopy.merge(doc);
-};
+const mergeHere = (doc: SharedSettingsDoc) =>
+  Graph.run(SharedSettingsStore.merge(doc));
 
 export function followSharedSettings(): void {
   onPeerPush((push) => {

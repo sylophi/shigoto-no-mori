@@ -25,7 +25,8 @@ export class SharedSettings extends Context.Service<
     // Runs `next` on the stored copy and stores its answer: an entry it
     // drops is deleted, a new or replaced one written. `next` handing
     // back the copy it was given stores nothing, which is how a caller
-    // tells a no-op from a change. Answers what `next` did.
+    // tells a no-op from a change. Answers what `next` did. `next` may
+    // run twice, so it stays pure.
     readonly update: (
       next: (current: SharedSettingsDoc) => SharedSettingsDoc,
     ) => Effect.Effect<SharedSettingsDoc>;
@@ -66,6 +67,10 @@ const make = Effect.gen(function* () {
   const update = Effect.fn("SharedSettings.update")(function* (
     next: (current: SharedSettingsDoc) => SharedSettingsDoc,
   ) {
+    // Most merges are echoes, settled off a plain read without taking
+    // the write lock.
+    const seen = yield* stored;
+    if (next(seen) === seen) return seen;
     return yield* sql.withTransaction(
       Effect.gen(function* () {
         const current = yield* stored;
