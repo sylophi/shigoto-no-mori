@@ -22,6 +22,7 @@ import {
   syncedProjectSettingValue,
   withSharedSetting,
 } from "@shigomori/contracts/sharedSettings";
+import { isAnchoredPath } from "@shigomori/contracts/projectPaths";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -218,8 +219,9 @@ export class Config extends Context.Service<
     // doesn't model included. A project with no settings reads as null.
     readonly read: (scope: ConfigScope) => Effect.Effect<ConfigDoc | null>;
     // The device's and a project's documents as `read` gives them, as the
-    // contracts read a stored one: the device's is empty with nothing
-    // stored, a project's null.
+    // contracts read a stored one, less any setting of the wrong type:
+    // the device's is empty with nothing stored, a project's null with
+    // nothing stored or no default branch, when none of it applies.
     readonly readDevice: Effect.Effect<typeof StoredGlobalConfigSchema.Type>;
     readonly readProject: (
       scope: Extract<ConfigScope, { readonly kind: "project" }>,
@@ -422,6 +424,23 @@ const missingBranch = (doc: ConfigDoc) => {
   return typeof branch !== "string" || branch.trim() === "";
 };
 
+// A stored document less the keys `fields` models whose value isn't of
+// their type: one setting of the wrong type is ignored, as `device`
+// reads it, not the whole document.
+const readable = (
+  fields: { readonly [key: string]: Schema.Decoder<unknown> },
+  doc: ConfigDoc,
+): ConfigDoc =>
+  Object.fromEntries(
+    Object.entries(doc).filter(([key, value]) => {
+      const field = fields[key];
+      return (
+        field === undefined ||
+        Option.isSome(Schema.decodeUnknownOption(field)(value))
+      );
+    }),
+  );
+
 const listedValue = (key: ConfigKey, doc: ConfigDoc): Setting => {
   const [value, set] = docGet(doc, key.name);
   return { key: key.name, value: set ? value : (key.default ?? null), set };
@@ -432,7 +451,6 @@ const parseValue = (
   key: ConfigKey,
   kind: Exclude<ConfigKey["kind"], "list">,
   raw: string,
-  expandHome: (raw: string) => string,
 ) => {
   const invalid = (reason: InvalidConfigValue["reason"]) =>
     Effect.fail(
@@ -458,18 +476,16 @@ const parseValue = (
     case "string": {
       if (key.choices.length > 0 && !key.choices.includes(raw))
         return invalid("enum");
-      if (key.name !== "customWorktreePath") return Effect.succeed(raw);
-      const absolute = expandHome(raw);
-      return absolute.startsWith("/")
-        ? Effect.succeed(absolute)
-        : invalid("absolutePath");
+      return key.name === "customWorktreePath" && !isAnchoredPath(raw)
+        ? invalid("absolutePath")
+        : Effect.succeed(raw);
     }
   }
 };
 
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  const { expandHome, binaryName } = yield* Paths.Paths;
+  const { binaryName } = yield* Paths.Paths;
   const git = yield* Git.Git;
   const identities = yield* Identity.Identity;
   const sharedSettings = yield* SharedSettings.SharedSettings;
@@ -660,16 +676,22 @@ const make = Effect.gen(function* () {
   });
 
   const readDevice = Effect.flatMap(read({ kind: "device" }), (doc) =>
-    Schema.decodeUnknownEffect(StoredGlobalConfigSchema)(doc ?? {}),
+    Schema.decodeUnknownEffect(StoredGlobalConfigSchema)(
+      readable(StoredGlobalConfigSchema.schema.fields, doc ?? {}),
+    ),
   ).pipe(Effect.orDie, Effect.withSpan("Config.readDevice"));
 
   const readProject = Effect.fn("Config.readProject")(function* (
     scope: Extract<ConfigScope, { readonly kind: "project" }>,
   ) {
-    return yield* Schema.decodeUnknownEffect(
-      Schema.NullOr(StoredShigomoriConfigSchema),
-    )(yield* read(scope));
-  }, Effect.orDie);
+    const doc = yield* read(scope);
+    if (doc === null) return null;
+    return Option.getOrNull(
+      Schema.decodeUnknownOption(StoredShigomoriConfigSchema)(
+        readable(StoredShigomoriConfigSchema.schema.fields, doc),
+      ),
+    );
+  });
 
   const device = Effect.fn("Config.device")(function* <
     K extends keyof DeviceSettingsPatch,
@@ -795,7 +817,7 @@ const make = Effect.gen(function* () {
       yield* unset(scope, name);
       return undefined;
     }
-    const value = yield* parseValue(key, key.kind, raw, expandHome);
+    const value = yield* parseValue(key, key.kind, raw);
     yield* update(
       scope,
       (doc) =>

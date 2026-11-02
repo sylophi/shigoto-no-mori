@@ -1,14 +1,14 @@
 // The one-time move of v2's worktrees into `wt/` that the store's
 // `wtFolder` migration owes (migrations/wtFolder.ts). The first start
 // looks through the v2 roots of every listed project, terrier's
-// included, and records each folder there. Each is then moved as
-// `worktrees move` moves one, whose own record keeps two processes
-// starting together from both taking it and lets a start finish one a
-// crash cut short (worktrees/moving.ts). One that can't be moved keeps
-// its folder and records why, for the doctor to report and retry. The
-// first start's
-// moves are reported to the migration as they go (Migration.ts), and
-// a start that resumes them counts the ones made before.
+// included, and records each worktree there under the project whose git
+// lists it. Each is then moved as `worktrees move` moves one, whose own
+// record keeps two processes starting together from both taking it and
+// lets a start finish one a crash cut short (worktrees/moving.ts). One
+// that can't be moved keeps its folder and records why, for the doctor
+// to report and retry. The first start's moves are reported to the
+// migration as they go (Migration.ts), and a start that resumes them
+// counts the ones made before.
 import { WORKTREES_DIR } from "@shigomori/contracts/git/worktreeLayout";
 import { listed, plural } from "@shigomori/contracts/words";
 import type { WorktreeMoveStep } from "@shigomori/contracts/schemas/migration";
@@ -18,6 +18,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -294,38 +295,70 @@ const make = Effect.gen(function* () {
     ] as const;
   };
 
-  // The folders under the v2 roots, recorded once. A folder git doesn't
-  // list is dropped when its move is tried.
+  // The moves of the folders under a project's v2 roots, and whether its
+  // git listed them. Two projects of one folder name share v2's managed
+  // root, so where its git lists its worktrees only those are its own.
+  // Where it can't (its folder away, say), each is recorded under it, so
+  // its move is tried and fails with why.
+  const v2MovesOf = Effect.fnUntraced(function* (
+    project: Registry.ListedProject,
+  ) {
+    const moves: Array<Omit<Row, "error">> = [];
+    for (const [from, to] of rootsOf(project.path)) {
+      const children = yield* fs
+        .readDirectory(from)
+        .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
+      for (const child of children) {
+        // As git spells it (symlinks resolved), which the id it has now
+        // is a hash of.
+        const at = path.join(from, child);
+        moves.push({
+          from_path: yield* fs
+            .realPath(at)
+            .pipe(Effect.orElseSucceed(() => at)),
+          to_path: path.join(to, child),
+          project_id: project.id,
+        });
+      }
+    }
+    if (moves.length === 0) return { moves, checked: true };
+    const known = yield* worktrees.identities(project).pipe(Effect.option);
+    if (Option.isNone(known)) return { moves, checked: false };
+    const paths = new Set(known.value.map((id) => id.path));
+    return {
+      moves: moves.filter((move) => paths.has(move.from_path)),
+      checked: true,
+    };
+  });
+
+  // The moves under every project's v2 roots, recorded at a start that
+  // owes the scan. One an earlier scan left unmoved under a namesake is
+  // handed to the project whose git lists it.
   // Read before the write transaction, which takes the lock: almost
   // every start has nothing owed.
   const scanOwed = sql`SELECT id FROM wt_move_scan LIMIT 1`.pipe(
     Effect.map((rows) => rows.length > 0),
   );
-  const scanNow = sql.withTransaction(
-    Effect.gen(function* () {
-      const owed = yield* sql`DELETE FROM wt_move_scan RETURNING id`;
-      if (owed.length === 0) return;
-      for (const project of yield* registry.listed) {
-        for (const [from, to] of rootsOf(project.path)) {
-          const children = yield* fs
-            .readDirectory(from)
-            .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
-          for (const child of children) {
-            // As git spells it (symlinks resolved), which the id it has
-            // now is a hash of.
-            const at = path.join(from, child);
-            yield* sql`INSERT INTO wt_moves ${sql.insert({
-              from_path: yield* fs
-                .realPath(at)
-                .pipe(Effect.orElseSucceed(() => at)),
-              to_path: path.join(to, child),
-              project_id: project.id,
-            })} ON CONFLICT DO NOTHING`;
+  const scanNow = Effect.gen(function* () {
+    const found = yield* Effect.forEach(yield* registry.listed, v2MovesOf);
+    yield* sql.withTransaction(
+      Effect.gen(function* () {
+        for (const { moves, checked } of found) {
+          for (const move of moves) {
+            yield* checked
+              ? sql`INSERT INTO wt_moves ${sql.insert(move)}
+                  ON CONFLICT (from_path) DO UPDATE
+                  SET project_id = excluded.project_id, error = NULL
+                  WHERE wt_moves.moved = 0
+                  AND wt_moves.project_id <> excluded.project_id`
+              : sql`INSERT INTO wt_moves ${sql.insert(move)}
+                  ON CONFLICT DO NOTHING`;
           }
         }
-      }
-    }),
-  );
+        yield* sql`DELETE FROM wt_move_scan`;
+      }),
+    );
+  });
   const scan = Effect.flatMap(scanOwed, (owed) =>
     owed ? scanNow : Effect.void,
   );

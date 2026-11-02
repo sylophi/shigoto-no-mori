@@ -81,6 +81,63 @@ it("moves v2 worktrees into wt at the first start, and keeps a locked one where 
   assert.match(unmoved[0]?.error ?? "", /locked/);
 });
 
+// Two projects of one folder name, whose worktrees v2 kept in one
+// managed root.
+const namesakes = () => {
+  mkdirSync(join(box.home, "work"));
+  mkdirSync(join(box.home, "personal"));
+  const work = box.repo("work/api", { "README.md": "hi\n" });
+  const personal = box.repo("personal/api", { "README.md": "hi\n" });
+  const dataDir = join(box.home, "engine");
+  box.write("registry.json", {
+    projects: [
+      { id: "P1", name: "api", path: work },
+      { id: "P2", name: "api", path: personal },
+    ],
+  });
+  box.side("engine");
+  return {
+    work,
+    personal,
+    v2: join(dataDir, "worktrees", "api"),
+    wt: join(dataDir, "wt", "api"),
+  };
+};
+
+it("moves the v2 worktrees of two projects of one folder name, each by its own git", async () => {
+  const { work, personal, v2, wt } = namesakes();
+  box.git(work, "worktree", "add", "-q", "-b", "a", join(v2, "a"));
+  box.git(personal, "worktree", "add", "-q", "-b", "b", join(v2, "b"));
+  const { unmoved } = await state();
+  assert.deepEqual(unmoved, []);
+  assert.ok(listed(work).includes(join(wt, "a")));
+  assert.ok(listed(personal).includes(join(wt, "b")));
+  assert.ok(!existsSync(v2), "the shared v2 root is gone");
+});
+
+it("hands a v2 worktree an earlier scan left under its namesake to its own project", async () => {
+  const { personal, v2, wt } = namesakes();
+  await state();
+  box.git(personal, "worktree", "add", "-q", "-b", "b", join(v2, "b"));
+  // What a scan before migration 18 recorded: under the project listed
+  // first, whose git doesn't list it.
+  await box.engine(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO wt_moves ${sql.insert({
+        from_path: join(v2, "b"),
+        to_path: join(wt, "b"),
+        project_id: "P1",
+        error: "not listed",
+      })}`;
+      yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id >= 18`;
+    }),
+  );
+  await box.start();
+  assert.ok(listed(personal).includes(join(wt, "b")));
+  assert.deepEqual((await state()).unmoved, []);
+});
+
 it("keeps a worktree something runs in where it is, naming what to close", async () => {
   const { repo, v2, wt } = v2Project();
   box.git(repo, "worktree", "unlock", join(v2, "c"));

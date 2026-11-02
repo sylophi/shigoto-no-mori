@@ -35,7 +35,7 @@ export class Layout extends Context.Service<
 const make = Effect.gen(function* () {
   const config = yield* Config.Config;
   const fs = yield* FileSystem.FileSystem;
-  const { dataDir, dataDirName } = yield* Paths.Paths;
+  const { dataDir, dataDirName, expandHome } = yield* Paths.Paths;
   const place = {
     dataDir,
     dataDirName,
@@ -63,6 +63,11 @@ const make = Effect.gen(function* () {
     };
   });
 
+  // A custom base under `~/` is in this device's home, whichever device
+  // wrote it.
+  const customBase = (base: string | undefined) =>
+    base === undefined ? undefined : expandHome(base.trim());
+
   const baseFor = Effect.fn("Layout.baseFor")(function* (
     project: ProjectPlace,
     settings: {
@@ -80,7 +85,11 @@ const make = Effect.gen(function* () {
         : false;
     return layout.worktreeBase(
       project.path,
-      { ...settings, managedOnProjectDrive: onDrive },
+      {
+        ...settings,
+        customWorktreePath: customBase(settings.customWorktreePath),
+        managedOnProjectDrive: onDrive,
+      },
       place,
     );
   });
@@ -94,9 +103,10 @@ const make = Effect.gen(function* () {
   const managedBases = Effect.fn("Layout.managedBases")(function* (
     project: ProjectPlace,
   ) {
+    const { customWorktreePath } = yield* projectSettings(project);
     const bases = layout.managedBases(
       project.path,
-      yield* projectSettings(project),
+      { customWorktreePath: customBase(customWorktreePath) },
       place,
     );
     const real = yield* Effect.forEach(bases, (base) =>

@@ -31,6 +31,7 @@ import { unshelvedAt } from "./migrations/unshelvedAt.ts";
 import { v2Import } from "./migrations/v2Import.ts";
 import { wtFolder } from "./migrations/wtFolder.ts";
 import { worktreeTerminals } from "./migrations/worktreeTerminals.ts";
+import { wtMoveRescan } from "./migrations/wtMoveRescan.ts";
 import { wtMovesWatched } from "./migrations/wtMovesWatched.ts";
 import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
@@ -116,6 +117,7 @@ const history = (platform: Platform, lenient: boolean) => ({
   "15_worktree_terminals": worktreeTerminals,
   "16_drop_mirror_invites": dropMirrorInvites,
   "17_running_script_groups": runningScriptGroups,
+  "18_wt_move_rescan": wtMoveRescan,
 });
 
 // Whether the store holds what a 2.x data dir's files said: the files
