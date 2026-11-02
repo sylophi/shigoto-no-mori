@@ -2,9 +2,9 @@ import { updaterContract } from "@shigomori/contracts/modules/updater";
 import { useMutation } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
+import { commandAccessOf } from "@/lib/remote/devices";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
-import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
+import { usePeers } from "@/hooks/remote/useDevices";
 import { useHasLocalHost } from "@/lib/localHost";
 import {
   allUpdating,
@@ -89,8 +89,8 @@ function useUpdateTargets(): UpdateTarget[] {
   const page = useApi();
   const localDeviceId = page.deviceId;
   const hasLocalHost = useHasLocalHost();
-  const reachable = useHostDevices().filter(
-    (peer) => deviceStatusView(peer.status).reachable,
+  const reachable = usePeers().filter(
+    (peer) => peer.hostsProjects && deviceStatusView(peer.status).reachable,
   );
   return [
     // This machine's updater, absent on a hostless client.
@@ -106,13 +106,12 @@ function useUpdateTargets(): UpdateTarget[] {
         ]
       : []),
     ...reachable.flatMap((peer) =>
-      peer.api !== undefined &&
-      commandAccessOf(localDeviceId, peer.deviceId, peer).granted
+      commandAccessOf(peer).granted
         ? [
             {
               deviceId: peer.deviceId,
               label: peer.label,
-              api: peer.api,
+              api: page.peerApi(peer.deviceId),
               running: peer.appVersion,
             },
           ]

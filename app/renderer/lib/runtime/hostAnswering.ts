@@ -7,14 +7,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { isOwnAppDrop } from "@shared/remote/rpcTransport";
-import {
-  createExternalStore,
-  useExternalStore,
-} from "@shigomori/ui/lib/externalStore.ts";
-import {
-  type DeviceStatusView,
-  THIS_DEVICE_NOT_RESPONDING_VIEW,
-} from "@shigomori/ui/lib/deviceStatus.ts";
+import { createExternalStore } from "@shigomori/ui/lib/externalStore.ts";
 
 export const hostAnswering = createExternalStore(true);
 
@@ -84,12 +77,4 @@ export function onHostReturn(listener: () => void, signal: AbortSignal): void {
     answering = now;
   });
   signal.addEventListener("abort", stop, { once: true });
-}
-
-// This device's state where a surface tags it: none while its host
-// answers (the glyph alone), and Not responding while it doesn't.
-export function useThisDeviceStatus(): DeviceStatusView | null {
-  return useExternalStore(hostAnswering)
-    ? null
-    : THIS_DEVICE_NOT_RESPONDING_VIEW;
 }

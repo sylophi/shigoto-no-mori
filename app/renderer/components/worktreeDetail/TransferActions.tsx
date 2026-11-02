@@ -29,7 +29,7 @@ import {
   useWorktreeMirrorLinks,
 } from "@/hooks/remote/useMirrors";
 import { useCanForwardPorts } from "@/hooks/remote/usePortForwards";
-import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useRemoteDeviceLabel } from "@/hooks/remote/useDevices";
 import {
   type TransferDialog,
   TransferActionsView,

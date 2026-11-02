@@ -5,7 +5,7 @@ import type { Project } from "@shigomori/contracts/schemas";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useRemoteDeviceLabel } from "@/hooks/remote/useDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { toast } from "@/lib/toast";
 import { useTerrierOptIn } from "./TerrierOptIn";

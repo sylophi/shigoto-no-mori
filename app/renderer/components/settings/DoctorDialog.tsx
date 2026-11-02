@@ -5,7 +5,7 @@ import {
   useDoctorReport,
 } from "@/hooks/cli/useDoctor";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useRemoteDeviceLabel } from "@/hooks/remote/useDevices";
 import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,

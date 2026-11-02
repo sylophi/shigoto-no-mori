@@ -9,29 +9,16 @@ import {
   DeviceTabNoteView,
   StaleDeviceNoteView,
 } from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
-import { useLocalDevice } from "@/hooks/account/useAccount";
-import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
-import {
-  HostScopeProvider,
-  LocalHostScope,
-  type HostApi,
-} from "@/hooks/remote/useHostScope";
-import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
-import {
-  useHostDevices,
-  useRemoteDevice,
-  useRemoteDevices,
-} from "@/hooks/remote/useRemoteDevices";
+import { DeviceScope, type HostApi } from "@/hooks/remote/useHostScope";
+import { useHostDevices } from "@/hooks/remote/useDevices";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
-import { useHasLocalHost } from "@/lib/localHost";
-import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
+import { commandAccessOf, liveApi, statusViewOf } from "@/lib/remote/devices";
 import {
   createExternalStore,
   useExternalStore,
 } from "@shigomori/ui/lib/externalStore.ts";
 import type { DeviceRosterEntry as ViewRosterEntry } from "@shigomori/ui/lib/deviceRoster.ts";
 import { useApi } from "@/lib/runtime/pageApi";
-import { useThisDeviceStatus } from "@/lib/runtime/hostAnswering";
 
 export interface DeviceRosterEntry extends ViewRosterEntry {
   // The api the body is scoped to: the page's api for this device, a
@@ -45,6 +32,9 @@ export interface DeviceTab extends DeviceRosterEntry {
   block: "offline" | "no-grant" | undefined;
 }
 
+const leads = (entry: DeviceRosterEntry) =>
+  entry.isThisDevice || entry.status?.reachable === true;
+
 // Every machine on the account, in the one order every device pick
 // uses: this device first (a hostless client has none), then the
 // reachable peers, then the rest, so the machines that can answer sit
@@ -53,37 +43,19 @@ export interface DeviceTab extends DeviceRosterEntry {
 // command grant on it, and the sidebar's device filter reads it as is.
 export function useDeviceRoster(): DeviceRosterEntry[] {
   const page = useApi();
-  const localDeviceId = page.deviceId;
-  const hasLocalHost = useHasLocalHost();
-  const devices = useHostDevices();
-  const local = useLocalDevice();
-  const thisDeviceStatus = useThisDeviceStatus();
-  const here: DeviceRosterEntry[] = hasLocalHost
-    ? [
-        {
-          deviceId: localDeviceId,
-          label: local.name,
-          icon: local.icon,
-          isThisDevice: true,
-          status: thisDeviceStatus,
-          api: page,
-        },
-      ]
-    : [];
-  const peers = devices.map(
+  const entries = useHostDevices().map(
     (device): DeviceRosterEntry => ({
       deviceId: device.deviceId,
       label: device.label,
       icon: device.icon,
-      isThisDevice: false,
-      status: deviceStatusView(device.status),
-      api: device.api,
+      isThisDevice: device.isThisDevice,
+      status: statusViewOf(device),
+      api: liveApi(page, device),
     }),
   );
   return [
-    ...here,
-    ...peers.filter((peer) => peer.status?.reachable),
-    ...peers.filter((peer) => !peer.status?.reachable),
+    ...entries.filter(leads),
+    ...entries.filter((entry) => !leads(entry)),
   ];
 }
 
@@ -93,17 +65,14 @@ export function useDeviceRoster(): DeviceRosterEntry[] {
 // rule, rather than flashing a refusal that turns into a body a moment
 // later.
 export function useDeviceTabs(): DeviceTab[] {
-  const localDeviceId = useApi().deviceId;
-  const devices = useRemoteDevices();
+  const devices = useHostDevices();
   const tabs: DeviceTab[] = [];
   for (const entry of useDeviceRoster()) {
     const block = entry.isThisDevice
       ? undefined
-      : !entry.status?.reachable || entry.api === undefined
+      : !entry.status?.reachable
         ? "offline"
         : commandAccessOf(
-              localDeviceId,
-              entry.deviceId,
               devices.find((device) => device.deviceId === entry.deviceId),
             ).canCommand
           ? undefined
@@ -181,34 +150,28 @@ export function DeviceTabPanel({
   subject: string;
   children: ReactNode;
 }) {
-  // This device is re-pinned rather than left to the surrounding
-  // scope: under a peer's /devices route the page already sits in that
-  // peer's scope, and its "this device" tab must not. Keyed per device
-  // either way: a body seeds from the picked device's own answers, so
-  // carrying state across would show one device's data under another's.
-  // The peer's last api survives a session blip so the body under it
-  // (a form and its unsaved edits) stays mounted, and the offline note
-  // moves above it. A peer never reached in this window has nothing to
-  // show and gets the note alone.
-  const kept = useLastGoodApi(useRemoteDevice(tab.deviceId));
-  if (tab.isThisDevice) {
-    return <LocalHostScope key={tab.deviceId}>{children}</LocalHostScope>;
-  }
-  const offline = tab.api === undefined || tab.block === "offline";
-  const note = offline
-    ? `${capitalized(tab.label)} is offline, and ${subject} loads when it reconnects.`
-    : tab.block === "no-grant"
-      ? peerReadOnlyNote(tab.label)
-      : null;
-  if (note !== null && (!offline || kept === undefined)) {
-    return <DeviceTabNoteView note={note} />;
-  }
-  const api = tab.api ?? kept;
-  if (api === undefined) return null;
+  // Every tab is scoped, this device's too: under a peer's /devices
+  // route the page already sits in that peer's scope, and its "this
+  // device" tab must not. Keyed per device: a body seeds from the picked
+  // device's own answers, so carrying state across would show one
+  // device's data under another's. An offline peer's body stays through
+  // the blip (DeviceScope) with the note above it. One that couldn't be
+  // asked since the panel opened on it has nothing to show and gets the
+  // note alone.
+  const offline = tab.block === "offline";
+  const offlineNote = `${capitalized(tab.label)} is offline, and ${subject} loads when it reconnects.`;
   return (
-    <HostScopeProvider key={tab.deviceId} deviceId={tab.deviceId} api={api}>
-      {offline && note !== null && <StaleDeviceNoteView note={note} />}
-      {children}
-    </HostScopeProvider>
+    <DeviceScope
+      key={tab.deviceId}
+      deviceId={tab.deviceId}
+      absent={offline ? <DeviceTabNoteView note={offlineNote} /> : undefined}
+    >
+      {offline && <StaleDeviceNoteView note={offlineNote} />}
+      {tab.block === "no-grant" ? (
+        <DeviceTabNoteView note={peerReadOnlyNote(tab.label)} />
+      ) : (
+        children
+      )}
+    </DeviceScope>
   );
 }

@@ -3,7 +3,7 @@
 import type { ComponentProps } from "react";
 import type { PortForwardWorktree } from "@shigomori/contracts/modules/portForward";
 import { useCanForwardPorts } from "@/hooks/remote/usePortForwards";
-import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useRemoteDeviceLabel } from "@/hooks/remote/useDevices";
 import { ForwardControl } from "./ForwardControl";
 import {
   forwardBandClass,

@@ -15,8 +15,12 @@
 //   that device's registry, so no scope is involved.
 import type { HostApi } from "@/lib/runtime/Api";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { createContext, use, type ReactNode } from "react";
-import { remoteDeviceById } from "@/lib/remote/devices";
+import { createContext, use, useState, type ReactNode } from "react";
+import {
+  useDeviceReach,
+  useRemoteDeviceLabel,
+} from "@/hooks/remote/useDevices";
+import { apiOf, isLiveStatus, remoteDeviceById } from "@/lib/remote/devices";
 import { queryKeysFor, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 
@@ -39,8 +43,9 @@ export interface HostScope {
   // the hooks that read one gate on this instead of asking and being
   // refused.
   hasHost: boolean;
-  // The api those calls go through: the page's locally, a connected
-  // remote device's socket- or hub-backed api under a provider.
+  // The api those calls go through: the page's locally, a peer's
+  // hub-backed api under a DeviceScope. A subtree kept through a blip
+  // holds an away peer's, whose calls fail until its session lands.
   api: HostApi;
   // The key registry the subtree's queries cache under, bound to
   // deviceId. Referentially stable per device (queryKeysFor memoizes),
@@ -48,103 +53,84 @@ export interface HostScope {
   keys: QueryKeyRegistry;
 }
 
-// The local device's scope, over the page's api: what every hook
-// reads with no provider mounted. One per page api, so the value is
+// A device's scope over its api (the page's for this machine, a peer's
+// off page.peerApi), one per device and page api, so the value is
 // stable for the page's life.
-const localScopes = new WeakMap<RendererApi, HostScope>();
+const scopes = new WeakMap<RendererApi, Map<string, HostScope>>();
 
-function localHostScope(api: RendererApi): HostScope {
-  const existing = localScopes.get(api);
-  if (existing !== undefined) return existing;
-  const scope: HostScope = {
-    deviceId: api.deviceId,
-    remote: false,
-    hasHost: api.isElectron,
-    api,
-    keys: queryKeysFor(api.deviceId),
-  };
-  localScopes.set(api, scope);
+function scopeFor(page: RendererApi, deviceId: string): HostScope {
+  let byDevice = scopes.get(page);
+  if (byDevice === undefined) {
+    byDevice = new Map();
+    scopes.set(page, byDevice);
+  }
+  let scope = byDevice.get(deviceId);
+  if (scope === undefined) {
+    const remote = deviceId !== page.deviceId;
+    scope = {
+      deviceId,
+      remote,
+      hasHost: remote || page.isElectron,
+      api: apiOf(page, deviceId),
+      keys: queryKeysFor(deviceId),
+    };
+    byDevice.set(deviceId, scope);
+  }
   return scope;
 }
+
+// What every hook reads with no provider mounted.
+const localHostScope = (page: RendererApi) => scopeFor(page, page.deviceId);
 
 // Null where no provider wraps the caller: the local device's scope.
 const HostScopeContext = createContext<HostScope | null>(null);
 
-// A device's scope, the one shape both providers below hand down.
-function hostScopeFor(
-  page: RendererApi,
-  deviceId: string,
-  api: HostApi,
-): HostScope {
-  const remote = deviceId !== page.deviceId;
-  return {
-    deviceId,
-    remote,
-    hasHost: remote || page.isElectron,
-    api,
-    keys: queryKeysFor(deviceId),
-  };
-}
-
 // Any device's scope by id, for a caller outside React (the villager
 // toasts, lib/villagers/moves.ts): this machine's, or a peer's while
-// it has an api. Undefined for a peer without one.
+// it can be asked. Undefined for a peer that can't.
 export function hostScopeOf(
   page: RendererApi,
   registry: AtomRegistry.AtomRegistry,
   deviceId: string,
 ): HostScope | undefined {
-  if (deviceId === page.deviceId) return localHostScope(page);
-  const api = remoteDeviceById(registry, deviceId)?.api;
-  return api === undefined ? undefined : hostScopeFor(page, deviceId, api);
+  const peer = remoteDeviceById(registry, deviceId);
+  const live =
+    deviceId === page.deviceId ||
+    (peer !== undefined && isLiveStatus(peer.status));
+  return live ? scopeFor(page, deviceId) : undefined;
 }
 
-export function HostScopeProvider({
+// Scopes a subtree to a device. With `absent`, the subtree shows once
+// the device can be asked and stays through a blip after that, so what
+// sits under it (a seeded form and its unsaved edits, a scrolled diff)
+// outlives the blip: its requests fail meanwhile, and its cache
+// refetches as the session lands. A device that never could be asked
+// while this was mounted, that stopped sharing or that left the list
+// gets `absent` in its place. Without `absent`, the subtree shows
+// whatever the device's state.
+export function DeviceScope({
   deviceId,
-  api,
-  children,
-}: Omit<HostScope, "keys" | "remote" | "hasHost"> & {
-  children: ReactNode;
-}) {
-  return (
-    <HostScopeContext value={hostScopeFor(useApi(), deviceId, api)}>
-      {children}
-    </HostScopeContext>
-  );
-}
-
-// Scopes a subtree to a device only when there is a session to scope
-// it to: a peer with an api gets the provider, this machine (whose api
-// is the page's, the default scope) and a peer that is asleep render
-// the children where they are. The seam the sidebar's per-device
-// actions and menus mount through.
-export function MaybeHostScope({
-  deviceId,
-  api,
+  absent,
   children,
 }: {
   deviceId: string;
-  api: HostApi | undefined;
+  absent?: ReactNode;
   children: ReactNode;
 }) {
-  const localDeviceId = useApi().deviceId;
-  if (api === undefined || deviceId === localDeviceId) return children;
+  const page = useApi();
+  const reach = useDeviceReach(deviceId);
+  const live = reach.kind === "this" || reach.kind === "live";
+  const [shownId, setShownId] = useState(live ? deviceId : undefined);
+  const nextShownId = live
+    ? deviceId
+    : reach.kind === "gone"
+      ? undefined
+      : shownId;
+  if (nextShownId !== shownId) setShownId(nextShownId);
+  const kept = nextShownId === deviceId && reach.kind !== "notSharing";
+  if (absent !== undefined && !kept) return absent;
   return (
-    <HostScopeProvider deviceId={deviceId} api={api}>
-      {children}
-    </HostScopeProvider>
-  );
-}
-
-// Re-pins a subtree to THIS machine from inside a remote scope, for
-// the half of a cross-device flow that belongs here (the transplant
-// dialog's destination: its project config, carry-over and runtime
-// paths). The same value the provider-less default resolves to, so
-// it is stable and the hooks beneath behave exactly as they do on a
-// local page.
-export function LocalHostScope({ children }: { children: ReactNode }) {
-  return (
-    <HostScopeContext value={localHostScope(useApi())}>
+    <HostScopeContext value={scopeFor(page, deviceId)}>
       {children}
     </HostScopeContext>
   );
@@ -152,7 +138,7 @@ export function LocalHostScope({ children }: { children: ReactNode }) {
 
 // The destination half of a cross-device flow, for the dialogs that
 // serve both directions. A transplant or a mirror lands on this
-// machine, so with no provider mounted this is LocalHostScope. A
+// machine, so with no provider mounted this is this machine's scope. A
 // flow to a peer mounts DestinationProvider around its dialog, and
 // every destination read beneath (the project's config, its
 // carry-over, its branches and paths) goes to that peer instead. The
@@ -166,18 +152,12 @@ export function DestinationProvider({
   peer,
   children,
 }: {
-  peer: Pick<HostScope, "deviceId" | "api"> | null;
+  peer: Pick<HostScope, "deviceId"> | null;
   children: ReactNode;
 }) {
   const page = useApi();
   return (
-    <DestinationContext
-      value={
-        peer === null
-          ? localHostScope(page)
-          : hostScopeFor(page, peer.deviceId, peer.api)
-      }
-    >
+    <DestinationContext value={scopeFor(page, peer?.deviceId ?? page.deviceId)}>
       {children}
     </DestinationContext>
   );
@@ -204,4 +184,9 @@ export function DestinationScope({ children }: { children: ReactNode }) {
 export function useHostScope(): HostScope {
   const page = useApi();
   return use(HostScopeContext) ?? localHostScope(page);
+}
+
+// The name of the device the caller's scope reads, for prose.
+export function useScopedDeviceLabel(): string {
+  return useRemoteDeviceLabel(useHostScope().deviceId);
 }

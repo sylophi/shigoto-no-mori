@@ -1,7 +1,7 @@
 // Route-level device scoping for the /devices/$deviceId/... pages:
 // this machine's id renders the page under the default local scope
 // (the page's api), a peer's resolves the device from the registry, scopes
-// the subtree's queries to its api (HostScopeProvider), and says
+// the subtree's queries to its api (DeviceScope), and says
 // honestly when the device is not reachable. Push refresh is not a
 // scope concern: every device's boot-scoped push watch
 // (renderer/lib/hostWatch.ts) keeps its cache live, so the sidebar
@@ -11,13 +11,12 @@
 import { useNavigate, useParams } from "@tanstack/react-router";
 import type { ComponentType, ReactElement } from "react";
 import { useAccountStatus } from "@/hooks/account/useAccount";
-import { HostScopeProvider } from "@/hooks/remote/useHostScope";
+import { DeviceScope } from "@/hooks/remote/useHostScope";
 import { useHasLocalHost } from "@/lib/localHost";
 import { useApi } from "@/lib/runtime/pageApi";
-import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
-import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
+import { type DeviceReach, useDeviceReach } from "@/hooks/remote/useDevices";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
-import type { RemoteDevice } from "@/lib/remote/devices";
+import type { Device } from "@/lib/remote/devices";
 import { NotSharingView } from "@shigomori/ui/views/remote/NotSharingView.tsx";
 import {
   OpenDevicesButtonView,
@@ -33,39 +32,19 @@ function RemoteScopeGate({
   deviceId: string;
   Page: ComponentType;
 }) {
-  const device = useRemoteDevice(deviceId);
-  // Kept across a blip so the page under it stays mounted (why: the
-  // hook). This matters twice here: a page opened on this device's
-  // route can be showing ANOTHER device's tab (ProjectDevicePage picks
-  // locally, without navigating), and that device is fine. The wrapper
-  // keys this gate by deviceId, so the kept api never outlives a
-  // navigation to a different device.
-  const api = useLastGoodApi(device);
-
-  // Nothing it shared is kept, so there is no page to stand under a
-  // banner.
-  if (device?.status.phase === "notSharing") {
-    return (
-      <NotSharingView label={device.label} action={<OpenDevicesButton />} />
-    );
-  }
-
-  // No session has ever been open on this device in this window (a
-  // fresh open of a route for a device that is off), so there is
-  // nothing to show under a banner: every query would be empty. A
-  // device gone from the registry (removed from the account) is not a
-  // blip either: its last state is nobody's to act on.
-  if (api === undefined || device === undefined) {
-    return <UnreachableDevice device={device} />;
-  }
-
+  const reach = useDeviceReach(deviceId);
+  // Kept across a blip so the page under it stays mounted (why:
+  // DeviceScope). This matters twice here: a page opened on this
+  // device's route can be showing ANOTHER device's tab
+  // (ProjectDevicePage picks locally, without navigating), and that
+  // device is fine.
   return (
-    <HostScopeProvider deviceId={deviceId} api={api}>
+    <DeviceScope deviceId={deviceId} absent={<AbsentDevice reach={reach} />}>
       <RemoteScopeFrameView
         banner={
-          device.api === undefined && (
+          reach.kind !== "live" && (
             <UnreachableBannerView
-              label={unreachableLabel(device)}
+              label={unreachableLabel(reach.device)}
               action={<OpenDevicesButton />}
             />
           )
@@ -73,14 +52,29 @@ function RemoteScopeGate({
       >
         <Page />
       </RemoteScopeFrameView>
-    </HostScopeProvider>
+    </DeviceScope>
   );
 }
 
-function unreachableLabel(
-  device: RemoteDevice | undefined,
-  signedIn = true,
-): string {
+// Nothing a device that stopped sharing shared is kept, so there is no
+// page to stand under a banner. Nor is there for a device that couldn't
+// be asked since the gate opened (a fresh open of a route for a device
+// that is off), where every query would be empty, or for one gone from
+// the registry (removed from the account), whose last state is nobody's
+// to act on.
+function AbsentDevice({ reach }: { reach: DeviceReach }) {
+  if (reach.kind === "notSharing") {
+    return (
+      <NotSharingView
+        label={reach.device.label}
+        action={<OpenDevicesButton />}
+      />
+    );
+  }
+  return <UnreachableDevice device={reach.device} />;
+}
+
+function unreachableLabel(device: Device | undefined, signedIn = true): string {
   if (device === undefined) {
     // A deep link or a page left open across a sign-out: signed out,
     // nothing is in any registry.
@@ -95,7 +89,7 @@ function unreachableLabel(
   return `${device.label} is ${deviceStatusView(device.status).label.toLowerCase()}.`;
 }
 
-function UnreachableDevice({ device }: { device: RemoteDevice | undefined }) {
+function UnreachableDevice({ device }: { device: Device | undefined }) {
   const { data: status } = useAccountStatus();
   return (
     <UnreachableDeviceView
@@ -125,10 +119,10 @@ export function withDeviceScope(
   Page: ComponentType & { preload?: () => Promise<unknown> },
 ): () => ReactElement {
   // A peer's gate is keyed by device: not every device route remounts
-  // on a params change, and the gate's kept api must not survive a
-  // switch to another device. This machine's page is a different
-  // element from any peer's gate, so a switch between the two remounts
-  // it all the same.
+  // on a params change, and a page's own state (a form seeded from one
+  // device's answers) must not carry over to another device. This
+  // machine's page is a different element from any peer's gate, so a
+  // switch between the two remounts it all the same.
   const DeviceScoped = () => {
     const { deviceId } = useParams({ strict: false }) as { deviceId: string };
     const localDeviceId = useApi().deviceId;

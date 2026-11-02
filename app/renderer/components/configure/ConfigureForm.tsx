@@ -4,7 +4,7 @@ import { BranchCombobox } from "@/components/shared/BranchCombobox";
 import { EditorFooterView } from "@shigomori/ui/views/shared/EditorFooterView.tsx";
 import { fieldSetter, useDirtyForm } from "@shigomori/ui/hooks/useDirtyForm.ts";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useRemoteDeviceLabel } from "@/hooks/remote/useDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriPatch } from "@/hooks/config/useShigomoriPatch";
 import { notifyError } from "@/lib/toast";

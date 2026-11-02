@@ -19,16 +19,14 @@ import { pullLandingBranch } from "@shigomori/contracts/git/branches";
 import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
-import {
-  DestinationProvider,
-  LocalHostScope,
-} from "@/hooks/remote/useHostScope";
+import { DestinationProvider, DeviceScope } from "@/hooks/remote/useHostScope";
 import {
   useCopyOff,
   useMirrors,
   useStartMirror,
 } from "@/hooks/remote/useMirrors";
 import type { MoveMutation } from "@/hooks/remote/useMoveWorktree";
+import { useApi } from "@/lib/runtime/pageApi";
 import { PullFlowFrame, usePullFlow } from "../flow/PullFlow";
 import { LandedPath } from "../flow/FlowChrome";
 import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
@@ -273,7 +271,12 @@ function RunnerScope({
   runsHere: boolean;
   children: ReactNode;
 }) {
-  return runsHere ? <LocalHostScope>{children}</LocalHostScope> : children;
+  const localDeviceId = useApi().deviceId;
+  return runsHere ? (
+    <DeviceScope deviceId={localDeviceId}>{children}</DeviceScope>
+  ) : (
+    children
+  );
 }
 
 // Step 3: the copy has landed and the session is up. Read under the

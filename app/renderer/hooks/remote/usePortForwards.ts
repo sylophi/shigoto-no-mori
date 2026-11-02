@@ -12,7 +12,7 @@
 // local act. Taking it from a scope would have tied the stop control to
 // an api the caller does not need.
 import { capitalized } from "@shigomori/contracts/words";
-import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useRemoteDeviceLabel } from "@/hooks/remote/useDevices";
 import { refreshQueries } from "@/lib/askAgain";
 import { type QueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import {

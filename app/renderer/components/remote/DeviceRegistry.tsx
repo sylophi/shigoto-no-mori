@@ -27,8 +27,8 @@ import {
   useAccountIdentity,
   useClerkSessionMissing,
 } from "@/hooks/account/useClerkAccount";
-import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
-import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { usePeers } from "@/hooks/remote/useDevices";
+import { commandAccessOf } from "@/lib/remote/devices";
 import {
   useHubBlock,
   useHubStatus,
@@ -56,7 +56,7 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
   const local = useLocalDevice();
   const devicesQuery = useAccountDevices();
   const revokeDevice = useRevokeDevice();
-  const hubDevices = useRemoteDevices();
+  const hubDevices = usePeers();
   const hubById = new Map(
     hubDevices.map((device) => [device.deviceId, device] as const),
   );
@@ -92,7 +92,7 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
     name: local.name,
     icon: local.icon,
     status: thisDeviceRowStatus(socket),
-    access: commandAccessOf(localDeviceId, localDeviceId, undefined),
+    access: commandAccessOf({ isThisDevice: true }),
     // This machine knows its own version synchronously.
     appVersion: api.appVersion,
   };
@@ -116,7 +116,7 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
         // Whether THIS device may drive verbs on the peer: the peer's
         // own "allow control from other devices" switch, as it reports
         // it.
-        access: commandAccessOf(localDeviceId, device.deviceId, hubDevice),
+        access: commandAccessOf(hubDevice),
         // A peer confirms its version only once its direct session's
         // welcome lands.
         appVersion: hubDevice?.appVersion ?? "",

@@ -22,7 +22,7 @@ import {
 } from "@/hooks/projects/useProjectNav";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useRemoteDeviceLabel } from "@/hooks/remote/useDevices";
 import type { Project } from "@shigomori/contracts/schemas";
 import {
   DeviceTabPanel,

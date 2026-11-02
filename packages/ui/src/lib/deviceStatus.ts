@@ -5,7 +5,7 @@ import type { HubStatus } from "@shigomori/contracts/modules/hub";
 // The hub socket's phases plus two of the renderer's: "online" is
 // rostered with no direct session yet, so not connected (a roster fact
 // claims no data wire), and "notSharing" is a session whose peer's
-// sharing switch is off, so it serves nothing and gets no api.
+// sharing switch is off, so it serves nothing and nothing asks it.
 export type RemoteDeviceStatus =
   | HubStatus["socket"]
   | { phase: "online" }

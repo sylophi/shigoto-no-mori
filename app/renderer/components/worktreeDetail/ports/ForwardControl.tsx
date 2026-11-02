@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { PortForwardWorktree } from "@shigomori/contracts/modules/portForward";
 import { useForwardLocalPort } from "@/hooks/config/useForwardLocalPort";
 import { usePortForwardControl } from "@/hooks/remote/usePortForwards";
-import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useRemoteDeviceLabel } from "@/hooks/remote/useDevices";
 import { ForwardControlView } from "@shigomori/ui/views/worktreeDetail/ports/ForwardControlView.tsx";
 
 export function ForwardControl({

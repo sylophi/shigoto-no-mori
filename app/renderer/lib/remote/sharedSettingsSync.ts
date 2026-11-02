@@ -44,14 +44,15 @@ import type { PeerFollower } from "./remoteDeviceSync";
 // header): a peer with no grant and a session that just dropped both
 // refuse, and each is caught up by a pull instead.
 function offerToPeers(
+  api: Pick<RendererApi, "peerApi">,
   registry: AtomRegistry.AtomRegistry,
   doc: SharedSettingsDoc,
 ): void {
   if (Object.keys(doc.entries).length === 0) return;
   for (const device of registry.get(remoteDevicesAtom)) {
     if (!deviceStatusView(device.status).reachable) continue;
-    const peer = device.api;
-    peer?.run(peer.sharedSettings.merge({ doc })).catch(() => undefined);
+    const peer = api.peerApi(device.deviceId);
+    peer.run(peer.sharedSettings.merge({ doc })).catch(() => undefined);
   }
 }
 
@@ -59,7 +60,7 @@ function offerToPeers(
 // the pick holds here whatever the network is doing, then an offer to
 // each peer with a session.
 export async function writeSharedSetting(
-  api: Pick<RendererApi, "sharedSettings" | "run">,
+  api: Pick<RendererApi, "sharedSettings" | "run" | "peerApi">,
   registry: AtomRegistry.AtomRegistry,
   key: string,
   value: SharedSettingValue,
@@ -67,7 +68,7 @@ export async function writeSharedSetting(
   const doc = await api.run(api.sharedSettings.set({ key, value }));
   const entry = doc.entries[key];
   if (entry !== undefined) {
-    offerToPeers(registry, { entries: { [key]: entry } });
+    offerToPeers(api, registry, { entries: { [key]: entry } });
   }
   return doc;
 }

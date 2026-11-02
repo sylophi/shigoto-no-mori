@@ -72,7 +72,7 @@ export function useLocalDevice(): { name: string; icon: DeviceIcon } {
 // answer, or the platform's fallback until the status lands (a
 // desktop app is a machine, a hostless client a browser), so a mark
 // never waits on the read.
-export function useLocalDeviceIcon(): DeviceIcon {
+function useLocalDeviceIcon(): DeviceIcon {
   const hasLocalHost = useHasLocalHost();
   const { data: account } = useAccountStatus();
   return (

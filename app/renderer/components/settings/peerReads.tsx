@@ -3,7 +3,7 @@ import {
   isCommandRefusedError,
 } from "@shigomori/contracts/errors";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useScopedDeviceLabel } from "@/hooks/remote/useHostScope";
 import { PeerReadErrorView } from "@shigomori/ui/views/settings/PeerReadErrorView.tsx";
 
 // The sections that read a device's disk (the CLI, the agent hooks). Each

@@ -45,8 +45,9 @@ export function useScriptRunState(key: ScriptKey): ScriptRunState {
 }
 
 // The sidebar's activity glyph. Takes its device and the api it is read
-// through (useRowHostApi) rather than reading the scope: the rows render
-// outside any provider, and a peer row names the device it belongs to.
+// through (useCommandableDeviceApi) rather than reading the scope: the
+// rows render outside any provider, and a peer row names the device it
+// belongs to.
 // A run this window holds says most; one held elsewhere (another
 // window, another device) shows off the device's running scripts.
 export function useWorktreeScriptActivity(

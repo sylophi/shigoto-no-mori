@@ -1,113 +1,59 @@
-import { useAtomValue } from "@effect/atom-react";
 import type { CommandAccess } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
-import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
-import {
-  type RemoteDevice,
-  type RemoteDeviceApi,
-  remoteDevicesAtom,
-} from "@/lib/remote/devices";
-import { useHasLocalHost } from "@/lib/localHost";
-import { useApi } from "@/lib/runtime/pageApi";
-
-const GRANTED: CommandAccess = {
-  granted: true,
-  isLoading: false,
-  canCommand: true,
-};
-const PENDING: CommandAccess = {
-  granted: false,
-  isLoading: true,
-  canCommand: true,
-};
-const REFUSED: CommandAccess = {
-  granted: false,
-  isLoading: false,
-  canCommand: false,
-};
-
-// The verdict for one device, given its registry entry (undefined for
-// this device, which the registry does not list, and for a peer it no
-// longer knows). This device (`localDeviceId`) always commands itself.
-export function commandAccessOf(
-  localDeviceId: string,
-  deviceId: string,
-  device: Pick<RemoteDevice, "acceptsCommands"> | undefined,
-): CommandAccess {
-  if (deviceId === localDeviceId) return GRANTED;
-  const accepts = device?.acceptsCommands;
-  if (accepts === undefined) return PENDING;
-  return accepts ? GRANTED : REFUSED;
-}
+import { usePeer, usePeers } from "@/hooks/remote/useDevices";
+import { commandAccessOf, type Device, liveApi } from "@/lib/remote/devices";
+import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 
 // Does THIS device hold command access on the scoped host? Drives
 // whether a scoped page renders mutation controls or a read-only note.
-// A selector over the registry, so another peer's churn leaves the
-// value, and the render, alone.
 export function useCommandAccess(): CommandAccess {
-  const localDeviceId = useApi().deviceId;
-  const { deviceId } = useHostScope();
-  const accepts = useAtomValue(
-    remoteDevicesAtom,
-    (devices) =>
-      devices.find((entry) => entry.deviceId === deviceId)?.acceptsCommands,
+  return useDeviceCommandAccess(useHostScope().deviceId);
+}
+
+// The same for a device by id.
+export function useDeviceCommandAccess(deviceId: string): CommandAccess {
+  const page = useApi();
+  const peer = usePeer(deviceId);
+  return commandAccessOf(
+    deviceId === page.deviceId ? { isThisDevice: true } : peer,
   );
-  return commandAccessOf(localDeviceId, deviceId, {
-    acceptsCommands: accepts,
-  });
 }
 
 // A device's api while this device may command it (a verdict not in
-// yet counts, as canCommand has it), else undefined.
+// yet counts, as canCommand has it) and it can be asked, else undefined.
 function commandableApiOf(
-  localDeviceId: string,
-  deviceId: string,
-  device: RemoteDevice | undefined,
-): RemoteDeviceApi | undefined {
-  return commandAccessOf(localDeviceId, deviceId, device).canCommand
-    ? device?.api
+  page: RendererApi,
+  device: Device | undefined,
+): HostApi | undefined {
+  return device !== undefined && commandAccessOf(device).canCommand
+    ? liveApi(page, device)
     : undefined;
 }
 
-// The api to command a peer through from here, by device id
+// The api to command a device through from here, by device id
 // (commandableApiOf). The lookup the group actions and the inbox's
 // create button share.
 export function useCommandableApi(): (deviceId: string) => HostApi | undefined {
-  const localDeviceId = useApi().deviceId;
-  const registry = useRemoteDevices();
+  const page = useApi();
+  const devices = usePeers();
   return (deviceId) =>
     commandableApiOf(
-      localDeviceId,
-      deviceId,
-      registry.find((entry) => entry.deviceId === deviceId),
+      page,
+      devices.find((device) => device.deviceId === deviceId),
     );
 }
 
-// The api a sidebar row reads its device's runs and terminals through,
-// outside any host scope: this machine's while it has a host, a peer's
-// while this device may command it.
-export function useRowHostApi(deviceId: string): HostApi | undefined {
-  const api = useApi();
-  const hasLocalHost = useHasLocalHost();
-  const local = deviceId === api.deviceId;
-  const peerApi = useCommandableDeviceApi(local ? undefined : deviceId);
-  return local ? (hasLocalHost ? api : undefined) : peerApi;
-}
-
-// The same for one peer, as a selector (useRemoteDeviceApi's), so a row
-// drawn per worktree doesn't re-render on every other peer's churn.
+// The same for one device, the api a sidebar row reads its device's
+// runs and terminals through outside any host scope: this machine's
+// while it has a host, a peer's while this device may command it.
 // Undefined for undefined.
-function useCommandableDeviceApi(
+export function useCommandableDeviceApi(
   deviceId: string | undefined,
-): RemoteDeviceApi | undefined {
-  const localDeviceId = useApi().deviceId;
-  return useAtomValue(remoteDevicesAtom, (devices) =>
-    deviceId === undefined
-      ? undefined
-      : commandableApiOf(
-          localDeviceId,
-          deviceId,
-          devices.find((entry) => entry.deviceId === deviceId),
-        ),
-  );
+): HostApi | undefined {
+  const page = useApi();
+  const peer = usePeer(deviceId);
+  if (deviceId === page.deviceId) return page.isElectron ? page : undefined;
+  return peer?.hostsProjects === true
+    ? commandableApiOf(page, peer)
+    : undefined;
 }

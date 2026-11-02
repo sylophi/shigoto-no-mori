@@ -21,7 +21,7 @@ import {
 } from "@/hooks/projects/useProjectPullRequests";
 import { projectsAtom } from "@/hooks/projects/useProjects";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
-import type { RemoteDevice } from "@/lib/remote/devices";
+import { type Device, isLive, liveApi } from "@/lib/remote/devices";
 import { combineFanOut } from "@/hooks/remote/hostForestScope";
 import {
   someWorktreesAtom,
@@ -30,8 +30,9 @@ import {
 import { useAtomValue } from "@effect/atom-react";
 import * as Atom from "effect/reactivity/Atom";
 import { hostSessionAtom } from "@/lib/runtime/atoms";
+import { useApi } from "@/lib/runtime/pageApi";
 import { useViews, viewsOf } from "@/lib/runtime/viewHooks";
-import { useRemoteDevices } from "./useRemoteDevices";
+import { useDevices, usePeers } from "./useDevices";
 
 // The peers' projects, each as its host streams it. A peer that has had
 // a session on this page keeps its views while it has none, so its rows
@@ -52,21 +53,20 @@ const hadSessionAtom = Atom.family((joined: string) =>
 );
 const SEPARATOR = "\u0001";
 
-type Peer = { readonly deviceId: string; readonly api?: unknown };
-
-// Whether each of `devices`' views is read: while it can be asked, and
-// after that for as long as the page lives once it had a session, so a
-// surface that shows what a device holds keeps showing it while it is
-// away.
+// Whether each of `deviceIds`' views is read: while it can be asked,
+// and after that for as long as the page lives once it had a session,
+// so a surface that shows what a device holds keeps showing it while it
+// is away.
 export function useViewsWanted(
-  devices: readonly Peer[],
-): (device: Peer) => boolean {
-  const had = new Set(
-    useAtomValue(
-      hadSessionAtom(devices.map((device) => device.deviceId).join(SEPARATOR)),
-    ),
+  deviceIds: readonly string[],
+): (deviceId: string) => boolean {
+  const live = new Set(
+    useDevices()
+      .filter(isLive)
+      .map((device) => device.deviceId),
   );
-  return (device) => device.api !== undefined || had.has(device.deviceId);
+  const had = new Set(useAtomValue(hadSessionAtom(deviceIds.join(SEPARATOR))));
+  return (deviceId) => live.has(deviceId) || had.has(deviceId);
 }
 
 export interface RemoteForests {
@@ -94,7 +94,7 @@ export interface RemoteForestsOptions {
 }
 
 export interface RemoteProjectPair {
-  device: RemoteDevice;
+  device: Device;
   project: Project;
 }
 
@@ -114,13 +114,13 @@ export function useRemoteProjects(): {
   failed: readonly string[];
 } {
   // A peer that isn't sharing lists nothing.
-  const devices = useRemoteDevices().filter(
+  const devices = usePeers().filter(
     (device) => device.status.phase !== "notSharing",
   );
-  const wanted = useViewsWanted(devices);
+  const wanted = useViewsWanted(devices.map((device) => device.deviceId));
   const projectViews = useViews(
     peersProjectsAtom,
-    devices.map((device) => (wanted(device) ? device.deviceId : null)),
+    devices.map((device) => (wanted(device.deviceId) ? device.deviceId : null)),
   );
   // A checkout the peer reports missing is left out, the same gate the
   // local fan-outs apply: every read on it would only throw.
@@ -140,15 +140,18 @@ export function useRemoteProjects(): {
 export function useRemoteForests(
   options: RemoteForestsOptions = {},
 ): RemoteForests {
+  const page = useApi();
   const { inboxFacts = false } = options;
   // Flattened (device, project) pairs, so the worktree fan-out is one
   // flat read whatever shape the forests have.
   const { pairs, loading: projectsLoading, failed } = useRemoteProjects();
-  const wanted = useViewsWanted(pairs.map(({ device }) => device));
+  const wanted = useViewsWanted(pairs.map(({ device }) => device.deviceId));
   const worktreeQueries = useViews(
     someWorktreesAtom,
     pairs.map(({ device, project }) =>
-      wanted(device) ? worktreeListKey(device.deviceId, project.id) : null,
+      wanted(device.deviceId)
+        ? worktreeListKey(device.deviceId, project.id)
+        : null,
     ),
   );
   // The PR maps are the peers' views of their sweeps, and the config
@@ -157,14 +160,16 @@ export function useRemoteForests(
   const pullRequestQueries = useViews(
     somePullRequestsAtom,
     pairs.map(({ device, project }) =>
-      wanted(device) ? pullRequestsKey(device.deviceId, project.id) : null,
+      wanted(device.deviceId)
+        ? pullRequestsKey(device.deviceId, project.id)
+        : null,
     ),
   );
   const configQueries = useQueries({
     queries: pairs.map(({ device, project }) => ({
       ...shigomoriConfigQueryOptions(project.id, {
         deviceId: device.deviceId,
-        api: device.api,
+        api: liveApi(page, device),
       }),
       staleTime: Infinity,
       refetchOnWindowFocus: false,

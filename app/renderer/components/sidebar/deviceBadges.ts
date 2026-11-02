@@ -1,7 +1,7 @@
 // The device badges the sidebar's rows wear (DeviceBadgeView), off the
 // device registry.
 import { useLocalDevice } from "@/hooks/account/useAccount";
-import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { usePeers } from "@/hooks/remote/useDevices";
 import { useApi } from "@/lib/runtime/pageApi";
 import type { ForestDevice } from "@shigomori/ui/lib/forest.ts";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
@@ -12,7 +12,7 @@ import type { SidebarDeviceBadge } from "@shigomori/ui/views/sidebar/DeviceBadge
 // the device registry rather than off whichever peers' rows happen to
 // be on screen, so it holds whatever the sidebar's device filter hides.
 export function useDeviceBadges(): ReadonlyMap<string, SidebarDeviceBadge> {
-  const devices = useRemoteDevices();
+  const devices = usePeers();
   const badges = new Map<string, SidebarDeviceBadge>();
   for (const device of devices) {
     const { tone, reachable } = deviceStatusView(device.status);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useScopedDeviceLabel } from "@/hooks/remote/useHostScope";
 import type { ScriptRunState } from "@shigomori/ui/lib/scriptRun.ts";
 import { useDeviceRunningScripts } from "@/hooks/live/useLiveActivity";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";

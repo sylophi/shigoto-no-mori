@@ -7,7 +7,7 @@
 // local-port collision between two rows deterministic. The rows reflect
 // the outcome live off the engine's broadcast. Failures fold into one
 // toast per action rather than one per port.
-import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useRemoteDeviceLabel } from "@/hooks/remote/useDevices";
 import { useMutation } from "@tanstack/react-query";
 import {
   errorMessageOf,

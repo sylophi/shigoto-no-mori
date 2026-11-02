@@ -46,9 +46,10 @@ import { quietVillagerMoves } from "@/lib/villagers/moves";
 import {
   useDeviceName,
   useEveryHost,
-  useRemoteDeviceApi,
-  useRemoteDevices,
-} from "@/hooks/remote/useRemoteDevices";
+  useLiveApi,
+  usePeer,
+  usePeers,
+} from "@/hooks/remote/useDevices";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import { useHasLocalHost } from "@/lib/localHost";
 import { useViewsWanted } from "@/hooks/remote/useRemoteForests";
@@ -58,12 +59,10 @@ import { notifyError, toast } from "@/lib/toast";
 import { useApi } from "@/lib/runtime/pageApi";
 import { useAcceptsCommands } from "@/hooks/account/useAccount";
 import { useSharing } from "@/hooks/account/useSharing";
-import { useAtomValue } from "@effect/atom-react";
 import {
   copySwitchOff,
   type CopySwitchOff,
 } from "@shigomori/ui/lib/commandAccessCopy.ts";
-import { type RemoteDevice, remoteDevicesAtom } from "@/lib/remote/devices";
 
 const EMPTY: MirrorListResult = {
   daemon: "stopped",
@@ -134,21 +133,15 @@ export function useCopyOff(
   const localDeviceId = useApi().deviceId;
   const acceptsCommands = useAcceptsCommands().data;
   const sharing = useSharing().data;
-  const entryOf = (devices: readonly RemoteDevice[]) =>
-    devices.find((entry) => entry.deviceId === deviceId);
-  const peerSharing = useAtomValue(
-    remoteDevicesAtom,
-    (devices) => entryOf(devices)?.status.phase !== "notSharing",
-  );
-  const peerAcceptsCommands = useAtomValue(
-    remoteDevicesAtom,
-    (devices) => entryOf(devices)?.acceptsCommands,
-  );
+  const peer = usePeer(deviceId);
   const device = useDeviceName(deviceId ?? "");
   const off = copySwitchOff({
     here: deviceId === localDeviceId,
     own: { acceptsCommands, sharing },
-    peer: { acceptsCommands: peerAcceptsCommands, sharing: peerSharing },
+    peer: {
+      acceptsCommands: peer?.acceptsCommands,
+      sharing: peer?.status.phase !== "notSharing",
+    },
   });
   return off === undefined ? undefined : { device, off };
 }
@@ -170,7 +163,7 @@ export function useMirrorPairs(): MirrorPair[] {
   const hosts = useEveryHostMirrors();
   // Off the registry the rows' badges read (useDeviceBadges).
   const reachable = new Set(
-    useRemoteDevices()
+    usePeers()
       .filter((device) => deviceStatusView(device.status).reachable)
       .map((device) => device.deviceId),
   );
@@ -231,11 +224,13 @@ function useOtherHostMirrors<T>(
   const candidates = useEveryHost().filter(
     (candidate) => candidate.deviceId !== exceptDeviceId,
   );
-  const wanted = useViewsWanted(candidates);
+  const wanted = useViewsWanted(
+    candidates.map((candidate) => candidate.deviceId),
+  );
   const lists = useViews(
     hostsMirrorsAtom,
     candidates.map((candidate) =>
-      wanted(candidate) ? candidate.deviceId : null,
+      wanted(candidate.deviceId) ? candidate.deviceId : null,
     ),
   );
   return candidates.map(({ deviceId, api }, index) => {
@@ -308,9 +303,7 @@ export function useWorktreeMirrorLinks(
   const serving = served.filter((s) => s.worktreeId === worktree.id);
   // A peer's page read off its cache while it is away: its own session
   // is its last word too.
-  const scopeApi = useRemoteDeviceApi(
-    scope.remote ? scope.deviceId : undefined,
-  );
+  const scopeApi = useLiveApi(scope.remote ? scope.deviceId : undefined);
   const others = useOtherHostMirrors(scope.deviceId, (list) => {
     const session = list.sessions.find(
       (s) => s.deviceId === scope.deviceId && s.worktreeId === worktree.id,

@@ -1,4 +1,4 @@
-import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useScopedDeviceLabel } from "@/hooks/remote/useHostScope";
 import { useSearch } from "@tanstack/react-router";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";

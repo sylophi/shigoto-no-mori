@@ -2,7 +2,7 @@ import type { WorktreeEntry } from "@shigomori/ui/views/sidebar/WorktreeEntryVie
 import { useMatch, useNavigate, useParams } from "@tanstack/react-router";
 import { useWorktreeScriptActivity } from "@/hooks/scripts/useScriptRuns";
 import { useWorktreeTerminalMark } from "@/hooks/terminals/useTerminals";
-import { useRowHostApi } from "@/hooks/remote/useCommandAccess";
+import { useCommandableDeviceApi } from "@/hooks/remote/useCommandAccess";
 import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { useSidebarMarks } from "@/hooks/config/useSidebarMarks";
@@ -36,7 +36,7 @@ export function useWorktreeEntry({
   mirrorWorktreeId?: string;
 }): WorktreeEntry {
   const navigate = useNavigate();
-  const api = useRowHostApi(deviceId);
+  const api = useCommandableDeviceApi(deviceId);
   const running = useWorktreeScriptActivity(worktree.id, deviceId, api);
   const terminal = useWorktreeTerminalMark(worktree.id, deviceId, api);
   const isDeleting = useIsDeletingWorktree(worktree.id, deviceId);

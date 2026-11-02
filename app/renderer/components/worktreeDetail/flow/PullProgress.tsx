@@ -3,7 +3,7 @@ import {
   useDestinationScope,
   useHostScope,
 } from "@/hooks/remote/useHostScope";
-import { useDeviceIcon } from "@/hooks/remote/useRemoteDevices";
+import { useDeviceIcon } from "@/hooks/remote/useDevices";
 import { useCreatePlan } from "./createPlan";
 import {
   type PullProgressProps,
