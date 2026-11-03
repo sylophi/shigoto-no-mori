@@ -2,7 +2,7 @@
 // api` asks github.com unless told otherwise, even in a repo on an
 // Enterprise host, so a repo's merge settings and stacks would be read
 // from the wrong server.
-import { normalizeRemoteUrl } from "@shigomori/contracts/predicates/remoteUrl";
+import { parseRemoteUrl } from "@shigomori/contracts/predicates/remoteUrl";
 
 // gh's own order for the repo a checkout means (its remote resolver):
 // upstream, then github, then origin, then the rest as git lists them.
@@ -10,7 +10,7 @@ const GH_REMOTE_ORDER = ["origin", "github", "upstream"];
 
 // The hosts gh is signed in to: the top-level keys of its hosts.yml
 // (`content`, empty for none), and github.com even without one.
-// Lowercased, as normalizeRemoteUrl leaves a remote's host.
+// Lowercased, as parseRemoteUrl leaves a remote's host.
 export function ghKnownHosts(content: string): Set<string> {
   const hosts = new Set<string>(["github.com"]);
   for (const line of content.split("\n")) {
@@ -34,10 +34,8 @@ export function ghHostFor(
   for (const { name, url } of remotes) {
     if (seen.has(name)) continue;
     seen.add(name);
-    const normalized = normalizeRemoteUrl(url);
-    if (normalized === null) continue;
-    const host = normalized.slice(0, normalized.indexOf("/"));
-    if (!known.has(host)) continue;
+    const host = parseRemoteUrl(url)?.host;
+    if (host === undefined || !known.has(host)) continue;
     const rank = GH_REMOTE_ORDER.indexOf(name);
     if (best === null || rank > best.rank) best = { host, rank };
   }

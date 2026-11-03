@@ -5,7 +5,10 @@ import { cloneFolderName } from "@shared/cloneUrl";
 import { expandHome } from "@shared/paths";
 import { reorderProjects } from "@shared/reorder";
 import type { CloneProgressPush } from "@shigomori/contracts/modules/projects";
-import { cloneUrlOf } from "@shigomori/contracts/predicates/remoteUrl";
+import {
+  cloneUrlOf,
+  githubRepoOf,
+} from "@shigomori/contracts/predicates/remoteUrl";
 import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -90,8 +93,9 @@ const registerNewCheckout = (
 const ghCredentials = Effect.fnUntraced(function* (url: string) {
   if (!/^https:\/\//i.test(url)) return [];
   const cli = yield* GithubCli;
-  const host = yield* cli.hostOf(url);
-  if (host === null || (yield* cli.unavailableReason) !== null) return [];
+  const host = githubRepoOf(url)?.host;
+  if (host === undefined || !(yield* cli.knownHosts).has(host)) return [];
+  if ((yield* cli.unavailableReason) !== null) return [];
   const key = `credential.https://${host}.helper`;
   return [
     [key, ""],

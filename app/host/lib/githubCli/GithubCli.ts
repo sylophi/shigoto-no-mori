@@ -20,11 +20,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as EngineConfig from "@shigomori/engine/Config";
-import * as Git from "@shigomori/engine/Git";
 import * as GitHub from "@shigomori/engine/GitHub";
 import { isCommandError } from "@shigomori/engine/processes";
 import { keptAnswer, keptAnswers } from "@shigomori/engine/keptAnswers";
-import { type GithubRepoInfo, parseRemoteUrl } from "./remote";
 
 // A wedged gh (proxy auth, SSO browser prompt) must not hang forever:
 // the readiness probe gates every PR feature, so one stuck spawn would
@@ -50,10 +48,8 @@ export class GithubCli extends Context.Service<
     // failed, or null when gh can be used. Surfaces that explain
     // themselves (the new-worktree PR mode) read the reason.
     readonly unavailableReason: Effect.Effect<GhUnavailableReason | null>;
-    // The first remote whose host gh is logged in to, or null.
-    readonly repo: (cwd: string) => Effect.Effect<GithubRepoInfo | null>;
-    // The GitHub host gh knows that `url` is a repository on, or null.
-    readonly hostOf: (url: string) => Effect.Effect<string | null>;
+    // The hosts gh is signed in to, and github.com always.
+    readonly knownHosts: Effect.Effect<ReadonlySet<string>>;
     // For a path that just gained its GitHub remote (a publish), so the
     // next read sees it rather than a cached "not on GitHub".
     readonly evictRepo: (cwd: string) => Effect.Effect<void>;
@@ -155,7 +151,6 @@ const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   // The device settings, for the integration's switch.
   const engineConfig = yield* EngineConfig.Config;
-  const git = yield* Git.Git;
   const github = yield* GitHub.GitHub;
 
   // github.com always counts, and alone for this ask when gh's file
@@ -214,21 +209,7 @@ const make = Effect.gen(function* () {
     { failures: UNANSWERED_PROBE_TTL },
   )).pipe(Effect.orElseSucceed(() => ({ installed: true, authed: false })));
 
-  const repos = yield* keptAnswers(
-    (cwd: string) =>
-      Effect.gen(function* () {
-        const [remotes, hosts] = yield* Effect.all(
-          [git.listRemoteEntries(cwd), knownHosts],
-          { concurrency: 2 },
-        );
-        for (const { url } of remotes) {
-          const parsed = parseRemoteUrl(url);
-          if (parsed && hosts.has(parsed.host)) return parsed;
-        }
-        return null;
-      }),
-    REPO_TTL,
-  );
+  const repos = yield* keptAnswers(github.repoOf, REPO_TTL);
 
   // The engine's read at the host's gh deadline, kept only when it read.
   const mergeConfigs = yield* keptAnswers(
@@ -296,14 +277,14 @@ const make = Effect.gen(function* () {
     return null;
   }).pipe(Effect.withSpan("GithubCli.unavailableReason"));
 
-  const repo = Effect.fn("GithubCli.repo")((cwd: string) => repos.get(cwd));
-
   const unavailableFor = Effect.fn("GithubCli.unavailableFor")(function* (
     cwd: string,
   ) {
     const reason = yield* unavailableReason;
     if (reason !== null) return reason;
-    return (yield* repo(cwd)) === null ? ("no-github-remote" as const) : null;
+    return (yield* repos.get(cwd)) === null
+      ? ("no-github-remote" as const)
+      : null;
   });
 
   return GithubCli.of({
@@ -314,12 +295,7 @@ const make = Effect.gen(function* () {
       Effect.withSpan("GithubCli.readiness"),
     ),
     unavailableReason,
-    repo,
-    hostOf: Effect.fn("GithubCli.hostOf")(function* (url: string) {
-      const parsed = parseRemoteUrl(url.trim());
-      if (parsed === null) return null;
-      return (yield* knownHosts).has(parsed.host) ? parsed.host : null;
-    }),
+    knownHosts,
     evictRepo: Effect.fn("GithubCli.evictRepo")((cwd: string) =>
       repos.invalidate(cwd),
     ),
@@ -328,13 +304,12 @@ const make = Effect.gen(function* () {
       if ((yield* unavailableFor(cwd)) !== null) return null;
       return yield* mergeConfigs.get(cwd);
     }),
-    // The repo the app takes the project for (its GitHub links open
-    // it), not gh's base repo, which for a fork is the parent.
+    // Of the repo the project is (GitHub.repoOf), not gh's base repo.
     description: Effect.fn("GithubCli.description")(function* (cwd) {
       const reason = yield* unavailableReason;
       if (reason === "integration-off") return null;
       if (reason !== null) return yield* new GhUnavailableError({ reason });
-      const info = yield* repo(cwd);
+      const info = yield* repos.get(cwd);
       if (info === null) return null;
       return yield* descriptions.get(`${info.host}/${info.owner}/${info.repo}`);
     }),

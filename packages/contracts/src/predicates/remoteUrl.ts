@@ -33,9 +33,32 @@ export function githubPageOf(remote: string | null | undefined): string | null {
   return host?.includes("github") ? `https://${remote}` : null;
 }
 
-// `host/owner/repo`, or null for anything machine-local. scp-style
-// without a user (`github.com:owner/repo`) is valid git syntax too.
+// `host/owner/repo`.
 export function normalizeRemoteUrl(url: string): string | null {
+  const remote = parseRemoteUrl(url);
+  return remote && `${remote.host}/${remote.path}`;
+}
+
+export type GithubRepo = {
+  readonly host: string;
+  readonly owner: string;
+  readonly repo: string;
+};
+
+// The repo a remote names, or a page on its host does (a pull request's
+// URL): the path's first two segments.
+export function githubRepoOf(url: string): GithubRepo | null {
+  const remote = parseRemoteUrl(url);
+  const [owner, repo] = remote?.path.split("/") ?? [];
+  return remote && owner && repo ? { host: remote.host, owner, repo } : null;
+}
+
+type Remote = { readonly host: string; readonly path: string };
+
+// A remote's host and the path on it, or null for anything machine-local.
+// scp-style without a user (`github.com:owner/repo`) is valid git syntax
+// too.
+export function parseRemoteUrl(url: string): Remote | null {
   const raw = url.trim();
   if (raw.length === 0) return null;
   const scheme = raw.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):\/\//);
@@ -45,7 +68,7 @@ export function normalizeRemoteUrl(url: string): string | null {
     const slash = rest.indexOf("/");
     const authority = slash === -1 ? rest : rest.slice(0, slash);
     const path = slash === -1 ? "" : rest.slice(slash + 1);
-    return joinHostPath(stripPort(stripUser(authority)), path);
+    return hostAndPath(stripPort(stripUser(authority)), path);
   }
   // git's heuristic: a colon before the first slash means ssh, unless it
   // looks like a drive letter or the URL is an explicit path.
@@ -55,7 +78,7 @@ export function normalizeRemoteUrl(url: string): string | null {
   if (colon === -1) return null;
   const slash = raw.indexOf("/");
   if (slash !== -1 && slash < colon) return null;
-  return joinHostPath(stripUser(raw.slice(0, colon)), raw.slice(colon + 1));
+  return hostAndPath(stripUser(raw.slice(0, colon)), raw.slice(colon + 1));
 }
 
 function stripUser(authority: string): string {
@@ -74,13 +97,13 @@ function lowerAsciiHost(host: string): string {
   return host.replace(/[A-Z]/g, (c) => c.toLowerCase());
 }
 
-function joinHostPath(host: string, path: string): string | null {
-  let repo = path.replace(/^\/+/, "").replace(/\/+$/, "");
-  if (repo.endsWith(".git")) repo = repo.slice(0, -4).replace(/\/+$/, "");
-  let folded = lowerAsciiHost(host);
-  // The host's SSH-over-443 alias: same repo. Mirrors normalizeHost in
-  // host/lib/githubCli/remote.ts.
-  if (folded.startsWith("ssh.")) folded = folded.slice(4);
-  if (folded.length === 0 || repo.length === 0) return null;
-  return `${folded}/${repo}`;
+function hostAndPath(rawHost: string, rawPath: string): Remote | null {
+  let path = rawPath.replace(/^\/+/, "").replace(/\/+$/, "");
+  if (path.endsWith(".git")) path = path.slice(0, -4).replace(/\/+$/, "");
+  let host = lowerAsciiHost(rawHost);
+  // `ssh.<host>` is the host's SSH-over-443 alias (GitHub's
+  // ssh.github.com), which gh resolves to the host itself.
+  if (host.startsWith("ssh.")) host = host.slice(4);
+  if (host.length === 0 || path.length === 0) return null;
+  return { host, path };
 }

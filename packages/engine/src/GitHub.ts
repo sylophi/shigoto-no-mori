@@ -7,6 +7,10 @@ import {
   type MergeSettings,
 } from "@shigomori/contracts/mergeMethods";
 import {
+  type GithubRepo,
+  githubRepoOf,
+} from "@shigomori/contracts/predicates/remoteUrl";
+import {
   isBranchsOwn,
   type MergeMethod,
   type RepoMergeConfig,
@@ -176,6 +180,10 @@ export class GitHub extends Context.Service<
     // null for none. Every gh run in a repo goes there: `gh api` asks
     // github.com otherwise.
     readonly hostOf: (cwd: string) => Effect.Effect<string | null>;
+    // The repo the checkout at `cwd` is, which the app's links open: its
+    // first remote on a host gh is signed in to, or null. Not the repo gh
+    // resolves (hostOf), which for a fork is the parent.
+    readonly repoOf: (cwd: string) => Effect.Effect<GithubRepo | null>;
     // The hosts gh is signed in to, as its hosts.yml lists them, and
     // github.com always. A file that is there and can't be read fails.
     readonly knownHosts: Effect.Effect<
@@ -499,15 +507,26 @@ const make = Effect.gen(function* () {
     );
   });
 
-  const hostOf = Effect.fn("GitHub.hostOf")(function* (cwd: string) {
-    const [remotes, known] = yield* Effect.all(
+  const remotesAndHosts = (cwd: string) =>
+    Effect.all(
       [
         git.listRemoteEntries(cwd),
         knownHosts.pipe(Effect.orElseSucceed(() => new Set(["github.com"]))),
       ],
       { concurrency: 2 },
     );
-    return ghHostFor(remotes, known);
+
+  const hostOf = Effect.fn("GitHub.hostOf")(function* (cwd: string) {
+    return ghHostFor(...(yield* remotesAndHosts(cwd)));
+  });
+
+  const repoOf = Effect.fn("GitHub.repoOf")(function* (cwd: string) {
+    const [remotes, known] = yield* remotesAndHosts(cwd);
+    for (const { url } of remotes) {
+      const repo = githubRepoOf(url);
+      if (repo && known.has(repo.host)) return repo;
+    }
+    return null;
   });
 
   // No stdin, so it never waits on a prompt.
@@ -1010,6 +1029,7 @@ const make = Effect.gen(function* () {
     run,
     runOn,
     hostOf,
+    repoOf,
     knownHosts,
     cardFor,
     owningPullRequest,
