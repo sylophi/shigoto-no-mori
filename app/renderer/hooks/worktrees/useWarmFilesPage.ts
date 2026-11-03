@@ -5,7 +5,7 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { worktreeFolderQuery } from "@/hooks/remote/useWorktreeFolder";
 import { worktreeFileQuery } from "@/hooks/worktrees/useWorktreeFile";
-import { rememberedFile } from "@/hooks/worktrees/useWorktreeNav";
+import { rememberedFile } from "@/store/lastFiles";
 import { prefetchAhead } from "@/lib/queryClientOptions";
 
 // Starts the reads the files page opens on: a folder's listing, a
@@ -40,8 +40,8 @@ export function useWarmFilesPage(worktree: Worktree) {
     file,
     page: () => {
       folder("");
-      const last = rememberedFile(deviceId, projectId, worktreeId);
-      if (last === undefined) return;
+      const last = rememberedFile({ deviceId, projectId, worktreeId });
+      if (last === null) return;
       for (const ancestor of ancestorsOf(last)) folder(ancestor);
       file(last);
     },

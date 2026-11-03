@@ -2,7 +2,8 @@ import { Outlet } from "@tanstack/react-router";
 import { TerminalDrawer } from "@/components/terminal/TerminalDrawer";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
-import { drawerKey, useDrawerSide } from "@/store/terminalDrawer";
+import { useDrawerSide } from "@/store/terminalDrawer";
+import { worktreeKey } from "@/store/worktreeState";
 import { WorktreePagesView } from "@shigomori/ui/views/worktreeDetail/WorktreePagesView.tsx";
 
 // The layout of a worktree's pages, which keeps its terminal drawer
@@ -17,7 +18,7 @@ export function WorktreePages() {
       drawer={
         worktree && (
           <TerminalDrawer
-            key={drawerKey(deviceId, projectId, worktreeId)}
+            key={worktreeKey({ deviceId, projectId, worktreeId })}
             worktree={worktree}
           />
         )

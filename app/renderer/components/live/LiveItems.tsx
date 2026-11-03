@@ -27,11 +27,7 @@ import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { slotLabel } from "@/store/scriptSlot";
-import {
-  drawerKey,
-  hideEmptyDrawer,
-  terminalTabLabel,
-} from "@/store/terminalDrawer";
+import { hideEmptyDrawer, terminalTabLabel } from "@/store/terminalDrawer";
 import {
   DeviceNameView,
   ForwardItemView,
@@ -114,9 +110,11 @@ export function TerminalItem({
       api.run(api.terminals.close({ terminalId: terminal.terminalId })),
     onSuccess: () => {
       if (last)
-        hideEmptyDrawer(
-          drawerKey(deviceId, terminal.projectId, terminal.worktreeId),
-        );
+        hideEmptyDrawer({
+          deviceId,
+          projectId: terminal.projectId,
+          worktreeId: terminal.worktreeId,
+        });
     },
     meta: { errorTitle: "Couldn't close the terminal" },
   });

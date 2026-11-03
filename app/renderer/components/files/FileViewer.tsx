@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { CODE_THEME } from "@shigomori/ui/views/diff/codeTheme.ts";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLook } from "@/hooks/ui/useLook";
-import { rememberFile } from "@/hooks/worktrees/useWorktreeNav";
+import { rememberFile } from "@/store/lastFiles";
 import {
   useWorktreeFile,
   useWorktreeImage,
@@ -52,7 +52,7 @@ export function FileViewer({
   const missing = data?.kind === "missing";
   useEffect(() => {
     if (read) {
-      rememberFile(deviceId, projectId, worktreeId, missing ? null : path);
+      rememberFile({ deviceId, projectId, worktreeId }, missing ? null : path);
     }
   }, [deviceId, projectId, worktreeId, path, read, missing]);
   const remoteImage = useRemoteImage(projectId);

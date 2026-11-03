@@ -39,9 +39,11 @@ containers, hooks, stores and routes over the views in `@shigomori/ui`
   read with its `listen` or an atom.
 - `lib/`: the rest of the window's own logic (deep links, focus, the
   theme root, toasts, the remote device registry and its sync).
-- `store/`: the page's own state kept outside React (the terminal
-  drawer, this window's unsent pull request drafts), and two helpers
-  the script runs use (the slot codec, keyed subscribers).
+- `store/`: the page's own state kept outside React, a store to a
+  file. One kept per worktree is built with `createWorktreeStore`
+  (`worktreeState.ts`), so it is forgotten with the worktree and, if
+  it moves, follows it to a new id. Beside them, two helpers the
+  script runs use (the slot codec, keyed subscribers).
 
 A new screen is a view in `@shigomori/ui` with a scene
 (`packages/ui/README.md`), a container here that binds it, a route in
