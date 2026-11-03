@@ -1,7 +1,4 @@
-import {
-  customBaseOf,
-  worktreeBase as worktreeBaseOf,
-} from "@shigomori/contracts/git/worktreeLayout";
+import { worktreeBase as worktreeBaseOf } from "@shigomori/contracts/git/worktreeLayout";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -96,7 +93,8 @@ const make = Effect.gen(function* () {
     const bases = layout.managedBases(
       project.path,
       place,
-      customBaseOf(customWorktreePath, home),
+      customWorktreePath,
+      home,
     );
     const real = yield* Effect.forEach(bases, (base) =>
       fs.realPath(base).pipe(Effect.orElseSucceed(() => base)),

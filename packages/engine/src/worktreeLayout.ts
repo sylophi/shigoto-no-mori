@@ -2,6 +2,7 @@
 // folders beside worktrees, and which folders count as managed. Where
 // new worktrees go is contracts' worktreeBase.
 import {
+  customBaseOf,
   type DataDirPlace,
   driveBaseOf,
   inProjectBaseOf,
@@ -53,15 +54,18 @@ const trimTrailingSlashes = (path: string) => path.replace(/\/+$/, "");
 
 // Every base whose direct children count as managed for a project, all
 // layouts included, so switching layouts doesn't turn worktrees external.
-// `customBase` is the project's, as contracts' customBaseOf gives it.
-export const managedBases = (
+export function managedBases(
   projectPath: string,
   place: DataDirPlace,
-  customBase: string | undefined,
-): ReadonlyArray<string> => [
-  ...ownBases(projectPath, place),
-  ...(customBase === undefined ? [] : [customBase]),
-];
+  customPath: string | undefined,
+  homedir: string,
+): ReadonlyArray<string> {
+  const custom = customBaseOf(customPath, homedir);
+  return [
+    ...ownBases(projectPath, place),
+    ...(custom === undefined ? [] : [custom]),
+  ];
+}
 
 // Parent equality, not a prefix: a root base would otherwise claim every
 // worktree on the volume.

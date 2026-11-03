@@ -10,7 +10,7 @@
 // `wt/` and relocate's. A create refuses a path a record still names.
 import * as Cause from "effect/Cause";
 import { UnknownWorktreeError } from "@shigomori/contracts/errors";
-import { cleanPath } from "@shigomori/contracts/git/worktreeLayout";
+import { cleanPath } from "@shigomori/contracts/projectPaths";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";

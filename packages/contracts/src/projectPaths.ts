@@ -62,6 +62,31 @@ export function normalizeForSubmit(value: string): string {
   return trimmed.replace(TRAILING_SEPS, "");
 }
 
+// A path as Go's filepath.Clean leaves it: `.` and `..` resolved, no
+// doubled or trailing slash, and `.` for a relative path that resolves
+// to nothing.
+export function cleanPath(path: string): string {
+  const absolute = path.startsWith("/");
+  const parts: string[] = [];
+  for (const part of path.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part !== "..") parts.push(part);
+    else if (parts.length > 0 && parts.at(-1) !== "..") parts.pop();
+    else if (!absolute) parts.push("..");
+  }
+  const joined = parts.join("/");
+  return absolute ? `/${joined}` : joined || ".";
+}
+
+// A `~` or `~/` path joined to `home` and cleaned as Go's filepath.Join
+// cleans it, and any other path as it is.
+export function expandHome(home: string, path: string): string {
+  if (!/^~(\/|$)/.test(path)) return path;
+  return cleanPath(
+    [home, path.slice(2)].filter((part) => part !== "").join("/"),
+  );
+}
+
 export function tildify(path: string, home: string | null | undefined): string {
   if (!home || !path) return path;
   if (path === home) return "~";

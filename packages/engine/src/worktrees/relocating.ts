@@ -1,7 +1,7 @@
 // Worktrees' relocating: a project moved or renamed by hand, pointed at
 // where it is now, its worktrees re-linked.
 import { UnknownProjectError } from "@shigomori/contracts/errors";
-import { cleanPath } from "@shigomori/contracts/git/worktreeLayout";
+import { cleanPath } from "@shigomori/contracts/projectPaths";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";

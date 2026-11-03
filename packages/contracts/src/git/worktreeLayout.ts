@@ -3,6 +3,7 @@
 // project's own external drive. The engine places worktrees by it and
 // the renderer previews them by it, so it is posix strings only.
 
+import { cleanPath, expandHome } from "../projectPaths.ts";
 import { PROJECT_CONFIG_DEFAULTS } from "../schemas/projectConfigDefaults.ts";
 
 // The folder worktrees live in under each root: short, since agents and
@@ -15,22 +16,6 @@ export function isSameOrInside(path: string, ancestor: string): boolean {
   const folded = path.replace(/\/+$/, "");
   const base = ancestor.replace(/\/+$/, "");
   return folded === base || folded.startsWith(`${base}/`);
-}
-
-// A path as Go's filepath.Clean leaves it: `.` and `..` resolved, no
-// doubled or trailing slash, and `.` for a relative path that resolves
-// to nothing.
-export function cleanPath(path: string): string {
-  const absolute = path.startsWith("/");
-  const parts: string[] = [];
-  for (const part of path.split("/")) {
-    if (part === "" || part === ".") continue;
-    if (part !== "..") parts.push(part);
-    else if (parts.length > 0 && parts.at(-1) !== "..") parts.pop();
-    else if (!absolute) parts.push("..");
-  }
-  const joined = parts.join("/");
-  return absolute ? `/${joined}` : joined || ".";
 }
 
 const joinPath = (...parts: string[]) =>
@@ -116,11 +101,7 @@ export function customBaseOf(
   homedir: string,
 ): string | undefined {
   const custom = customPath?.trim() ?? "";
-  if (custom === "") return undefined;
-  if (custom === "~") return cleanPath(homedir);
-  return cleanPath(
-    custom.startsWith("~/") ? `${homedir}/${custom.slice(2)}` : custom,
-  );
+  return custom === "" ? undefined : cleanPath(expandHome(homedir, custom));
 }
 
 export type LayoutInputs = DeviceLayout & {
