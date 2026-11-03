@@ -13,7 +13,7 @@ import {
   PullRequestSchema,
 } from "@shigomori/contracts/schemas";
 import { forkBranchCandidates } from "@shigomori/contracts/git/branches";
-import { messageOf } from "@shigomori/engine/errorDocument";
+import { clauseOf } from "@shigomori/engine/errorDocument";
 import * as Git from "@shigomori/engine/Git";
 import * as GitHub from "@shigomori/engine/GitHub";
 import { trimGhError } from "./actions";
@@ -316,5 +316,5 @@ const pickForkBranchName = Effect.fnUntraced(function* (
 // A git failure's words are its stderr, of which the last line is the
 // useful part.
 function message(err: unknown): string {
-  return trimGhError(messageOf(err));
+  return trimGhError(clauseOf(err));
 }

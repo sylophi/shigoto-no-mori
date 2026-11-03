@@ -31,21 +31,15 @@ export const messageOf = (error: unknown): string => {
     return `post-checkout hook: ${messageOf(error.cause)}`;
   }
   if (error instanceof CheckoutUnfinished) return messageOf(error.cause);
-  // A tag, not the class: Landing imports this module.
-  if (
-    Predicate.isTagged(error, "MergeUnverified") &&
-    Predicate.hasProperty(error, "cause") &&
-    error instanceof Error
-  ) {
-    return `${error.message} gh said: ${messageOf(error.cause)}`;
-  }
   return errorMessageOf(error);
 };
 
 // What a failure says, set inside another sentence: with no stop of its
 // own.
 export const clauseOf = (error: unknown): string =>
-  messageOf(error).trimEnd().replace(/\.$/, "");
+  messageOf(error)
+    .trimEnd()
+    .replace(/[.!?]$/, "");
 
 // git's own words (its stderr), or why it never ran.
 const gitWordsOf = (error: Git.GitCommandError): string => {
@@ -90,13 +84,16 @@ export const errorDocument = (error: unknown): ErrorDocument => {
   };
 };
 
-// A failure's words with its hint after them, as the terminal says it.
-// The words may end in another program's own (gh's), with no stop.
-export const withHint = (error: string, hint?: string): string => {
-  if (hint === undefined) return error;
-  const words = error.trimEnd();
-  return `${words}${/[.!?]$/.test(words) ? "" : "."} ${hint}`;
+// Two sentences, a stop after the first where its words have none: they
+// may end in another program's own (gh's).
+export const sentences = (first: string, second: string): string => {
+  const words = first.trimEnd();
+  return `${words}${/[.!?]$/.test(words) ? "" : "."} ${second}`;
 };
+
+// A failure's words with its hint after them, as the terminal says it.
+export const withHint = (error: string, hint?: string): string =>
+  hint === undefined ? error : sentences(error, hint);
 
 const hintOf = (error: unknown): string | undefined =>
   Predicate.hasProperty(error, "flagHint") && typeof error.flagHint === "string"

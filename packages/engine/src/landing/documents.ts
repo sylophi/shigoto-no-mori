@@ -3,7 +3,12 @@ import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { clauseOf, errorDocument, messageOf } from "../errorDocument.ts";
+import {
+  clauseOf,
+  errorDocument,
+  messageOf,
+  sentences,
+} from "../errorDocument.ts";
 import * as Git from "../Git.ts";
 import * as GitHub from "../GitHub.ts";
 import type { MergeMethod } from "@shigomori/contracts/schemas/pullRequest";
@@ -20,7 +25,10 @@ export class DoneUnfinished extends Schema.TaggedError<DoneUnfinished>()(
   { branch: Schema.String, checkout: Schema.Defect(), delete: Schema.Defect() },
 ) {
   override get message(): string {
-    return `${messageOf(this.checkout)} The branch ${this.branch} couldn't be deleted either: ${messageOf(this.delete)}`;
+    return sentences(
+      messageOf(this.checkout),
+      `The branch ${this.branch} couldn't be deleted either: ${messageOf(this.delete)}`,
+    );
   }
 }
 
@@ -162,7 +170,7 @@ export class LandingRefused extends Schema.TaggedError<LandingRefused>()(
 }
 
 // `done` couldn't ask GitHub whether the branch merged. gh's own words
-// are the cause's, which the document puts beside the message.
+// are the cause's.
 export class MergeUnverified extends Schema.TaggedError<MergeUnverified>()(
   "MergeUnverified",
   { branch: Schema.String, cause: Schema.Defect() },
@@ -172,7 +180,7 @@ export class MergeUnverified extends Schema.TaggedError<MergeUnverified>()(
   }
 
   override get message(): string {
-    return `Couldn't ask GitHub whether ${this.branch} was merged. Try again once gh can reach it.`;
+    return `Couldn't ask GitHub whether ${this.branch} was merged. Try again once gh can reach it. gh said: ${messageOf(this.cause)}`;
   }
 }
 
