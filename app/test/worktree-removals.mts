@@ -34,6 +34,8 @@
 //   - an original taken so goes only if it still holds what its device
 //     read of it, HEAD on its branch, checked before its scripts stop
 //     or its cleanup runs,
+//   - a copy's delete of both sides arriving as the peer's push takes
+//     the original only with control from other devices on,
 //   - a copy's delete takes both sides only of a mirror its peer runs
 //     with the files settled before and after the original's device
 //     read it and the branch at the same commit on both, and not of a
@@ -44,11 +46,14 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
 import { callFailureOf, RemoteCallError } from "@shigomori/contracts/errors";
 import type { ChannelEndpoint, ChannelHandle } from "@shigomori/contracts/link";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { afterAll, beforeAll, it } from "vitest";
+import { hubContract } from "@shigomori/contracts/modules/hub";
 import {
   MIRROR_LABEL_MODE,
   type MirrorSessionRaw,
@@ -58,17 +63,19 @@ import { controlHandlers } from "../host/ipc/modules/control.ts";
 import { MirrorError } from "../host/mirror/MirrorEngine.ts";
 import { worktreesHandlers } from "../host/ipc/modules/worktrees.ts";
 import * as Fixtures from "./lib/engineFixtures.mts";
+import * as HostAccount from "../host/lib/HostAccount.ts";
 import * as HostPushes from "../host/lib/HostPushes.ts";
 import { addProject, listWorktrees } from "../host/lib/projects/index.ts";
 import * as Scripts from "../host/lib/Scripts.ts";
 import * as HostWorktrees from "../host/lib/Worktrees.ts";
 import { MirrorLedger } from "../host/mirror/MirrorLedger.ts";
+import * as PeerRemovals from "../host/mirror/peerRemovals.ts";
 import { annotateMirrorSession } from "../host/mirror/plan.ts";
 import { MIRROR_LABEL_LOCAL_PROJECT } from "../host/mirror/registry.ts";
 import type { HandlerContext } from "../shared/ipc/transport.ts";
 import { initDataDirAt } from "../shared/paths.ts";
 import { standInMirror, standInPeers } from "./lib/hostStandIns.mts";
-import { engineDataDir, runHost } from "./lib/hostRuntime.mts";
+import { engineDataDir, hostContext, runHost } from "./lib/hostRuntime.mts";
 import { inertMirrorImpl, rawMirrorSession } from "./lib/mirrorFakes.mts";
 import {
   installFakeGh,
@@ -793,6 +800,91 @@ it("an original taken by its copy's delete goes only if it still holds what its 
   git(fox.path, "checkout", "-q", fox.branch);
   assert.equal(await take(), "removed");
   assert.ok(!existsSync(fox.path));
+});
+
+const MIRROR_ENDED =
+  "The copy on the other device was deleted or moved, so the mirror ended. This worktree stays unless the copy was deleted with the two in step.";
+
+// The peer's push of its copy's delete of both sides, expecting what
+// fox holds.
+const deleted = (fox: Worktree) =>
+  runHost(
+    HostPushes.push(hubContract, "peerPush", {
+      deviceId: "peer",
+      channel: "worktrees:removal",
+      payload: {
+        projectId: "far",
+        worktreeId: "copy",
+        state: "removed",
+        expect: holding(fox),
+      },
+    }),
+  );
+
+// This device signed in with control from other devices `acceptsCommands`,
+// or signed out at null.
+const setControl = (acceptsCommands: boolean | null) =>
+  runHost(
+    Effect.flatMap(HostAccount.HostAccount, (account) =>
+      account.set(
+        acceptsCommands === null
+          ? null
+          : {
+              hubUrl: "http://127.0.0.1:9",
+              accountId: "account",
+              credential: "",
+              deviceKey: "",
+              webOrigin: "",
+              acceptsCommands,
+            },
+      ),
+    ),
+  );
+
+// A copy's delete of both sides as it arrives, a peer's push, which
+// takes the original only under the command switch.
+it("a copy's delete of both sides takes the original only with control from other devices on", async () => {
+  const removals = ManagedRuntime.make(
+    PeerRemovals.layer.pipe(
+      Layer.provide(Layer.succeedContext(await hostContext())),
+    ),
+  );
+  await removals.context();
+  try {
+    const off = await mirroredFox("pushed-control-off", async () => ({
+      ok: true,
+    }));
+    await deleted(off.fox);
+    await waitFor(
+      () => off.noted.length > 1,
+      "the original's thread to say why it stays",
+    );
+    assert.deepEqual(off.calls, ["terminate"]);
+    assert.ok(existsSync(off.fox.path));
+    assert.deepEqual(off.noted, [
+      MIRROR_ENDED,
+      "The two were in step when the copy was deleted, but control from other devices is off here, so this worktree stays.",
+    ]);
+
+    await setControl(true);
+    const on = await mirroredFox("pushed-control-on", async () => ({
+      ok: true,
+    }));
+    await deleted(on.fox);
+    await waitFor(
+      async () =>
+        !(await runHost(listWorktrees(on.project.id))).some(
+          (worktree) => worktree.id === on.fox.id,
+        ),
+      "the original to go",
+    );
+    assert.ok(!existsSync(on.fox.path));
+    assert.deepEqual(on.calls, ["terminate"]);
+    assert.deepEqual(on.noted, [MIRROR_ENDED]);
+  } finally {
+    await setControl(null);
+    await removals.dispose();
+  }
 });
 
 // What a delete's device announces once the delete is over.
