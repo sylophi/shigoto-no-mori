@@ -314,7 +314,8 @@ export const makeResolving = ({
     });
 
     return {
-      locate,
+      // In this file `here` is the Here each resolver takes.
+      here: locate,
       nowhere,
       resolveProject,
       resolveProjectById,

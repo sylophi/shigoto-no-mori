@@ -16,7 +16,6 @@ import type * as PlatformError from "effect/PlatformError";
 import { type AgentSession } from "./agentSessions.ts";
 import type { CheckoutUnfinished, HookFailed } from "./CloneCheckout.ts";
 import * as Git from "./Git.ts";
-import { splitRemoteRef } from "./gitParse.ts";
 import * as Lifecycle from "./Lifecycle.ts";
 import type { PortInfo, PortPoolConfig } from "./ports.ts";
 import * as Registry from "./Registry.ts";
@@ -468,92 +467,21 @@ const make = Effect.gen(function* () {
   const moving = yield* makeMoving({ listing, creating, removing, kept });
   const adopting = yield* makeAdopting({ listing, creating, removing, kept });
   const relocating = yield* makeRelocating({ listing, kept, moving });
-  const { identities, primaryRefOf, list, row, identityList, identityRow } =
-    listing;
-  const { status, poolPorts } = statusCard;
-  const {
-    locate,
-    nowhere,
-    resolveProject,
-    resolveProjectById,
-    resolveProjectRef,
-    resolveById,
-    resolve,
-  } = resolving;
-  const { setShelved, setAutoPull, description, describe } = describing;
-  const { destination, scriptContext, create, portPoolActive } = creating;
-  const { removable, remove } = removing;
-  const { move, carryMoved, carryLease, rename, rekey, resume, interrupted } =
-    moving;
-  const { adopt, setup } = adopting;
-  const { relocateProject, relocationPlan, relink } = relocating;
-
   return Worktrees.of({
-    identities,
-    identityList,
-    identityRow,
-    list,
-    row,
-    status,
-    poolPorts,
-    portPoolActive,
-    here: locate,
-    nowhere,
-    resolveProject,
-    resolveProjectById,
-    resolveProjectRef,
-    resolveById,
-    resolve,
-    setShelved,
-    setAutoPull,
-    description,
-    scriptContext: Effect.fn("Worktrees.scriptContext")(function* ({
-      project,
-      worktree,
-    }: Located) {
-      return yield* scriptContext(project, worktree);
-    }),
-    describe,
-    destination,
-    create,
-    adopt,
-    setup,
-    remove,
-    move,
-    rename,
-    carryMoved,
-    carryLease,
-    resumeMoves: resume,
-    interruptedMoves: interrupted,
-    rekey,
-    forgetKept: kept.forgetRows,
+    ...listing,
+    ...statusCard,
+    ...resolving,
+    ...describing,
+    ...creating,
+    ...removing,
+    ...moving,
+    ...adopting,
+    ...relocating,
+    // Not spread: its rekey takes ids, under moving's, which takes a path.
     keptUnder: kept.keptUnder,
     movedTo: kept.movedTo,
     movedIds: kept.movedIds,
-    relocateProject,
-    deletesBranch: removing.deletesBranch,
-    refuseChangedSince: removing.refuseChangedSince,
-    relocationPlan,
-    relink,
-    checkRemovable: Effect.fn("Worktrees.checkRemovable")(function* (
-      located: Located,
-      force: boolean,
-    ) {
-      yield* removable(located.worktree, force);
-    }),
-    primaryTarget: Effect.fn("Worktrees.primaryTarget")(function* (
-      project: RegisteredProject,
-    ) {
-      const { remotes, primaryRef, primaryFullRef, primaryBranch } =
-        yield* primaryRefOf(project);
-      return {
-        remotes,
-        primaryRef,
-        primaryFullRef,
-        remote: splitRemoteRef(primaryRef, remotes)?.remote ?? "",
-        primaryBranch,
-      };
-    }),
+    forgetKept: kept.forgetRows,
   });
 });
 

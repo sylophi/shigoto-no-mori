@@ -89,11 +89,9 @@ export const makeStaging = ({
     // The staged update a build at `version` can install: one newer than
     // it. An older or the same one is what an install by hand or a crash
     // between the swap and its cleanup left, which the swap would refuse.
-    const installable = Effect.fn("Updater.staged")(function* (
-      version: string,
-    ) {
-      return Option.filter(yield* readManifest, (staged) =>
-        isNewer(staged.version, version),
+    const staged = Effect.fn("Updater.staged")(function* (version: string) {
+      return Option.filter(yield* readManifest, (manifest) =>
+        isNewer(manifest.version, version),
       );
     });
 
@@ -182,13 +180,13 @@ export const makeStaging = ({
         if (confirmed) {
           // Required only while the update would still be offered: one
           // of this build's version or older is offered never again.
-          const offered = yield* installable(running.version);
+          const offered = yield* staged(running.version);
           yield* Option.isSome(offered)
             ? clearStaged
             : clearStaged.pipe(Effect.ignore);
           return Option.none<StagedManifest>();
         }
-        return yield* installable(running.version);
+        return yield* staged(running.version);
       }
       const existing = yield* readManifest;
       if (
@@ -238,7 +236,7 @@ export const makeStaging = ({
     return {
       lock,
       readManifest,
-      installable,
+      staged,
       clearStaged,
       stageUpdate,
     };

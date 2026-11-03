@@ -1,6 +1,8 @@
 // Git's worktree verbs: listing, adding, moving and removing linked worktrees.
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import { parseWorktreeList, splitLines, splitRemoteRef } from "../gitParse.ts";
 import type { RunningArea } from "./running.ts";
 
@@ -9,8 +11,24 @@ export const makeWorktreeVerbs = ({
 }: {
   readonly running: RunningArea;
 }) =>
-  Effect.sync(() => {
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const { run, succeeds } = running;
+    const adminDirOf = Effect.fn("Git.adminDirOf")((worktreePath: string) =>
+      fs.readFileString(path.join(worktreePath, ".git")).pipe(
+        Effect.map((text) => {
+          const trimmed = text.trim();
+          if (!trimmed.startsWith("gitdir: ")) return Option.none<string>();
+          const dir = trimmed.slice("gitdir: ".length);
+          return Option.some(
+            path.isAbsolute(dir) ? dir : path.join(worktreePath, dir),
+          );
+        }),
+        Effect.orElseSucceed(() => Option.none<string>()),
+      ),
+    );
+
     const listWorktrees = Effect.fn("Git.listWorktrees")(function* (
       repo: string,
     ) {
@@ -143,6 +161,7 @@ export const makeWorktreeVerbs = ({
     });
 
     return {
+      adminDirOf,
       listWorktrees,
       addWorktree,
       listRemotes,

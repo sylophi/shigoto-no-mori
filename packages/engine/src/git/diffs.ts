@@ -153,5 +153,60 @@ export const makeDiffs = ({ running }: { readonly running: RunningArea }) =>
       Effect.orElseSucceed(() => false),
     );
 
-    return { fileDiff, readBlob, isWorkingTreeBlob };
+    // --format= drops the commit header, so the patch parses as is. A
+    // merge's is against its first parent, what it brought in, as a
+    // plain patch rather than git's combined one. Empty for a commit git
+    // can't show one for. Paths come out as they are (core.quotePath),
+    // not octal-escaped, here and in mergeBaseDiff and readStashDiff,
+    // since the file list shows them and opens them, and blob ids in
+    // full (--full-index), since a binary file's sides are read back by
+    // them (readBlob).
+    const commitDiff = Effect.fn("Git.commitDiff")(function* (
+      worktree: string,
+      hash: string,
+    ) {
+      return yield* run(
+        worktree,
+        [
+          "-c",
+          "core.quotePath=false",
+          ...PATCH_CONFIG,
+          "show",
+          "--format=",
+          "--no-color",
+          "--full-index",
+          ...PATCH_FLAGS,
+          "--diff-merges=first-parent",
+          "--end-of-options",
+          hash,
+          "--",
+        ],
+        { maxOutputBytes: PATCH_MAX_OUTPUT, anyExit: true },
+      ).pipe(Effect.catchTags({ GitCommandError: () => Effect.succeed("") }));
+    });
+
+    // Both have to be commits the repository already holds.
+    const mergeBaseDiff = Effect.fn("Git.mergeBaseDiff")(function* (input: {
+      readonly repo: string;
+      readonly base: string;
+      readonly head: string;
+    }) {
+      return yield* run(
+        input.repo,
+        [
+          "-c",
+          "core.quotePath=false",
+          ...PATCH_CONFIG,
+          "diff",
+          "--no-color",
+          "--full-index",
+          ...PATCH_FLAGS,
+          "--end-of-options",
+          `${input.base}...${input.head}`,
+        ],
+        { maxOutputBytes: PATCH_MAX_OUTPUT },
+      );
+    });
+
+    return { fileDiff, readBlob, isWorkingTreeBlob, commitDiff, mergeBaseDiff };
   });

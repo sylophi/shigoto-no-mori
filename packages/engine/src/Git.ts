@@ -23,14 +23,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
-import {
-  type BranchRefs,
-  parseBranchList,
-  parseConfiguredRemoteEntries,
-  parseRemoteEntries,
-  splitLines,
-  type WorktreeEntry,
-} from "./gitParse.ts";
+import type { BranchRefs, WorktreeEntry } from "./gitParse.ts";
 import { makeRunning } from "./git/running.ts";
 import { makeWorktreeVerbs } from "./git/worktreeVerbs.ts";
 import { makeWorkingTree } from "./git/workingTree.ts";
@@ -57,12 +50,8 @@ import {
   type GitError,
   type GitOutputTooLargeError,
   type GitRefusedError,
-  LOCAL_TIPS_LIMIT,
   NestedRepositoryError,
   NoRemoteError,
-  PATCH_CONFIG,
-  PATCH_FLAGS,
-  PATCH_MAX_OUTPUT,
   type PrimaryRelation,
   type RunOptions,
   type RefUnreadable,
@@ -886,348 +875,27 @@ const make = Effect.gen(function* () {
     merging,
   });
   const diffs = yield* makeDiffs({ running });
-  const { checkDestination, clone, createRepository } = yield* makeRepositories(
-    { running },
-  );
-  const { run, runLenient, refreshIndex, succeeds, onIndex } = running;
-  const {
-    listWorktrees,
-    addWorktree,
-    listRemotes,
-    localBranchExists,
-    remoteRefExists,
-    resolveCheckoutRef,
-    checkoutWorktree,
-    removeWorktree,
-    pruneWorktrees,
-  } = worktreeVerbs;
-  const { changedFiles, changes, workingTreeChanges, changedCount } =
-    workingTree;
-  const {
-    aheadBehind,
-    upstreamSync,
-    unpushedCount,
-    listCommits,
-    readBranchHistory,
-    firstParentChain,
-    primaryRelation,
-    readCommitMessage,
-  } = history;
-  const {
-    verifyRev,
-    refTip,
-    readRef,
-    hasObject,
-    isAncestor,
-    resolveCommit,
-    headAt,
-    upstreamName,
-    countCommits,
-    ownCommitCounts,
-  } = refs;
-  const {
-    branchRefs,
-    appendExcludes,
-    resolveDefaultBranch,
-    resolvePrimaryRef,
-    checkoutBranch,
-    createBranch,
-    deleteBranch,
-    listOthersIgnored,
-    listIgnoreRules,
-  } = branches;
-  const { fetchAll, overwriteFromUpstream, publish } = remote;
-  const { resetSoft, resetHard, snapshotPaths, discard, restoreDiscard } =
-    gitIndex;
+  const repositories = yield* makeRepositories({ running });
   const hunks = yield* makeHunks({ running, gitIndex });
-  const { commitPicks } = yield* makeCommit({ running, hunks });
+  const commit = yield* makeCommit({ running, hunks });
   const stash = yield* makeStash({ running, operation });
-  const { fileDiff, readBlob, isWorkingTreeBlob } = diffs;
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
   return Git.of({
-    run,
-    gitPath: running.gitPath,
-    runLenient,
-    refreshIndex,
-    withIndexLock: onIndex,
-    ...operation,
-    readHunks: hunks.readHunks,
-    discardHunks: hunks.discardHunks,
-    commitPicks,
-    ...stash,
+    ...running,
+    ...repositories,
+    ...worktreeVerbs,
+    ...workingTree,
+    ...history,
+    ...refs,
+    ...branches,
+    ...remote,
+    ...merging,
     ...rewriting,
-    readMergePreview: merging.readMergePreview,
-    mergeBranch: merging.mergeBranch,
-    pullRebaseOrMergeAndPush: remote.pullRebaseOrMergeAndPush,
-    syncWithPrimary: remote.syncWithPrimary,
-    mergeUpstreamKeepingConflicts: remote.mergeUpstreamKeepingConflicts,
-    mergePrimaryKeepingConflicts: remote.mergePrimaryKeepingConflicts,
-    hasUncommittedOrUntracked: remote.hasUncommittedOrUntracked,
-    readBranchHistory,
-    adminDirOf: Effect.fn("Git.adminDirOf")((worktreePath: string) =>
-      fs.readFileString(path.join(worktreePath, ".git")).pipe(
-        Effect.map((text) => {
-          const trimmed = text.trim();
-          if (!trimmed.startsWith("gitdir: ")) return Option.none<string>();
-          const dir = trimmed.slice("gitdir: ".length);
-          return Option.some(
-            path.isAbsolute(dir) ? dir : path.join(worktreePath, dir),
-          );
-        }),
-        Effect.orElseSucceed(() => Option.none<string>()),
-      ),
-    ),
-    isRepo: Effect.fn("Git.isRepo")(function* (repo) {
-      return yield* succeeds(repo, ["rev-parse", "--git-dir"]);
-    }),
-    locate: Effect.fn("Git.locate")((dir: string) =>
-      run(dir, [
-        "rev-parse",
-        "--path-format=absolute",
-        "--show-toplevel",
-        "--git-common-dir",
-      ]).pipe(
-        Effect.map((stdout) => {
-          const [toplevel, commonDir] = stdout.trim().split("\n");
-          if (toplevel === undefined || commonDir === undefined) {
-            return Option.none();
-          }
-          const common = commonDir.trim();
-          return Option.some({
-            toplevel: toplevel.trim(),
-            commonDir: common,
-            primaryPath:
-              path.basename(common) === ".git" ? path.dirname(common) : common,
-          });
-        }),
-        Effect.orElseSucceed(() => Option.none()),
-      ),
-    ),
-    listWorktrees,
-    addWorktree,
-    checkoutWorktree,
-    removeWorktree,
-    pruneWorktrees,
-    appendExcludes,
-    changedFiles,
-    changes,
-    workingTreeChanges,
-    changedCount,
-    aheadBehind,
-    upstreamSync,
-    unpushedCount,
-    listCommits,
-    firstParentChain,
-    primaryRelation,
-    readCommitMessage,
-    refTip,
-    readRef,
-    verifyRev,
-    treeOf: Effect.fn("Git.treeOf")(function* (cwd, commit) {
-      return yield* verifyRev(cwd, `${commit}^{tree}`);
-    }),
-    hasObject,
-    hasCommit: Effect.fn("Git.hasCommit")(function* (cwd, commit) {
-      return yield* hasObject(cwd, `${commit}^{commit}`);
-    }),
-    isAncestor,
-    resolveCommit,
-    headAt,
-    upstreamName,
-    countCommits,
-    ownCommitCounts,
-    updateRef: Effect.fn("Git.updateRef")(function* (input) {
-      yield* run(input.repo, [
-        "update-ref",
-        "--end-of-options",
-        input.ref,
-        input.commit,
-        ...(input.expected === undefined ? [] : [input.expected]),
-      ]);
-    }),
-    deleteRef: Effect.fn("Git.deleteRef")(function* (repo, ref, expected) {
-      yield* run(repo, [
-        "update-ref",
-        "-d",
-        "--end-of-options",
-        ref,
-        ...(expected === undefined ? [] : [expected]),
-      ]);
-    }),
-    localBranchTips: Effect.fn("Git.localBranchTips")(function* (repo) {
-      const tips = splitLines(
-        yield* run(repo, [
-          "for-each-ref",
-          "--format=%(objectname)",
-          "refs/heads/",
-        ]),
-      );
-      return [...new Set(tips)].slice(0, LOCAL_TIPS_LIMIT);
-    }),
-    snapshotRemoteRefs: Effect.fn("Git.snapshotRemoteRefs")(function* (repo) {
-      return yield* run(repo, [
-        "for-each-ref",
-        "--format=%(objectname) %(refname)",
-        "refs/remotes/",
-      ]);
-    }),
-    refTips: Effect.fn("Git.refTips")(function* (repo) {
-      const out = yield* run(repo, [
-        "for-each-ref",
-        "--format=%(refname)%00%(objectname)%00%(upstream)",
-        "refs/heads/",
-        "refs/remotes/",
-        "refs/replace/",
-      ]);
-      return new Map(
-        splitLines(out).map((line) => {
-          const [ref = "", tip = "", upstream = ""] = line.split("\0");
-          return [ref, { tip, upstream }] as const;
-        }),
-      );
-    }),
-    worktreeConfigOn: Effect.fn("Git.worktreeConfigOn")(function* (repo) {
-      const out = yield* run(
-        repo,
-        ["config", "--type=bool", "--get", "extensions.worktreeConfig"],
-        // Unset.
-        { okExitCodes: [1] },
-      );
-      return out.trim() === "true";
-    }),
-    listRemotes,
-    listRemoteEntries: Effect.fn("Git.listRemoteEntries")(function* (repo) {
-      return yield* run(repo, ["remote", "-v"]).pipe(
-        Effect.map(parseRemoteEntries),
-        Effect.orElseSucceed(() => []),
-      );
-    }),
-    listConfiguredRemoteEntries: Effect.fn("Git.listConfiguredRemoteEntries")(
-      function* (repo) {
-        return yield* run(
-          repo,
-          ["config", "--get-regexp", "^remote\\..*\\.(url|pushurl)$"],
-          { okExitCodes: [1] },
-        ).pipe(
-          Effect.map(parseConfiguredRemoteEntries),
-          Effect.orElseSucceed(() => []),
-        );
-      },
-    ),
-    branchRefs,
-    listBranches: Effect.fn("Git.listBranches")(function* (repo) {
-      return parseBranchList(
-        yield* run(repo, [
-          "for-each-ref",
-          "--format=%(refname)\t%(refname:short)\t%(symref)",
-          "refs/heads/",
-          "refs/remotes/",
-        ]),
-      );
-    }),
-    localBranchExists,
-    remoteRefExists,
-    resolveDefaultBranch,
-    resolvePrimaryRef,
-    resolveCheckoutRef,
-    checkoutBranch,
-    createBranch,
-    renameCurrentBranch: Effect.fn("Git.renameCurrentBranch")(
-      function* (worktree, name) {
-        yield* run(worktree, ["branch", "-m", "--", name]);
-      },
-    ),
-    renameBranch: Effect.fn("Git.renameBranch")(function* (input) {
-      yield* run(input.repo, ["branch", "-m", "--", input.from, input.to]);
-    }),
-    deleteBranch,
-    listIgnoredPaths: Effect.fn("Git.listIgnoredPaths")(function* (repo) {
-      return yield* listOthersIgnored(repo, "--exclude-standard");
-    }),
-    listUntrackedMatching: Effect.fn("Git.listUntrackedMatching")(
-      function* (repo, excludeFile) {
-        return yield* listOthersIgnored(repo, `--exclude-from=${excludeFile}`);
-      },
-    ),
-    listIgnoreRules,
-    fetchAll,
-    push: Effect.fn("Git.push")(function* (worktree) {
-      yield* run(worktree, ["push"]);
-    }),
-    pushForceWithLease: Effect.fn("Git.pushForceWithLease")(
-      function* (worktree) {
-        yield* run(worktree, ["push", "--force-with-lease"]);
-      },
-    ),
-    pullFastForward: Effect.fn("Git.pullFastForward")(function* (worktree) {
-      yield* run(worktree, ["fetch"]);
-      yield* run(worktree, ["merge", "--ff-only", "@{u}"]);
-    }),
-    fastForwardToUpstream: Effect.fn("Git.fastForwardToUpstream")(
-      function* (worktree) {
-        yield* run(worktree, ["merge", "--ff-only", "@{u}"]);
-      },
-    ),
-    overwriteFromUpstream,
-    publish,
-    checkDestination,
-    clone,
-    createRepository,
-    resetSoft,
-    resetHard,
-    snapshotPaths,
-    discard,
-    restoreDiscard,
-    fileDiff,
-    readBlob,
-    isWorkingTreeBlob,
-    // --format= drops the commit header, so the patch parses as is. A
-    // merge's is against its first parent, what it brought in, as a
-    // plain patch rather than git's combined one. Empty for a commit git
-    // can't show one for. Paths come out as they are (core.quotePath),
-    // not octal-escaped, here and in mergeBaseDiff and readStashDiff,
-    // since the file list shows them and opens them, and blob ids in
-    // full (--full-index), since a binary file's sides are read back by
-    // them (readBlob).
-    commitDiff: Effect.fn("Git.commitDiff")(function* (worktree, hash) {
-      return yield* run(
-        worktree,
-        [
-          "-c",
-          "core.quotePath=false",
-          ...PATCH_CONFIG,
-          "show",
-          "--format=",
-          "--no-color",
-          "--full-index",
-          ...PATCH_FLAGS,
-          "--diff-merges=first-parent",
-          "--end-of-options",
-          hash,
-          "--",
-        ],
-        { maxOutputBytes: PATCH_MAX_OUTPUT, anyExit: true },
-      ).pipe(Effect.catchTags({ GitCommandError: () => Effect.succeed("") }));
-    }),
-    // Both have to be commits the repository already holds.
-    mergeBaseDiff: Effect.fn("Git.mergeBaseDiff")(function* (input) {
-      return yield* run(
-        input.repo,
-        [
-          "-c",
-          "core.quotePath=false",
-          ...PATCH_CONFIG,
-          "diff",
-          "--no-color",
-          "--full-index",
-          ...PATCH_FLAGS,
-          "--end-of-options",
-          `${input.base}...${input.head}`,
-        ],
-        { maxOutputBytes: PATCH_MAX_OUTPUT },
-      );
-    }),
+    ...operation,
+    ...gitIndex,
+    ...hunks,
+    ...commit,
+    ...stash,
+    ...diffs,
   });
 });
 

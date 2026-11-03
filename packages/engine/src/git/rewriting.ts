@@ -26,7 +26,7 @@ export const makeRewriting = ({
   readonly operation: OperationArea;
 }) =>
   Effect.sync(() => {
-    const { run, runLenient, onIndex } = running;
+    const { run, runLenient, withIndexLock } = running;
     const { headAt, isAncestor } = refs;
     const { conflictedPaths, refuseMidOperation, undoStopped } = operation;
 
@@ -40,7 +40,7 @@ export const makeRewriting = ({
       verb: "revert" | "cherry-pick",
       hash: string,
     ) =>
-      onIndex(
+      withIndexLock(
         worktree,
         Effect.gen(function* () {
           yield* refuseMidOperation(worktree);
@@ -159,7 +159,7 @@ export const makeRewriting = ({
       expectHead: string,
       edit: (commits: CommitSpec[]) => CommitSpec[],
     ) =>
-      onIndex(
+      withIndexLock(
         worktree,
         Effect.gen(function* () {
           yield* refuseMidOperation(worktree);

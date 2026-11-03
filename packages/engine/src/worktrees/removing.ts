@@ -94,7 +94,7 @@ export const makeRemoving = ({
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
     const { projectSettings, primaryRefOf } = listing;
-    const { scriptContext, runScript, portPoolActive } = creating;
+    const { scriptContextOf, runScript, portPoolActive } = creating;
 
     // Fails closed on a dirty or unreadable worktree, since the next
     // step destroys the folder.
@@ -269,6 +269,13 @@ export const makeRemoving = ({
       yield* requireClean(worktree, force, "remove", "");
     });
 
+    const checkRemovable = Effect.fn("Worktrees.checkRemovable")(function* (
+      located: Located,
+      force: boolean,
+    ) {
+      yield* removable(located.worktree, force);
+    });
+
     // Whether removing `worktree` deletes its branch: never an external
     // worktree's, a detached one's (it has none), one kept, or the
     // project's primary branch, else as the device's setting says.
@@ -382,7 +389,7 @@ export const makeRemoving = ({
         );
         const pool = yield* portPoolActive(worktree);
         if (pool || teardown !== "") {
-          const context = yield* scriptContext(project, worktree);
+          const context = yield* scriptContextOf(project, worktree);
           const cleanup = (
             phase: CleanupFailed["phase"],
             command: string,
@@ -516,6 +523,7 @@ export const makeRemoving = ({
       removeCheckout,
       pruneEmptyParents,
       removable,
+      checkRemovable,
       deletesBranch,
       refuseChangedSince,
       remove,

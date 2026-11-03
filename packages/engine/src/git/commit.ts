@@ -22,7 +22,7 @@ export const makeCommit = ({
 }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const { run, runChunked, onIndex, gitPath } = running;
+    const { run, runChunked, withIndexLock, gitPath } = running;
     const { stageHunks } = hunks;
 
     const commitWith = (worktree: string, message: CommitRequest) =>
@@ -87,7 +87,7 @@ export const makeCommit = ({
       worktree: string,
       message: CommitRequest,
     ) {
-      return yield* onIndex(
+      return yield* withIndexLock(
         worktree,
         Effect.gen(function* () {
           const indexFile = yield* gitPath(worktree, "index");

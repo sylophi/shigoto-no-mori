@@ -43,7 +43,7 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const { run, onIndex, refreshIndex } = running;
+    const { run, withIndexLock, refreshIndex } = running;
 
     const there = (file: string) =>
       fs.exists(file).pipe(Effect.orElseSucceed(() => false));
@@ -195,7 +195,7 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
     const continueOperation = Effect.fn("Git.continueOperation")(function* (
       worktree: string,
     ) {
-      yield* onIndex(
+      yield* withIndexLock(
         worktree,
         Effect.gen(function* () {
           const { operation, conflicted } = yield* readOperation(worktree);
@@ -247,7 +247,7 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
     const abortOperation = Effect.fn("Git.abortOperation")(function* (
       worktree: string,
     ) {
-      yield* onIndex(
+      yield* withIndexLock(
         worktree,
         Effect.gen(function* () {
           const { operation } = yield* readOperation(worktree);
@@ -292,7 +292,7 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
       readonly side: "mine" | "theirs" | "as-is";
     }) {
       const { worktree, path: file, side } = input;
-      yield* onIndex(
+      yield* withIndexLock(
         worktree,
         Effect.gen(function* () {
           const add = run(worktree, ["--literal-pathspecs", "add", "--", file]);

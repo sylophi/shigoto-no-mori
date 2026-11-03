@@ -30,7 +30,7 @@ export const makeMerging = ({
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const { run, runLenient, onIndex } = running;
+    const { run, runLenient, withIndexLock } = running;
     const { resolveCommit, countCommits, ownCommitCounts } = refs;
     const { readOperation, refuseMidOperation, gitDir, hasStagedChanges } =
       operation;
@@ -112,7 +112,7 @@ export const makeMerging = ({
     // conflicts. Whether it stopped.
     const mergeKeepingConflicts = Effect.fn("Git.mergeKeepingConflicts")(
       function* (worktree: string, ref: string) {
-        return yield* onIndex(
+        return yield* withIndexLock(
           worktree,
           refuseMidOperation(worktree).pipe(
             Effect.andThen(
@@ -139,7 +139,7 @@ export const makeMerging = ({
       readonly message?: string | undefined;
     }) {
       const { worktree, ref, method, message } = input;
-      return yield* onIndex(
+      return yield* withIndexLock(
         worktree,
         Effect.gen(function* () {
           yield* refuseMidOperation(worktree);

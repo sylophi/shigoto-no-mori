@@ -1,10 +1,12 @@
-// Git's refs and objects: resolving a name, reading an object.
+// Git's refs and objects: resolving a name, reading an object, writing a ref.
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import { splitLines } from "../gitParse.ts";
 import {
   BranchMovedError,
   GitCommandError,
+  LOCAL_TIPS_LIMIT,
   RefUnreadable,
   UnknownRevisionError,
 } from "./documents.ts";
@@ -184,17 +186,119 @@ export const makeRefs = ({ running }: { readonly running: RunningArea }) =>
       );
     });
 
+    const treeOf = Effect.fn("Git.treeOf")(function* (
+      cwd: string,
+      commit: string,
+    ) {
+      return yield* verifyRev(cwd, `${commit}^{tree}`);
+    });
+
+    const hasCommit = Effect.fn("Git.hasCommit")(function* (
+      cwd: string,
+      commit: string,
+    ) {
+      return yield* hasObject(cwd, `${commit}^{commit}`);
+    });
+
+    const updateRef = Effect.fn("Git.updateRef")(function* (input: {
+      readonly repo: string;
+      readonly ref: string;
+      readonly commit: string;
+      readonly expected?: string | undefined;
+    }) {
+      yield* run(input.repo, [
+        "update-ref",
+        "--end-of-options",
+        input.ref,
+        input.commit,
+        ...(input.expected === undefined ? [] : [input.expected]),
+      ]);
+    });
+
+    const deleteRef = Effect.fn("Git.deleteRef")(function* (
+      repo: string,
+      ref: string,
+      expected?: string,
+    ) {
+      yield* run(repo, [
+        "update-ref",
+        "-d",
+        "--end-of-options",
+        ref,
+        ...(expected === undefined ? [] : [expected]),
+      ]);
+    });
+
+    const localBranchTips = Effect.fn("Git.localBranchTips")(function* (
+      repo: string,
+    ) {
+      const tips = splitLines(
+        yield* run(repo, [
+          "for-each-ref",
+          "--format=%(objectname)",
+          "refs/heads/",
+        ]),
+      );
+      return [...new Set(tips)].slice(0, LOCAL_TIPS_LIMIT);
+    });
+
+    const snapshotRemoteRefs = Effect.fn("Git.snapshotRemoteRefs")(function* (
+      repo: string,
+    ) {
+      return yield* run(repo, [
+        "for-each-ref",
+        "--format=%(objectname) %(refname)",
+        "refs/remotes/",
+      ]);
+    });
+
+    const refTips = Effect.fn("Git.refTips")(function* (repo: string) {
+      const out = yield* run(repo, [
+        "for-each-ref",
+        "--format=%(refname)%00%(objectname)%00%(upstream)",
+        "refs/heads/",
+        "refs/remotes/",
+        "refs/replace/",
+      ]);
+      return new Map(
+        splitLines(out).map((line) => {
+          const [ref = "", tip = "", upstream = ""] = line.split("\0");
+          return [ref, { tip, upstream }] as const;
+        }),
+      );
+    });
+
+    const worktreeConfigOn = Effect.fn("Git.worktreeConfigOn")(function* (
+      repo: string,
+    ) {
+      const out = yield* run(
+        repo,
+        ["config", "--type=bool", "--get", "extensions.worktreeConfig"],
+        // Unset.
+        { okExitCodes: [1] },
+      );
+      return out.trim() === "true";
+    });
+
     return {
       verifyRev,
       refTip,
       readRef,
+      treeOf,
       hasObject,
+      hasCommit,
       isAncestor,
       resolveCommit,
       headAt,
       upstreamName,
       countCommits,
       ownCommitCounts,
+      updateRef,
+      deleteRef,
+      localBranchTips,
+      snapshotRemoteRefs,
+      refTips,
+      worktreeConfigOn,
     };
   });
 
