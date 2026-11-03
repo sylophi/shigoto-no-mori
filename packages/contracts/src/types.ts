@@ -1,6 +1,5 @@
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
-import type { Decoded, Encoded } from "./codec.ts";
 import type {
   CallsOf,
   ContractModule,
@@ -17,8 +16,8 @@ type ViewsOf<M> = Exclude<Extract<CallsOf<M>, Streaming>, Pushing>;
 
 type KeyOf<Tag> = Tag extends `${string}:${infer K}` ? K : never;
 
-// Producers give the wire shape (`Encoded`), consumers see `Decoded`.
-// They diverge for defaults and transforms.
+// Producers give the wire shape (`Encoded`), consumers see the decoded
+// one (`Type`). They diverge for defaults and transforms.
 
 type Args<I> = [I] extends [void]
   ? []
@@ -31,9 +30,9 @@ type Args<I> = [I] extends [void]
 // undefined.
 export type Handlers<M extends ContractModule, Ctx = unknown> = {
   [R in InvokesOf<M> as KeyOf<R["_tag"]>]: (
-    input: Decoded<InputOf<R>>,
+    input: InputOf<R>["Type"],
     context: Ctx,
-  ) => Promise<Decoded<OutputOf<R>>> | Decoded<OutputOf<R>>;
+  ) => Promise<OutputOf<R>["Type"]> | OutputOf<R>["Type"];
 };
 
 export type EffectHandlers<
@@ -42,15 +41,15 @@ export type EffectHandlers<
   Services = never,
 > = {
   [R in InvokesOf<M> as KeyOf<R["_tag"]>]: (
-    input: Decoded<InputOf<R>>,
+    input: InputOf<R>["Type"],
     context: Ctx,
-  ) => Effect.Effect<Decoded<OutputOf<R>>, unknown, Services>;
+  ) => Effect.Effect<OutputOf<R>["Type"], unknown, Services>;
 };
 
 export type ViewHandlers<M extends ContractModule, R> = {
   [V in ViewsOf<M> as KeyOf<V["_tag"]>]: (
-    input: Decoded<InputOf<V>>,
-  ) => Stream.Stream<Decoded<PayloadOf<V>>, unknown, R>;
+    input: InputOf<V>["Type"],
+  ) => Stream.Stream<PayloadOf<V>["Type"], unknown, R>;
 };
 
 type ContractInfo<M> = NonNullable<
@@ -59,8 +58,8 @@ type ContractInfo<M> = NonNullable<
 
 export type EffectClient<M extends ContractModule, E = unknown> = {
   [R in InvokesOf<M> as KeyOf<R["_tag"]>]: (
-    ...args: Args<Encoded<InputOf<R>>>
-  ) => Effect.Effect<Decoded<OutputOf<R>>, E>;
+    ...args: Args<InputOf<R>["Encoded"]>
+  ) => Effect.Effect<OutputOf<R>["Type"], E>;
 };
 
 export type EffectApi<M extends ContractModule> = {
@@ -76,9 +75,9 @@ export type HostModulesOf<M extends ContractModule> = Extract<
 
 export type PushKeys<M extends ContractModule> = KeyOf<PushesOf<M>["_tag"]>;
 
-export type PushPayload<M extends ContractModule, K extends string> = Decoded<
-  PayloadOf<Extract<PushesOf<M>, { readonly _tag: `${string}:${K}` }>>
->;
+export type PushPayload<M extends ContractModule, K extends string> = PayloadOf<
+  Extract<PushesOf<M>, { readonly _tag: `${string}:${K}` }>
+>["Type"];
 
 export type ViewKeys<M extends ContractModule> = KeyOf<ViewsOf<M>["_tag"]>;
 
@@ -87,28 +86,28 @@ type ViewOf<M extends ContractModule, K extends string> = Extract<
   { readonly _tag: `${string}:${K}` }
 >;
 
-export type ViewInput<M extends ContractModule, K extends string> = Encoded<
-  InputOf<ViewOf<M, K>>
->;
-export type ViewValue<M extends ContractModule, K extends string> = Decoded<
-  PayloadOf<ViewOf<M, K>>
->;
+export type ViewInput<M extends ContractModule, K extends string> = InputOf<
+  ViewOf<M, K>
+>["Encoded"];
+export type ViewValue<M extends ContractModule, K extends string> = PayloadOf<
+  ViewOf<M, K>
+>["Type"];
 
 export type PushProducerPayload<
   M extends ContractModule,
   K extends string,
-> = Encoded<
-  PayloadOf<Extract<PushesOf<M>, { readonly _tag: `${string}:${K}` }>>
->;
+> = PayloadOf<
+  Extract<PushesOf<M>, { readonly _tag: `${string}:${K}` }>
+>["Encoded"];
 
 // For something answering channels straight off the wire. A view is
 // answered with its value as it reads now.
 export type ChannelHandlers<M extends ContractModule> = {
   [R in InvokesOf<M> as R["_tag"]]: (
-    input: Decoded<InputOf<R>>,
-  ) => Promise<Decoded<OutputOf<R>>> | Decoded<OutputOf<R>>;
+    input: InputOf<R>["Type"],
+  ) => Promise<OutputOf<R>["Type"]> | OutputOf<R>["Type"];
 } & {
   [V in ViewsOf<M> as V["_tag"]]: (
-    input: Decoded<InputOf<V>>,
-  ) => Promise<Decoded<PayloadOf<V>>> | Decoded<PayloadOf<V>>;
+    input: InputOf<V>["Type"],
+  ) => Promise<PayloadOf<V>["Type"]> | PayloadOf<V>["Type"];
 };

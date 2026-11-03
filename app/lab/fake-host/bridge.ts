@@ -45,7 +45,6 @@ import {
   outputOf,
   scopeOf,
 } from "@shigomori/contracts/contract";
-import { decode } from "@shigomori/contracts/codec";
 import { WEB_PLATFORM } from "@shigomori/contracts/platform";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import type {
@@ -75,6 +74,7 @@ import type { Link } from "@shared/ipc/transport";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { ClientLinks } from "@/lib/runtime/ClientLinks";
 import { disposeWithPage, startClientNow } from "@/lib/runtime/client";
@@ -260,7 +260,7 @@ function createFixtureWire(
       // them in place later: a cached answer that is the same object as
       // the next one would never look changed.
       return structuredClone(
-        await handler(decode(inputOf(call), input), signal),
+        await handler(Schema.decodeUnknownSync(inputOf(call))(input), signal),
       );
     }
     const stub = stubValueFor(outputOf(call), { fabricateArms: true });

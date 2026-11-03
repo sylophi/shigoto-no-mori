@@ -31,7 +31,6 @@ import {
   outputOf,
   scopeOf,
 } from "@shigomori/contracts/contract";
-import { decode } from "@shigomori/contracts/codec";
 import { callFailureOf, RemoteCallError } from "@shigomori/contracts/errors";
 import { allContractModules } from "@shigomori/contracts/allModules";
 import * as Effect from "effect/Effect";
@@ -165,7 +164,7 @@ export function createLocalRegistrar(options: {
       if (handler !== undefined) {
         return Effect.flatMap(
           Effect.try({
-            try: () => decode(inputOf(call), input),
+            try: () => Schema.decodeUnknownSync(inputOf(call))(input),
             catch: callFailureOf,
           }),
           (decoded) =>
@@ -199,7 +198,7 @@ export function createLocalRegistrar(options: {
       return Stream.unwrap(
         Effect.map(
           Effect.try({
-            try: () => decode(inputOf(call), input),
+            try: () => Schema.decodeUnknownSync(inputOf(call))(input),
             catch: callFailureOf,
           }),
           view,

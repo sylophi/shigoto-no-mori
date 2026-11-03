@@ -44,11 +44,7 @@ import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import { errorWordsOf } from "@host/lib/errorWords";
-import {
-  type ContractSchema,
-  type Decoded,
-  decode,
-} from "@shigomori/contracts/codec";
+import type { ContractSchema } from "@shigomori/contracts/contract";
 import { isAbsent } from "@shigomori/engine/platformErrors";
 import {
   type VillagerDataStatus,
@@ -194,9 +190,7 @@ const make = ({
     // or decode fails.
     const readJson = <S extends ContractSchema>(file: string, schema: S) =>
       fs.readFileString(file).pipe(
-        Effect.flatMap((raw) =>
-          Effect.try(() => decode(schema, JSON.parse(raw))),
-        ),
+        Effect.flatMap(Schema.decodeEffect(Schema.fromJsonString(schema))),
         Effect.catchTags({
           PlatformError: (error) =>
             isAbsent(error) ? Effect.succeed(null) : Effect.fail(error),
@@ -207,7 +201,7 @@ const make = ({
     // again rather than left to block the data behind it.
     const readIfValid = <S extends ContractSchema>(file: string, schema: S) =>
       readJson(file, schema).pipe(
-        Effect.orElseSucceed((): Decoded<S> | null => null),
+        Effect.orElseSucceed((): S["Type"] | null => null),
       );
 
     // What a folder holds so far, or null when there is no such folder.

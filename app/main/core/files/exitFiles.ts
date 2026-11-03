@@ -16,11 +16,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
-import {
-  type ContractSchema,
-  type Decoded,
-  decode,
-} from "@shigomori/contracts/codec";
+import type { ContractSchema } from "@shigomori/contracts/contract";
+import * as Schema from "effect/Schema";
 
 const isENOENT = (error: unknown): boolean =>
   (error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
@@ -28,9 +25,11 @@ const isENOENT = (error: unknown): boolean =>
 export function readJsonOrNullSync<S extends ContractSchema>(
   filePath: string,
   schema: S,
-): Decoded<S> | null {
+): S["Type"] | null {
   try {
-    return decode(schema, JSON.parse(readFileSync(filePath, "utf8")));
+    return Schema.decodeSync(Schema.fromJsonString(schema))(
+      readFileSync(filePath, "utf8"),
+    );
   } catch (error) {
     if (isENOENT(error)) return null;
     throw new Error(`Failed to read ${filePath}`, { cause: error });

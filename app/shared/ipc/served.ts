@@ -24,7 +24,6 @@ import {
   Scope,
   TracksProjectUsage,
 } from "@shigomori/contracts/contract";
-import { decode } from "@shigomori/contracts/codec";
 import { type CallFailure, callFailureOf } from "@shigomori/contracts/errors";
 import type {
   EffectHandlers,
@@ -34,6 +33,7 @@ import type {
   ViewHandlers,
 } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import type * as Stream from "effect/Stream";
 
 // Fails closed on a host call that never classified itself: a host
@@ -224,7 +224,7 @@ export function resolvePush<M extends ContractModule, K extends PushKeys<M>>(
   }
   return {
     channel: channelOf(call),
-    payload: decode(payloadOf(call), payload),
+    payload: Schema.decodeUnknownSync(payloadOf(call))(payload),
     remote: annotation(call, Remote) === true,
   };
 }

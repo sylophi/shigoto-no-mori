@@ -10,12 +10,12 @@ import * as SchemaBinary from "effect/encoding/SchemaBinary";
 import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 import { describe, it } from "vitest";
-import type { ContractSchema } from "../src/codec.ts";
 import {
   callsOf,
   channelOf,
   type ContractCall,
   type ContractModule,
+  type ContractSchema,
   inputOf,
   isPush,
   isInvoke,

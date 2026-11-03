@@ -4,11 +4,9 @@
 // directly. Everything in web/ that persists reads storage through an
 // injected KeyValueStorage rather than touching a browser global at
 // module scope.
-import {
-  type ContractSchema,
-  type Decoded,
-  safeDecode,
-} from "@shigomori/contracts/codec";
+import type { ContractSchema } from "@shigomori/contracts/contract";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 
 export type KeyValueStorage = {
   getItem(key: string): string | null;
@@ -34,16 +32,14 @@ export function readJsonKey<S extends ContractSchema>(
   storage: KeyValueStorage,
   key: string,
   schema: S,
-  fallback: Decoded<S>,
-): Decoded<S> {
+  fallback: S["Type"],
+): S["Type"] {
   const raw = readKey(storage, key);
   if (raw === null) return fallback;
-  try {
-    const parsed = safeDecode(schema, JSON.parse(raw));
-    return parsed.success ? parsed.data : fallback;
-  } catch {
-    return fallback;
-  }
+  return Result.getOrElse(
+    Schema.decodeResult(Schema.fromJsonString(schema))(raw),
+    () => fallback,
+  );
 }
 
 export function writeKey(

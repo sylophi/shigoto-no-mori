@@ -6,10 +6,10 @@
 import {
   channelOf,
   type ContractCall,
+  type ContractSchema,
   isPush,
   isInvoke,
 } from "@shigomori/contracts/contract";
-import { type ContractSchema, decode } from "@shigomori/contracts/codec";
 import {
   isContractError,
   isRemoteCallError,
@@ -18,6 +18,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
+import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
@@ -175,7 +176,9 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
         (
           client(
             channel,
-            decode(rpc.payloadSchema as ContractSchema, input),
+            Schema.decodeUnknownSync(rpc.payloadSchema as ContractSchema)(
+              input,
+            ),
           ) as Effect.Effect<unknown, unknown>
         ).pipe(
           Effect.catchDefect((defect) => {
@@ -198,7 +201,9 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
         (
           client(
             channel,
-            decode(rpc.payloadSchema as ContractSchema, input),
+            Schema.decodeUnknownSync(rpc.payloadSchema as ContractSchema)(
+              input,
+            ),
           ) as Stream.Stream<unknown, unknown>
         ).pipe(
           Stream.catchDefect((defect) => {

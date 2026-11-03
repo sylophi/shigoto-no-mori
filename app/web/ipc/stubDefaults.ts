@@ -6,9 +6,10 @@
 // biased: a status enum would stub to its "ok"-like value), so it yields
 // NO_STRUCTURAL_STUB and the call is refused. fabricateArms opts back in,
 // for the lab's fake host (lab/fake-host/bridge.ts).
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
-import { type ContractSchema, safeDecode } from "@shigomori/contracts/codec";
+import type { ContractSchema } from "@shigomori/contracts/contract";
 
 // Distinct from every legal stub value (undefined included), so the
 // caller can tell "no safe stub exists" from "the stub is undefined".
@@ -34,8 +35,8 @@ export function stubValueFor(
   // The list and object candidates are fresh per call, so no two
   // stubs share one.
   for (const candidate of [...SCALAR_CANDIDATES, [], {}]) {
-    const result = safeDecode(schema, candidate);
-    if (result.success) return result.data;
+    const result = Schema.decodeUnknownResult(schema)(candidate);
+    if (Result.isSuccess(result)) return result.success;
   }
   return stubFromAst(schema.ast, opts);
 }
