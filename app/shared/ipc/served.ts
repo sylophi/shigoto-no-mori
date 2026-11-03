@@ -8,7 +8,6 @@
 import {
   type ContractCall,
   type ContractModule,
-  callOf,
   callsOf,
   channelOf,
   isInvoke,
@@ -41,14 +40,6 @@ export type Served<Ctx, Services = never, E = CallFailure> = {
     module: M,
     handlers: Handlers<M, Ctx> | EffectHandlers<M, Ctx, Services>,
   ) => void;
-  // One call alone, as a proof serves just what it asks.
-  readonly serveOne: <M extends ContractModule, K extends keyof Handlers<M>>(
-    module: M,
-    key: K,
-    handler:
-      | Handlers<M, Ctx>[K]
-      | EffectHandlers<M, Ctx, Services>[K & keyof EffectHandlers<M>],
-  ) => void;
   readonly view: <M extends ContractModule>(
     module: M,
     views: ViewHandlers<M, Services>,
@@ -60,12 +51,6 @@ export type Served<Ctx, Services = never, E = CallFailure> = {
   ) => Invoke<Ctx, Services, E> | undefined;
   readonly viewOf: (call: ContractCall) => View<Services> | undefined;
 };
-
-function check(call: ContractCall, handler: unknown): void {
-  if (handler === undefined) {
-    throw new Error(`no handler for ${channelOf(call)}`);
-  }
-}
 
 export function createServed<Ctx, Services = never, E = CallFailure>(
   options: {
@@ -118,17 +103,14 @@ export function createServed<Ctx, Services = never, E = CallFailure>(
       // the group decodes every payload before a handler sees it
       const byKey = handlers as ByKey;
       const calls = callsOf(module).filter(isInvoke);
-      for (const call of calls) check(call, byKey[keyOf(call)]);
+      const missing = calls.find((call) => byKey[keyOf(call)] === undefined);
+      if (missing !== undefined) {
+        throw new Error(`no handler for ${channelOf(missing)}`);
+      }
       for (const call of calls) {
         const handler = byKey[keyOf(call)];
         if (handler !== undefined) mount(call, handler);
       }
-    },
-    serveOne(module, key, handler) {
-      const call = callOf(module, String(key));
-      check(call, handler);
-      // the group decodes every payload before a handler sees it
-      mount(call, handler as (input: unknown, ctx: Ctx) => unknown);
     },
     view(module, handlers) {
       // typed per view above, read here by key

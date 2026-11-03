@@ -97,10 +97,12 @@ export const handlers = <M extends ContractModule>(
           Effect.gen(function* () {
             const ctx = contextOf(yield* LinkPeer);
             const services = yield* graph;
-            const run = yield* Effect.try({
-              try: () => fn(payload, ctx),
-              catch: hostCallFailure,
-            });
+            const run = Effect.flatten(
+              Effect.try({
+                try: () => fn(payload, ctx),
+                catch: hostCallFailure,
+              }),
+            );
             return yield* (
               changesCode.has(channel)
                 ? changing(run, {}, annotation(call, Busy))

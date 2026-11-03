@@ -17,10 +17,11 @@ const hasProjectId = Schema.is(
 let usageFailureLogged = false;
 
 // Called by the host's handlers (socket/hostRpc.ts) after an action
-// whose contract entry sets `tracksProjectUsage` succeeds. Records a use of the project named by
-// the payload and answers its id once recorded, so the caller can
-// notify the renderer to refresh its usage-sorted list, or null if the
-// payload had no project to attribute or the use wasn't recorded.
+// whose contract entry sets `tracksProjectUsage` succeeds. Records a use
+// of the project named by the payload and answers its id once recorded,
+// so the caller can notify the renderer to refresh its usage-sorted
+// list, or null if the payload had no project to attribute or the use
+// wasn't recorded.
 // Best-effort: never let a stats write break the handler.
 export const recordProjectActionUsage = (input: unknown) => {
   if (!hasProjectId(input)) return Effect.succeed(null);

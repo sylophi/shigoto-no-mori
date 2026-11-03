@@ -383,7 +383,8 @@ export const make = (options: {
       sharing === undefined ? Effect.succeed(true) : sharing.current;
     // The pushes every peer hears.
     const hostPushes = yield* HostPushes.HostPushes;
-    // The host's handlers, one layer for every listener (hostRpc.ts).
+    // The listener's context, whose RPC handlers are the host's
+    // (hostRpc.ts).
     const served = yield* Effect.context<Rpc.Handler<string>>();
     const runFork = yield* FiberSet.makeRuntime<never>();
     const lifecycle = yield* Semaphore.make(1);
