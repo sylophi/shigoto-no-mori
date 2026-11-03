@@ -206,16 +206,13 @@ const make = Effect.gen(function* () {
   const listCatalog = Effect.forEach(
     apps,
     (app) =>
-      Effect.map(
-        available(app),
-        (installed): CatalogEntry => ({
-          kind: "detected",
-          id: `app:${app.id}`,
-          label: app.label,
-          available: installed,
-          ...(app.editor === true ? { editor: true as const } : {}),
-        }),
-      ),
+      Effect.map(available(app), (installed): CatalogEntry => ({
+        kind: "detected",
+        id: `app:${app.id}`,
+        label: app.label,
+        available: installed,
+        ...(app.editor === true ? { editor: true as const } : {}),
+      })),
     { concurrency: "unbounded" },
   ).pipe(
     Effect.map((entries) =>

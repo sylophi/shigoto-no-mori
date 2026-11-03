@@ -63,9 +63,11 @@ export type EffectClient<M extends ContractModule, E = unknown> = {
 };
 
 export type EffectApi<M extends ContractModule> = {
-  [K in M as ContractInfo<K> extends { readonly name: infer N extends string }
-    ? N
-    : never]: EffectClient<K>;
+  [
+    K in M as ContractInfo<K> extends { readonly name: infer N extends string }
+      ? N
+      : never
+  ]: EffectClient<K>;
 };
 
 export type HostModulesOf<M extends ContractModule> = Extract<

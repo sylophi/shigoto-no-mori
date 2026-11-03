@@ -49,13 +49,11 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
         anyExit: true,
       }).pipe(
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-        Effect.map(
-          ({ stdout, code }): Ran => ({
-            ok: code === 0,
-            output: stdout,
-            cause: new Error(`exit status ${code}`),
-          }),
-        ),
+        Effect.map(({ stdout, code }): Ran => ({
+          ok: code === 0,
+          output: stdout,
+          cause: new Error(`exit status ${code}`),
+        })),
         Effect.catch((error) =>
           Effect.succeed<Ran>({
             ok: false,

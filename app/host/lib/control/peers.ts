@@ -422,13 +422,11 @@ export const worktreesOn = (standings: ControlDevice[]) =>
                 (worktree) =>
                   !worktree.detached && isRealBranch(worktree.branch),
               )
-              .map(
-                (worktree): ControlPeerWorktree => ({
-                  device: { deviceId: device.deviceId, name: device.name },
-                  projectId,
-                  worktree,
-                }),
-              ),
+              .map((worktree): ControlPeerWorktree => ({
+                device: { deviceId: device.deviceId, name: device.name },
+                projectId,
+                worktree,
+              })),
           ),
           Effect.catch(() =>
             Effect.sync(() => {

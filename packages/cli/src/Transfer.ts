@@ -156,7 +156,7 @@ type SourceOutcome = NonNullable<ControlTransferResult["source"]>;
 // A control call's answer, as its contract types it.
 type ControlCall = CallsOf<typeof controlContract>;
 type Answer<
-  K extends ControlCall["_tag"] extends `control:${infer N}` ? N : never,
+  K extends (ControlCall["_tag"] extends `control:${infer N}` ? N : never),
 > = OutputOf<Extract<ControlCall, { readonly _tag: `control:${K}` }>>["Type"];
 type MirrorStop = Answer<"mirrorStop">;
 type MirrorList = Answer<"mirrors">;

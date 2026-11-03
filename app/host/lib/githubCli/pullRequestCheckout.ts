@@ -95,21 +95,17 @@ export const listPullRequestCandidates = Effect.fn("PullRequests.candidates")(
       Effect.flatMap(decodeGhPrCandidates),
       // gh already returns newest-first, which is the order a reviewer
       // wants.
-      Effect.map(
-        (rows): PullRequestCandidateList => ({
-          status: "ok",
-          pullRequests: rows.map(toCandidate),
-        }),
-      ),
+      Effect.map((rows): PullRequestCandidateList => ({
+        status: "ok",
+        pullRequests: rows.map(toCandidate),
+      })),
       // gh exited non-zero (network, SSO prompt, rate limit) or answered
       // with something we can't read. The form says so rather than
       // showing an empty list that reads as "no PRs".
-      Effect.orElseSucceed(
-        (): PullRequestCandidateList => ({
-          status: "unavailable",
-          reason: "gh-failed",
-        }),
-      ),
+      Effect.orElseSucceed((): PullRequestCandidateList => ({
+        status: "unavailable",
+        reason: "gh-failed",
+      })),
     );
   },
 );

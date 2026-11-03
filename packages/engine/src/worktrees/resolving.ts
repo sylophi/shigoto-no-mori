@@ -115,15 +115,12 @@ export const makeResolving = ({
       };
     });
 
-    const nowhere = Effect.map(
-      registry.listed,
-      (projects): Here => ({
-        cwd: "/",
-        projects,
-        current: undefined,
-        unregisteredRepo: undefined,
-      }),
-    ).pipe(Effect.withSpan("Worktrees.nowhere"));
+    const nowhere = Effect.map(registry.listed, (projects): Here => ({
+      cwd: "/",
+      projects,
+      current: undefined,
+      unregisteredRepo: undefined,
+    })).pipe(Effect.withSpan("Worktrees.nowhere"));
 
     // A typed path made absolute against the command's cwd, ~ expanded.
     const absolute = (here: Here, ref: string) =>

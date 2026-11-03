@@ -223,14 +223,12 @@ function launchToolMenuItems(): MenuItemConstructorOptions[] {
   if (entries.length === 0) return [];
   return [
     { type: "separator" },
-    ...entries.map(
-      (entry, i): MenuItemConstructorOptions => ({
-        label: entry.label,
-        accelerator: chords[`launchTool${i + 1}`],
-        enabled,
-        click: clickBroadcast(navContract, "launchById", entry.id),
-      }),
-    ),
+    ...entries.map((entry, i): MenuItemConstructorOptions => ({
+      label: entry.label,
+      accelerator: chords[`launchTool${i + 1}`],
+      enabled,
+      click: clickBroadcast(navContract, "launchById", entry.id),
+    })),
   ];
 }
 

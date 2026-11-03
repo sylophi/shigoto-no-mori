@@ -142,12 +142,11 @@ export const handOver = (
       yield* Effect.promise(() => gone);
     });
   }).pipe(
-    Effect.flatMap(
-      (ended): Effect.Effect<void, ExitCode | Killed> =>
-        "signal" in ended
-          ? new Killed({ signal: ended.signal })
-          : ended.code === 0
-            ? Effect.void
-            : new ExitCode({ code: ended.code }),
+    Effect.flatMap((ended): Effect.Effect<void, ExitCode | Killed> =>
+      "signal" in ended
+        ? new Killed({ signal: ended.signal })
+        : ended.code === 0
+          ? Effect.void
+          : new ExitCode({ code: ended.code }),
     ),
   );

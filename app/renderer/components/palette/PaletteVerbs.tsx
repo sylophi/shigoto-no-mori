@@ -438,15 +438,13 @@ function CreateVerbs({
       heading={`New worktree ${row.branch}`}
       query={query}
       verbs={[
-        ...row.targets.map(
-          (project): Verb => ({
-            key: `create:${project.id}`,
-            label: `In ${project.name}`,
-            icon: <ProjectIcon projectId={project.id} name={project.name} />,
-            listKeys: project === first ? "↩" : undefined,
-            run: () => actions.create(project.id, row.branch),
-          }),
-        ),
+        ...row.targets.map((project): Verb => ({
+          key: `create:${project.id}`,
+          label: `In ${project.name}`,
+          icon: <ProjectIcon projectId={project.id} name={project.name} />,
+          listKeys: project === first ? "↩" : undefined,
+          run: () => actions.create(project.id, row.branch),
+        })),
         {
           key: "create-form",
           label: "Pick a base or device…",

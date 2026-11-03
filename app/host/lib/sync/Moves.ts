@@ -174,11 +174,10 @@ const make = Effect.gen(function* () {
     ).pipe(
       // Interrupted by a cancel: the move fails with it, whatever the
       // step it was on said as it was cut short.
-      Effect.flatMap(
-        (exit): Effect.Effect<A, E | MoveCancelledError> =>
-          Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)
-            ? Effect.fail(new MoveCancelledError())
-            : exit,
+      Effect.flatMap((exit): Effect.Effect<A, E | MoveCancelledError> =>
+        Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)
+          ? Effect.fail(new MoveCancelledError())
+          : exit,
       ),
     );
   };

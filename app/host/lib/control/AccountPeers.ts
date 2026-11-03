@@ -58,15 +58,14 @@ export const withinAccountRead = <A, E, R>(
   seconds = 15,
 ) =>
   answerWithin(read, seconds * 1_000).pipe(
-    Effect.flatMap(
-      (answered): Effect.Effect<A, E | AccountUnreachableError> =>
-        Option.isSome(answered)
-          ? answered.value
-          : Effect.fail(
-              new AccountUnreachableError({
-                reason: `it didn't answer in ${seconds} s`,
-              }),
-            ),
+    Effect.flatMap((answered): Effect.Effect<A, E | AccountUnreachableError> =>
+      Option.isSome(answered)
+        ? answered.value
+        : Effect.fail(
+            new AccountUnreachableError({
+              reason: `it didn't answer in ${seconds} s`,
+            }),
+          ),
     ),
   );
 

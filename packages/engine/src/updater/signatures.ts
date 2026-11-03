@@ -33,10 +33,10 @@ export const makeSignatures = ({ files }: { readonly files: FilesArea }) =>
 
     // The installed bundle for a run, its signer read at most once.
     const anchorOf = (bundle: string) =>
-      Effect.map(
-        Effect.cached(signerOf(bundle)),
-        (signer): Anchor => ({ bundle, signer }),
-      );
+      Effect.map(Effect.cached(signerOf(bundle)), (signer): Anchor => ({
+        bundle,
+        signer,
+      }));
 
     // A valid deep, strict signature that satisfies one requirement made
     // from the installed app: a certificate Apple issued, to the installed

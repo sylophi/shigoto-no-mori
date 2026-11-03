@@ -689,12 +689,10 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     const repoOf = new Map(projects.map((one) => [one.id, one.path]));
     journal.moved = yield* Effect.forEach(entries, ({ oldId, ...entry }) =>
       git.readRef(repoOf.get(entry.projectId) ?? "", dirtyRef(oldId)).pipe(
-        Effect.map(
-          (capture): Entry => ({
-            ...entry,
-            capture: Option.getOrNull(capture),
-          }),
-        ),
+        Effect.map((capture): Entry => ({
+          ...entry,
+          capture: Option.getOrNull(capture),
+        })),
       ),
     );
     yield* journalHere;

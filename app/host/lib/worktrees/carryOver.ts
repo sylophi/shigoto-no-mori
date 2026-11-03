@@ -270,13 +270,11 @@ const listWorktreeFolder = Effect.fnUntraced(function* (
     ),
   );
   return listed
-    .map(
-      ({ name, isDirectory }): SyncWorktreeFolderEntry => ({
-        name,
-        isDirectory,
-        ignored: isIgnored(pathOf(relative, name)),
-      }),
-    )
+    .map(({ name, isDirectory }): SyncWorktreeFolderEntry => ({
+      name,
+      isDirectory,
+      ignored: isIgnored(pathOf(relative, name)),
+    }))
     .toSorted(foldersFirst);
 });
 

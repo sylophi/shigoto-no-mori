@@ -702,13 +702,11 @@ export const helpPages = (look: HelpLook) => {
             "Commands",
             [
               ...items.general.map(([usage, desc]): Item => [usage, desc, ""]),
-              ...namespaces.map(
-                (ns): Item => [
-                  `${ns.name} <command>`,
-                  ns.desc,
-                  `${ns.items.map(([usage]) => fieldsOf(usage)[1]).join(", ")}. Run \`${bin} ${ns.name}\` for details.`,
-                ],
-              ),
+              ...namespaces.map((ns): Item => [
+                `${ns.name} <command>`,
+                ns.desc,
+                `${ns.items.map(([usage]) => fieldsOf(usage)[1]).join(", ")}. Run \`${bin} ${ns.name}\` for details.`,
+              ]),
             ],
           ],
           ["Flags", items.flags],

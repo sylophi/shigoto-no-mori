@@ -185,9 +185,10 @@ const make = Effect.gen(function* () {
         (named) =>
           git.treeOf(repo, named.full).pipe(
             Effect.map((tree): PrimaryCandidate => ({ ...named, tree })),
-            Effect.orElseSucceed(
-              (): PrimaryCandidate => ({ ...named, tree: null }),
-            ),
+            Effect.orElseSucceed((): PrimaryCandidate => ({
+              ...named,
+              tree: null,
+            })),
           ),
         { concurrency: "unbounded" },
       );
