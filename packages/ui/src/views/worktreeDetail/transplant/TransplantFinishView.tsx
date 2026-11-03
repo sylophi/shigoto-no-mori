@@ -11,6 +11,7 @@
 // the dialog hands in.
 import { ArrowRight, Check } from "lucide-react";
 import type { ReactNode } from "react";
+import { RadioGroup } from "@base-ui/react/radio-group";
 import type { SyncPullWorktreeResult } from "@shigomori/contracts/modules/sync";
 import {
   errorMessageOf,
@@ -18,11 +19,11 @@ import {
 } from "@shigomori/contracts/errors";
 import { Button } from "../../../primitives/button.tsx";
 import { Chip } from "../../../primitives/chip-button.tsx";
+import { OptionCard } from "../../../primitives/option-card.tsx";
 import { SectionHeading } from "../../../primitives/section-heading.tsx";
 import { InlineError } from "../../../primitives/inline-error.tsx";
 import { peerReadOnlyNote } from "../../../lib/commandAccessCopy.ts";
 import { pluralize } from "@shigomori/contracts/words";
-import { cn } from "../../../lib/utils.ts";
 import { DialogBody, DialogFooter } from "../../../primitives/dialog.tsx";
 import type { Landing } from "../flow/pullSteps.ts";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
@@ -197,21 +198,21 @@ export function TransplantFinishView({
             <SectionHeading>
               The copy still on {sourceDeviceLabel}
             </SectionHeading>
-            <div
-              role="radiogroup"
+            <RadioGroup
+              value={choice}
+              onValueChange={onChoose}
               aria-label={`What to do with the copy on ${sourceDeviceLabel}`}
               className="grid gap-2 @min-[40rem]:grid-cols-3"
             >
               {CHOICES.map((entry) => {
                 const off = entry.key === "teardown" && stranded;
                 return (
-                  <ChoiceCard
+                  <OptionCard
                     key={entry.key}
-                    selected={choice === entry.key}
-                    onSelect={() => onChoose(entry.key)}
+                    value={entry.key}
                     disabled={off}
-                    title={entry.title}
-                    body={
+                    title={<span className="font-medium">{entry.title}</span>}
+                    detail={
                       off
                         ? "Off while the changes only exist there."
                         : entry.body(sourceDeviceLabel, staying)
@@ -219,7 +220,7 @@ export function TransplantFinishView({
                   />
                 );
               })}
-            </div>
+            </RadioGroup>
           </section>
 
           {error !== null ? (
@@ -269,53 +270,5 @@ export function TransplantFinishView({
         </Button>
       </DialogFooter>
     </>
-  );
-}
-
-function ChoiceCard({
-  selected,
-  disabled = false,
-  onSelect,
-  title,
-  body,
-}: {
-  selected: boolean;
-  disabled?: boolean;
-  onSelect: () => void;
-  title: string;
-  body: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      data-slot="choice-card"
-      aria-checked={selected}
-      disabled={disabled}
-      onClick={onSelect}
-      className={cn(
-        "flex flex-col gap-1.5 rounded-lg border p-3 text-left text-xs transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-        selected
-          ? "border-primary/40 bg-accent text-accent-foreground"
-          : "border-border bg-card hover:bg-muted/50",
-        disabled && "cursor-not-allowed opacity-50 hover:bg-card",
-      )}
-    >
-      <span className="flex items-center gap-2">
-        <span
-          aria-hidden
-          className={cn(
-            "flex size-4 shrink-0 items-center justify-center rounded-full",
-            selected
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted-foreground/20",
-          )}
-        >
-          {selected && <Check className="size-2.5" />}
-        </span>
-        <span className="text-sm font-medium">{title}</span>
-      </span>
-      <span className={cn(!selected && "text-muted-foreground")}>{body}</span>
-    </button>
   );
 }
