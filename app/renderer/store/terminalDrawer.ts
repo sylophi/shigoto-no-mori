@@ -2,15 +2,14 @@
 // worktree it keeps whether it is open (so its pages come back as they
 // were left, and visiting one opens no shell there), the script
 // consoles opened in it as tabs, and the tab picked. Every drawer
-// shares its height at the bottom and width at the side, each null
-// until it is dragged and kept across launches, and the edge it is
-// docked to (a store of its own, which the pages read). A tab is named
-// by a terminal's id, or `script:` and its slot's param.
+// shares the edge it is docked to (a store of its own, which the pages
+// read) and its size (layout.ts). A tab is named by a terminal's id, or
+// `script:` and its slot's param.
 import {
   createExternalStore,
   useExternalStore,
 } from "@shigomori/ui/lib/externalStore.ts";
-import { readStored, removeStored, writeStored } from "@/lib/localStorage";
+import { readStored, writeStored } from "@/lib/localStorage";
 import { slotToParam, type ScriptSlot } from "./scriptSlot";
 import {
   createWorktreeStore,
@@ -31,18 +30,6 @@ const drawers = createWorktreeStore<Drawer>({ empty: CLOSED, moves: false });
 
 export const useDrawer = (ref: WorktreeRef): Drawer =>
   useWorktreeStore(drawers, ref);
-
-const HEIGHT_KEY = "terminalDrawer.height";
-const WIDTH_KEY = "terminalDrawer.width";
-const readSize = (key: string): number | null =>
-  Number(readStored(key)) || null;
-
-const sizeStore = createExternalStore<{
-  readonly height: number | null;
-  readonly width: number | null;
-}>({ height: readSize(HEIGHT_KEY), width: readSize(WIDTH_KEY) });
-
-export const useDrawerSizes = () => useExternalStore(sizeStore);
 
 // Docked at the side rather than the bottom, kept across launches.
 const SIDE_KEY = "terminalDrawer.side";
@@ -109,20 +96,4 @@ export const forgetDrawer = drawers.forget;
 export function setDrawerSide(side: boolean): void {
   writeStored(SIDE_KEY, String(side));
   sideStore.publish(side);
-}
-
-// The height at the bottom, or the width at the side.
-export function setDrawerSize(size: number): void {
-  const sizes = sizeStore.get();
-  const side = sideStore.get();
-  writeStored(side ? WIDTH_KEY : HEIGHT_KEY, String(size));
-  sizeStore.publish(
-    side ? { ...sizes, width: size } : { ...sizes, height: size },
-  );
-}
-
-export function resetDrawerSizes(): void {
-  removeStored(HEIGHT_KEY);
-  removeStored(WIDTH_KEY);
-  sizeStore.publish({ height: null, width: null });
 }

@@ -38,6 +38,8 @@ import {
   forgetWorktreeStores,
   moveWorktreeStores,
 } from "@/store/worktreeState";
+// oxlint-disable-next-line import/no-unassigned-import -- a store joins forget and move as it loads, and stored drafts go even before their page loads
+import "@/store/commitDraft";
 
 interface CreateWorktreeInput {
   projectId: string;

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { CODE_THEME } from "@shigomori/ui/views/diff/codeTheme.ts";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLook } from "@/hooks/ui/useLook";
-import { rememberFile } from "@/hooks/worktrees/useWorktreeNav";
+import { rememberFile } from "@/store/lastFiles";
 import {
   useWorktreeFile,
   useWorktreeImage,

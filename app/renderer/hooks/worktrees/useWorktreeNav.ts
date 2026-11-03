@@ -14,7 +14,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { WORKTREE_ROUTE_PATHS, type WorktreeDialog } from "@/lib/routePaths";
 import { paramToSlot, slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 import { openScriptTab, openTerminalTab } from "@/store/terminalDrawer";
-import { createWorktreeStore, type WorktreeRef } from "@/store/worktreeState";
+import { rememberedFile } from "@/store/lastFiles";
 import { terminalsAtom } from "@/hooks/terminals/useTerminals";
 import { useRegistry, whenViewShows } from "@/lib/runtime/viewHooks";
 
@@ -41,20 +41,6 @@ interface WorktreePageParams {
   hash?: string;
   scriptKey?: string;
 }
-
-// The file each worktree's Files page last showed this session, which
-// the page opens on again unless it is asked for another.
-const lastFiles = createWorktreeStore<string | null>({
-  empty: null,
-  moves: true,
-});
-
-export function rememberFile(ref: WorktreeRef, path: string | null): void {
-  lastFiles.update(ref, () => path);
-}
-
-export const rememberedFile = (ref: WorktreeRef): string | null =>
-  lastFiles.get(ref);
 
 export function useWorktreeNav() {
   const navigate = useNavigate();

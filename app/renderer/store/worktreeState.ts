@@ -1,8 +1,6 @@
-// What the window keeps about each worktree outside React: its commit
-// draft, its pull request drafts, the changes page's picks, its terminal
-// drawer and the file its Files page last showed. Every store made here
-// is forgotten once the worktree's id is gone, and one that `moves`
-// follows the worktree to its new id (useWorktreeMutations).
+// What the window keeps about each worktree outside React. Every store
+// made here is forgotten once the worktree's id is gone, and one that
+// `moves` follows the worktree to its new id (useWorktreeMutations).
 import { useSyncExternalStore } from "react";
 import { readStoredJson, removeStored, writeStored } from "@/lib/localStorage";
 
@@ -32,7 +30,7 @@ export interface WorktreeStore<T> {
 
 const stores: {
   forget: (ref: WorktreeRef) => void;
-  move: ((from: WorktreeRef, to: WorktreeRef) => void) | null;
+  move: (from: WorktreeRef, to: WorktreeRef) => void;
 }[] = [];
 
 export function createWorktreeStore<T>({
@@ -43,35 +41,46 @@ export function createWorktreeStore<T>({
   // What a worktree holding nothing reads. Set back to it, a persisted
   // value leaves storage.
   empty: T;
-  // Kept across launches. A store registers as its module loads, so a
-  // persisted one has to load with the app rather than a lazy page, or
-  // a worktree removed before then keeps it.
+  // Kept across launches.
   persist?: {
     key: (ref: WorktreeRef) => string;
     parse: (stored: Record<string, unknown>) => T;
   };
   moves: boolean;
 }): WorktreeStore<T> {
+  // By the storage key when persisted, so another window's write finds
+  // what it replaces.
   const values = new Map<string, T>();
+  const keyOf = persist ? persist.key : worktreeKey;
   const listeners = new Set<() => void>();
   const notify = () => {
     for (const listener of listeners) listener();
   };
 
+  if (persist) {
+    // Read again on the next get. Another window writes storage but not
+    // this window's copy.
+    window.addEventListener("storage", ({ key }) => {
+      if (key === null) values.clear();
+      else if (!values.delete(key)) return;
+      notify();
+    });
+  }
+
   const get = (ref: WorktreeRef): T => {
-    const key = worktreeKey(ref);
+    const key = keyOf(ref);
     const value = values.get(key);
     if (value !== undefined || !persist) return value ?? empty;
     // Kept once read, so every render reads the same value.
-    const stored = persist.parse(readStoredJson(persist.key(ref), {}));
+    const stored = persist.parse(readStoredJson(key, {}));
     values.set(key, stored);
     return stored;
   };
 
   const set = (ref: WorktreeRef, value: T) => {
-    values.set(worktreeKey(ref), value);
+    const key = keyOf(ref);
+    values.set(key, value);
     if (persist) {
-      const key = persist.key(ref);
       if (value === empty) removeStored(key);
       else writeStored(key, JSON.stringify(value));
     }
@@ -79,20 +88,20 @@ export function createWorktreeStore<T>({
   };
 
   const forget = (ref: WorktreeRef) => {
-    values.delete(worktreeKey(ref));
-    if (persist) removeStored(persist.key(ref));
+    const key = keyOf(ref);
+    if (!values.delete(key) && !persist) return;
+    if (persist) removeStored(key);
     notify();
   };
 
   stores.push({
     forget,
-    move: moves
-      ? (from, to) => {
-          const value = get(from);
-          forget(from);
-          if (value !== empty) set(to, value);
-        }
-      : null,
+    move(from, to) {
+      if (!moves) return;
+      const value = get(from);
+      forget(from);
+      if (value !== empty) set(to, value);
+    },
   });
 
   return {
@@ -127,5 +136,5 @@ export function forgetWorktreeStores(ref: WorktreeRef): void {
 // The stores that move take their value along. The rest are left for
 // the old id's forget.
 export function moveWorktreeStores(from: WorktreeRef, to: WorktreeRef): void {
-  for (const store of stores) store.move?.(from, to);
+  for (const store of stores) store.move(from, to);
 }

@@ -12,11 +12,10 @@ import {
   pickDrawerTab,
   setDrawerOpen,
   setDrawerSide,
-  setDrawerSize,
   useDrawer,
   useDrawerSide,
-  useDrawerSizes,
 } from "@/store/terminalDrawer";
+import { setDrawerSize, useDrawerSizes } from "@/store/layout";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { TerminalScope } from "./TerminalScope";
 import { TerminalDrawerView } from "@shigomori/ui/views/terminal/TerminalDrawerView.tsx";
@@ -77,7 +76,7 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
         side={side}
         size={side ? sizes.width : sizes.height}
         slideIn={slideIn}
-        onSize={setDrawerSize}
+        onSize={(size) => setDrawerSize(side, size)}
       >
         <Suspense>
           <TerminalTabs

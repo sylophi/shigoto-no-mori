@@ -1,6 +1,7 @@
 // The sizes the user drags in a page, kept across launches: the
-// sidebar's width and the terminal drawer's (terminalDrawer.ts).
-// resetLayout puts them back to their defaults. The terminals window's
+// sidebar's width, and the terminal drawer's height at the bottom and
+// width at the side, each null until dragged and shared by every
+// worktree's drawer. resetLayout puts them back to their defaults. The terminals window's
 // size is the shell's (window:resetLayout).
 import {
   createExternalStore,
@@ -12,7 +13,6 @@ import {
   SIDEBAR_MIN,
 } from "@shigomori/ui/views/AppShellView.tsx";
 import { readStored, removeStored, writeStored } from "@/lib/localStorage";
-import { resetDrawerSizes } from "./terminalDrawer";
 
 const SIDEBAR_KEY = "sidebar.width";
 
@@ -31,8 +31,31 @@ export function setSidebarWidth(width: number): void {
   sidebarStore.publish(clamped);
 }
 
+const HEIGHT_KEY = "terminalDrawer.height";
+const WIDTH_KEY = "terminalDrawer.width";
+const readSize = (key: string): number | null =>
+  Number(readStored(key)) || null;
+
+const drawerSizeStore = createExternalStore<{
+  readonly height: number | null;
+  readonly width: number | null;
+}>({ height: readSize(HEIGHT_KEY), width: readSize(WIDTH_KEY) });
+
+export const useDrawerSizes = () => useExternalStore(drawerSizeStore);
+
+// The width when docked at the side, the height otherwise.
+export function setDrawerSize(side: boolean, size: number): void {
+  const sizes = drawerSizeStore.get();
+  writeStored(side ? WIDTH_KEY : HEIGHT_KEY, String(size));
+  drawerSizeStore.publish(
+    side ? { ...sizes, width: size } : { ...sizes, height: size },
+  );
+}
+
 export function resetLayout(): void {
   removeStored(SIDEBAR_KEY);
   sidebarStore.publish(SIDEBAR_DEFAULT);
-  resetDrawerSizes();
+  removeStored(HEIGHT_KEY);
+  removeStored(WIDTH_KEY);
+  drawerSizeStore.publish({ height: null, width: null });
 }
