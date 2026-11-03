@@ -26,6 +26,7 @@ import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import {
   type Cloned,
+  type Located,
   type Reporter,
   type WorktreeIdentity,
   WorktreeRefused,
@@ -128,7 +129,7 @@ export const makeCreating = ({
 
     // What a script is told about the worktree it runs in.
     // `found` is the project's checkouts, when the caller has them.
-    const scriptContext = (
+    const scriptContextOf = (
       project: RegisteredProject,
       worktree: WorktreeIdentity,
       found?: ReadonlyArray<WorktreeIdentity>,
@@ -157,6 +158,13 @@ export const makeCreating = ({
           description: described.description,
         };
       });
+
+    const scriptContext = Effect.fn("Worktrees.scriptContext")(function* ({
+      project,
+      worktree,
+    }: Located) {
+      return yield* scriptContextOf(project, worktree);
+    });
 
     const runScript = (
       context: Lifecycle.ScriptContext,
@@ -212,7 +220,7 @@ export const makeCreating = ({
           : lifecycleCommand({ kind: "setup" }, settings, worktree.path);
         const pool = yield* portPoolActive(worktree);
         if (setup === "" && !pool) return { failures, ran };
-        const context = yield* scriptContext(project, worktree, found);
+        const context = yield* scriptContextOf(project, worktree, found);
         const step = (
           name: string,
           phase: Lifecycle.Phase,
@@ -519,6 +527,7 @@ export const makeCreating = ({
       occupied,
       unreserved,
       destination,
+      scriptContextOf,
       scriptContext,
       runScript,
       portPoolActive,

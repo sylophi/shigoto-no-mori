@@ -37,7 +37,7 @@ export const makeGitIndex = ({
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const { run, runChunked, onIndex, refreshIndex } = running;
+    const { run, runChunked, withIndexLock, refreshIndex } = running;
     const { verifyRev, refTip, isAncestor, headAt, resolveCommit } = refs;
     const { status } = workingTree;
     // `reset --soft`: HEAD moves and nothing else does, so the commits
@@ -55,7 +55,7 @@ export const makeGitIndex = ({
       readonly expectHead?: string | undefined;
     }) {
       const { worktree, target, expectHead } = input;
-      return yield* onIndex(
+      return yield* withIndexLock(
         worktree,
         Effect.gen(function* () {
           yield* operation.refuseMidOperation(worktree);
@@ -200,7 +200,7 @@ export const makeGitIndex = ({
       readonly paths: readonly string[];
     }) {
       const { worktree, paths } = input;
-      return yield* onIndex(
+      return yield* withIndexLock(
         worktree,
         Effect.gen(function* () {
           // Without its snapshot the discard is off: that would be the
@@ -287,7 +287,7 @@ export const makeGitIndex = ({
       readonly worktree: string;
       readonly snapshot: string;
     }) {
-      yield* onIndex(
+      yield* withIndexLock(
         input.worktree,
         restoreSnapshot(input.worktree, input.snapshot),
       );
@@ -322,7 +322,7 @@ export const makeGitIndex = ({
       readonly restore?: string | undefined;
     }) {
       const { worktree, ref, expectHead, restore } = input;
-      return yield* onIndex(
+      return yield* withIndexLock(
         worktree,
         Effect.gen(function* () {
           // The refusals first, and only then the status: a refusal that

@@ -153,15 +153,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
     swap,
     restart,
   });
-  const { check, stage, update, install, finishInstall } = methods;
-  return Updater.of({
-    check,
-    stage,
-    update,
-    staged: staging.installable,
-    install,
-    finishInstall,
-  });
+  return Updater.of({ ...methods, staged: staging.staged });
 });
 
 export const layer = (flavor: Flavor) => Layer.effect(Updater, make(flavor));

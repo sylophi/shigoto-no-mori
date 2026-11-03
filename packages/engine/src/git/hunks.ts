@@ -119,7 +119,7 @@ export const makeHunks = ({
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const { run, onIndex } = running;
+    const { run, withIndexLock } = running;
     const { snapshotPaths } = gitIndex;
 
     const diffHead = (worktree: string, file: string, cached: boolean) =>
@@ -301,7 +301,7 @@ export const makeHunks = ({
       readonly changes: readonly LineChange[];
     }) {
       const { worktree, path: file, changes: picks } = input;
-      return yield* onIndex(
+      return yield* withIndexLock(
         worktree,
         Effect.gen(function* () {
           const state = yield* readTree(worktree, file);

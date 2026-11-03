@@ -779,11 +779,26 @@ export const makeListing = Effect.gen(function* () {
     );
   });
 
+  const primaryTarget = Effect.fn("Worktrees.primaryTarget")(function* (
+    project: RegisteredProject,
+  ) {
+    const { remotes, primaryRef, primaryFullRef, primaryBranch } =
+      yield* primaryRefOf(project);
+    return {
+      remotes,
+      primaryRef,
+      primaryFullRef,
+      remote: splitRemoteRef(primaryRef, remotes)?.remote ?? "",
+      primaryBranch,
+    };
+  });
+
   return {
     deviceFlag,
     projectSettings,
     identities,
     primaryRefOf,
+    primaryTarget,
     marks,
     descriptionOf,
     list,

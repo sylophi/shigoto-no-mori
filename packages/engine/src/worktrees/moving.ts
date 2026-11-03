@@ -590,13 +590,13 @@ export const makeMoving = ({
         ),
       );
 
-    const resume = Effect.gen(function* () {
+    const resumeMoves = Effect.gen(function* () {
       const records = yield* sql<MovingRow>`
         SELECT * FROM moving`.pipe(Effect.orDie);
       for (const record of records) yield* resumeOne(record);
     }).pipe(Effect.withSpan("Worktrees.resumeMoves"));
 
-    const interrupted = sql<MovingRow>`
+    const interruptedMoves = sql<MovingRow>`
       SELECT * FROM moving`.pipe(
       Effect.flatMap((records) =>
         Effect.filter(records, (record) =>
@@ -689,8 +689,8 @@ export const makeMoving = ({
       carryLease,
       rename,
       rekey,
-      resume,
-      interrupted,
+      resumeMoves,
+      interruptedMoves,
     };
   });
 

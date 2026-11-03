@@ -1,6 +1,8 @@
-// Git's new repositories: where one may land, a clone, and a fresh one.
+// Git's repositories: finding the one a folder is in, where a new one
+// may land, a clone, and a fresh one.
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type { CloneProgress } from "@shigomori/contracts/modules/projects";
 import { isNotFound } from "../platformErrors.ts";
@@ -80,7 +82,35 @@ export const makeRepositories = ({
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const { run } = running;
+    const { run, succeeds } = running;
+
+    const isRepo = Effect.fn("Git.isRepo")(function* (repo: string) {
+      return yield* succeeds(repo, ["rev-parse", "--git-dir"]);
+    });
+
+    const locate = Effect.fn("Git.locate")((dir: string) =>
+      run(dir, [
+        "rev-parse",
+        "--path-format=absolute",
+        "--show-toplevel",
+        "--git-common-dir",
+      ]).pipe(
+        Effect.map((stdout) => {
+          const [toplevel, commonDir] = stdout.trim().split("\n");
+          if (toplevel === undefined || commonDir === undefined) {
+            return Option.none();
+          }
+          const common = commonDir.trim();
+          return Option.some({
+            toplevel: toplevel.trim(),
+            commonDir: common,
+            primaryPath:
+              path.basename(common) === ".git" ? path.dirname(common) : common,
+          });
+        }),
+        Effect.orElseSucceed(() => Option.none()),
+      ),
+    );
 
     // `parentDir/name`, with the parent a folder and the destination
     // not there yet. Both checks are for the message: git would refuse
@@ -205,5 +235,5 @@ export const makeRepositories = ({
       return dest;
     });
 
-    return { checkDestination, clone, createRepository };
+    return { isRepo, locate, checkDestination, clone, createRepository };
   });

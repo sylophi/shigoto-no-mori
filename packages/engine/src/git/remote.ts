@@ -39,6 +39,29 @@ export const makeRemote = ({
       yield* fetches.get(repo);
     });
 
+    const push = Effect.fn("Git.push")(function* (worktree: string) {
+      yield* run(worktree, ["push"]);
+    });
+
+    const pushForceWithLease = Effect.fn("Git.pushForceWithLease")(function* (
+      worktree: string,
+    ) {
+      yield* run(worktree, ["push", "--force-with-lease"]);
+    });
+
+    const pullFastForward = Effect.fn("Git.pullFastForward")(function* (
+      worktree: string,
+    ) {
+      yield* run(worktree, ["fetch"]);
+      yield* run(worktree, ["merge", "--ff-only", "@{u}"]);
+    });
+
+    const fastForwardToUpstream = Effect.fn("Git.fastForwardToUpstream")(
+      function* (worktree: string) {
+        yield* run(worktree, ["merge", "--ff-only", "@{u}"]);
+      },
+    );
+
     // Whether a rebase onto `ref` only replays commits that exist nowhere
     // else, in one line: none of them a merge (a rebase would flatten it)
     // or on a remote already (replayed, the branch would split from its
@@ -204,6 +227,10 @@ export const makeRemote = ({
 
     return {
       fetchAll,
+      push,
+      pushForceWithLease,
+      pullFastForward,
+      fastForwardToUpstream,
       pullRebaseOrMergeAndPush,
       syncWithPrimary,
       mergeUpstreamKeepingConflicts,

@@ -8,7 +8,10 @@ import {
   anchorRule,
   escapeGitignorePattern,
   ignoreRulesOf,
+  parseBranchList,
   parseBranchRefs,
+  parseConfiguredRemoteEntries,
+  parseRemoteEntries,
   pickDefaultRef,
   shortRefName,
   splitRemoteRef,
@@ -47,6 +50,41 @@ export const makeBranches = ({
           "--format=%(refname) %(symref)",
           "refs/heads",
           "refs/remotes",
+        ]),
+      );
+    });
+
+    const listRemoteEntries = Effect.fn("Git.listRemoteEntries")(function* (
+      repo: string,
+    ) {
+      return yield* run(repo, ["remote", "-v"]).pipe(
+        Effect.map(parseRemoteEntries),
+        Effect.orElseSucceed(() => []),
+      );
+    });
+
+    const listConfiguredRemoteEntries = Effect.fn(
+      "Git.listConfiguredRemoteEntries",
+    )(function* (repo: string) {
+      return yield* run(
+        repo,
+        ["config", "--get-regexp", "^remote\\..*\\.(url|pushurl)$"],
+        { okExitCodes: [1] },
+      ).pipe(
+        Effect.map(parseConfiguredRemoteEntries),
+        Effect.orElseSucceed(() => []),
+      );
+    });
+
+    const listBranches = Effect.fn("Git.listBranches")(function* (
+      repo: string,
+    ) {
+      return parseBranchList(
+        yield* run(repo, [
+          "for-each-ref",
+          "--format=%(refname)\t%(refname:short)\t%(symref)",
+          "refs/heads/",
+          "refs/remotes/",
         ]),
       );
     });
@@ -185,6 +223,21 @@ export const makeBranches = ({
       ]);
     });
 
+    const renameCurrentBranch = Effect.fn("Git.renameCurrentBranch")(function* (
+      worktree: string,
+      name: string,
+    ) {
+      yield* run(worktree, ["branch", "-m", "--", name]);
+    });
+
+    const renameBranch = Effect.fn("Git.renameBranch")(function* (input: {
+      readonly repo: string;
+      readonly from: string;
+      readonly to: string;
+    }) {
+      yield* run(input.repo, ["branch", "-m", "--", input.from, input.to]);
+    });
+
     const deleteBranch = Effect.fn("Git.deleteBranch")(function* (input: {
       readonly repo: string;
       readonly name: string;
@@ -219,6 +272,18 @@ export const makeBranches = ({
         exclude,
         "--directory",
       ]).pipe(Effect.map(splitZ));
+
+    const listIgnoredPaths = Effect.fn("Git.listIgnoredPaths")(function* (
+      repo: string,
+    ) {
+      return yield* listOthersIgnored(repo, "--exclude-standard");
+    });
+
+    const listUntrackedMatching = Effect.fn("Git.listUntrackedMatching")(
+      function* (repo: string, excludeFile: string) {
+        return yield* listOthersIgnored(repo, `--exclude-from=${excludeFile}`);
+      },
+    );
 
     const listIgnoreRules = Effect.fn("Git.listIgnoreRules")(function* (
       worktree: string,
@@ -260,14 +325,20 @@ export const makeBranches = ({
     });
 
     return {
+      listRemoteEntries,
+      listConfiguredRemoteEntries,
       branchRefs,
-      appendExcludes,
-      resolveDefaultBranch,
+      listBranches,
       resolvePrimaryRef,
+      resolveDefaultBranch,
       checkoutBranch,
       createBranch,
+      renameCurrentBranch,
+      renameBranch,
       deleteBranch,
-      listOthersIgnored,
+      listIgnoredPaths,
+      listUntrackedMatching,
       listIgnoreRules,
+      appendExcludes,
     };
   });

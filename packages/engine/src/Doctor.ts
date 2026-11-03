@@ -80,12 +80,7 @@ const make = Effect.gen(function* () {
   });
   const fileReads = yield* makeFileReads({ dataDirChecks });
   const withoutStore = yield* makeWithoutStore({ dataDirChecks, checklist });
-  const finishing = yield* makeFinishing;
-  const { checkDataDir } = dataDirChecks;
-  const { checkAll } = checklist;
-  const { readFiles } = fileReads;
-  const { checkWithoutState } = withoutStore;
-  const { finish } = finishing;
+  const { finish } = yield* makeFinishing;
   return {
     // Every check, given the store's services. With `files`, they read
     // the 2.x files the store refused.
@@ -99,17 +94,20 @@ const make = Effect.gen(function* () {
     ) =>
       finish(
         input,
-        Effect.map(checkAll(input, files), (entries) =>
+        Effect.map(checklist.checkAll(input, files), (entries) =>
           amend === undefined ? entries : amend(entries),
         ),
       ),
-    readFiles,
+    ...fileReads,
     // The checks that need no state, `failed` when the store wouldn't
     // open.
     withoutState: (input: RunInput, failed: boolean) =>
-      finish(input, checkWithoutState(input, failed)),
+      finish(input, withoutStore.checkWithoutState(input, failed)),
     // Whether there is a data dir the store could open in.
-    dataDirUsable: Effect.map(checkDataDir, ({ usable }) => usable),
+    dataDirUsable: Effect.map(
+      dataDirChecks.checkDataDir,
+      ({ usable }) => usable,
+    ),
   };
 });
 

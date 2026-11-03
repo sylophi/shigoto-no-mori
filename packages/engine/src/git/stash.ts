@@ -41,7 +41,7 @@ export const makeStash = ({
   readonly operation: OperationArea;
 }) =>
   Effect.sync(() => {
-    const { run, succeeds, onIndex } = running;
+    const { run, succeeds, withIndexLock } = running;
     const { conflictedPaths } = operation;
 
     const readStashes = (worktree: string) =>
@@ -164,7 +164,7 @@ export const makeStash = ({
           ),
         );
       });
-      yield* onIndex(worktree, waitingForIndex(attempt));
+      yield* withIndexLock(worktree, waitingForIndex(attempt));
     });
 
     // With `drop`, a pop: the stash goes only once it applied cleanly.
@@ -176,7 +176,7 @@ export const makeStash = ({
       readonly drop: boolean;
     }) {
       const { worktree, hash, drop } = input;
-      yield* onIndex(
+      yield* withIndexLock(
         worktree,
         Effect.gen(function* () {
           const ref = yield* refOf(worktree, hash);
