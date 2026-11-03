@@ -223,7 +223,7 @@ export const makeRemoving = ({
         const parent = path.dirname(worktreePath);
         const place = {
           dataDir: paths.dataDir,
-          dataDirName: paths.dataDirName,
+          canonicalDataDirName: paths.dataDirName,
         };
         // git spells the worktree's path with links resolved, and the
         // managed folder is named for the project as written, so each base

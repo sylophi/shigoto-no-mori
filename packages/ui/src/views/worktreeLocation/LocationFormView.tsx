@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Button } from "../../primitives/button.tsx";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import type { RowStatus } from "../../primitives/row-status.tsx";
-import type { DeviceLayout } from "./layoutOptions.ts";
+import type { DeviceLayout } from "@shigomori/contracts/git/worktreeLayout";
 import type { Worktree, WorktreeLayout } from "@shigomori/contracts/schemas";
 import { pluralize } from "@shigomori/contracts/words";
 import { LayoutOptionItemView } from "./LayoutOptionItemView.tsx";

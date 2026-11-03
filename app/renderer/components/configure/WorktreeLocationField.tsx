@@ -1,7 +1,10 @@
 import { LAYOUT_OPTIONS } from "@shigomori/ui/views/worktreeLocation/layoutOptions.ts";
 import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
-import { managedDriveBaseFor } from "@shigomori/contracts/git/worktreeLayout";
+import {
+  customBaseOf,
+  managedDriveBase,
+} from "@shigomori/contracts/git/worktreeLayout";
 import {
   PROJECT_CONFIG_DEFAULTS,
   type ShigomoriConfig,
@@ -33,11 +36,13 @@ export function WorktreeLocationField({
   // A custom layout has no description. Its folder says more, and so
   // does the one the managed layout keeps on the project's drive.
   const customPath =
-    layout === "custom" ? config?.customWorktreePath?.trim() : undefined;
+    layout === "custom" && device
+      ? customBaseOf(config?.customWorktreePath, device.homedir)
+      : undefined;
   const drivePath =
     layout === "managed-root" && device
-      ? managedDriveBaseFor(projectPath, device)
-      : null;
+      ? managedDriveBase(projectPath, device)
+      : undefined;
 
   return (
     <WorktreeLocationFieldView

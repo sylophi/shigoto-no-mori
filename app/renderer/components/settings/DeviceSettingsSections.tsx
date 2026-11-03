@@ -2,7 +2,7 @@ import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
-import { projectDriveBaseFor } from "@shigomori/contracts/git/worktreeLayout";
+import { projectDriveBase } from "@shigomori/contracts/git/worktreeLayout";
 import {
   DRIVE_PROJECT_STANDIN,
   IntegrationTogglesView,
@@ -21,7 +21,7 @@ export function WorktreeToggles(props: ToggleProps) {
   return (
     <WorktreeTogglesView
       {...props}
-      driveBase={runtime && projectDriveBaseFor(DRIVE_PROJECT_STANDIN, runtime)}
+      driveBase={runtime && projectDriveBase(DRIVE_PROJECT_STANDIN, runtime)}
     />
   );
 }

@@ -12,11 +12,12 @@
 // script launched from the packaged app's script runner would boot the
 // dev build, see the packaged app's data dir here, and quietly operate
 // on real data.
+import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { DataDirSource } from "@shigomori/engine/Paths";
-import { expandHome as expandHomeIn } from "@shigomori/engine/expandHome";
+import { expandHome as expandHomeIn } from "@shigomori/contracts/projectPaths";
 import * as Paths from "@shigomori/engine/Paths";
 import type { Flavor } from "@shigomori/engine/flavor";
 import * as Effect from "effect/Effect";
@@ -100,6 +101,18 @@ function current(): Found {
 
 export function dataDir(): string {
   return current().dataDir;
+}
+
+// The data dir with its links resolved, none where that spells it the
+// same or it can't be read.
+export function dataDirReal(): string | undefined {
+  const dir = dataDir();
+  try {
+    const real = realpathSync(dir);
+    return real === resolve(dir) ? undefined : real;
+  } catch {
+    return undefined;
+  }
 }
 
 export function dataDirSource(): DataDirSource {

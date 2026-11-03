@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { expandHome as expandHomeIn } from "./expandHome.ts";
+import { expandHome as expandHomeIn } from "@shigomori/contracts/projectPaths";
 import { type Flavor, flavorNames } from "./flavor.ts";
 import { rescueStrandedMove } from "./dataDirMoveJournal.ts";
 import { isAbsent, isNotFound } from "./platformErrors.ts";

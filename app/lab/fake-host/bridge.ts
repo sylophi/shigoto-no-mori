@@ -716,6 +716,7 @@ function hostHandlersFor(
         customPath,
         dataDir: `${disk.home}/.sm`,
         canonicalDataDirName: ".sm",
+        homedir: disk.home,
         onProjectDrive: false,
       };
       return (forest.worktrees[projectId] ?? [])

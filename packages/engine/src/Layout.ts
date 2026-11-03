@@ -1,4 +1,4 @@
-import { PROJECT_CONFIG_DEFAULTS } from "@shigomori/contracts/schemas/projectConfigDefaults";
+import { worktreeBase as worktreeBaseOf } from "@shigomori/contracts/git/worktreeLayout";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -35,13 +35,13 @@ export class Layout extends Context.Service<
 const make = Effect.gen(function* () {
   const config = yield* Config.Config;
   const fs = yield* FileSystem.FileSystem;
-  const { dataDir, dataDirName, expandHome } = yield* Paths.Paths;
+  const { home, dataDir, dataDirName } = yield* Paths.Paths;
   const place = {
     dataDir,
-    dataDirName,
-    realDataDir: yield* fs
+    dataDirReal: yield* fs
       .realPath(dataDir)
       .pipe(Effect.orElseSucceed(() => dataDir)),
+    canonicalDataDirName: dataDirName,
   };
 
   // The project's layout settings, which count only once the project is
@@ -63,11 +63,6 @@ const make = Effect.gen(function* () {
     };
   });
 
-  // A custom base under `~/` is in this device's home, whichever device
-  // wrote it.
-  const customBase = (base: string | undefined) =>
-    base === undefined ? undefined : expandHome(base.trim());
-
   const baseFor = Effect.fn("Layout.baseFor")(function* (
     project: ProjectPlace,
     settings: {
@@ -75,23 +70,14 @@ const make = Effect.gen(function* () {
       readonly customWorktreePath?: string | undefined;
     },
   ) {
-    // The device's drive setting matters only for a managed root a
-    // project's own drive could hold.
-    const onDrive =
-      (settings.worktreeLayout ?? PROJECT_CONFIG_DEFAULTS.worktreeLayout) ===
-        "managed-root" &&
-      layout.projectDriveBase(project.path, place) !== undefined
-        ? yield* config.device("managedOnProjectDrive")
-        : false;
-    return layout.worktreeBase(
-      project.path,
-      {
-        ...settings,
-        customWorktreePath: customBase(settings.customWorktreePath),
-        managedOnProjectDrive: onDrive,
-      },
-      place,
-    );
+    return worktreeBaseOf({
+      ...place,
+      homedir: home,
+      onProjectDrive: yield* config.device("managedOnProjectDrive"),
+      layout: settings.worktreeLayout,
+      projectPath: project.path,
+      customPath: settings.customWorktreePath,
+    });
   });
 
   const worktreeBase = Effect.fn("Layout.worktreeBase")(function* (
@@ -106,8 +92,9 @@ const make = Effect.gen(function* () {
     const { customWorktreePath } = yield* projectSettings(project);
     const bases = layout.managedBases(
       project.path,
-      { customWorktreePath: customBase(customWorktreePath) },
       place,
+      customWorktreePath,
+      home,
     );
     const real = yield* Effect.forEach(bases, (base) =>
       fs.realPath(base).pipe(Effect.orElseSucceed(() => base)),

@@ -24,6 +24,7 @@ import type { HostServices } from "@host/process/services";
 import {
   canonicalDataDirName,
   dataDir,
+  dataDirReal,
   dataDirSource,
   defaultDataDir,
 } from "@shared/paths";
@@ -108,6 +109,7 @@ export const runtimeHandlers = {
       const dir = dataDir();
       return {
         dataDir: dir,
+        dataDirReal: dataDirReal(),
         dataDirSource: dataDirSource(),
         // resolve() drops the trailing slash a hand-edited pointer may carry.
         atDefaultDataDir: resolve(dir) === defaultDataDir(),

@@ -4,10 +4,11 @@ import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
 import { tildify } from "@shigomori/contracts/projectPaths";
 import type { WorktreeLayout } from "@shigomori/contracts/schemas";
-import type { DeviceLayout, LayoutOption } from "./layoutOptions.ts";
+import type { LayoutOption } from "./layoutOptions.ts";
 import {
-  managedDriveBaseFor,
-  worktreeBaseFor,
+  type DeviceLayout,
+  managedDriveBase,
+  worktreeBase,
 } from "@shigomori/contracts/git/worktreeLayout";
 import { RowTag } from "../../primitives/row-tag.tsx";
 
@@ -38,12 +39,11 @@ export function LayoutOptionItemView({
     option.value === "custom" && !hasCustomPath
       ? null
       : `${tildify(
-          worktreeBaseFor({
+          worktreeBase({
             ...device,
             layout: option.value,
             projectPath,
-            customPath:
-              option.value === "custom" ? customPath.trim() || null : null,
+            customPath,
           }),
           device.homedir,
         )}/`;
@@ -52,7 +52,7 @@ export function LayoutOptionItemView({
   // external drive, and the description follows the preview there.
   const description =
     option.value === "managed-root" &&
-    managedDriveBaseFor(projectPath, device) !== null
+    managedDriveBase(projectPath, device) !== undefined
       ? "Worktrees live in Shigomori's folder on the project's drive."
       : option.description;
   return (

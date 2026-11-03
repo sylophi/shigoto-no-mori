@@ -1,17 +1,14 @@
-// The renderer's mirror of the engine's worktreeBase, which decides
-// where a worktree actually lands. Dependency-free, for either side.
+// Where a project's new worktrees go, as path math: the managed root
+// under the data dir, the in-project folder, a custom base, and the
+// project's own external drive. The engine places worktrees by it and
+// the renderer previews them by it, so it is posix strings only.
 
-import type { RuntimeInfo, WorktreeLayout } from "../schemas/index.ts";
+import { cleanPath, expandHome } from "../projectPaths.ts";
 import { PROJECT_CONFIG_DEFAULTS } from "../schemas/projectConfigDefaults.ts";
 
 // The folder worktrees live in under each root: short, since agents and
-// people read and type these paths all day. The engine's layout names
-// it by this too.
+// people read and type these paths all day.
 export const WORKTREES_DIR = "wt";
-
-// Also appended to the primary's `.git/info/exclude`.
-const IN_PROJECT_ROOT_DIR = ".shigomori";
-const IN_PROJECT_SUBDIR = `${IN_PROJECT_ROOT_DIR}/${WORKTREES_DIR}`;
 
 // The whole subtree, as destructive flows guarding against it want.
 // The engine's isManagedPath uses parent equality instead.
@@ -21,107 +18,120 @@ export function isSameOrInside(path: string, ancestor: string): boolean {
   return folded === base || folded.startsWith(`${base}/`);
 }
 
-function joinPath(base: string, ...segments: string[]): string {
-  let out = base.replace(/\/+$/, "");
-  for (const seg of segments) {
-    const parts = seg.split(/\/+/).filter((p) => p.length > 0);
-    for (const part of parts) out += "/" + part;
-  }
-  return out;
-}
+const joinPath = (...parts: string[]) =>
+  cleanPath(parts.filter((part) => part !== "").join("/"));
+
+const lastSegment = (path: string) =>
+  path.split("/").findLast((segment) => segment !== "") ?? "";
 
 // None for the mount point itself.
 export function externalVolumeRoot(path: string): string | undefined {
   return /^(\/Volumes\/[^/]+)\/+[^/]/.exec(path)?.[1];
 }
 
-export interface DeviceLayoutInputs extends Pick<
-  RuntimeInfo,
-  "dataDir" | "canonicalDataDirName"
-> {
-  onProjectDrive: boolean;
-}
+// Where a device's data dir is, and the flavor's name for it, which a
+// managed root on another drive is named after.
+export type DataDirPlace = {
+  readonly dataDir: string;
+  // The data dir with its links resolved, where that was read.
+  readonly dataDirReal?: string | undefined;
+  readonly canonicalDataDirName: string;
+};
 
-// Null on the internal drive, or when the data dir already sits on the
-// project's drive. Mirrors the engine's projectDriveBase.
-export function projectDriveBaseFor(
+// A device's side of the layout: its data dir, its home for a custom
+// base under `~/`, and its managedOnProjectDrive setting.
+export type DeviceLayout = DataDirPlace & {
+  readonly homedir: string;
+  readonly onProjectDrive: boolean;
+};
+
+export const managedRootOf = (projectPath: string, place: DataDirPlace) =>
+  joinPath(place.dataDir, WORKTREES_DIR, lastSegment(projectPath));
+
+export const inProjectBaseOf = (projectPath: string) =>
+  joinPath(projectPath, ".shigomori", WORKTREES_DIR);
+
+// The managed root's place on the project's own external drive. Always
+// managed, so worktrees placed there stay ours whatever happens to the
+// setting or the data dir later.
+export function driveBaseOf(
   projectPath: string,
-  {
-    dataDir,
-    canonicalDataDirName,
-  }: Pick<DeviceLayoutInputs, "dataDir" | "canonicalDataDirName">,
-): string | null {
+  place: DataDirPlace,
+): string | undefined {
   const volume = externalVolumeRoot(projectPath);
-  if (volume === undefined || dataDir.startsWith(`${volume}/`)) return null;
-  return joinPath(
-    volume,
-    canonicalDataDirName,
-    WORKTREES_DIR,
-    lastSegment(projectPath),
-  );
+  return volume === undefined
+    ? undefined
+    : joinPath(
+        volume,
+        place.canonicalDataDirName,
+        WORKTREES_DIR,
+        lastSegment(projectPath),
+      );
 }
 
-export function managedDriveBaseFor(
+// driveBaseOf as a destination for new worktrees: none as well when the
+// data dir sits on the project's drive, where the managed root already is.
+export function projectDriveBase(
   projectPath: string,
-  device: DeviceLayoutInputs,
-): string | null {
-  return device.onProjectDrive
-    ? projectDriveBaseFor(projectPath, device)
-    : null;
-}
-
-function lastSegment(path: string): string {
-  return path.split("/").findLast((s) => s.length > 0) ?? "";
-}
-
-interface LayoutInputs extends DeviceLayoutInputs {
-  layout: WorktreeLayout;
-  projectPath: string;
-  customPath: string | null;
-}
-
-// A trailing space in a custom path is noise, never another folder.
-export function layoutInputsFor(
-  config: {
-    worktreeLayout?: WorktreeLayout;
-    customWorktreePath?: string | null;
-  } | null,
-  projectPath: string,
-  { dataDir, canonicalDataDirName, onProjectDrive }: DeviceLayoutInputs,
-): LayoutInputs {
-  return {
-    layout: config?.worktreeLayout ?? PROJECT_CONFIG_DEFAULTS.worktreeLayout,
-    projectPath,
-    dataDir,
-    canonicalDataDirName,
-    onProjectDrive,
-    customPath: config?.customWorktreePath?.trim() || null,
-  };
-}
-
-export function worktreeBaseFor(inputs: LayoutInputs): string {
-  const { layout, projectPath, dataDir, customPath } = inputs;
-  if (layout === "in-project") {
-    return joinPath(projectPath, IN_PROJECT_SUBDIR);
+  place: DataDirPlace,
+): string | undefined {
+  const volume = externalVolumeRoot(projectPath);
+  if (
+    volume !== undefined &&
+    [place.dataDir, place.dataDirReal].some((dir) =>
+      dir?.startsWith(`${volume}/`),
+    )
+  ) {
+    return undefined;
   }
-  if (layout === "custom") {
-    const trimmed = customPath?.trim();
-    if (trimmed) {
-      // A bare root stays itself: an empty string would join as
-      // relative and prefix-match everything.
-      return trimmed.replace(/\/+$/, "") || trimmed;
-    }
-  }
-  if (layout === "managed-root") {
-    const driveBase = managedDriveBaseFor(projectPath, inputs);
-    if (driveBase !== null) return driveBase;
-  }
-  return joinPath(dataDir, WORKTREES_DIR, lastSegment(projectPath));
+  return driveBaseOf(projectPath, place);
 }
 
-export function worktreePathFor(
-  inputs: LayoutInputs,
-  worktreeName: string,
-): string {
-  return joinPath(worktreeBaseFor(inputs), worktreeName);
+// projectDriveBase where the device's setting keeps managed worktrees
+// there.
+export const managedDriveBase = (projectPath: string, device: DeviceLayout) =>
+  device.onProjectDrive ? projectDriveBase(projectPath, device) : undefined;
+
+// A custom base, none when empty. One under `~/` is in this device's
+// home, whichever device wrote it. Cleaned, so `/` stays the root rather
+// than an empty, relative base, and one through `..` is the folder it
+// names.
+export function customBaseOf(
+  customPath: string | null | undefined,
+  homedir: string,
+): string | undefined {
+  const custom = customPath?.trim() ?? "";
+  return custom === "" ? undefined : cleanPath(expandHome(homedir, custom));
 }
+
+export type LayoutInputs = DeviceLayout & {
+  // A name this build doesn't know reads as the plain managed root.
+  readonly layout?: string | undefined;
+  readonly projectPath: string;
+  readonly customPath?: string | null | undefined;
+};
+
+// Custom without a path falls back to the managed root under the data
+// dir.
+export function worktreeBase(inputs: LayoutInputs): string {
+  const { projectPath } = inputs;
+  switch (inputs.layout ?? PROJECT_CONFIG_DEFAULTS.worktreeLayout) {
+    case "in-project":
+      return inProjectBaseOf(projectPath);
+    case "custom":
+      return (
+        customBaseOf(inputs.customPath, inputs.homedir) ??
+        managedRootOf(projectPath, inputs)
+      );
+    case "managed-root":
+      return (
+        managedDriveBase(projectPath, inputs) ??
+        managedRootOf(projectPath, inputs)
+      );
+    default:
+      return managedRootOf(projectPath, inputs);
+  }
+}
+
+export const worktreePathFor = (inputs: LayoutInputs, worktreeName: string) =>
+  joinPath(worktreeBase(inputs), worktreeName);

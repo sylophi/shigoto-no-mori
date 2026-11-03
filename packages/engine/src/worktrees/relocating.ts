@@ -1,6 +1,7 @@
 // Worktrees' relocating: a project moved or renamed by hand, pointed at
 // where it is now, its worktrees re-linked.
 import { UnknownProjectError } from "@shigomori/contracts/errors";
+import { cleanPath } from "@shigomori/contracts/projectPaths";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -14,11 +15,7 @@ import * as Paths from "../Paths.ts";
 import * as Terrier from "../Terrier.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
-import {
-  cleanPath,
-  isManagedPath,
-  worktreeIdFromPath,
-} from "../worktreeLayout.ts";
+import { isManagedPath, worktreeIdFromPath } from "../worktreeLayout.ts";
 import {
   CaptureNotCarried,
   RelocateRefused,
