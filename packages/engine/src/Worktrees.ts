@@ -477,7 +477,7 @@ const make = Effect.gen(function* () {
     ...moving,
     ...adopting,
     ...relocating,
-    // Not spread: its own rekey is only the rows' half of moving's.
+    // Not spread: its rekey takes ids, under moving's, which takes a path.
     keptUnder: kept.keptUnder,
     movedTo: kept.movedTo,
     movedIds: kept.movedIds,
