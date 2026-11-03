@@ -20,7 +20,7 @@ import {
 } from "../views/shared/DeviceTabBarView.tsx";
 import { EditorFooterView } from "../views/shared/EditorFooterView.tsx";
 import { FolderPickerView } from "../views/shared/FolderPickerView.tsx";
-import { BROWSE_VALUE_PREFIX } from "../views/shared/PathBrowserView.tsx";
+import { BROWSE_VALUE_PREFIX } from "../views/shared/BrowseListPartsView.tsx";
 import { LauncherIconView } from "../views/shared/LauncherIconView.tsx";
 import { PageShellView } from "../views/shared/PageShellView.tsx";
 import { PathPickerView } from "../views/shared/PathPickerView.tsx";

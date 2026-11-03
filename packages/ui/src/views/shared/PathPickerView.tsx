@@ -1,18 +1,27 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  ArrowLeft,
-  CornerLeftUp,
-  Folder,
-  Loader2,
-  Search,
-  X,
-} from "lucide-react";
+import { useState } from "react";
 import type { ReactNode } from "react";
+import { Command } from "cmdk";
+import { ArrowLeft, Folder, Search, X } from "lucide-react";
 import { PathSpan } from "../../primitives/path-span.tsx";
-import { BrowseKeyHintsView } from "./BrowseListPartsView.tsx";
-import { type PickerEntry, PickerRowView } from "./PickerRowView.tsx";
+import { MaterialIcon } from "../../primitives/material-icon.tsx";
+import { MODAL_COMMAND_CLASS } from "../../primitives/cmdk-classes.ts";
+import {
+  BROWSE_UP,
+  BrowseKeyHintsView,
+  BrowseListView,
+  browseValue,
+} from "./BrowseListPartsView.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { FooterRow } from "../../primitives/footer-row.tsx";
+
+// What a picker row needs of an entry. The carry-over candidate, the
+// worktree folder entry and the repo listing entry all carry these
+// three.
+export interface PickerEntry {
+  name: string;
+  isDirectory: boolean;
+  ignored: boolean;
+}
 
 // The folder browser behind the carry-over picker and the "leave out"
 // pickers: a filter that owns the keyboard, folders to step into, and
@@ -62,15 +71,14 @@ export function PathPickerView<E extends PickerEntry>({
   const relative = parents.map((parent) => parent.name).join("/");
   const insideIgnored = parents.some((parent) => parent.ignored);
   const [filter, setFilter] = useState("");
-  const [highlightedIdx, setHighlightedIdx] = useState(0);
-  const listRef = useRef<HTMLUListElement | null>(null);
+  const [highlighted, setHighlighted] = useState("");
   const atRoot = relative === "";
   const cwd = relative ? `${rootPath}/${relative}` : rootPath;
 
   const resetView = (nextParents: readonly E[]) => {
     onParentsChange(nextParents);
     setFilter("");
-    setHighlightedIdx(0);
+    setHighlighted("");
   };
 
   const goUp = () => {
@@ -90,32 +98,26 @@ export function PathPickerView<E extends PickerEntry>({
     trimmed ? e.name.toLowerCase().includes(trimmed) : true,
   );
 
-  useEffect(() => {
-    if (entries.length === 0) return;
-    listRef.current
-      ?.querySelector(`[data-row-idx="${highlightedIdx}"]`)
-      ?.scrollIntoView({ block: "nearest" });
-  }, [highlightedIdx, entries.length]);
+  // The first entry stays highlighted until another row is, as it is
+  // when a folder opens or the filter changes.
+  const valueOf = (entry: E) => browseValue(relativeFor(entry.name));
+  const rows = [...(atRoot ? [] : [BROWSE_UP]), ...entries.map(valueOf)];
+  const active = rows.includes(highlighted)
+    ? highlighted
+    : entries[0]
+      ? valueOf(entries[0])
+      : "";
+  const activeEntry = entries.find((entry) => valueOf(entry) === active);
 
+  const open = (entry: E) => {
+    if (entry.isDirectory) navigateInto(entry);
+  };
+
+  // ↑, ↓ and ↩ are the list's (cmdk's).
   const onInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "ArrowDown") {
+    if (e.key === "ArrowRight" && activeEntry?.isDirectory) {
       e.preventDefault();
-      setHighlightedIdx((i) =>
-        entries.length === 0 ? 0 : Math.min(i + 1, entries.length - 1),
-      );
-      return;
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setHighlightedIdx((i) => Math.max(i - 1, 0));
-      return;
-    }
-    if (e.key === "Enter" || e.key === "ArrowRight") {
-      const target = entries[highlightedIdx];
-      if (target?.isDirectory) {
-        e.preventDefault();
-        navigateInto(target);
-      }
+      navigateInto(activeEntry);
       return;
     }
     if (e.key === "ArrowLeft" && filter === "" && !atRoot) {
@@ -125,7 +127,18 @@ export function PathPickerView<E extends PickerEntry>({
   };
 
   return (
-    <>
+    <Command
+      label="Browse folders"
+      loop
+      shouldFilter={false}
+      value={active}
+      // While a folder loads, cmdk highlights its only row, `..`, which
+      // would keep the first entry from taking over once it lands.
+      onValueChange={(value) => {
+        if (!isPending) setHighlighted(value);
+      }}
+      className={MODAL_COMMAND_CLASS}
+    >
       <header className="flex items-center gap-2 border-b border-border px-3 py-2">
         {!atRoot && (
           <IconButton onClick={goUp} aria-label="Go up">
@@ -153,7 +166,7 @@ export function PathPickerView<E extends PickerEntry>({
           value={filter}
           onChange={(e) => {
             setFilter(e.target.value);
-            setHighlightedIdx(0);
+            setHighlighted("");
           }}
           onKeyDown={onInputKeyDown}
           placeholder="Filter"
@@ -163,59 +176,38 @@ export function PathPickerView<E extends PickerEntry>({
         />
       </div>
 
-      <div className="min-h-[12rem] overflow-y-auto p-1">
-        {!atRoot && (
-          <button
-            type="button"
-            onClick={goUp}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <CornerLeftUp className="size-3.5" />
-            <span className="font-mono">..</span>
-          </button>
+      <BrowseListView
+        entries={entries}
+        pathOf={(entry) => relativeFor(entry.name)}
+        highlighted={active}
+        onUp={atRoot ? undefined : goUp}
+        onOpen={open}
+        renderIcon={(entry, lit) => (
+          <MaterialIcon
+            kind={entry.isDirectory ? "folder" : "file"}
+            name={entry.name}
+            expanded={entry.isDirectory && lit}
+            className="size-4"
+          />
         )}
-
-        {isPending ? (
-          <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            Loading…
-          </div>
-        ) : error ? (
-          <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-            Couldn't read folder.
-          </div>
-        ) : entries.length === 0 ? (
-          <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-            {trimmed
-              ? `No entries matching "${trimmed}".`
-              : atRoot
-                ? emptyRootLabel
-                : "Empty folder."}
-          </div>
-        ) : (
-          <ul ref={listRef} className="divide-y divide-border/40">
-            {entries.map((entry, idx) => {
-              const path = relativeFor(entry.name);
-              return (
-                <PickerRowView
-                  key={entry.name}
-                  entry={entry}
-                  index={idx}
-                  highlighted={idx === highlightedIdx}
-                  onNavigate={() => navigateInto(entry)}
-                  onHover={() => setHighlightedIdx(idx)}
-                  provenance={renderProvenance?.(entry)}
-                  trailing={renderTrailing(entry, path, insideIgnored)}
-                />
-              );
-            })}
-          </ul>
+        label={(entry) => (entry.isDirectory ? `${entry.name}/` : entry.name)}
+        dim={(entry) => !entry.isDirectory && !entry.ignored}
+        renderTrailing={(entry, path) => (
+          <>
+            {renderProvenance?.(entry)}
+            {renderTrailing(entry, path, insideIgnored)}
+          </>
         )}
-      </div>
+        loading={isPending}
+        error={Boolean(error)}
+        noMatch={trimmed ? `No entries matching "${trimmed}".` : undefined}
+        emptyLabel={atRoot ? emptyRootLabel : undefined}
+        className="min-h-[12rem] p-1"
+      />
 
       <FooterRow className="py-2">
         <BrowseKeyHintsView enterFolder goUp={!atRoot} />
       </FooterRow>
-    </>
+    </Command>
   );
 }

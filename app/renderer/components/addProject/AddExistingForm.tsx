@@ -27,7 +27,7 @@ import { useBinding } from "@/hooks/ui/useKeymap";
 import { useOpenAddedProject } from "./useOpenAddedProject";
 import { withToggled } from "@shigomori/ui/lib/toggleSet.ts";
 import { AddExistingFormView } from "@shigomori/ui/views/addProject/AddExistingFormView.tsx";
-import { isBrowseRow } from "@shigomori/ui/views/shared/PathBrowserView.tsx";
+import { isBrowseRow } from "@shigomori/ui/views/shared/BrowseListPartsView.tsx";
 import { useApi } from "@/lib/runtime/pageApi";
 
 interface AddExistingFormProps {
