@@ -2,6 +2,7 @@ import { Flame } from "lucide-react";
 import type { NukeProgress, NukeReport } from "@shigomori/contracts/schemas";
 import { BlockingOverlay } from "../../primitives/blocking-overlay.tsx";
 import { Button } from "../../primitives/button.tsx";
+import { ConfirmDestructiveButton } from "../../primitives/confirm-destructive-button.tsx";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
 
 // This machine's nuke: everything shigomori made, gone, and the next
@@ -73,19 +74,15 @@ export function DangerZoneView({
             install. The original project repos on disk are not touched.
           </p>
         </div>
-        <Button
+        <ConfirmDestructiveButton
           variant="destructive"
-          size="sm"
-          disabled={nuking}
+          armed={armed}
+          pending={nuking}
+          pendingLabel="Nuking…"
+          idleLabel="Nuke everything"
+          icon={<Flame />}
           onClick={onNuke}
-        >
-          <Flame />
-          {nuking
-            ? "Nuking…"
-            : armed
-              ? "Click again to confirm"
-              : "Nuke everything"}
-        </Button>
+        />
       </div>
     </section>
   );

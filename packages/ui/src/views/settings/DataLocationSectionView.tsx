@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { FolderInput, FolderOpen, RotateCcw } from "lucide-react";
 import { BlockingOverlay } from "../../primitives/blocking-overlay.tsx";
 import { Button } from "../../primitives/button.tsx";
+import { ConfirmDestructiveButton } from "../../primitives/confirm-destructive-button.tsx";
 import { PathSpan } from "../../primitives/path-span.tsx";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
 
@@ -106,16 +107,17 @@ export function DataLocationSectionView({
           Move data folder…
         </Button>
         {movable && !atDefault && (
-          <Button
+          <ConfirmDestructiveButton
             variant="outline"
-            size="sm"
+            armed={resetArmed}
+            pending={false}
+            pendingLabel=""
+            armedLabel="Reset and restart?"
+            idleLabel="Reset to default"
+            icon={<RotateCcw />}
             disabled={busy}
-            aria-pressed={resetArmed}
             onClick={onReset}
-          >
-            <RotateCcw />
-            {resetArmed ? "Reset and restart?" : "Reset to default"}
-          </Button>
+          />
         )}
       </div>
       {remote && busy && (

@@ -180,7 +180,6 @@ function versionSection() {
       restart={
         <RestartToUpdateButtonView
           version={STAGED.version}
-          remote={false}
           canCommand
           deviceLabel="MacBook"
           armed={false}
@@ -494,7 +493,6 @@ export function SettingsDialogsScene() {
           restartButton={
             <RestartToUpdateButtonView
               version={STAGED.version}
-              remote={false}
               canCommand
               deviceLabel="MacBook"
               armed={false}
