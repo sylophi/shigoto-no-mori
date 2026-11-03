@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 import { Check } from "lucide-react";
 import { Button } from "../../../primitives/button.tsx";
+import { DialogFrame } from "../../../primitives/dialog.tsx";
 import { InlineError } from "../../../primitives/inline-error.tsx";
 import { Input } from "../../../primitives/input.tsx";
 import { SegmentedControl } from "../../../primitives/segmented-control.tsx";
@@ -69,66 +70,18 @@ export function MergeDialogView({
   const messaged =
     method === "squash" && preview !== undefined && preview.incoming > 0;
   return (
-    <form
-      className="flex flex-col gap-4 p-5"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSubmit();
-      }}
-    >
-      <SimpleTooltip whenTruncated tip={branch}>
-        <h2 className="truncate text-base font-semibold">
-          Merge into <span className="font-mono">{branch}</span>
-        </h2>
-      </SimpleTooltip>
-      <div className="space-y-1.5">
-        <label htmlFor="merge-from" className="block text-xs font-medium">
-          From
-        </label>
-        {from}
-      </div>
-      <SegmentedControl
-        aria-label="How"
-        className="w-full"
-        optionClassName="flex-1 justify-center px-1 py-1 text-xs"
-        value={method}
-        onChange={onMethod}
-        options={METHODS}
-      />
-      <Outcome
-        branch={branch}
-        ref_={source}
-        method={method}
-        preview={preview}
-        error={previewError}
-      />
-      {messaged && (
-        <Input
-          aria-label="Commit message"
-          placeholder="Commit message"
-          value={squashMessage}
-          onChange={(e) => onSquashMessage(e.target.value)}
-        />
-      )}
-      {/* The error first: a failure can leave the very state that
-            blocks another go (a squash whose commit a hook refused). */}
-      {mergeError !== undefined ? (
-        <Warning>
-          <InlineError multiline title="Couldn't merge" message={mergeError} />
-        </Warning>
-      ) : (
-        blocked !== null && <Warning>{blocked}</Warning>
-      )}
-      <div className="flex justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={onCancel}
-          disabled={pending}
-        >
-          Cancel
-        </Button>
+    <DialogFrame
+      title={
+        <SimpleTooltip whenTruncated tip={branch}>
+          <span className="block truncate">
+            Merge into <span className="font-mono">{branch}</span>
+          </span>
+        </SimpleTooltip>
+      }
+      busy={pending}
+      onCancel={onCancel}
+      onSubmit={onSubmit}
+      actions={
         <Button
           type="submit"
           keys={messaged ? "↩" : undefined}
@@ -137,8 +90,53 @@ export function MergeDialogView({
         >
           {METHODS.find((m) => m.value === method)?.label}
         </Button>
+      }
+    >
+      <div className="mt-4 flex flex-col gap-4">
+        <div className="space-y-1.5">
+          <label htmlFor="merge-from" className="block text-xs font-medium">
+            From
+          </label>
+          {from}
+        </div>
+        <SegmentedControl
+          aria-label="How"
+          className="w-full"
+          optionClassName="flex-1 justify-center px-1 py-1 text-xs"
+          value={method}
+          onChange={onMethod}
+          options={METHODS}
+        />
+        <Outcome
+          branch={branch}
+          ref_={source}
+          method={method}
+          preview={preview}
+          error={previewError}
+        />
+        {messaged && (
+          <Input
+            aria-label="Commit message"
+            placeholder="Commit message"
+            value={squashMessage}
+            onChange={(e) => onSquashMessage(e.target.value)}
+          />
+        )}
+        {/* The error first: a failure can leave the very state that
+              blocks another go (a squash whose commit a hook refused). */}
+        {mergeError !== undefined ? (
+          <Warning>
+            <InlineError
+              multiline
+              title="Couldn't merge"
+              message={mergeError}
+            />
+          </Warning>
+        ) : (
+          blocked !== null && <Warning>{blocked}</Warning>
+        )}
       </div>
-    </form>
+    </DialogFrame>
   );
 }
 

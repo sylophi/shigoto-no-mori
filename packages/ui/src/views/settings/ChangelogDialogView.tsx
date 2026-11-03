@@ -17,10 +17,10 @@ import { TONE_PILL } from "../../primitives/status-dot.tsx";
 import { useOutside } from "../../outside.tsx";
 import { pluralize } from "@shigomori/contracts/words";
 import {
-  FlowBodyView,
-  FlowFooterView,
-  FlowHeaderView,
-} from "../worktreeDetail/flow/FlowChromeView.tsx";
+  DialogBody,
+  DialogFooter,
+  DialogHeader,
+} from "../../primitives/dialog.tsx";
 
 // The update the preview is of: the version it brings, and the notes
 // the update feed sent with it when there are any (the stand-in when
@@ -102,7 +102,7 @@ export function ChangelogDialogView({
 
   return (
     <>
-      <FlowHeaderView
+      <DialogHeader
         tint={TONE_PILL[news === null ? "slate" : "sky"]}
         icon={news === null ? ScrollText : Sparkles}
         title={news === null ? "Changelog" : "What's new"}
@@ -119,8 +119,8 @@ export function ChangelogDialogView({
         onClose={onClose}
       >
         <p>{subtitle(version, news, list?.length)}</p>
-      </FlowHeaderView>
-      <FlowBodyView>
+      </DialogHeader>
+      <DialogBody>
         {list !== undefined ? (
           list.length === 0 ? (
             <p className="text-xs text-muted-foreground">
@@ -145,8 +145,8 @@ export function ChangelogDialogView({
         ) : (
           <LoadingEntries />
         )}
-      </FlowBodyView>
-      {restartButton && <FlowFooterView>{restartButton}</FlowFooterView>}
+      </DialogBody>
+      {restartButton && <DialogFooter>{restartButton}</DialogFooter>}
     </>
   );
 }

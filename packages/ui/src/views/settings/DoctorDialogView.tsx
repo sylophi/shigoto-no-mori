@@ -27,12 +27,12 @@ import {
 } from "../../primitives/status-dot.tsx";
 import { pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../lib/utils.ts";
+import { CARD } from "../worktreeDetail/flow/FlowChromeView.tsx";
 import {
-  CARD,
-  FlowBodyView,
-  FlowFooterView,
-  FlowHeaderView,
-} from "../worktreeDetail/flow/FlowChromeView.tsx";
+  DialogBody,
+  DialogFooter,
+  DialogHeader,
+} from "../../primitives/dialog.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 
 // `sm doctor` for the scoped device, behind Settings' health check
@@ -79,7 +79,7 @@ export function DoctorDialogView({
 
   return (
     <>
-      <FlowHeaderView
+      <DialogHeader
         tint={TONE_PILL[report ? summaryTone(report) : "slate"]}
         icon={Stethoscope}
         title={title}
@@ -98,8 +98,8 @@ export function DoctorDialogView({
             </>
           )}
         </p>
-      </FlowHeaderView>
-      <FlowBodyView>
+      </DialogHeader>
+      <DialogBody>
         <div className="space-y-5">
           {error && (
             <ErrorBanner
@@ -170,8 +170,8 @@ export function DoctorDialogView({
             </div>
           )}
         </div>
-      </FlowBodyView>
-      <FlowFooterView
+      </DialogBody>
+      <DialogFooter
         note={
           repairable > 0
             ? `Repair fixes the ${pluralize(repairable, "problem")} marked repairable. The rest need a decision only you can make.`
@@ -209,7 +209,7 @@ export function DoctorDialogView({
         <Button variant="ghost" size="sm" onClick={onClose}>
           Close
         </Button>
-      </FlowFooterView>
+      </DialogFooter>
     </>
   );
 }

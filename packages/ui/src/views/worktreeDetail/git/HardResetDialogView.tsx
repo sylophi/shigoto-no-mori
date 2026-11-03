@@ -2,6 +2,7 @@
 // ModalShell).
 import type { ReactNode } from "react";
 import { Button } from "../../../primitives/button.tsx";
+import { DialogFrame } from "../../../primitives/dialog.tsx";
 import { InlineError } from "../../../primitives/inline-error.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 import { Warning } from "../../../primitives/warning.tsx";
@@ -44,57 +45,51 @@ export function HardResetDialogView({
   onCancel: () => void;
 }) {
   return (
-    <form
-      className="flex flex-col gap-4 p-5"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSubmit();
-      }}
-    >
-      <SimpleTooltip whenTruncated tip={branch}>
-        <h2 className="truncate text-base font-semibold">
-          Hard reset <span className="font-mono">{branch}</span>
-        </h2>
-      </SimpleTooltip>
-      <div className="space-y-1.5">
-        <label htmlFor="reset-to" className="block text-xs font-medium">
-          To
-        </label>
-        {to}
-      </div>
-      <Outcome
-        branch={branch}
-        ref_={target}
-        dirty={dirty}
-        preview={preview}
-        error={previewError}
-      />
-      {resetError !== undefined ? (
-        <Warning>
-          <InlineError
-            multiline
-            title="Couldn't hard reset"
-            message={resetError}
-          />
-        </Warning>
-      ) : (
-        blocked !== null && <Warning>{blocked}</Warning>
-      )}
-      <div className="flex justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={onCancel}
-          disabled={pending}
-        >
-          Cancel
-        </Button>
+    <DialogFrame
+      title={
+        <SimpleTooltip whenTruncated tip={branch}>
+          <span className="block truncate">
+            Hard reset <span className="font-mono">{branch}</span>
+          </span>
+        </SimpleTooltip>
+      }
+      destructive
+      busy={pending}
+      onCancel={onCancel}
+      onSubmit={onSubmit}
+      actions={
         <Button type="submit" variant="destructive" size="sm" disabled={!ready}>
           Hard reset
         </Button>
+      }
+    >
+      <div className="mt-4 flex flex-col gap-4">
+        <div className="space-y-1.5">
+          <label htmlFor="reset-to" className="block text-xs font-medium">
+            To
+          </label>
+          {to}
+        </div>
+        <Outcome
+          branch={branch}
+          ref_={target}
+          dirty={dirty}
+          preview={preview}
+          error={previewError}
+        />
+        {resetError !== undefined ? (
+          <Warning>
+            <InlineError
+              multiline
+              title="Couldn't hard reset"
+              message={resetError}
+            />
+          </Warning>
+        ) : (
+          blocked !== null && <Warning>{blocked}</Warning>
+        )}
       </div>
-    </form>
+    </DialogFrame>
   );
 }
 

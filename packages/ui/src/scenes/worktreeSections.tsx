@@ -9,11 +9,13 @@ import { TONE_PILL } from "../primitives/status-dot.tsx";
 import {
   CardListView,
   CardSkeletonView,
-  FlowBodyView,
-  FlowFooterView,
-  FlowHeaderView,
   StepRailView,
 } from "../views/worktreeDetail/flow/FlowChromeView.tsx";
+import {
+  DialogBody,
+  DialogFooter,
+  DialogHeader,
+} from "../primitives/dialog.tsx";
 import {
   CommitMenuItemsView,
   CommitRowView,
@@ -33,10 +35,7 @@ import {
 import { HardResetDialogView } from "../views/worktreeDetail/git/HardResetDialogView.tsx";
 import { MergeDialogView } from "../views/worktreeDetail/git/MergeDialogView.tsx";
 import { OperationBannerView } from "../views/worktreeDetail/git/OperationBannerView.tsx";
-import {
-  RewordDialogView,
-  RewordFormView,
-} from "../views/worktreeDetail/git/RewordDialogView.tsx";
+import { RewordDialogView } from "../views/worktreeDetail/git/RewordDialogView.tsx";
 import { StashListView } from "../views/worktreeDetail/git/StashListView.tsx";
 import { StashMovesView } from "../views/worktreeDetail/git/StashMovesView.tsx";
 import type { CommitActions } from "../lib/commitRewrite.ts";
@@ -602,18 +601,14 @@ export function WorktreeSectionsPartsScene({
           <ModalBox className="max-w-lg">
             <RewordDialogView
               hash="7d02b18"
-              form={
-                <RewordFormView
-                  summary="Aggregate worktrees across daemons"
-                  onSummaryChange={noop}
-                  description=""
-                  onDescriptionChange={noop}
-                  canSave
-                  onSave={noop}
-                  onCancel={noop}
-                  saveKeys={defaultBinding("save")}
-                />
-              }
+              summary="Aggregate worktrees across daemons"
+              onSummaryChange={noop}
+              description=""
+              onDescriptionChange={noop}
+              canSave
+              onSave={noop}
+              onCancel={noop}
+              saveKeys={defaultBinding("save")}
             />
           </ModalBox>
         </ScenePart>
@@ -662,25 +657,25 @@ export function WorktreeSectionsPartsScene({
           <OpenLocalhostButtonView port={5173} />
         </ScenePart>
         <ScenePart label="A flow's frame">
-          <FlowHeaderView
+          <DialogHeader
             tint={TONE_PILL.sky}
             icon={GitBranch}
             title="Transplant"
             onClose={noop}
           >
             <p>Move this worktree to another device.</p>
-          </FlowHeaderView>
+          </DialogHeader>
           <StepRailView
             current={1}
             steps={["Review", "Move", "Done"]}
             label="Transplant"
           />
-          <FlowBodyView>
+          <DialogBody>
             <CardListView total={1}>
               {[<CardSkeletonView key="s" rows={2} />]}
             </CardListView>
-          </FlowBodyView>
-          <FlowFooterView>{null}</FlowFooterView>
+          </DialogBody>
+          <DialogFooter>{null}</DialogFooter>
         </ScenePart>
       </div>
     </div>

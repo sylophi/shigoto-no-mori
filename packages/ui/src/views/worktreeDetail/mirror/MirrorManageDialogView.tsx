@@ -51,13 +51,12 @@ import {
   getBrowseLeafSegment,
   normalizeForSubmit,
 } from "@shigomori/contracts/projectPaths";
+import { CARD, CARD_NOTE } from "../flow/FlowChromeView.tsx";
 import {
-  CARD,
-  CARD_NOTE,
-  FlowHeaderView,
-  FlowBodyView,
-  FlowFooterView,
-} from "../flow/FlowChromeView.tsx";
+  DialogBody,
+  DialogFooter,
+  DialogHeader,
+} from "../../../primitives/dialog.tsx";
 import { gitVerdict, type MirrorLook } from "./mirrorStatus.ts";
 
 export type MirrorNames = {
@@ -118,7 +117,7 @@ export function MirrorManageDialogView({
 }) {
   return (
     <>
-      <FlowHeaderView
+      <DialogHeader
         tint={TONE_PILL[view.tone]}
         icon={RefreshCw}
         spin={view.spinning}
@@ -147,9 +146,9 @@ export function MirrorManageDialogView({
               </SimpleTooltip>
             )}
         </p>
-      </FlowHeaderView>
+      </DialogHeader>
 
-      <FlowBodyView>
+      <DialogBody>
         <div className="grid gap-5 @min-[48rem]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <div className="flex min-w-0 flex-col gap-5">
             <div className="space-y-2">
@@ -172,10 +171,10 @@ export function MirrorManageDialogView({
             {history}
           </section>
         </div>
-      </FlowBodyView>
+      </DialogBody>
 
       {stop.confirming ? (
-        <FlowFooterView
+        <DialogFooter
           note={
             <span
               className={cn(
@@ -208,9 +207,9 @@ export function MirrorManageDialogView({
                 ? "Stop and remove the copy"
                 : "Remove the copy anyway"}
           </Button>
-        </FlowFooterView>
+        </DialogFooter>
       ) : (
-        <FlowFooterView
+        <DialogFooter
           note={
             !canControl
               ? peerReadOnlyNote(names.runner)
@@ -244,7 +243,7 @@ export function MirrorManageDialogView({
               </Button>
             </>
           )}
-        </FlowFooterView>
+        </DialogFooter>
       )}
     </>
   );

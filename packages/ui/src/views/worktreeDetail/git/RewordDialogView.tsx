@@ -2,30 +2,37 @@
 // in a ModalShell): the commit's summary and description, editable,
 // read off the commit before the form shows.
 import type { Binding } from "../../../lib/keymap.ts";
-import type { KeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent } from "react";
 import { Button } from "../../../primitives/button.tsx";
+import { DialogFrame } from "../../../primitives/dialog.tsx";
 import { Input } from "../../../primitives/input.tsx";
 import { Textarea } from "../../../primitives/textarea.tsx";
 
-export function RewordDialogView({
-  hash,
-  form,
-}: {
-  hash: string;
-  // The form (RewordFormView), once the commit's message is read.
-  form: ReactNode;
-}) {
+function title(hash: string) {
   return (
-    <div className="p-5">
-      <h2 className="text-base font-semibold">
-        Reword <span className="font-mono">{hash}</span>
-      </h2>
-      {form || <div className="mt-4 h-40" />}
-    </div>
+    <>
+      Reword <span className="font-mono">{hash}</span>
+    </>
   );
 }
 
-export function RewordFormView({
+// While the commit's message is read, holding the form's place.
+export function RewordLoadingView({
+  hash,
+  onCancel,
+}: {
+  hash: string;
+  onCancel: () => void;
+}) {
+  return (
+    <DialogFrame title={title(hash)} onCancel={onCancel}>
+      <div className="mt-4 h-40" />
+    </DialogFrame>
+  );
+}
+
+export function RewordDialogView({
+  hash,
   summary,
   onSummaryChange,
   description,
@@ -35,6 +42,7 @@ export function RewordFormView({
   onCancel,
   saveKeys,
 }: {
+  hash: string;
   summary: string;
   onSummaryChange: (summary: string) => void;
   description: string;
@@ -52,28 +60,10 @@ export function RewordFormView({
     }
   };
   return (
-    <div className="mt-4 flex flex-col gap-2">
-      <Input
-        aria-label="Summary"
-        placeholder="Summary (required)"
-        value={summary}
-        onChange={(e) => onSummaryChange(e.target.value)}
-        onKeyDown={onKeyDown}
-        // oxlint-disable-next-line jsx-a11y/no-autofocus -- the dialog exists to edit this field
-        autoFocus
-      />
-      <Textarea
-        aria-label="Description"
-        placeholder="Description"
-        rows={5}
-        value={description}
-        onChange={(e) => onDescriptionChange(e.target.value)}
-        onKeyDown={onKeyDown}
-      />
-      <div className="mt-3 flex justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={onCancel}>
-          Cancel
-        </Button>
+    <DialogFrame
+      title={title(hash)}
+      onCancel={onCancel}
+      actions={
         <Button
           size="sm"
           onClick={onSave}
@@ -83,7 +73,27 @@ export function RewordFormView({
         >
           Reword
         </Button>
+      }
+    >
+      <div className="mt-4 flex flex-col gap-2">
+        <Input
+          aria-label="Summary"
+          placeholder="Summary (required)"
+          value={summary}
+          onChange={(e) => onSummaryChange(e.target.value)}
+          onKeyDown={onKeyDown}
+          // oxlint-disable-next-line jsx-a11y/no-autofocus -- the dialog exists to edit this field
+          autoFocus
+        />
+        <Textarea
+          aria-label="Description"
+          placeholder="Description"
+          rows={5}
+          value={description}
+          onChange={(e) => onDescriptionChange(e.target.value)}
+          onKeyDown={onKeyDown}
+        />
       </div>
-    </div>
+    </DialogFrame>
   );
 }

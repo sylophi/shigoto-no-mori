@@ -5,10 +5,10 @@ import { Cable } from "lucide-react";
 import { Button } from "../../../primitives/button.tsx";
 import { TONE_PILL } from "../../../primitives/status-dot.tsx";
 import {
-  FlowBodyView,
-  FlowFooterView,
-  FlowHeaderView,
-} from "../flow/FlowChromeView.tsx";
+  DialogBody,
+  DialogFooter,
+  DialogHeader,
+} from "../../../primitives/dialog.tsx";
 
 export function PortsDialogView({
   remote,
@@ -30,7 +30,7 @@ export function PortsDialogView({
 }) {
   return (
     <>
-      <FlowHeaderView
+      <DialogHeader
         tint={TONE_PILL.sky}
         icon={Cable}
         title={remote ? `Ports on ${deviceLabel}` : "Ports"}
@@ -43,14 +43,14 @@ export function PortsDialogView({
               : `What ${deviceLabel} serves from this worktree. Forwarding needs the app.`
             : "What this worktree serves."}
         </p>
-      </FlowHeaderView>
-      <FlowBodyView>{list}</FlowBodyView>
-      <FlowFooterView>
+      </DialogHeader>
+      <DialogBody>{list}</DialogBody>
+      <DialogFooter>
         {actions}
         <Button variant="ghost" size="sm" onClick={onClose}>
           Close
         </Button>
-      </FlowFooterView>
+      </DialogFooter>
     </>
   );
 }
