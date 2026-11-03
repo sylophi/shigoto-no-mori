@@ -30,7 +30,7 @@ import {
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { EffectHandlers, ViewHandlers } from "@shigomori/contracts/types";
 import { hostCallFailure } from "@host/lib/Engine";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import { pullWorktreeName } from "@shigomori/contracts/git/branches";
 import {
   type IgnoreSelection,
@@ -127,7 +127,7 @@ const planned = <A>(decide: () => A) =>
     catch: (error) =>
       error instanceof ControlError
         ? error
-        : new ControlError("device-blocked", errorWordsOf(error)),
+        : new ControlError("device-blocked", messageOf(error)),
   });
 
 // The one device a send goes to, among the candidates (plan.ts
@@ -228,7 +228,7 @@ const settleSource = (
       );
   return outcome.pipe(
     Effect.catch((error) =>
-      Effect.succeed({ fate, done: false, error: errorWordsOf(error) }),
+      Effect.succeed({ fate, done: false, error: messageOf(error) }),
     ),
   );
 };
@@ -269,11 +269,11 @@ const stopMirror = <A, E, R>(
       (error): Effect.Effect<string | undefined, E | ControlError> => {
         if (isMirrorStopUnconfirmed(error)) {
           return Effect.fail(
-            new ControlError("stop-unconfirmed", errorWordsOf(error)),
+            new ControlError("stop-unconfirmed", messageOf(error)),
           );
         }
         if (!isMirrorCopyStayed(error)) return Effect.fail(error);
-        return Effect.succeed(errorWordsOf(error));
+        return Effect.succeed(messageOf(error));
       },
     ),
   );

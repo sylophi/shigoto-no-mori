@@ -15,7 +15,7 @@ import {
 } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { isContractError } from "@shigomori/contracts/errors";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import {
   pullLandingBranch,
   pullWorktreeName,
@@ -152,7 +152,7 @@ export const pullWorktree = (
         ),
         Effect.catch((error) =>
           Effect.succeed(
-            `the other device couldn't be asked: ${errorWordsOf(error)}`,
+            `the other device couldn't be asked: ${messageOf(error)}`,
           ),
         ),
       );
@@ -242,7 +242,7 @@ const fromPeer = <A, E, R>(answer: Effect.Effect<A, E, R>) =>
     Effect.mapError((error) =>
       isContractError(error)
         ? error
-        : new PeerRefusedError({ reason: errorWordsOf(error) }),
+        : new PeerRefusedError({ reason: messageOf(error) }),
     ),
   );
 

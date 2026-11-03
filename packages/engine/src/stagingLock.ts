@@ -19,6 +19,10 @@ export class UpdateInProgress extends Schema.TaggedError<UpdateInProgress>()(
   "UpdateInProgress",
   { pid: Schema.Finite },
 ) {
+  get documentCode(): string {
+    return "update-in-progress";
+  }
+
   override get message(): string {
     return `Another update is already in progress (pid ${this.pid}).`;
   }

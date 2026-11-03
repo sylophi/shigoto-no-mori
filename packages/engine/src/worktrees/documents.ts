@@ -423,6 +423,12 @@ export class DirtyWorktree extends Schema.TaggedError<DirtyWorktree>()(
     cause: Schema.optional(Schema.Defect()),
   },
 ) {
+  get documentCode(): string {
+    return this.reason === "uncommitted"
+      ? "uncommitted-changes"
+      : "status-unreadable";
+  }
+
   get flagHint(): string {
     return this.reason === "half-removed"
       ? "Pass --force to finish removing it."

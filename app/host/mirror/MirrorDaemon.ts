@@ -30,7 +30,7 @@ import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import * as FileSync from "@host/fileSync/FileSync";
 import type { MirrorCreateInput } from "@host/mirror/MirrorEngine";
 import {
@@ -385,7 +385,7 @@ const make = (options: Options) =>
           yield* setStatus("unavailable");
           return;
         }
-        const why = errorWordsOf(spawned.failure);
+        const why = messageOf(spawned.failure);
         yield* Effect.logWarning(`[mirror] daemon spawn failed: ${why}`);
         yield* failed(`couldn't start: ${why}`);
         return;
@@ -434,8 +434,8 @@ const make = (options: Options) =>
       // restart ladder, never the supervisor with it.
       Effect.catchDefect((defect) =>
         Effect.logWarning(
-          `[mirror] daemon run failed, restarting: ${errorWordsOf(defect)}`,
-        ).pipe(Effect.andThen(failed(`failed: ${errorWordsOf(defect)}`))),
+          `[mirror] daemon run failed, restarting: ${messageOf(defect)}`,
+        ).pipe(Effect.andThen(failed(`failed: ${messageOf(defect)}`))),
       ),
       Effect.timed,
       Effect.map(([duration]) => Duration.toMillis(duration)),

@@ -29,7 +29,7 @@ import {
   mirrorContract,
 } from "@shigomori/contracts/modules/mirror";
 import { callFailureOf } from "@shigomori/contracts/errors";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
 import { portForwardContract } from "@shigomori/contracts/modules/portForward";
 import { portPoolContract } from "@shigomori/contracts/modules/portPool";
@@ -171,7 +171,7 @@ export const mirrorChangesLayer = Layer.effectDiscard(
             broadcastAll(mirrorContract, "changed", list);
           } catch (error) {
             log.warn(
-              `[mirror] the changed broadcast goes without its list: ${errorWordsOf(error)}`,
+              `[mirror] the changed broadcast goes without its list: ${messageOf(error)}`,
             );
             broadcastAll(mirrorContract, "changed", undefined);
           }
@@ -181,7 +181,7 @@ export const mirrorChangesLayer = Layer.effectDiscard(
       Effect.tapError((error) =>
         Effect.sync(() =>
           log.warn(
-            `[mirror] the changed push lost its picture: ${errorWordsOf(error)}`,
+            `[mirror] the changed push lost its picture: ${messageOf(error)}`,
           ),
         ),
       ),
@@ -271,7 +271,7 @@ const deleteOriginals = (originals: readonly Taken[]) =>
           ),
           (removed) => {
             const stayed = Exit.isFailure(removed)
-              ? errorWordsOf(Cause.squash(removed.cause))
+              ? messageOf(Cause.squash(removed.cause))
               : removed.value.ok
                 ? undefined
                 : `its ${removed.value.cleanupError.phase} step failed`;

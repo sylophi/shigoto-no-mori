@@ -59,6 +59,10 @@ export type ScriptsList = {
 export class NoScripts extends Schema.TaggedError<NoScripts>()("NoScripts", {
   dir: Schema.String,
 }) {
+  get documentCode(): string {
+    return "no-scripts";
+  }
+
   override get message(): string {
     return `No package.json, justfile or Makefile in ${this.dir}.`;
   }

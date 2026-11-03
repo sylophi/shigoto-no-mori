@@ -7,11 +7,12 @@ import * as DataDirLock from "@shigomori/engine/DataDirLock";
 import type { Flavor } from "@shigomori/engine/flavor";
 import { migratingEngineLayer } from "@shigomori/engine/layer";
 import { messageOf } from "@shigomori/engine/errorDocument";
-import * as Git from "@shigomori/engine/Git";
 import * as Store from "@shigomori/engine/Store";
 import { storeErrorOf } from "@shigomori/engine/storeErrors";
 import {
-  callFailureOf,
+  type CallFailure,
+  errorCodeOf,
+  isContractError,
   isEntityGoneError,
   RemoteCallError,
   type UnknownProjectError,
@@ -24,7 +25,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import { errorWordsOf } from "./errorWords";
 
 // The scope an engine run outlives its caller in: a create the app
 // navigates away from at "created" goes on to its setup here, and ends
@@ -158,26 +158,20 @@ export const engineFailure = (
 export const asCall = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.mapError(engineFailure));
 
-// What a host call's failure crosses a wire as: a git the engine ran
-// in the words errorWordsOf gives it, a store's refusal in the store's
-// words, and anything else as callFailureOf makes it. The host's store
+// What a host call's failure crosses a wire as: a contract's error as it
+// is, and anything else in the words `sm` prints for it. The host's store
 // refuses as moved only while the host's own move runs or is still
 // unsettled, which is what the move's lock refuses a change with.
-export const hostCallFailure = (error: unknown) => {
-  const store = storeErrorOf(error);
-  return callFailureOf(
-    error instanceof Git.GitCommandError
-      ? new RemoteCallError({ text: errorWordsOf(error) })
-      : store !== undefined
-        ? new RemoteCallError({
-            text:
-              store.category === "moved"
-                ? new DataDirLock.DataDirMoving().message
-                : store.message,
-          })
-        : error,
-  );
-};
+export const hostCallFailure = (error: unknown): CallFailure =>
+  isContractError(error)
+    ? error
+    : new RemoteCallError({
+        text:
+          storeErrorOf(error)?.category === "moved"
+            ? new DataDirLock.DataDirMoving().message
+            : messageOf(error),
+        code: errorCodeOf(error),
+      });
 
 // An operation that changes a worktree on disk, run only while no
 // data-folder move can start (`DataDirLock`): every hold of the lock the

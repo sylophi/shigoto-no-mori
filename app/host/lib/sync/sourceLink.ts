@@ -43,7 +43,7 @@ import * as Fiber from "effect/Fiber";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import { errnoWords } from "@shigomori/engine/platformErrors";
 import {
   type SyncCapture,
@@ -545,7 +545,7 @@ const sendBundle = (
                     new BrokenLink({
                       reason: Option.match(Cause.findErrorOption(cause), {
                         onNone: () => "the bundle stopped short",
-                        onSome: errorWordsOf,
+                        onSome: messageOf,
                       }),
                     }),
                   ),
@@ -633,7 +633,7 @@ const serveSource = (
             // them): the other device hears a fixed line, and the log
             // here keeps the rest.
             return Option.isSome(Cause.findErrorOption(cause))
-              ? link.write({ error: errorWordsOf(error) })
+              ? link.write({ error: messageOf(error) })
               : Effect.logError("[sync] a source step failed", cause).pipe(
                   Effect.andThen(
                     link.write({

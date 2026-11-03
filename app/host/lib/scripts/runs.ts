@@ -6,7 +6,7 @@
 // run leads its own session, so a stop takes the whole tree of
 // children the user's command spawned.
 import { randomUUID } from "node:crypto";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import {
   type RunningScript,
   runScriptName,
@@ -376,7 +376,7 @@ export const makeRuns = ({
           Effect.tapError((error) =>
             error.reason === "failed"
               ? Effect.logWarning(
-                  `[scripts] the PTY did not start: ${errorWordsOf(error.cause)}`,
+                  `[scripts] the PTY did not start: ${messageOf(error.cause)}`,
                 )
               : Effect.void,
           ),
@@ -445,7 +445,7 @@ export const makeRuns = ({
 
       pty.onError((error) => {
         flushOutput();
-        stream.emit({ runId, kind: "error", data: errorWordsOf(error) });
+        stream.emit({ runId, kind: "error", data: messageOf(error) });
       });
 
       // The exit comes after the run's last output (./ScriptRuns.ts), so the

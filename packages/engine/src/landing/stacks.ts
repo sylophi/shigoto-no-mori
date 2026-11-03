@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import { elapsedMillis } from "../elapsed.ts";
-import { errorDocument } from "../errorDocument.ts";
+import { messageOf } from "../errorDocument.ts";
 import * as GitHub from "../GitHub.ts";
 import type { MergeMethod } from "@shigomori/contracts/schemas/pullRequest";
 import type { PullRequestSummary } from "../GitHub.ts";
@@ -187,7 +187,7 @@ export const makeStacks = ({
               [pr.number],
               [
                 landed.map((done) => `#${done.number}`).join(", "),
-                errorDocument(outcome.failure).error,
+                messageOf(outcome.failure),
               ],
             );
           }

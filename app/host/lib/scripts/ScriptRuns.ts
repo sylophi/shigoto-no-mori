@@ -20,7 +20,7 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { type IPty, spawn as spawnPty } from "node-pty";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import * as Lifecycle from "@shigomori/engine/Lifecycle";
 import { signalTree, signalTreeBestEffort } from "./process";
 
@@ -234,7 +234,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
       on("error", (error) => {
         const code = error.code ?? "";
         if (code.includes("EAGAIN") || code.includes("EIO")) return;
-        listener(new Error(errorWordsOf(error)));
+        listener(new Error(messageOf(error)));
       }),
     onExit: (listener) => void child.onExit(listener),
     exit,

@@ -2,7 +2,7 @@
 // the roster, where each peer stands for a repo, their worktrees and
 // the mirrors they run against this device, and where a send would
 // clone.
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import {
   isHubRateLimitedError,
   isNoDirectConnectionError,
@@ -164,7 +164,7 @@ const projectsOn = (
             : {
                 ...base,
                 block: "refused" as const,
-                refusal: errorWordsOf(error),
+                refusal: messageOf(error),
               },
         projects: null,
       }),

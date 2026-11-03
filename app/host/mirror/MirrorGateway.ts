@@ -36,7 +36,7 @@ import {
   isNoDirectConnectionError,
   isPeerRefusal,
 } from "@shigomori/contracts/errors";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import {
   mirrorContract,
   mirrorHereBlocker,
@@ -242,7 +242,7 @@ const make = Effect.gen(function* () {
         });
       },
       (error: unknown) => {
-        log.warn(`[mirror] gateway: ${errorWordsOf(error)}`);
+        log.warn(`[mirror] gateway: ${messageOf(error)}`);
         socket.destroy();
       },
     );
@@ -284,10 +284,10 @@ const make = Effect.gen(function* () {
         // news.
         if (!isPeerRefusal(error) && !isNoDirectConnectionError(error)) {
           log.warn(
-            `[mirror] gateway: opening ${preface.deviceId}/${preface.worktreeId} failed: ${errorWordsOf(error)}`,
+            `[mirror] gateway: opening ${preface.deviceId}/${preface.worktreeId} failed: ${messageOf(error)}`,
           );
         }
-        socket.write(`error ${errorWordsOf(error).replace(/\n/g, " ")}\n`);
+        socket.write(`error ${messageOf(error).replace(/\n/g, " ")}\n`);
       },
       onClosed: () => {
         streams.delete(conn);
@@ -325,7 +325,7 @@ const make = Effect.gen(function* () {
     ),
     Effect.tapError((error) =>
       Effect.logWarning(
-        `[mirror] gateway failed to bind, retrying: ${errorWordsOf(error.cause)}`,
+        `[mirror] gateway failed to bind, retrying: ${messageOf(error.cause)}`,
       ),
     ),
   );

@@ -3,7 +3,7 @@ import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { errorDocument } from "../errorDocument.ts";
+import { errorDocument, messageOf } from "../errorDocument.ts";
 import * as Git from "../Git.ts";
 import * as GitHub from "../GitHub.ts";
 import type { MergeMethod } from "@shigomori/contracts/schemas/pullRequest";
@@ -20,7 +20,7 @@ export class DoneUnfinished extends Schema.TaggedError<DoneUnfinished>()(
   { branch: Schema.String, checkout: Schema.Defect(), delete: Schema.Defect() },
 ) {
   override get message(): string {
-    return `${errorDocument(this.checkout).error} The branch ${this.branch} couldn't be deleted either: ${errorDocument(this.delete).error}`;
+    return `${messageOf(this.checkout)} The branch ${this.branch} couldn't be deleted either: ${messageOf(this.delete)}`;
   }
 }
 
@@ -57,6 +57,12 @@ export class LandingRefused extends Schema.TaggedError<LandingRefused>()(
     binary: Schema.String,
   },
 ) {
+  get documentCode(): string | undefined {
+    if (this.reason === "fork") return "fork-pull-request";
+    if (this.reason === "unpushed") return "unpushed-commits";
+    return undefined;
+  }
+
   get flagHint(): string | undefined {
     switch (this.reason) {
       case "not-merged":
@@ -200,7 +206,7 @@ export class MergeLostTrack extends Schema.TaggedError<MergeLostTrack>()(
   },
 ) {
   override get message(): string {
-    return `Lost track of PR #${this.number}: ${errorDocument(this.cause).error}. Run \`${this.command}\` again to keep waiting`;
+    return `Lost track of PR #${this.number}: ${messageOf(this.cause)}. Run \`${this.command}\` again to keep waiting`;
   }
 }
 

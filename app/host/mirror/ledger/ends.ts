@@ -16,7 +16,7 @@
 // step, so a copy changed since stays.
 import * as Effect from "effect/Effect";
 import type { MovedSource } from "@shigomori/contracts/schemas";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import { PeerReach, peerWorktree, peerWorktreesFor } from "@host/ipc/PeerReach";
 import { log } from "@shared/log";
 import type { MirrorEngine } from "../MirrorEngine";
@@ -87,7 +87,7 @@ export const makeEnds = ({ marks }: { readonly marks: Marks }) =>
         yield* daemon.terminate(raw.session);
         return yield* deleteCopy(raw, expect, (error) =>
           Effect.map(copyIsGone(raw), (gone) =>
-            gone ? undefined : errorWordsOf(error),
+            gone ? undefined : messageOf(error),
           ),
         );
       },
@@ -128,9 +128,7 @@ export const makeEnds = ({ marks }: { readonly marks: Marks }) =>
           Effect.as(true),
           Effect.catch((error) =>
             Effect.sync(() => {
-              log.warn(
-                `[mirror] could not end a session: ${errorWordsOf(error)}`,
-              );
+              log.warn(`[mirror] could not end a session: ${messageOf(error)}`);
               return false;
             }),
           ),
@@ -159,9 +157,7 @@ export const makeEnds = ({ marks }: { readonly marks: Marks }) =>
             ),
             Effect.catch((error) =>
               Effect.sync(() =>
-                log.warn(
-                  `[mirror] could not end ${what}: ${errorWordsOf(error)}`,
-                ),
+                log.warn(`[mirror] could not end ${what}: ${messageOf(error)}`),
               ),
             ),
           );
@@ -194,7 +190,7 @@ export const makeEnds = ({ marks }: { readonly marks: Marks }) =>
               Effect.catch((error) =>
                 Effect.sync(() =>
                   log.warn(
-                    `[mirror] could not stop the mirror of a worktree being deleted: ${errorWordsOf(error)}`,
+                    `[mirror] could not stop the mirror of a worktree being deleted: ${messageOf(error)}`,
                   ),
                 ),
               ),

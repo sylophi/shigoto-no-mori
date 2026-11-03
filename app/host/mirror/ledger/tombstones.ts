@@ -14,7 +14,7 @@ import type { MovedSource } from "@shigomori/contracts/schemas";
 import { answerWithin } from "@shigomori/engine/liveness";
 import type { Stopped } from "@shigomori/engine/MirrorsOnDelete";
 import { PeerReach, peerMirrorFor } from "@host/ipc/PeerReach";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import { log } from "@shared/log";
 import { PROBE_TIMEOUT_MS } from "@shared/remote/link";
 import type { MirrorEngine } from "../MirrorEngine";
@@ -220,7 +220,7 @@ export const makeTombstones = ({
               Effect.catch((error) =>
                 Effect.sync(() =>
                   log.warn(
-                    `[mirror] could not resume a mirror: ${errorWordsOf(error)}`,
+                    `[mirror] could not resume a mirror: ${messageOf(error)}`,
                   ),
                 ),
               ),

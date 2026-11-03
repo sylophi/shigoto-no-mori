@@ -13,7 +13,7 @@
 // (registry.ts mirrorSessions). Nothing here fails the pull: the
 // worktree is real either way, and the outcome (crossed, with how
 // many conflicts, or why not) rides the pull's result.
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import {
   isHaltedStatus,
   MIRROR_LABEL_MODE,
@@ -118,14 +118,14 @@ export const transferFilesOnce = (
                   Effect.catch((error) =>
                     Effect.sync(() =>
                       log.warn(
-                        `[sync] could not end the file transfer session: ${errorWordsOf(error)}`,
+                        `[sync] could not end the file transfer session: ${messageOf(error)}`,
                       ),
                     ),
                   ),
                 ),
           );
         }).pipe(
-          Effect.catch((error) => Effect.succeed(failed(errorWordsOf(error)))),
+          Effect.catch((error) => Effect.succeed(failed(messageOf(error)))),
         ),
       (token) => Effect.sync(() => ledger.endTransfer(token)),
     ),

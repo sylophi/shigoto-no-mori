@@ -17,7 +17,7 @@ import * as Layer from "effect/Layer";
 import type * as Path from "effect/Path";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import type { HostFacts as Facts } from "@shared/hostFacts";
 import { log } from "@shared/log";
 import { bundledBinaryPath } from "@shared/packaging/bundledBinary.mts";
@@ -184,7 +184,7 @@ export async function runHost<E>(root: {
     await graph.context();
   } catch (error) {
     log.error("[host] could not start:", error);
-    Graph.failed(errorWordsOf(error));
+    Graph.failed(messageOf(error));
     // A store the 2.x files couldn't be imported into, or that can't
     // be read: the doctor's findings say which file and what to do.
     const store = await storeFailureReport(error, {
@@ -195,7 +195,7 @@ export async function runHost<E>(root: {
     // may not have reached the shell with: a stuck import shows its
     // reason on the migration's page, in place of the dialog.
     await root.failed(
-      { message: errorWordsOf(error), store },
+      { message: messageOf(error), store },
       await Effect.runPromise(migration.current),
     );
     process.exit(1);

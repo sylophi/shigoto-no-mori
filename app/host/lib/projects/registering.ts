@@ -13,7 +13,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Projects from "@shigomori/engine/Projects";
 import * as Registry from "@shigomori/engine/Registry";
 import { changing } from "@host/lib/Engine";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import { GithubCli } from "@host/lib/githubCli/GithubCli";
 import * as Scripts from "@host/lib/Scripts";
 import { bookingScripts } from "@host/lib/worktrees/documents";
@@ -76,7 +76,7 @@ const registerNewCheckout = (
         new CheckoutUnregisteredError({
           path,
           made,
-          reason: errorWordsOf(cause),
+          reason: messageOf(cause),
           cause,
         }),
     ),
