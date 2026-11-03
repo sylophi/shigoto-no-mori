@@ -1,14 +1,13 @@
 import { ErrorBanner } from "../../../primitives/error-banner.tsx";
 import { Button } from "../../../primitives/button.tsx";
-import { Check, ChevronDown } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../../../primitives/dropdown-menu.tsx";
+import { Check } from "lucide-react";
+import { DropdownMenuItem } from "../../../primitives/dropdown-menu.tsx";
 import { cn } from "../../../lib/utils.ts";
 import { ConfirmDestructiveButton } from "../../../primitives/confirm-destructive-button.tsx";
+import {
+  SPLIT_BUTTON_MAIN,
+  SplitButton,
+} from "../../../primitives/split-button.tsx";
 
 // A worktree a stack's cleanup could not remove, as the app's
 // useWorktreeMutations reports it.
@@ -76,6 +75,28 @@ export function ClosedPullRequestBoxView({
   onDismissStackError: () => void;
 }) {
   const pending = stackPending || deletePending;
+  const deleteButton = (
+    <ConfirmDestructiveButton
+      armed={armed}
+      {...(reach === "stack"
+        ? {
+            pending: stackPending,
+            disabled: deletePending,
+            pendingLabel: "Deleting stack…",
+            idleLabel: `Delete ${count} stack worktrees`,
+            onClick: onDeleteStack,
+          }
+        : {
+            pending: deletePending,
+            disabled: stackPending,
+            pendingLabel: "Deleting…",
+            idleLabel: "Delete worktree",
+            onClick: onDelete,
+            disabledReason: deleteBlockedReason,
+          })}
+      className={cn(count > 1 && SPLIT_BUTTON_MAIN)}
+    />
+  );
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-end gap-2">
@@ -131,72 +152,36 @@ export function ClosedPullRequestBoxView({
               </Button>
             )}
           </>
-        ) : (
+        ) : count > 1 ? (
           // One button, and with landed layers to take along, a menu
           // beside it that sets how far it reaches, the way the merge
           // button's sets its method. This worktree by default: taking
           // more than the page you are on is the surprise to avoid.
-          <div className="inline-flex items-stretch">
-            <ConfirmDestructiveButton
-              armed={armed}
-              {...(reach === "stack"
-                ? {
-                    pending: stackPending,
-                    disabled: deletePending,
-                    pendingLabel: "Deleting stack…",
-                    idleLabel: `Delete ${count} stack worktrees`,
-                    onClick: onDeleteStack,
-                  }
-                : {
-                    pending: deletePending,
-                    disabled: stackPending,
-                    pendingLabel: "Deleting…",
-                    idleLabel: "Delete worktree",
-                    onClick: onDelete,
-                    disabledReason: deleteBlockedReason,
-                  })}
-              className={cn(count > 1 && "rounded-r-none border-r-0")}
-            />
-            {count > 1 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline-destructive"
-                      disabled={pending}
-                      aria-label="Choose what to delete"
-                      className="rounded-l-none px-1.5"
-                    >
-                      <ChevronDown aria-hidden className="size-3.5" />
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent align="end" sideOffset={4}>
-                  {(
-                    [
-                      ["one", "This worktree"],
-                      ["stack", `All ${count} stack worktrees`],
-                    ] as const
-                  ).map(([value, label]) => (
-                    <DropdownMenuItem
-                      key={value}
-                      onClick={() => onPickReach(value)}
-                    >
-                      <span className="flex-1">{label}</span>
-                      {reach === value && (
-                        <Check
-                          aria-hidden
-                          className="size-3.5 text-muted-foreground"
-                        />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
+          <SplitButton
+            main={deleteButton}
+            variant="outline-destructive"
+            disabled={pending}
+            menuLabel="Choose what to delete"
+          >
+            {(
+              [
+                ["one", "This worktree"],
+                ["stack", `All ${count} stack worktrees`],
+              ] as const
+            ).map(([value, label]) => (
+              <DropdownMenuItem key={value} onClick={() => onPickReach(value)}>
+                <span className="flex-1">{label}</span>
+                {reach === value && (
+                  <Check
+                    aria-hidden
+                    className="size-3.5 text-muted-foreground"
+                  />
+                )}
+              </DropdownMenuItem>
+            ))}
+          </SplitButton>
+        ) : (
+          deleteButton
         )}
       </div>
       {blockedNote && (

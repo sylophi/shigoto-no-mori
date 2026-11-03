@@ -1,21 +1,20 @@
 // The create pull request dialog's content (CreatePullRequestDialog puts
 // it in a ModalShell).
 import type { ReactNode } from "react";
-import { ArrowLeft, ChevronDown, GitPullRequest, Loader2 } from "lucide-react";
+import { ArrowLeft, GitPullRequest, Loader2 } from "lucide-react";
 import type {
   PullRequestCompare,
   PullRequestOptions,
 } from "@shigomori/contracts/schemas";
 import { Button } from "../../primitives/button.tsx";
 import { DiffStats } from "../../primitives/diff-stats.tsx";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../../primitives/dropdown-menu.tsx";
+import { DropdownMenuItem } from "../../primitives/dropdown-menu.tsx";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import { Input } from "../../primitives/input.tsx";
+import {
+  SPLIT_BUTTON_MAIN,
+  SplitButton,
+} from "../../primitives/split-button.tsx";
 import { TONE_PILL } from "../../primitives/status-dot.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { pluralize } from "@shigomori/contracts/words";
@@ -232,40 +231,29 @@ export function CreatePullRequestDialogView({
         >
           Cancel
         </Button>
-        <div className="inline-flex items-stretch">
-          <SimpleTooltip tip={busy ? undefined : (blocked ?? undefined)}>
-            <Button
-              type="button"
-              size="sm"
-              disabled={!ready}
-              onClick={() => onCreate(false)}
-              className="rounded-r-none"
-            >
-              {busy && <Loader2 aria-hidden className="animate-spin" />}
-              {busy ? "Creating…" : "Create pull request"}
-            </Button>
-          </SimpleTooltip>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={!ready}
-                  aria-label="More ways to create"
-                  className="rounded-l-none border-l border-l-primary-foreground/20 px-1.5"
-                >
-                  <ChevronDown aria-hidden className="size-3.5" />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" sideOffset={4}>
-              <DropdownMenuItem onClick={() => onCreate(true)}>
-                Create draft pull request
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <SplitButton
+          main={
+            <SimpleTooltip tip={busy ? undefined : (blocked ?? undefined)}>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!ready}
+                onClick={() => onCreate(false)}
+                className={SPLIT_BUTTON_MAIN}
+              >
+                {busy && <Loader2 aria-hidden className="animate-spin" />}
+                {busy ? "Creating…" : "Create pull request"}
+              </Button>
+            </SimpleTooltip>
+          }
+          variant="default"
+          disabled={!ready}
+          menuLabel="More ways to create"
+        >
+          <DropdownMenuItem onClick={() => onCreate(true)}>
+            Create draft pull request
+          </DropdownMenuItem>
+        </SplitButton>
       </DialogFooter>
     </>
   );
