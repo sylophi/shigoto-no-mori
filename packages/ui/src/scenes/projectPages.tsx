@@ -213,10 +213,10 @@ export function ProjectPagesPartsScene() {
             <WorktreeKindIconView worktree={worktree} allowAgentWorking />
           )
         }
-        draft={name === "port-pool-retry" ? "port-pool-retry-2" : null}
-        onDraft={noop}
+        editing={name === "port-pool-retry"}
+        onEditingChange={noop}
         renamePending={false}
-        onCommitRename={noop}
+        onRename={noop}
         onOpenWorktree={noop}
         onDelete={noop}
         deletePending={false}

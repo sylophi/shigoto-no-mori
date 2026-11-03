@@ -75,7 +75,6 @@ function TitledHeader({
   // external checkout keeps no data file for one of its own.
   const titleEdit = useTitleEdit(
     worktree,
-    title,
     hasWorktreeData(worktree) && (!pr || pr.state === "OPEN"),
   );
   const showBase = useBaseFits(

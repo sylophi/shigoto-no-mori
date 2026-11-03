@@ -9,9 +9,9 @@
 // The name is TEXT until asked for: it is the thing every other device
 // shows in its sidebar, so it reads as an identity, not as a form field
 // standing permanently open. Clicking Rename swaps the same line for the
-// inline editor (InlineNameEditorView).
+// inline editor (InlineEdit).
 import { Pencil } from "lucide-react";
-import { InlineNameEditorView } from "../shared/InlineNameEditorView.tsx";
+import { InlineEdit } from "../../primitives/inline-edit.tsx";
 import { Button } from "../../primitives/button.tsx";
 import { cn } from "../../lib/utils.ts";
 
@@ -71,13 +71,14 @@ export function DeviceNameFieldView({
     );
   }
   return (
-    <InlineNameEditorView
-      name={deviceName}
-      label={label}
+    <InlineEdit
+      variant="text"
+      value={deviceName}
+      label={`${label} name`}
       pending={pending}
       onSave={onRename}
       onCancel={() => onEditingChange(false)}
-      className={className}
+      inputClassName={cn("w-48", className)}
     />
   );
 }

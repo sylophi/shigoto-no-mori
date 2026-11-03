@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
-import { Check, Pencil, Trash2, X } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
 import { DialogFrame } from "../../primitives/dialog.tsx";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
-import { Input } from "../../primitives/input.tsx";
+import { InlineEdit } from "../../primitives/inline-edit.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
 import { sanitizeBranchName } from "@shigomori/contracts/git/branches";
@@ -16,10 +16,10 @@ export function BranchRowView({
   name,
   worktree,
   kindIcon,
-  draft,
-  onDraft,
+  editing,
+  onEditingChange,
   renamePending,
-  onCommitRename,
+  onRename,
   onOpenWorktree,
   onDelete,
   deletePending,
@@ -31,35 +31,30 @@ export function BranchRowView({
   // That worktree's kind (WorktreeKindIcon), for a primary or external
   // one.
   kindIcon: ReactNode;
-  // The in-flight edit value, null when not editing.
-  draft: string | null;
-  onDraft: (draft: string | null) => void;
+  editing: boolean;
+  onEditingChange: (editing: boolean) => void;
   renamePending: boolean;
-  onCommitRename: () => void;
+  onRename: (name: string) => void;
   onOpenWorktree: () => void;
   onDelete: () => void;
   deletePending: boolean;
   // The delete's confirm, while it is up.
   deleteDialog: ReactNode;
 }) {
-  const editing = draft !== null;
   const checkedOut = !!worktree;
 
   return (
     <div className={cn("group flex items-center gap-3 px-3 py-2 text-sm")}>
       {editing ? (
-        <Input
-          value={draft ?? ""}
-          onChange={(e) => onDraft(sanitizeBranchName(e.target.value))}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") onCommitRename();
-            if (e.key === "Escape") onDraft(null);
-          }}
-          onBlur={onCommitRename}
-          disabled={renamePending}
-          // oxlint-disable-next-line jsx-a11y/no-autofocus -- inline edit
-          autoFocus
-          className="flex-1 px-2 py-1 font-mono text-sm"
+        <InlineEdit
+          variant="icons"
+          value={name}
+          label="Branch name"
+          pending={renamePending}
+          sanitize={sanitizeBranchName}
+          onSave={onRename}
+          onCancel={() => onEditingChange(false)}
+          inputClassName="font-mono"
         />
       ) : (
         <SimpleTooltip whenTruncated tip={name}>
@@ -83,8 +78,10 @@ export function BranchRowView({
       {!editing && (
         <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 phone:opacity-100">
           <IconButton
-            onClick={() => onDraft(name)}
+            onClick={() => onEditingChange(true)}
             aria-label={`Rename ${name}`}
+            reveal
+            className="group-hover:opacity-100"
           >
             <Pencil className="size-3.5" />
           </IconButton>
@@ -106,29 +103,6 @@ export function BranchRowView({
             </IconButton>
           </SimpleTooltip>
         </div>
-      )}
-
-      {editing && (
-        <IconButton
-          onMouseDown={(e) => {
-            // Prevent onBlur from firing before this click is processed.
-            e.preventDefault();
-            onDraft(null);
-          }}
-          aria-label="Cancel rename"
-        >
-          <X className="size-3.5" />
-        </IconButton>
-      )}
-      {editing && (
-        <IconButton
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={onCommitRename}
-          aria-label="Save rename"
-          disabled={renamePending}
-        >
-          <Check className="size-3.5" />
-        </IconButton>
       )}
 
       {deleteDialog}

@@ -17,9 +17,7 @@ export function BranchTitle({
   worktree: Worktree;
   subtitle?: boolean;
 }) {
-  // Null while idle, otherwise the in-flight edit value. Folds "editing"
-  // and "draft" together so we don't seed state from a prop.
-  const [draft, setDraft] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
   const [switching, setSwitching] = useState(false);
   const rename = useRenameBranch();
   const { canCommand } = useCommandAccess();
@@ -30,27 +28,17 @@ export function BranchTitle({
 
   const begin = () => {
     rename.reset();
-    setDraft(worktree.branch);
+    setEditing(true);
   };
   const cancel = () => {
-    setDraft(null);
+    setEditing(false);
     rename.reset();
   };
-  const commit = () => {
-    const next = (draft ?? "").trim();
-    if (!next || next === worktree.branch) {
-      cancel();
-      return;
-    }
+  const save = (newBranch: string) =>
     rename.mutate(
-      {
-        projectId: worktree.projectId,
-        worktreeId: worktree.id,
-        newBranch: next,
-      },
-      { onSuccess: () => setDraft(null) },
+      { projectId: worktree.projectId, worktreeId: worktree.id, newBranch },
+      { onSuccess: () => setEditing(false) },
     );
-  };
 
   return (
     <BranchTitleView
@@ -60,16 +48,14 @@ export function BranchTitle({
       subtitle={subtitle}
       titleRef={titleRef}
       editing={
-        draft === null
-          ? undefined
-          : {
-              draft,
-              onDraftChange: setDraft,
+        editing
+          ? {
               pending: rename.isPending,
               error: rename.error?.message,
-              onCommit: commit,
+              onSave: save,
               onCancel: cancel,
             }
+          : undefined
       }
       actions={
         <BranchActionsView
