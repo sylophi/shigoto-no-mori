@@ -91,9 +91,9 @@ const make = Effect.gen(function* () {
     generations.set(project.id, generation(project) + 1);
 
   const announce = (project: ProjectRef) =>
-    HostPushes.push(githubCliContract, "projectPullRequestsRefreshed", {
+    pushes.publish(githubCliContract, "projectPullRequestsRefreshed", {
       projectId: project.id,
-    }).pipe(Effect.provideService(HostPushes.HostPushes, pushes));
+    });
 
   const write = (
     project: ProjectRef,

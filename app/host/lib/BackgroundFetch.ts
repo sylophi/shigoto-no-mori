@@ -27,7 +27,7 @@ import { findProject, listedProjects } from "@host/lib/projects";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Scripts from "@host/lib/Scripts";
 import { sweepAutoPull } from "@host/lib/worktrees/autoPullSweep";
-import type { broadcastAll } from "@host/process/wires";
+import * as HostPushes from "@host/lib/HostPushes";
 import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import { log } from "@shared/log";
 import {
@@ -86,260 +86,254 @@ export class BackgroundFetch extends Context.Service<
 
 type FetchServices = Engine.Services | ChildProcessSpawner.ChildProcessSpawner;
 
-// What a pass tells: the pushes on every wire, and a ref move the app
-// made itself, announced as the git watcher announces any.
-export interface Options {
-  readonly broadcast: typeof broadcastAll;
-  readonly announceProjectChanged: (projectId: string) => void;
-}
+const make = Effect.gen(function* () {
+  const clock = yield* Clock.Clock;
+  // What a pass tells, on every wire.
+  const pushes = yield* HostPushes.HostPushes;
+  const now = () => elapsedMillisUnsafe(clock);
+  const stamp = () => stampOf(clock);
+  const ageOf = (at: Stamp) => ageBetween(at, stamp());
+  const scripts = yield* Scripts.Scripts;
+  const pullRequests = yield* PullRequestMaps.PullRequestMaps;
+  // What a pass reaches, as the layer finds it.
+  const context = yield* Effect.context<FetchServices>();
+  const runs = yield* FiberSet.make();
+  // Signals from outside any effect (the shell's focus report).
+  const inbox =
+    yield* Queue.unbounded<Effect.Effect<void, never, FetchServices>>();
+  const lastFetchedAt = new Map<string, Stamp>();
+  const fetchInFlight = new Map<string, Deferred.Deferred<boolean>>();
+  const lastPullRequestSweepAt = new Map<string, Stamp>();
+  // Per project, the remote refs after its last fetch.
+  const remoteRefs = new Map<string, string>();
+  // Projects whose last fetch attempt failed, so a run of failures warns once.
+  const failingProjects = new Set<string>();
+  // Per project, the worktrees whose auto-pull failed on the last sweep,
+  // so a run of failures warns once. Replaced whole on every sweep: a
+  // worktree that stops failing (pulled, skipped, unmarked, removed)
+  // drops out, and its next failure warns again.
+  const failingAutoPulls = new Map<string, ReadonlySet<string>>();
+  let attendedUntil = -Infinity;
+  // Whether a window of this machine is focused, as the shell reports it.
+  let windowFocused = false;
 
-const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
-  Effect.gen(function* () {
-    const clock = yield* Clock.Clock;
-    const now = () => elapsedMillisUnsafe(clock);
-    const stamp = () => stampOf(clock);
-    const ageOf = (at: Stamp) => ageBetween(at, stamp());
-    const scripts = yield* Scripts.Scripts;
-    const pullRequests = yield* PullRequestMaps.PullRequestMaps;
-    // What a pass reaches, as the layer finds it.
-    const context = yield* Effect.context<FetchServices>();
-    const runs = yield* FiberSet.make();
-    // Signals from outside any effect (the shell's focus report).
-    const inbox =
-      yield* Queue.unbounded<Effect.Effect<void, never, FetchServices>>();
-    const lastFetchedAt = new Map<string, Stamp>();
-    const fetchInFlight = new Map<string, Deferred.Deferred<boolean>>();
-    const lastPullRequestSweepAt = new Map<string, Stamp>();
-    // Per project, the remote refs after its last fetch.
-    const remoteRefs = new Map<string, string>();
-    // Projects whose last fetch attempt failed, so a run of failures warns once.
-    const failingProjects = new Set<string>();
-    // Per project, the worktrees whose auto-pull failed on the last sweep,
-    // so a run of failures warns once. Replaced whole on every sweep: a
-    // worktree that stops failing (pulled, skipped, unmarked, removed)
-    // drops out, and its next failure warns again.
-    const failingAutoPulls = new Map<string, ReadonlySet<string>>();
-    let attendedUntil = -Infinity;
-    // Whether a window of this machine is focused, as the shell reports it.
-    let windowFocused = false;
-
-    // Fast-forward the project's auto-pull worktrees (autoPullSweep.ts).
-    // The project-scoped announcement goes out from here as the pass ends,
-    // beside the git-directory watcher's own after its debounce.
-    // Never fails: a failed pull is one worktree's problem and must not
-    // read as a failed fetch.
-    const autoPullProject = (projectId: string, projectPath: string) =>
-      Effect.gen(function* () {
-        const project = yield* findProject(projectId);
-        const identities = yield* (yield* Worktrees.Worktrees).identityList(
-          [project],
-          { primaryRef: false },
-        );
-        const { pulled, failed } = yield* sweepAutoPull(
-          identities.rows,
-          new Set(scripts.worktrees().map(({ worktreeId }) => worktreeId)),
-        );
-        for (const { worktree, commits } of pulled) {
-          log.info(
-            `[auto-pull] ${worktree.path}: fast-forwarded ${commits} commit(s)`,
-          );
-        }
-        const wasFailing = failingAutoPulls.get(projectId);
-        for (const { worktree, message } of failed) {
-          if (wasFailing?.has(worktree.id)) continue;
-          log.warn(`[auto-pull] ${worktree.path}: ${message}`);
-        }
-        failingAutoPulls.set(
-          projectId,
-          new Set(failed.map((f) => f.worktree.id)),
-        );
-        if (pulled.length > 0) announceProjectChanged(projectId);
-      }).pipe(
-        Effect.catch((error) =>
-          Effect.sync(() =>
-            log.warn(`[auto-pull] ${projectPath}: ${messageOf(error)}`),
-          ),
-        ),
+  // Fast-forward the project's auto-pull worktrees (autoPullSweep.ts).
+  // The project-scoped announcement goes out from here as the pass ends,
+  // beside the git-directory watcher's own after its debounce.
+  // Never fails: a failed pull is one worktree's problem and must not
+  // read as a failed fetch.
+  const autoPullProject = (projectId: string, projectPath: string) =>
+    Effect.gen(function* () {
+      const project = yield* findProject(projectId);
+      const identities = yield* (yield* Worktrees.Worktrees).identityList(
+        [project],
+        { primaryRef: false },
       );
-
-    // Whether a fetch ran. Leaves refs stale on a failure and lets the
-    // next attempt retry. Warns only on the way into the failed state:
-    // lastFetchedAt advances on success only, so a project that stays
-    // broken (offline, expired credentials) would otherwise warn on every
-    // sweep, focus and navigation. Nothing else reports it.
-    const fetchProject = (projectId: string, projectPath: string) =>
-      Effect.acquireUseRelease(
+      const { pulled, failed } = yield* sweepAutoPull(
+        identities.rows,
+        new Set(scripts.worktrees().map(({ worktreeId }) => worktreeId)),
+      );
+      for (const { worktree, commits } of pulled) {
+        log.info(
+          `[auto-pull] ${worktree.path}: fast-forwarded ${commits} commit(s)`,
+        );
+      }
+      const wasFailing = failingAutoPulls.get(projectId);
+      for (const { worktree, message } of failed) {
+        if (wasFailing?.has(worktree.id)) continue;
+        log.warn(`[auto-pull] ${worktree.path}: ${message}`);
+      }
+      failingAutoPulls.set(
+        projectId,
+        new Set(failed.map((f) => f.worktree.id)),
+      );
+      // A ref move the app made itself, announced as the git watcher
+      // announces any.
+      if (pulled.length > 0) {
+        yield* pushes.publish(gitContract, "projectChanged", { projectId });
+      }
+    }).pipe(
+      Effect.catch((error) =>
         Effect.sync(() =>
-          broadcastAll(gitContract, "fetchActive", { projectId, active: true }),
+          log.warn(`[auto-pull] ${projectPath}: ${messageOf(error)}`),
         ),
-        () =>
-          Effect.gen(function* () {
-            const git = yield* Git.Git;
-            const before = yield* git.snapshotRemoteRefs(projectPath);
-            yield* git.fetchAll(projectPath);
-            lastFetchedAt.set(projectId, stamp());
-            failingProjects.delete(projectId);
-            const after = yield* git.snapshotRemoteRefs(projectPath);
-            if (before !== after) {
-              broadcastAll(gitContract, "refsRefreshed", { projectId });
-            }
-            // A push or a merge is what most often moves a PR, so moved
-            // refs read the map now rather than at its age. Against the
-            // last fetch rather than `before`, so a push from here between
-            // passes counts too.
-            const seen = remoteRefs.get(projectId) ?? before;
-            remoteRefs.set(projectId, after);
-            if (seen !== after) {
-              yield* FiberSet.run(
-                runs,
-                pullRequests.refresh({ id: projectId, path: projectPath }),
-              );
-            }
-            // After every successful fetch, not only one that moved a
-            // ref: a marked worktree that was dirty or busy at the last
-            // pass and is clean now has the same upstream and still wants
-            // pulling.
-            yield* autoPullProject(projectId, projectPath);
-            return true;
-          }).pipe(
-            Effect.catch((error) =>
-              Effect.sync(() => {
-                if (!failingProjects.has(projectId)) {
-                  failingProjects.add(projectId);
-                  log.warn(`[fetch] ${projectPath}: ${messageOf(error)}`);
-                }
-                return false;
-              }),
-            ),
-          ),
-        () =>
-          Effect.sync(() =>
-            broadcastAll(gitContract, "fetchActive", {
-              projectId,
-              active: false,
-            }),
-          ),
-      );
+      ),
+    );
 
-    // Whether a fetch ran (false inside the freshness window). A request
-    // landing while a fetch is running joins it rather than spawning a
-    // second git behind the same network round trip.
-    const maybeFetchProject = (
-      projectId: string,
-      projectPath: string,
-      maxAgeMs = FRESHNESS_MS,
-    ) =>
-      Effect.suspend(() => {
-        const fetchedAt = lastFetchedAt.get(projectId);
-        if (fetchedAt !== undefined && ageOf(fetchedAt) < maxAgeMs)
-          return Effect.succeed(false);
-        const running = fetchInFlight.get(projectId);
-        if (running) return Deferred.await(running);
-        const fetching = Deferred.makeUnsafe<boolean>();
-        fetchInFlight.set(projectId, fetching);
-        return fetchProject(projectId, projectPath).pipe(
-          Effect.onExit((exit) =>
+  // Whether a fetch ran. Leaves refs stale on a failure and lets the
+  // next attempt retry. Warns only on the way into the failed state:
+  // lastFetchedAt advances on success only, so a project that stays
+  // broken (offline, expired credentials) would otherwise warn on every
+  // sweep, focus and navigation. Nothing else reports it.
+  const fetchProject = (projectId: string, projectPath: string) =>
+    Effect.acquireUseRelease(
+      pushes.publish(gitContract, "fetchActive", { projectId, active: true }),
+      () =>
+        Effect.gen(function* () {
+          const git = yield* Git.Git;
+          const before = yield* git.snapshotRemoteRefs(projectPath);
+          yield* git.fetchAll(projectPath);
+          lastFetchedAt.set(projectId, stamp());
+          failingProjects.delete(projectId);
+          const after = yield* git.snapshotRemoteRefs(projectPath);
+          if (before !== after) {
+            yield* pushes.publish(gitContract, "refsRefreshed", { projectId });
+          }
+          // A push or a merge is what most often moves a PR, so moved
+          // refs read the map now rather than at its age. Against the
+          // last fetch rather than `before`, so a push from here between
+          // passes counts too.
+          const seen = remoteRefs.get(projectId) ?? before;
+          remoteRefs.set(projectId, after);
+          if (seen !== after) {
+            yield* FiberSet.run(
+              runs,
+              pullRequests.refresh({ id: projectId, path: projectPath }),
+            );
+          }
+          // After every successful fetch, not only one that moved a
+          // ref: a marked worktree that was dirty or busy at the last
+          // pass and is clean now has the same upstream and still wants
+          // pulling.
+          yield* autoPullProject(projectId, projectPath);
+          return true;
+        }).pipe(
+          Effect.catch((error) =>
             Effect.sync(() => {
-              fetchInFlight.delete(projectId);
-              Deferred.doneUnsafe(fetching, exit);
+              if (!failingProjects.has(projectId)) {
+                failingProjects.add(projectId);
+                log.warn(`[fetch] ${projectPath}: ${messageOf(error)}`);
+              }
+              return false;
             }),
           ),
-        );
-      });
-
-    const sweepProjectPullRequests = (project: Project) =>
-      Effect.suspend(() => {
-        const sweptAt = lastPullRequestSweepAt.get(project.id);
-        if (sweptAt !== undefined && ageOf(sweptAt) < SWEEP_INTERVAL_MS)
-          return Effect.void;
-        lastPullRequestSweepAt.set(project.id, stamp());
-        return Effect.asVoid(pullRequests.get(project));
-      });
-
-    // One pass over every project. The timer and the window-focus handler
-    // take the fetch freshness default. A peer's request passes the sweep
-    // interval: what it wants is the timer's guarantee, not a fresh fetch.
-    const sweepProjects = (refsMaxAgeMs = FRESHNESS_MS) =>
-      Effect.flatMap(listedProjects, (projects) =>
-        Effect.forEach(
-          projects,
-          (project) =>
-            Effect.all(
-              [
-                FiberSet.run(
-                  runs,
-                  maybeFetchProject(project.id, project.path, refsMaxAgeMs),
-                ),
-                FiberSet.run(runs, sweepProjectPullRequests(project)),
-              ],
-              { discard: true },
-            ),
-          { discard: true },
         ),
-      ).pipe(Effect.provide(context));
-
-    yield* Effect.forkScoped(
-      Effect.forever(
-        Effect.flatMap(Queue.take(inbox), (work) =>
-          Effect.provide(work, context),
-        ),
-      ),
+      () =>
+        pushes.publish(gitContract, "fetchActive", {
+          projectId,
+          active: false,
+        }),
     );
-    // The first pass, then a pass a minute while someone is looking.
-    yield* sweepProjects();
-    yield* Effect.forkScoped(
-      Effect.forever(
-        Effect.andThen(
-          Effect.sleep(SWEEP_INTERVAL_MS),
-          Effect.suspend(() =>
-            windowFocused || now() < attendedUntil
-              ? sweepProjects()
-              : Effect.void,
+
+  // Whether a fetch ran (false inside the freshness window). A request
+  // landing while a fetch is running joins it rather than spawning a
+  // second git behind the same network round trip.
+  const maybeFetchProject = (
+    projectId: string,
+    projectPath: string,
+    maxAgeMs = FRESHNESS_MS,
+  ) =>
+    Effect.suspend(() => {
+      const fetchedAt = lastFetchedAt.get(projectId);
+      if (fetchedAt !== undefined && ageOf(fetchedAt) < maxAgeMs)
+        return Effect.succeed(false);
+      const running = fetchInFlight.get(projectId);
+      if (running) return Deferred.await(running);
+      const fetching = Deferred.makeUnsafe<boolean>();
+      fetchInFlight.set(projectId, fetching);
+      return fetchProject(projectId, projectPath).pipe(
+        Effect.onExit((exit) =>
+          Effect.sync(() => {
+            fetchInFlight.delete(projectId);
+            Deferred.doneUnsafe(fetching, exit);
+          }),
+        ),
+      );
+    });
+
+  const sweepProjectPullRequests = (project: Project) =>
+    Effect.suspend(() => {
+      const sweptAt = lastPullRequestSweepAt.get(project.id);
+      if (sweptAt !== undefined && ageOf(sweptAt) < SWEEP_INTERVAL_MS)
+        return Effect.void;
+      lastPullRequestSweepAt.set(project.id, stamp());
+      return Effect.asVoid(pullRequests.get(project));
+    });
+
+  // One pass over every project. The timer and the window-focus handler
+  // take the fetch freshness default. A peer's request passes the sweep
+  // interval: what it wants is the timer's guarantee, not a fresh fetch.
+  const sweepProjects = (refsMaxAgeMs = FRESHNESS_MS) =>
+    Effect.flatMap(listedProjects, (projects) =>
+      Effect.forEach(
+        projects,
+        (project) =>
+          Effect.all(
+            [
+              FiberSet.run(
+                runs,
+                maybeFetchProject(project.id, project.path, refsMaxAgeMs),
+              ),
+              FiberSet.run(runs, sweepProjectPullRequests(project)),
+            ],
+            { discard: true },
           ),
-        ),
+        { discard: true },
       ),
-    );
-
-    // Every project's rows read again, for an edit the working trees'
-    // watch missed (GitWatcher.ts), as a window here gains focus, or a
-    // peer's window asks a sweep that is no renewal.
-    const rereadRows = Effect.flatMap(listedProjects, (projects) =>
-      Effect.sync(() => {
-        for (const project of projects) {
-          broadcastAll(worktreesContract, "filesChanged", {
-            projectId: project.id,
-          });
-        }
-      }),
     ).pipe(Effect.provide(context));
 
-    return BackgroundFetch.of({
-      refreshProject: Effect.fn("BackgroundFetch.refreshProject")(function* (
-        projectId: string,
-        projectPath: string,
-      ) {
-        const fetched = yield* maybeFetchProject(projectId, projectPath);
-        if (!fetched) yield* autoPullProject(projectId, projectPath);
-      }, Effect.provide(context)),
-      sweepForPeer: Effect.fn("BackgroundFetch.sweepForPeer")(function* (
-        renewal: boolean,
-      ) {
-        if (!renewal) yield* rereadRows;
-        attendedUntil = now() + ATTENTION_LEASE_MS;
-        yield* sweepProjects(SWEEP_INTERVAL_MS);
-        return { leaseMs: ATTENTION_LEASE_MS };
-      }, Effect.provide(context)),
-      setWindowFocused: (focused) => {
-        const wasFocused = windowFocused;
-        windowFocused = focused;
-        if (!focused) return;
-        Queue.offerUnsafe(inbox, rereadRows);
-        // A pass only as the app comes back, not as focus moves between
-        // its windows.
-        if (!wasFocused) Queue.offerUnsafe(inbox, sweepProjects());
-      },
-    });
-  });
+  yield* Effect.forkScoped(
+    Effect.forever(
+      Effect.flatMap(Queue.take(inbox), (work) =>
+        Effect.provide(work, context),
+      ),
+    ),
+  );
+  // The first pass, then a pass a minute while someone is looking.
+  yield* sweepProjects();
+  yield* Effect.forkScoped(
+    Effect.forever(
+      Effect.andThen(
+        Effect.sleep(SWEEP_INTERVAL_MS),
+        Effect.suspend(() =>
+          windowFocused || now() < attendedUntil
+            ? sweepProjects()
+            : Effect.void,
+        ),
+      ),
+    ),
+  );
 
-export const layer = (options: Options) =>
-  Layer.effect(BackgroundFetch, make(options));
+  // Every project's rows read again, for an edit the working trees'
+  // watch missed (GitWatcher.ts), as a window here gains focus, or a
+  // peer's window asks a sweep that is no renewal.
+  const rereadRows = Effect.flatMap(listedProjects, (projects) =>
+    Effect.forEach(
+      projects,
+      (project) =>
+        pushes.publish(worktreesContract, "filesChanged", {
+          projectId: project.id,
+        }),
+      { discard: true },
+    ),
+  ).pipe(Effect.provide(context));
+
+  return BackgroundFetch.of({
+    refreshProject: Effect.fn("BackgroundFetch.refreshProject")(function* (
+      projectId: string,
+      projectPath: string,
+    ) {
+      const fetched = yield* maybeFetchProject(projectId, projectPath);
+      if (!fetched) yield* autoPullProject(projectId, projectPath);
+    }, Effect.provide(context)),
+    sweepForPeer: Effect.fn("BackgroundFetch.sweepForPeer")(function* (
+      renewal: boolean,
+    ) {
+      if (!renewal) yield* rereadRows;
+      attendedUntil = now() + ATTENTION_LEASE_MS;
+      yield* sweepProjects(SWEEP_INTERVAL_MS);
+      return { leaseMs: ATTENTION_LEASE_MS };
+    }, Effect.provide(context)),
+    setWindowFocused: (focused) => {
+      const wasFocused = windowFocused;
+      windowFocused = focused;
+      if (!focused) return;
+      Queue.offerUnsafe(inbox, rereadRows);
+      // A pass only as the app comes back, not as focus moves between
+      // its windows.
+      if (!wasFocused) Queue.offerUnsafe(inbox, sweepProjects());
+    },
+  });
+});
+
+export const layer = Layer.effect(BackgroundFetch, make);

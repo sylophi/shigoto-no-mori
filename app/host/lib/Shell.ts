@@ -11,6 +11,8 @@ import type {
 } from "@shigomori/contracts/modules/guide";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
+import type * as Stream from "effect/Stream";
 
 export class Shell extends Context.Service<
   Shell,
@@ -38,6 +40,13 @@ export class Shell extends Context.Service<
       // so a peer's read is answered here without a round trip.
       readonly state: Effect.Effect<UpdaterState>;
       readonly noteState: (state: UpdaterState) => Effect.Effect<void>;
+      // Each state it moves to, from the moment this returns, for as
+      // long as the scope is open.
+      readonly states: Effect.Effect<
+        Stream.Stream<UpdaterState>,
+        never,
+        Scope.Scope
+      >;
     };
     // Before a move or a reset of the data folder: the updater starts
     // nothing there from now on (null: no check or install, one under

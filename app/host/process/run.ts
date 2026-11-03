@@ -39,7 +39,6 @@ import * as Loopback from "@host/socket/Loopback";
 import { reapOrphanedConnector } from "@host/direct/Tunnel";
 import { TUNNEL_PID_FILE } from "@shigomori/engine/tunnelPid";
 import { setHostFacts } from "./facts";
-import { followPeerPushes } from "./handlers";
 import * as HostLayer from "./layer";
 import * as HostNodeServices from "./nodeServices";
 import { sessionHandlers } from "./session";
@@ -123,6 +122,9 @@ export async function runHost<E>(root: {
   readonly openSpans: Observability.OpenSpans;
   // What the entry serves on the loopback beside the host's own.
   readonly loopback?: HostRpc.HandlerLayer;
+  // What the entry follows on the host's graph, up before the graph
+  // opens.
+  readonly follows?: Layer.Layer<never, never, Graph.GraphServices>;
   // The host is up, on the loopback at `address`.
   readonly ready: (address: {
     readonly port: number;
@@ -154,7 +156,6 @@ export async function runHost<E>(root: {
   // The shell has opened the data folder already, and says so when it
   // can't: this only names it for the host.
   await initDataDir(flavor);
-  followPeerPushes();
   const engine = {
     flavor,
     nativefs: bundledBinaryPath(facts, NATIVEFS_DIST_DIR, NATIVEFS_BINARY_NAME),
@@ -165,6 +166,7 @@ export async function runHost<E>(root: {
   // The root's door on top: open once every service is up (graph.ts).
   const graph = ManagedRuntime.make(
     Graph.layer.pipe(
+      Layer.provideMerge(root.follows ?? Layer.empty),
       Layer.provideMerge(
         HostLayer.layer({
           hurried: () => hurried,

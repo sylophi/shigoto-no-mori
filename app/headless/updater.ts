@@ -6,19 +6,21 @@
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { updaterContract } from "@shigomori/contracts/modules/updater";
+import type { UpdaterState } from "@shigomori/contracts/schemas";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Updater from "@shigomori/engine/Updater";
 import * as Scripts from "@host/lib/Scripts";
 import * as Graph from "@host/process/graph";
 import { quit } from "@host/process/run";
-import { broadcastAll } from "@host/process/wires";
 import type { HostFacts } from "@shared/hostFacts";
 import { bundledBinaryPath } from "@shared/packaging/bundledBinary.mts";
 import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
 import { makeUpdater } from "@shared/updater/machine";
 
-export const makeHeadlessUpdater = (facts: HostFacts) => {
+export const makeHeadlessUpdater = (
+  facts: HostFacts,
+  noteState: (state: UpdaterState) => void,
+) => {
   const cliBinary = () =>
     bundledBinaryPath(facts, CLI_DIST_DIR, cliBinaryName(facts.flavor));
   const updater = makeUpdater({
@@ -26,7 +28,7 @@ export const makeHeadlessUpdater = (facts: HostFacts) => {
     packaged: facts.packaged,
     version: facts.appVersion,
     cliBinary,
-    noteState: (state) => broadcastAll(updaterContract, "state", state),
+    noteState,
     busy: () =>
       Graph.run(Effect.flatMap(Scripts.Scripts, (scripts) => scripts.busy)),
     confirmRestart: null,

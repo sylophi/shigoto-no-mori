@@ -175,7 +175,7 @@ export const layer = Layer.effect(Registry, make);
   from, and runs each call on the graph as it is when the call comes.
 - The host's composition root reaches its graph from the callbacks it
   hands code that is not Effect (the hub connection, the account
-  fan-out, the store changes) through one door,
+  fan-out) through one door,
   `app/host/process/graph.ts`: a layer on top of the graph, so a run
   made before every service is up waits for it, and one made after the
   graph closed is turned away. Nothing outside `app/host/process/`

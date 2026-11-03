@@ -4,6 +4,10 @@
 // helpers it runs (MirrorLedger.ts, sessions.ts) reach the engine by
 // that tag.
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import { gitContract } from "@shigomori/contracts/modules/git";
+import { hubContract } from "@shigomori/contracts/modules/hub";
+import { MirrorWorktreePayloadSchema } from "@shigomori/contracts/modules/mirror";
+import { ProjectScopedPayloadSchema } from "@shigomori/contracts/schemas/payloads";
 import * as MirrorAgreements from "@shigomori/engine/MirrorAgreements";
 import * as MirrorHistoryStore from "@shigomori/engine/MirrorHistory";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
@@ -13,12 +17,15 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import { PeerReach } from "@host/ipc/PeerReach";
 import type { MirrorStatus } from "@shigomori/contracts/modules/mirror";
 import * as HostAccount from "@host/lib/HostAccount";
+import * as HostPushes from "@host/lib/HostPushes";
 import * as Sharing from "@host/lib/Sharing";
 import { makeGitFollower } from "./gitFollow";
 import { ownMirrorHereBlocker } from "./MirrorGateway";
@@ -30,7 +37,11 @@ import {
   MirrorError,
 } from "./MirrorEngine";
 import { MirrorLedger } from "./MirrorLedger";
-import { LEFT_ACCOUNT_DETAIL, mirrorSessions } from "./registry";
+import {
+  LEFT_ACCOUNT_DETAIL,
+  MIRROR_LABEL_LOCAL_PROJECT,
+  mirrorSessions,
+} from "./registry";
 
 // A device leaving its account ends its mirrors within this, so a stuck
 // daemon request cannot hold the sign-out: the hub refresh that follows
@@ -45,386 +56,432 @@ const LINK_LOST: ReadonlySet<MirrorStatus> = new Set([
   "connecting-remote",
 ]);
 
+const isProjectScoped = Schema.is(ProjectScopedPayloadSchema);
+const decodeMirrorWorktree = Schema.decodeUnknownOption(
+  MirrorWorktreePayloadSchema,
+);
+
 type Bookkeeping =
   | PeerReach
   | Effect.Services<MirrorLedger["Service"]["settleMirrorBookkeeping"]>;
 
-const make = (options: {
-  // A pull the follower applied moved a project's git state here.
-  readonly projectChanged: (projectId: string) => void;
-}) =>
-  Effect.gen(function* () {
-    const daemon = yield* MirrorDaemon.MirrorDaemon;
-    const account = yield* HostAccount.HostAccount;
-    const reach = yield* PeerReach;
-    const ledger = yield* MirrorLedger;
-    const runFork = yield* FiberSet.makeRuntime<never>();
-    const context = yield* Effect.context<Bookkeeping>();
-    // What reaches the engine through its tag, run on this one.
-    const withEngine = <A, E>(
-      effect: Effect.Effect<A, E, Bookkeeping | MirrorEngine>,
-    ) =>
-      Effect.suspend(() =>
-        effect.pipe(
-          Effect.provideService(MirrorEngine, engine),
-          Effect.provideContext(context),
-        ),
-      );
+const make = Effect.gen(function* () {
+  const daemon = yield* MirrorDaemon.MirrorDaemon;
+  const pushes = yield* HostPushes.HostPushes;
+  const account = yield* HostAccount.HostAccount;
+  const reach = yield* PeerReach;
+  const ledger = yield* MirrorLedger;
+  const runFork = yield* FiberSet.makeRuntime<never>();
+  const context = yield* Effect.context<Bookkeeping>();
+  // What reaches the engine through its tag, run on this one.
+  const withEngine = <A, E>(
+    effect: Effect.Effect<A, E, Bookkeeping | MirrorEngine>,
+  ) =>
+    Effect.suspend(() =>
+      effect.pipe(
+        Effect.provideService(MirrorEngine, engine),
+        Effect.provideContext(context),
+      ),
+    );
 
-    // Every thread as the store had it, written back a turn after it
-    // changes, one write at a time.
-    const threads = yield* MirrorHistoryStore.MirrorHistory;
-    const saved = yield* threads.load;
-    const writes = yield* Semaphore.make(1);
-    const history = createMirrorHistory({
-      store: {
-        load: () => ({ ...saved }),
-        save: (events) => {
-          runFork(writes.withPermit(threads.save(events)));
-        },
+  // Every thread as the store had it, written back a turn after it
+  // changes, one write at a time.
+  const threads = yield* MirrorHistoryStore.MirrorHistory;
+  const saved = yield* threads.load;
+  const writes = yield* Semaphore.make(1);
+  const history = createMirrorHistory({
+    store: {
+      load: () => ({ ...saved }),
+      save: (events) => {
+        runFork(writes.withPermit(threads.save(events)));
       },
-      onChange: ledger.changed,
-    });
+    },
+    onChange: ledger.changed,
+  });
 
-    // Every re-key the engine records (Worktrees.movedIds), this
-    // process's or another's (the terminal's adopt or relocate), carries
-    // the thread kept under the old id: those made while the app was
-    // closed as it comes up, and each one after as the store records it.
-    // The sessions follow at the daemon's next snapshot, which finds their
-    // root gone and the move recorded, once their peer takes this
-    // device's calls, within 2 minutes (settleMirrorBookkeeping).
-    const worktrees = yield* Worktrees.Worktrees;
-    const carried = new Map<string, string>();
-    const carryRekeys = Effect.gen(function* () {
-      for (const [from, to] of yield* worktrees.movedIds) {
-        if (carried.get(from) === to) continue;
-        carried.set(from, to);
-        history.move(from, to);
-      }
-    }).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("[mirror] a worktree's re-key went unread", cause),
+  // Every re-key the engine records (Worktrees.movedIds), this
+  // process's or another's (the terminal's adopt or relocate), carries
+  // the thread kept under the old id: those made while the app was
+  // closed as it comes up, and each one after as the store records it.
+  // The sessions follow at the daemon's next snapshot, which finds their
+  // root gone and the move recorded, once their peer takes this
+  // device's calls, within 2 minutes (settleMirrorBookkeeping).
+  const worktrees = yield* Worktrees.Worktrees;
+  const carried = new Map<string, string>();
+  const carryRekeys = Effect.gen(function* () {
+    for (const [from, to] of yield* worktrees.movedIds) {
+      if (carried.get(from) === to) continue;
+      carried.set(from, to);
+      history.move(from, to);
+    }
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning("[mirror] a worktree's re-key went unread", cause),
+    ),
+  );
+  const stored = yield* (yield* StoreChanges.StoreChanges).subscribe;
+  yield* carryRekeys.pipe(
+    Effect.andThen(
+      stored.pipe(
+        Stream.filter((tables) => tables.has("wt_moves")),
+        Stream.runForEach(() => carryRekeys),
       ),
-    );
-    const stored = yield* (yield* StoreChanges.StoreChanges).subscribe;
-    yield* carryRekeys.pipe(
-      Effect.andThen(
-        stored.pipe(
-          Stream.filter((tables) => tables.has("wt_moves")),
-          Stream.runForEach(() => carryRekeys),
-        ),
-      ),
-      Effect.forkScoped,
-    );
+    ),
+    Effect.forkScoped,
+  );
 
-    const switches = yield* Effect.context<
-      HostAccount.HostAccount | Sharing.Sharing
-    >();
-    const follower = yield* makeGitFollower({
-      sessions: mirrorSessions(daemon),
-      fresh: daemon.fresh,
-      switchedOff: ownMirrorHereBlocker.pipe(
-        Effect.map((refusal) => refusal !== undefined),
-        Effect.provide(switches),
-      ),
-      followDescription: true,
-      // The states both sides last agreed on, in the store so a restart
-      // resumes the follow rule rather than falling back to ancestry.
-      agreedStore: yield* MirrorAgreements.MirrorAgreements,
-      onChange: () => {
-        ledger.changed();
-        runFork(observeHistory);
-      },
-      // The peer says the session's copy is gone, behind this device's
-      // back: confirmed against the peer's own list (an answer while its
-      // registry loads, or mid-move, is no removal), the session ends and
-      // the original keeps its own.
-      onCopyGone: (session) =>
-        runFork(Effect.ignore(withEngine(ledger.endMirrorIfCopyGone(session)))),
-      // Announced at once, so the pages showing it refetch without
-      // waiting on the git watcher.
-      onLocalApplied: (projectId) => {
-        options.projectChanged(projectId);
-        follower.onLocalProjectChanged(projectId);
-      },
-    });
+  const switches = yield* Effect.context<
+    HostAccount.HostAccount | Sharing.Sharing
+  >();
+  const follower = yield* makeGitFollower({
+    sessions: mirrorSessions(daemon),
+    fresh: daemon.fresh,
+    switchedOff: ownMirrorHereBlocker.pipe(
+      Effect.map((refusal) => refusal !== undefined),
+      Effect.provide(switches),
+    ),
+    followDescription: true,
+    // The states both sides last agreed on, in the store so a restart
+    // resumes the follow rule rather than falling back to ancestry.
+    agreedStore: yield* MirrorAgreements.MirrorAgreements,
+    onChange: () => {
+      ledger.changed();
+      runFork(observeHistory);
+    },
+    // The peer says the session's copy is gone, behind this device's
+    // back: confirmed against the peer's own list (an answer while its
+    // registry loads, or mid-move, is no removal), the session ends and
+    // the original keeps its own.
+    onCopyGone: (session) =>
+      runFork(Effect.ignore(withEngine(ledger.endMirrorIfCopyGone(session)))),
+    // Announced at once, so the pages showing it refetch without
+    // waiting on the git watcher, and the follower looks again.
+    onLocalApplied: (projectId) =>
+      pushes.publishUnsafe(gitContract, "projectChanged", { projectId }),
+  });
 
-    // The daemon's sessions that are mirrors, into their threads, off its
-    // own snapshots: the one that stands through a restart moves nothing,
-    // and the sessions the next run brings back are seen afresh.
-    let restarted = false;
-    const observeHistory = Effect.gen(function* () {
-      if (!(yield* daemon.fresh)) {
-        restarted = true;
-        return;
-      }
-      if (restarted) {
-        restarted = false;
-        history.restarted();
-      }
-      history.observe(yield* mirrorSessions(daemon), (session) =>
-        follower.statusOf(session),
-      );
-    });
-
-    const fromDaemon = Effect.mapError(
-      (error: MirrorDaemon.MirrorDaemonError) =>
-        new MirrorError({ reason: error.message }),
-    );
-
-    const create = Effect.fn("MirrorEngine.create")(function* (
-      input: MirrorCreateInput,
-    ) {
-      // A start's long leg (the copy across) can straddle a sign-out;
-      // the sweep that ran meanwhile found nothing, so this is the last
-      // gate before a session with a peer of no account.
-      if ((yield* account.current).facts === null) {
-        return yield* new MirrorError({
-          reason: "This device is signed out, so it cannot mirror.",
-        });
-      }
-      return yield* fromDaemon(daemon.create(input));
-    });
-
-    // The old session is paused, not ended, until the new one is up: two
-    // running sessions on one root would fight, but a paused one holds
-    // nothing, and a create that fails (peer away) then leaves the
-    // mirror as it was instead of gone with no way to re-open it. The
-    // agreement moves to the new id, so the follower picks up where it
-    // was instead of starting from the no-agreement fallback. Held as
-    // recreating throughout, so the leftover sweep (MirrorLedger's
-    // settleMirrorBookkeeping) does not end the old session under it.
-    const recreate = Effect.fn("MirrorEngine.recreate")(
-      (session: string, input: MirrorCreateInput) =>
-        ledger.whileRecreating(
-          session,
-          Effect.gen(function* () {
-            // Undone however the create ends short of a session, an
-            // interrupt included.
-            const next = yield* Effect.acquireUseRelease(
-              fromDaemon(daemon.pause(session)),
-              () => create(input),
-              (_, exit) =>
-                Exit.isSuccess(exit)
-                  ? Effect.void
-                  : Effect.ignoreCause(daemon.resume(session), {
-                      log: "Warn",
-                      message: "[mirror] the paused session didn't resume",
-                    }),
-            );
-            // An old session already gone by now was ended all the same.
-            yield* fromDaemon(daemon.terminate(session)).pipe(
-              Effect.catch((error) =>
-                Effect.flatMap(daemon.sessions, (sessions) =>
-                  sessions.some((raw) => raw.session === session)
-                    ? Effect.fail(error)
-                    : Effect.void,
-                ),
-              ),
-            );
-            follower.rename(session, next);
-            return next;
-          }),
-        ),
-    );
-
-    // An explicit stop ends the agreement too, or the git follower's
-    // store keeps one entry per session ever created. A terminate that
-    // failed still ends it: the session is doomed either way, and the
-    // entry would otherwise outlive the daemon that could ever match it.
-    const terminate = Effect.fn("MirrorEngine.terminate")((session: string) =>
-      fromDaemon(daemon.terminate(session)).pipe(
-        Effect.asVoid,
-        Effect.ensuring(Effect.sync(() => follower.forget(session))),
-      ),
-    );
-
-    // A transfer session no pull here is waiting on (MirrorLedger's
-    // isOrphanedTransfer) is ended on sight, since no mirror surface
-    // would ever show it, off the running daemon's own snapshot. Each is
-    // asked once while its end is under way or done, and the engine drops
-    // it from the next snapshot; one whose end failed is asked again.
-    const reaped = new Set<string>();
-    const reapOrphanedTransfers = Effect.gen(function* () {
-      if (!(yield* daemon.fresh)) return;
-      yield* Effect.forEach(
-        (yield* daemon.sessions).filter(
-          (session) =>
-            ledger.isOrphanedTransfer(session) && !reaped.has(session.session),
-        ),
-        (session) => {
-          reaped.add(session.session);
-          return terminate(session.session).pipe(
-            Effect.catch((error) =>
-              Effect.sync(() => reaped.delete(session.session)).pipe(
-                Effect.andThen(
-                  Effect.logWarning(
-                    `[mirror] could not end an orphaned transfer session: ${error.message}`,
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-        { discard: true },
-      );
-    });
-
-    // The engine persists its sessions, so they come back on every
-    // spawn: a boot that starts signed out, or a daemon that was down at
-    // the sign-out, would otherwise resume mirroring with peers of an
-    // account this device is not on. Nothing is asked before the shell's
-    // first report, which asks itself. After it, each session is asked
-    // about one time, so the snapshots while it ends do not end it
-    // again. leaveAccount ends what was running itself and resets the
-    // asked set, so a session reported after it is asked again. Only the
-    // running daemon's own snapshot is asked about: the one that stands
-    // through a restart can end nothing.
-    const endAll = withEngine(
-      ledger.endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL),
-    );
-    const asked = new Set<string>();
-    const endSignedOut = Effect.gen(function* () {
-      const { reported, facts } = yield* account.current;
-      if (!reported || !(yield* daemon.fresh)) return;
-      const unasked = (yield* daemon.sessions).filter(
-        (raw) => !asked.has(raw.session),
-      );
-      if (unasked.length === 0) return;
-      for (const raw of unasked) asked.add(raw.session);
-      if (facts === null) runFork(Effect.ignore(endAll));
-    });
-    yield* account.changes.pipe(
-      Stream.filter((current) => current.reported),
-      Stream.take(1),
-      Stream.runForEach(() => endSignedOut),
-      Effect.forkScoped,
-    );
-
-    const engine = MirrorEngine.of({
-      status: daemon.status,
-      failure: daemon.failure,
-      sessions: daemon.sessions,
-      fresh: daemon.fresh,
-      create,
-      recreate,
-      terminate,
-      pause: Effect.fn("MirrorEngine.pause")((session: string) =>
-        Effect.asVoid(fromDaemon(daemon.pause(session))),
-      ),
-      resume: Effect.fn("MirrorEngine.resume")((session: string) =>
-        Effect.asVoid(fromDaemon(daemon.resume(session))),
-      ),
-      gitStatus: (session) => follower.statusOf(session),
-      refreshGit: Effect.fn("MirrorEngine.refreshGit")((session: string) =>
-        follower.reconcileNow(session),
-      ),
-      history: (localWorktreeId) => history.eventsFor(localWorktreeId),
-      noteEvent: (localWorktreeId, kind, detail) =>
-        history.note(localWorktreeId, kind, detail),
-      forgetHistory: (localWorktreeId) => history.forget(localWorktreeId),
-      moveHistory: (from, to) => history.move(from, to),
-      localProjectChanged: (projectId) =>
-        follower.onLocalProjectChanged(projectId),
-      peerProjectChanged: (deviceId, projectId) =>
-        follower.onPeerProjectChanged(deviceId, projectId),
-      peerWorktreeChanged: (deviceId, projectId, worktreeId) =>
-        follower.onPeerWorktreeChanged(deviceId, projectId, worktreeId),
-      leaveAccount: endAll.pipe(
-        Effect.timeoutOrElse({
-          duration: LEAVE_ACCOUNT_LIMIT,
-          orElse: () => Effect.void,
-        }),
-        // After the sweep, so a snapshot during it does not sweep again.
-        Effect.ensuring(Effect.sync(() => asked.clear())),
-        Effect.withSpan("MirrorEngine.leaveAccount"),
-      ),
-    });
-
-    // A peer coming to take this device's calls (its link up, both of
-    // its switches on): git looks again, the bookkeeping re-opens what
-    // waited on the peer (a moved original's sessions, MirrorLedger's
-    // settleMirrorBookkeeping), or ends it past 2 minutes of waiting, and
-    // the sessions into it that wait on the link, that nobody paused and
-    // that no re-open holds reconnect at once, not at the engine's next
-    // retry. Side by side, each admission on its own: a resume waits on
-    // its reconnect, and one asked off a snapshot older than a pause
-    // would undo the pause.
-    const admit = (deviceId: string) =>
+  // A project's git state moved here (the git watcher, the app's own
+  // git commands, a peer's follower landing its side), or on a peer, or
+  // the index of a worktree a peer serves: the follower looks at the
+  // sessions it touches.
+  const moved = yield* HostPushes.payloads(gitContract, "projectChanged");
+  yield* moved.pipe(
+    Stream.runForEach(({ projectId }) =>
+      Effect.sync(() => follower.onLocalProjectChanged(projectId)),
+    ),
+    Effect.forkScoped,
+  );
+  // A store write the terminal or the app made (git:externalChange) may be
+  // a title `sm describe` wrote, announced like a git change so a mirror
+  // of the worktree carries it now (gitFollow.ts). Which worktree it was
+  // is not told, so every mirrored project is.
+  const written = yield* HostPushes.payloads(gitContract, "externalChange");
+  yield* written.pipe(
+    Stream.runForEach(() =>
       Effect.gen(function* () {
-        follower.onPeerAdmitted(deviceId);
-        runFork(Effect.ignore(withEngine(ledger.settleMirrorBookkeeping)));
-        const waiting = (yield* daemon.sessions).filter(
-          (raw) =>
-            raw.deviceId === deviceId &&
-            !raw.paused &&
-            LINK_LOST.has(raw.status) &&
-            !ledger.isRecreating(raw.session),
+        const mirrored = new Set(
+          (yield* daemon.sessions)
+            .map((session) => session.labels[MIRROR_LABEL_LOCAL_PROJECT])
+            .filter((projectId) => projectId !== undefined),
         );
-        yield* Effect.forEach(
-          waiting,
-          (raw) =>
-            Effect.ignoreCause(daemon.resume(raw.session), {
-              log: "Warn",
-              message: "[mirror] a session didn't reconnect",
-            }),
-          { concurrency: "unbounded", discard: true },
-        );
-      });
-    yield* reach.admissions.pipe(
-      Stream.runForEach((deviceId) =>
-        Effect.sync(() => runFork(admit(deviceId))),
-      ),
-      Effect.forkScoped,
-    );
+        for (const projectId of mirrored) {
+          yield* pushes.publish(gitContract, "projectChanged", { projectId });
+        }
+      }),
+    ),
+    Effect.forkScoped,
+  );
+  const peerPushes = yield* HostPushes.payloads(hubContract, "peerPush");
+  yield* peerPushes.pipe(
+    Stream.runForEach(({ deviceId, channel, payload }) =>
+      Effect.sync(() => {
+        if (channel === "git:projectChanged" && isProjectScoped(payload)) {
+          follower.onPeerProjectChanged(deviceId, payload.projectId);
+        } else if (channel === "mirror:gitChanged") {
+          const worktree = decodeMirrorWorktree(payload);
+          if (Option.isSome(worktree)) {
+            follower.onPeerWorktreeChanged(
+              deviceId,
+              worktree.value.projectId,
+              worktree.value.worktreeId,
+            );
+          }
+        }
+      }),
+    ),
+    Effect.forkScoped,
+  );
 
-    // Every snapshot: the follower compares the session set itself (one
-    // that only moved a cycle count is a no-op there), and the history,
-    // the orphaned transfers, the stops that waited for the daemon,
-    // originals gone behind the app's back, sessions a re-open replaced
-    // (MirrorLedger.ts) and the sessions of a device on no account are
-    // looked at again.
-    yield* daemon.changes.pipe(
-      Stream.runForEach(() =>
-        Effect.sync(() => {
-          follower.sessionsChanged();
-          runFork(
-            Effect.ignore(
-              Effect.all([
-                observeHistory,
-                reapOrphanedTransfers,
-                withEngine(ledger.settleMirrorBookkeeping),
-              ]),
+  // The daemon's sessions that are mirrors, into their threads, off its
+  // own snapshots: the one that stands through a restart moves nothing,
+  // and the sessions the next run brings back are seen afresh.
+  let restarted = false;
+  const observeHistory = Effect.gen(function* () {
+    if (!(yield* daemon.fresh)) {
+      restarted = true;
+      return;
+    }
+    if (restarted) {
+      restarted = false;
+      history.restarted();
+    }
+    history.observe(yield* mirrorSessions(daemon), (session) =>
+      follower.statusOf(session),
+    );
+  });
+
+  const fromDaemon = Effect.mapError(
+    (error: MirrorDaemon.MirrorDaemonError) =>
+      new MirrorError({ reason: error.message }),
+  );
+
+  const create = Effect.fn("MirrorEngine.create")(function* (
+    input: MirrorCreateInput,
+  ) {
+    // A start's long leg (the copy across) can straddle a sign-out;
+    // the sweep that ran meanwhile found nothing, so this is the last
+    // gate before a session with a peer of no account.
+    if ((yield* account.current).facts === null) {
+      return yield* new MirrorError({
+        reason: "This device is signed out, so it cannot mirror.",
+      });
+    }
+    return yield* fromDaemon(daemon.create(input));
+  });
+
+  // The old session is paused, not ended, until the new one is up: two
+  // running sessions on one root would fight, but a paused one holds
+  // nothing, and a create that fails (peer away) then leaves the
+  // mirror as it was instead of gone with no way to re-open it. The
+  // agreement moves to the new id, so the follower picks up where it
+  // was instead of starting from the no-agreement fallback. Held as
+  // recreating throughout, so the leftover sweep (MirrorLedger's
+  // settleMirrorBookkeeping) does not end the old session under it.
+  const recreate = Effect.fn("MirrorEngine.recreate")(
+    (session: string, input: MirrorCreateInput) =>
+      ledger.whileRecreating(
+        session,
+        Effect.gen(function* () {
+          // Undone however the create ends short of a session, an
+          // interrupt included.
+          const next = yield* Effect.acquireUseRelease(
+            fromDaemon(daemon.pause(session)),
+            () => create(input),
+            (_, exit) =>
+              Exit.isSuccess(exit)
+                ? Effect.void
+                : Effect.ignoreCause(daemon.resume(session), {
+                    log: "Warn",
+                    message: "[mirror] the paused session didn't resume",
+                  }),
+          );
+          // An old session already gone by now was ended all the same.
+          yield* fromDaemon(daemon.terminate(session)).pipe(
+            Effect.catch((error) =>
+              Effect.flatMap(daemon.sessions, (sessions) =>
+                sessions.some((raw) => raw.session === session)
+                  ? Effect.fail(error)
+                  : Effect.void,
+              ),
             ),
           );
-        }).pipe(
-          Effect.catchDefect((defect) =>
-            Effect.logWarning(
-              `[mirror] a daemon change went unread: ${messageOf(defect)}`,
+          follower.rename(session, next);
+          return next;
+        }),
+      ),
+  );
+
+  // An explicit stop ends the agreement too, or the git follower's
+  // store keeps one entry per session ever created. A terminate that
+  // failed still ends it: the session is doomed either way, and the
+  // entry would otherwise outlive the daemon that could ever match it.
+  const terminate = Effect.fn("MirrorEngine.terminate")((session: string) =>
+    fromDaemon(daemon.terminate(session)).pipe(
+      Effect.asVoid,
+      Effect.ensuring(Effect.sync(() => follower.forget(session))),
+    ),
+  );
+
+  // A transfer session no pull here is waiting on (MirrorLedger's
+  // isOrphanedTransfer) is ended on sight, since no mirror surface
+  // would ever show it, off the running daemon's own snapshot. Each is
+  // asked once while its end is under way or done, and the engine drops
+  // it from the next snapshot; one whose end failed is asked again.
+  const reaped = new Set<string>();
+  const reapOrphanedTransfers = Effect.gen(function* () {
+    if (!(yield* daemon.fresh)) return;
+    yield* Effect.forEach(
+      (yield* daemon.sessions).filter(
+        (session) =>
+          ledger.isOrphanedTransfer(session) && !reaped.has(session.session),
+      ),
+      (session) => {
+        reaped.add(session.session);
+        return terminate(session.session).pipe(
+          Effect.catch((error) =>
+            Effect.sync(() => reaped.delete(session.session)).pipe(
+              Effect.andThen(
+                Effect.logWarning(
+                  `[mirror] could not end an orphaned transfer session: ${error.message}`,
+                ),
+              ),
             ),
           ),
-          Effect.andThen(endSignedOut),
-        ),
-      ),
-      Effect.forkScoped,
+        );
+      },
+      { discard: true },
     );
-
-    // Every move the store records or forgets: a session waiting on its
-    // peer to re-open on a moved original is paused, so no snapshot
-    // comes for it, and a worktree made at its old folder meanwhile ends
-    // it (MirrorLedger's settleMirrorBookkeeping).
-    yield* (yield* (yield* StoreChanges.StoreChanges).subscribe).pipe(
-      Stream.filter((tables) => tables.has("wt_moves")),
-      Stream.runForEach(() =>
-        Effect.sync(() =>
-          runFork(Effect.ignore(withEngine(ledger.settleMirrorBookkeeping))),
-        ),
-      ),
-      Effect.forkScoped,
-    );
-
-    return engine;
   });
+
+  // The engine persists its sessions, so they come back on every
+  // spawn: a boot that starts signed out, or a daemon that was down at
+  // the sign-out, would otherwise resume mirroring with peers of an
+  // account this device is not on. Nothing is asked before the shell's
+  // first report, which asks itself. After it, each session is asked
+  // about one time, so the snapshots while it ends do not end it
+  // again. leaveAccount ends what was running itself and resets the
+  // asked set, so a session reported after it is asked again. Only the
+  // running daemon's own snapshot is asked about: the one that stands
+  // through a restart can end nothing.
+  const endAll = withEngine(
+    ledger.endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL),
+  );
+  const asked = new Set<string>();
+  const endSignedOut = Effect.gen(function* () {
+    const { reported, facts } = yield* account.current;
+    if (!reported || !(yield* daemon.fresh)) return;
+    const unasked = (yield* daemon.sessions).filter(
+      (raw) => !asked.has(raw.session),
+    );
+    if (unasked.length === 0) return;
+    for (const raw of unasked) asked.add(raw.session);
+    if (facts === null) runFork(Effect.ignore(endAll));
+  });
+  yield* account.changes.pipe(
+    Stream.filter((current) => current.reported),
+    Stream.take(1),
+    Stream.runForEach(() => endSignedOut),
+    Effect.forkScoped,
+  );
+
+  const engine = MirrorEngine.of({
+    status: daemon.status,
+    failure: daemon.failure,
+    sessions: daemon.sessions,
+    fresh: daemon.fresh,
+    create,
+    recreate,
+    terminate,
+    pause: Effect.fn("MirrorEngine.pause")((session: string) =>
+      Effect.asVoid(fromDaemon(daemon.pause(session))),
+    ),
+    resume: Effect.fn("MirrorEngine.resume")((session: string) =>
+      Effect.asVoid(fromDaemon(daemon.resume(session))),
+    ),
+    gitStatus: (session) => follower.statusOf(session),
+    refreshGit: Effect.fn("MirrorEngine.refreshGit")((session: string) =>
+      follower.reconcileNow(session),
+    ),
+    history: (localWorktreeId) => history.eventsFor(localWorktreeId),
+    noteEvent: (localWorktreeId, kind, detail) =>
+      history.note(localWorktreeId, kind, detail),
+    forgetHistory: (localWorktreeId) => history.forget(localWorktreeId),
+    moveHistory: (from, to) => history.move(from, to),
+    leaveAccount: endAll.pipe(
+      Effect.timeoutOrElse({
+        duration: LEAVE_ACCOUNT_LIMIT,
+        orElse: () => Effect.void,
+      }),
+      // After the sweep, so a snapshot during it does not sweep again.
+      Effect.ensuring(Effect.sync(() => asked.clear())),
+      Effect.withSpan("MirrorEngine.leaveAccount"),
+    ),
+  });
+
+  // A peer coming to take this device's calls (its link up, both of
+  // its switches on): git looks again, the bookkeeping re-opens what
+  // waited on the peer (a moved original's sessions, MirrorLedger's
+  // settleMirrorBookkeeping), or ends it past 2 minutes of waiting, and
+  // the sessions into it that wait on the link, that nobody paused and
+  // that no re-open holds reconnect at once, not at the engine's next
+  // retry. Side by side, each admission on its own: a resume waits on
+  // its reconnect, and one asked off a snapshot older than a pause
+  // would undo the pause.
+  const admit = (deviceId: string) =>
+    Effect.gen(function* () {
+      follower.onPeerAdmitted(deviceId);
+      runFork(Effect.ignore(withEngine(ledger.settleMirrorBookkeeping)));
+      const waiting = (yield* daemon.sessions).filter(
+        (raw) =>
+          raw.deviceId === deviceId &&
+          !raw.paused &&
+          LINK_LOST.has(raw.status) &&
+          !ledger.isRecreating(raw.session),
+      );
+      yield* Effect.forEach(
+        waiting,
+        (raw) =>
+          Effect.ignoreCause(daemon.resume(raw.session), {
+            log: "Warn",
+            message: "[mirror] a session didn't reconnect",
+          }),
+        { concurrency: "unbounded", discard: true },
+      );
+    });
+  yield* reach.admissions.pipe(
+    Stream.runForEach((deviceId) =>
+      Effect.sync(() => runFork(admit(deviceId))),
+    ),
+    Effect.forkScoped,
+  );
+
+  // Every snapshot: the follower compares the session set itself (one
+  // that only moved a cycle count is a no-op there), and the history,
+  // the orphaned transfers, the stops that waited for the daemon,
+  // originals gone behind the app's back, sessions a re-open replaced
+  // (MirrorLedger.ts) and the sessions of a device on no account are
+  // looked at again.
+  yield* daemon.changes.pipe(
+    Stream.runForEach(() =>
+      Effect.sync(() => {
+        follower.sessionsChanged();
+        runFork(
+          Effect.ignore(
+            Effect.all([
+              observeHistory,
+              reapOrphanedTransfers,
+              withEngine(ledger.settleMirrorBookkeeping),
+            ]),
+          ),
+        );
+      }).pipe(
+        Effect.catchDefect((defect) =>
+          Effect.logWarning(
+            `[mirror] a daemon change went unread: ${messageOf(defect)}`,
+          ),
+        ),
+        Effect.andThen(endSignedOut),
+      ),
+    ),
+    Effect.forkScoped,
+  );
+
+  // Every move the store records or forgets: a session waiting on its
+  // peer to re-open on a moved original is paused, so no snapshot
+  // comes for it, and a worktree made at its old folder meanwhile ends
+  // it (MirrorLedger's settleMirrorBookkeeping).
+  yield* (yield* (yield* StoreChanges.StoreChanges).subscribe).pipe(
+    Stream.filter((tables) => tables.has("wt_moves")),
+    Stream.runForEach(() =>
+      Effect.sync(() =>
+        runFork(Effect.ignore(withEngine(ledger.settleMirrorBookkeeping))),
+      ),
+    ),
+    Effect.forkScoped,
+  );
+
+  return engine;
+});
 
 // An engine that failed to start (its stores unreadable) answers as
 // unavailable and refuses every change, saying why, and the rest of the
@@ -449,22 +506,17 @@ const unavailable = (cause: Cause.Cause<unknown>) => {
     noteEvent: () => {},
     forgetHistory: () => {},
     moveHistory: () => {},
-    localProjectChanged: () => {},
-    peerProjectChanged: () => {},
-    peerWorktreeChanged: () => {},
     leaveAccount: Effect.void,
   });
 };
 
-export const layer = (options: Parameters<typeof make>[0]) =>
-  Layer.effect(
-    MirrorEngine,
-    make(options).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logError(
-          "[boot] the mirror engine failed to start:",
-          cause,
-        ).pipe(Effect.as(unavailable(cause))),
+export const layer = Layer.effect(
+  MirrorEngine,
+  make.pipe(
+    Effect.catchCause((cause) =>
+      Effect.logError("[boot] the mirror engine failed to start:", cause).pipe(
+        Effect.as(unavailable(cause)),
       ),
     ),
-  );
+  ),
+);

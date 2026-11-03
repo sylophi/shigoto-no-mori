@@ -136,9 +136,7 @@ async function harness(answer: (request: Request) => Answer) {
   );
   trackTest(() => daemonRuntime.dispose());
   const runtime = ManagedRuntime.make(
-    MirrorEngineLayer.layer({
-      projectChanged: () => {},
-    }).pipe(
+    MirrorEngineLayer.layer.pipe(
       Layer.provideMerge(HostAccount.layer),
       Layer.provideMerge(Layer.succeedContext(await daemonRuntime.context())),
     ),

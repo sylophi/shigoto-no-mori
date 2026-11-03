@@ -3,17 +3,14 @@
 // on. It depends on nothing of the shell's (main/shellLayer.ts), which
 // starts it. Each subsystem here is a lifetime: acquiring it starts the
 // subsystem, and the scope closing stops it.
-import { gitContract } from "@shigomori/contracts/modules/git";
-import { scriptsContract } from "@shigomori/contracts/modules/scripts";
-import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
-import { messageOf } from "@shigomori/engine/errorDocument";
-import { log } from "@shared/log";
+import { updaterContract } from "@shigomori/contracts/modules/updater";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import * as DeviceId from "@host/lib/config/DeviceId";
 import * as HostAccount from "@host/lib/HostAccount";
+import * as HostPushes from "@host/lib/HostPushes";
 import { DataDirHolders } from "@host/lib/DataDirHolders";
 import * as HostRpc from "@host/socket/hostRpc";
 import * as Loopback from "@host/socket/Loopback";
@@ -24,9 +21,7 @@ import * as Engine from "@host/lib/Engine";
 import * as StoreChanges from "@host/lib/storeChanges";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import { MirrorsOnDelete } from "@shigomori/engine/MirrorsOnDelete";
-import * as Terrier from "@shigomori/engine/Terrier";
 import { mirrorsOnDelete } from "@host/mirror/onDelete";
-import { MIRROR_LABEL_LOCAL_PROJECT } from "@host/mirror/registry";
 import * as Shell from "@host/lib/Shell";
 import * as CliShell from "@host/lib/cli/shell";
 import * as GithubCli from "@host/lib/githubCli/GithubCli";
@@ -46,28 +41,25 @@ import * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
 import * as Moves from "@host/lib/sync/Moves";
 import * as FileSyncRunner from "@host/fileSync/runner";
 import * as MirrorGateway from "@host/mirror/MirrorGateway";
+import * as MirrorEngineLayer from "@host/mirror/MirrorEngineLayer";
 import * as MirrorLedger from "@host/mirror/MirrorLedger";
+import * as PeerRemovals from "@host/mirror/peerRemovals";
 import * as ScratchIndex from "@host/mirror/ScratchIndex";
+import * as PortForwards from "@host/portForward/PortForwards";
+import * as Sharing from "@host/lib/Sharing";
 import {
-  announceProjectChanged,
   hostHandlers,
   loopbackHandlers,
   mirrorChangesLayer,
   mirrorDaemonChangesLayer,
   mirrorDaemonLayer,
-  mirrorEngineLayer,
-  mirrorSessionsNow,
-  portForwardsLayer,
   rootServices,
   scriptsChangedLayer,
 } from "./handlers";
 import {
-  broadcastAll,
   deviceLinkLayer,
   loopbackLayer,
-  pushesLayer,
   remotePlanesLayer,
-  sharingLayer,
   tunnelLayer,
   followDeviceSettings,
   refreshDirectHost,
@@ -77,64 +69,6 @@ import * as Migration from "@shigomori/engine/Migration";
 import { hostFacts } from "./facts";
 import * as Graph from "./graph";
 import * as MigrationShell from "./migration";
-
-// A store write, the terminal's or the app's own, reaches every window
-// and every viewing device as an explicit invalidation broadcast.
-// Window focus will not do: React Query refetches only on a blur to
-// focus transition, and the window may be focused the whole time an
-// agent works in a terminal beside it.
-function onExternalStateChange() {
-  broadcastAll(gitContract, "externalChange", undefined);
-  // A title `sm describe` wrote, announced like a git change so a
-  // mirror of the worktree carries it now (host/mirror/gitFollow.ts).
-  // Which worktree it was is not told, so every mirrored project is.
-  const mirrored = new Set(
-    mirrorSessionsNow()
-      .map((session) => session.labels[MIRROR_LABEL_LOCAL_PROJECT])
-      .filter((projectId) => projectId !== undefined),
-  );
-  for (const projectId of mirrored) announceProjectChanged(projectId);
-  // The terminal may have added or removed a project: re-read the list,
-  // terrier's included, which it may have written to (a project gone
-  // takes its scripts, and a worktree or project gone its terminals),
-  // then follow it with the git-directory watches.
-  // A watcher that failed to start has nothing to follow.
-  void Graph.run(
-    Effect.flatMap(Terrier.Terrier, (terrier) => terrier.invalidate).pipe(
-      Effect.andThen(
-        Effect.flatMap(
-          Scripts.Scripts,
-          (scripts) => scripts.reapRemovedProjects,
-        ),
-      ),
-      Effect.andThen(Effect.serviceOption(GitWatcher.GitWatcher)),
-      Effect.flatMap(
-        Option.match({
-          onNone: () => Effect.void,
-          onSome: (watcher) => watcher.reconcile,
-        }),
-      ),
-    ),
-  ).catch(() => {});
-  // The app's only chance to notice an `sm rm` run in a terminal, which
-  // leaves a script the app started there running in a deleted cwd and
-  // holding its port.
-  void Graph.run(Effect.flatMap(Scripts.Scripts, (it) => it.reapRemoved))
-    .then((removed) => {
-      for (const worktree of removed) {
-        broadcastAll(scriptsContract, "stoppedForRemovedWorktree", {
-          worktreeId: worktree.worktreeId,
-          worktreeName: worktree.worktreeName,
-          scriptCount: worktree.scriptCount,
-        });
-      }
-    })
-    .catch((error: unknown) => {
-      log.warn(
-        `[scripts] reap after external change failed: ${messageOf(error)}`,
-      );
-    });
-}
 
 // A layer that failed to start is logged and the rest of the graph
 // still comes up, like a lifetime (lifetimes.ts).
@@ -151,21 +85,9 @@ const logged = <A, R>(
     ),
   );
 
-const storeChanges = logged(
-  "the store's changes",
-  StoreChanges.layer(onExternalStateChange),
-);
-
 // Git state inside every project (commits, checkouts, refs written by
 // any tool), as a project-scoped ping on every wire.
-const gitWatcher = logged(
-  "the git watcher",
-  GitWatcher.layer({
-    onChange: announceProjectChanged,
-    onFilesChanged: (projectId) =>
-      broadcastAll(worktreesContract, "filesChanged", { projectId }),
-  }),
-);
+const gitWatcher = logged("the git watcher", GitWatcher.layer);
 
 // The hub socket and the direct plane, and the device link's listener,
 // which follows the same enrollment condition. Both connect on the
@@ -179,7 +101,7 @@ const remotePlanes = logged("the device hub", remotePlanesLayer);
 // persisted sessions the moment it is up, so it starts with the app.
 // The sessions it resumes are swept for a device on no account once the
 // shell's first account report lands (MirrorEngineLayer.ts).
-const mirrors = mirrorEngineLayer.pipe(
+const mirrors = MirrorEngineLayer.layer.pipe(
   Layer.provideMerge(mirrorDaemonChangesLayer),
   Layer.provideMerge(mirrorDaemonLayer),
   Layer.provideMerge(MirrorGateway.layer),
@@ -211,6 +133,21 @@ const dataDirHolders = Layer.effect(
   }),
 );
 
+// The updater's state as the shell reports it, to every window and
+// peer.
+const updaterStates = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const pushes = yield* HostPushes.HostPushes;
+    const states = yield* (yield* Shell.Shell).updater.states;
+    yield* states.pipe(
+      Stream.runForEach((state) =>
+        pushes.publish(updaterContract, "state", state),
+      ),
+      Effect.forkScoped,
+    );
+  }),
+);
+
 // What the host answers from caches: other tools' (gh, its PR maps
 // and port-pool) and the login shell's config place.
 const cachedAnswers = Layer.mergeAll(
@@ -230,19 +167,22 @@ const foundation = (
     // The scratch copies of the index the mirrors' git reads take, for
     // the follower and the peers' calls alike.
     Layer.provideMerge(ScratchIndex.layer),
-    // Every push the host makes and every store write, which the wires
-    // and the views read, and the views' shared reads.
+    // The views' shared reads, over every push the host makes and every
+    // store write.
     Layer.provideMerge(Views.layer),
     // The engine's deletes stop the mirrors of what they take first.
     Layer.provideMerge(Layer.effect(MirrorsOnDelete, mirrorsOnDelete("both"))),
     // What the host keeps about its mirrors while it works on them, which
     // those deletes, the scripts' tombstone and the mirror engine share.
     Layer.provideMerge(MirrorLedger.layer),
-    Layer.provideMerge(pushesLayer),
-    Layer.provideMerge(EngineStoreChanges.layer),
-    // What the root provides from its own wiring: the peers' reach, the
-    // mirror signals and the account's peers.
+    Layer.provideMerge(updaterStates),
+    // What the root provides from its own wiring: the peers' reach and
+    // the account's peers.
     Layer.provideMerge(rootServices),
+    // Every push the host makes, which the wires, the views and the
+    // host's own followers read, and every store write.
+    Layer.provideMerge(HostPushes.layer),
+    Layer.provideMerge(EngineStoreChanges.layer),
     // This device's id, which the wires above name themselves by, read
     // from the store once.
     Layer.provideMerge(DeviceId.layer),
@@ -319,7 +259,7 @@ export const layer = (options: {
     Layer.provideMerge(scriptGate),
     // Port forwards start on demand. Stopping them before the remote
     // planes gives their best-effort closes a socket to ride out on.
-    Layer.provideMerge(portForwardsLayer),
+    Layer.provideMerge(PortForwards.layer),
     // The loopback the terminal reaches the app on. It unpublishes its
     // address first as it stops, so a terminal run during the quit
     // reads "not running" instead of dialing a closing listener.
@@ -333,6 +273,9 @@ export const layer = (options: {
         ),
       ),
     ),
+    // A peer's worktree gone, which ends the mirrors into it and takes
+    // the originals here a delete of both sides stood for.
+    Layer.provideMerge(PeerRemovals.layer),
     // The worktree moves and removals, around the scripts and terminals
     // they stop and refuse for and the mirrors they carry or end, and the
     // carry-over reads.
@@ -347,16 +290,14 @@ export const layer = (options: {
     // The listener peers dial, which connected peers see go away
     // cleanly.
     Layer.provideMerge(deviceLinkLayer.pipe(Layer.provide(served))),
-    // The switch the listener's gate reads.
-    Layer.provideMerge(sharingLayer),
+    // The switch the listener's gate reads. Its changes go to this
+    // device's windows and, the push being remote, to every peer.
+    Layer.provideMerge(Sharing.layer),
+    // Every store write, the terminal's or the app's own, as pushes, and
+    // what the scripts and the projects' git watches follow of it.
+    Layer.provideMerge(logged("the store's changes", StoreChanges.layer)),
     Layer.provideMerge(gitWatcher),
-    Layer.provideMerge(storeChanges),
-    Layer.provideMerge(
-      BackgroundFetch.layer({
-        broadcast: broadcastAll,
-        announceProjectChanged,
-      }),
-    ),
+    Layer.provideMerge(BackgroundFetch.layer),
     // Installing the CLI link is a Settings action. A start only
     // repairs an installed link whose target moved (an app update,
     // another checkout).

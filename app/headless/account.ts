@@ -14,21 +14,24 @@ import {
   isHubRefusal,
 } from "@shigomori/contracts/errors";
 import type { AccountStatus } from "@shigomori/contracts/modules/account";
+import { hubContract } from "@shigomori/contracts/modules/hub";
 import {
   loginContract,
   type LoginStatus,
 } from "@shigomori/contracts/modules/login";
 import { current as currentPlatform } from "@shigomori/engine/platform";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
 import {
   listed,
   matchDevices,
   nameOf,
   type Named,
 } from "@host/lib/control/plan";
+import * as HostPushes from "@host/lib/HostPushes";
 import { applyAccount, noteAccountDevices } from "@host/process/handlers";
-import { onHubStatus } from "@host/process/wires";
 import * as HostRpc from "@host/socket/hostRpc";
 import { createAccountStore } from "@shared/account/credentialFile";
 import { defaultDesktopDeviceName } from "@shared/account/defaultDeviceName";
@@ -217,18 +220,34 @@ export function headlessAccount(facts: HostFacts) {
     // The login contract, which the loopback serves.
     login,
     setAcceptsCommands,
+    // Removed from the account, it signs out, as a window does
+    // (ClerkAccountSync), so `sm login` can sign it in afresh. Heard from
+    // as the host comes up, before boot dials the hub, since a revoked
+    // device is blocked at its first ticket and the block isn't said
+    // again.
+    signsOutRevoked: Layer.effectDiscard(
+      Effect.gen(function* () {
+        const statuses = yield* HostPushes.payloads(
+          hubContract,
+          "statusChanged",
+        );
+        yield* statuses.pipe(
+          Stream.runForEach(({ socket }) =>
+            Effect.sync(() => {
+              if (!credentialRevoked(socket) || store.read() === null) return;
+              void Promise.resolve(account.signOut(undefined, null)).catch(
+                () => {},
+              );
+            }),
+          ),
+          Effect.forkScoped,
+        );
+      }),
+    ),
     // The account as this start finds it, and a revoke a sign-out
     // couldn't deliver, delivered now.
     boot: async (deviceId: string) => {
       deviceIdIs(deviceId);
-      // Removed from the account, it signs out, as a window does
-      // (ClerkAccountSync), so `sm login` can sign it in afresh. Heard
-      // from before the hub is dialed, since a revoked device is blocked
-      // at its first ticket and the block isn't said again.
-      onHubStatus(({ socket }) => {
-        if (!credentialRevoked(socket) || store.read() === null) return;
-        void Promise.resolve(account.signOut(undefined, null)).catch(() => {});
-      });
       await tellHost();
       const parked = await retryParkedRevoke({
         config,

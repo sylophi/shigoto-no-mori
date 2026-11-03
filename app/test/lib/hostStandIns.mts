@@ -17,7 +17,6 @@ import * as Registry from "@shigomori/engine/Registry";
 import * as Shell from "../../host/lib/Shell.ts";
 import * as PeerReach from "../../host/ipc/PeerReach.ts";
 import { MirrorEngine } from "../../host/mirror/MirrorEngine.ts";
-import { MirrorSignals } from "../../host/mirror/MirrorSignals.ts";
 import * as PortForwards from "../../host/portForward/PortForwards.ts";
 import { inertMirrorImpl } from "./mirrorFakes.mts";
 
@@ -87,10 +86,6 @@ const standIns = Layer.mergeAll(
       noteEvent: (id, kind, detail) => mirror.noteEvent(id, kind, detail),
       forgetHistory: (id) => mirror.forgetHistory(id),
       moveHistory: (from, to) => mirror.moveHistory(from, to),
-      localProjectChanged: (id) => mirror.localProjectChanged(id),
-      peerProjectChanged: (peer, id) => mirror.peerProjectChanged(peer, id),
-      peerWorktreeChanged: (peer, projectId, worktreeId) =>
-        mirror.peerWorktreeChanged(peer, projectId, worktreeId),
       leaveAccount: Effect.suspend(() => mirror.leaveAccount),
     }),
   ),
@@ -137,6 +132,7 @@ const standIns = Layer.mergeAll(
         update: () => Effect.void,
         state: Effect.succeed({ kind: "idle" }),
         noteState: () => Effect.void,
+        states: Effect.succeed(Stream.never),
       },
       holdUpdater: () => Effect.succeed(null),
       resumeUpdater: Effect.void,
@@ -149,17 +145,7 @@ const standIns = Layer.mergeAll(
     }),
   ),
   Layer.succeed(DataDirHolders, DataDirHolders.of({ release: Effect.void })),
-  // Nothing the serving side tells reaches a window here.
-  Layer.succeed(
-    MirrorSignals,
-    MirrorSignals.of({
-      gitChanged: () => {},
-      gitApplied: () => {},
-    }),
-  ),
 );
 
 // The forwards are the real engine's, over the stood-in peers.
-export const layer = PortForwards.layer({ onChange: () => {} }).pipe(
-  Layer.provideMerge(standIns),
-);
+export const layer = PortForwards.layer.pipe(Layer.provideMerge(standIns));

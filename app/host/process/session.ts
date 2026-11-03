@@ -1,7 +1,6 @@
 // The shell's session with its host (packages/contracts/src/modules/
 // session.ts), on the loopback alone.
 import { sessionContract } from "@shigomori/contracts/modules/session";
-import { updaterContract } from "@shigomori/contracts/modules/updater";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as Scripts from "@host/lib/Scripts";
@@ -16,7 +15,7 @@ import { applyAccount, noteAccountDevices } from "./handlers";
 import * as Shell from "@host/lib/Shell";
 import * as WtFolder from "@shigomori/engine/WtFolder";
 import { asCall, changing } from "@host/lib/Engine";
-import { broadcastAll, probeRemoteConnections } from "./wires";
+import { probeRemoteConnections } from "./wires";
 
 // The root's own Promise work, for the session's calls.
 const onRoot = <A>(run: () => Promise<A>) =>
@@ -52,13 +51,7 @@ export const sessionHandlers = (options: {
       }),
     busy: () => Effect.flatMap(Scripts.Scripts, (scripts) => scripts.busy),
     updaterState: (state) =>
-      Effect.flatMap(Shell.Shell, (shell) =>
-        shell.updater.noteState(state),
-      ).pipe(
-        Effect.andThen(
-          Effect.sync(() => broadcastAll(updaterContract, "state", state)),
-        ),
-      ),
+      Effect.flatMap(Shell.Shell, (shell) => shell.updater.noteState(state)),
     // The user's agent on a guide session the shell minted for one of its
     // windows. Like a resume, it writes no state. A release's agent reads
     // the source at its tag, a dev build's the checkout it runs from.

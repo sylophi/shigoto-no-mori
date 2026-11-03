@@ -69,9 +69,6 @@ export const inertMirrorImpl = (
   noteEvent: () => {},
   forgetHistory: () => {},
   moveHistory: () => {},
-  localProjectChanged: () => {},
-  peerProjectChanged: () => {},
-  peerWorktreeChanged: () => {},
   leaveAccount: Effect.void,
   ...impl,
 });
