@@ -45,7 +45,7 @@ import type {
   MirrorApplyGitStateResult,
 } from "@shigomori/contracts/modules/mirror";
 import type { Project } from "@shigomori/contracts/schemas";
-import { messageOf } from "@shigomori/engine/errorDocument";
+import { clauseOf, messageOf } from "@shigomori/engine/errorDocument";
 import * as Deferred from "effect/Deferred";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -132,7 +132,7 @@ const readHeadFacts = Effect.fnUntraced(function* (worktreePath: string) {
       Effect.mapError(
         (error) =>
           new GitStateError({
-            reason: `the worktree has no commits yet (${messageOf(error)})`,
+            reason: `the worktree has no commits yet (${clauseOf(error)})`,
           }),
       ),
     );

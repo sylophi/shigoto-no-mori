@@ -3,7 +3,7 @@ import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { errorDocument, messageOf } from "../errorDocument.ts";
+import { clauseOf, errorDocument, messageOf } from "../errorDocument.ts";
 import * as Git from "../Git.ts";
 import * as GitHub from "../GitHub.ts";
 import type { MergeMethod } from "@shigomori/contracts/schemas/pullRequest";
@@ -206,7 +206,7 @@ export class MergeLostTrack extends Schema.TaggedError<MergeLostTrack>()(
   },
 ) {
   override get message(): string {
-    return `Lost track of PR #${this.number}: ${messageOf(this.cause)}. Run \`${this.command}\` again to keep waiting`;
+    return `Lost track of PR #${this.number}: ${clauseOf(this.cause)}. Run \`${this.command}\` again to keep waiting`;
   }
 }
 

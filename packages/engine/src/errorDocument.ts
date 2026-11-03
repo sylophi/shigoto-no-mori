@@ -42,6 +42,11 @@ export const messageOf = (error: unknown): string => {
   return errorMessageOf(error);
 };
 
+// What a failure says, set inside another sentence: with no stop of its
+// own.
+export const clauseOf = (error: unknown): string =>
+  messageOf(error).trimEnd().replace(/\.$/, "");
+
 // git's own words (its stderr), or why it never ran.
 const gitWordsOf = (error: Git.GitCommandError): string => {
   if (error.exitCode !== null) return Git.stderrOf(error);

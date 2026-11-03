@@ -11,7 +11,7 @@ import type * as PlatformError from "effect/PlatformError";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { errnoText, isNotFound } from "./platformErrors.ts";
-import { messageOf } from "./errorDocument.ts";
+import { clauseOf } from "./errorDocument.ts";
 import { entryExists } from "./entries.ts";
 import * as Git from "./Git.ts";
 import { splitZ } from "./gitParse.ts";
@@ -46,7 +46,7 @@ export class NoHead extends Schema.TaggedError<NoHead>()("NoHead", {
   cause: Schema.Defect(),
 }) {
   override get message(): string {
-    return `Couldn't resolve the worktree's HEAD (${messageOf(this.cause)}).`;
+    return `Couldn't resolve the worktree's HEAD (${clauseOf(this.cause)}).`;
   }
 }
 
@@ -111,13 +111,13 @@ export class ApplyRefused extends Schema.TaggedError<ApplyRefused>()(
       case "uncommitted":
         return `Worktree has ${count} uncommitted change(s) that apply would overwrite. Commit them first.`;
       case "unreadable":
-        return `Couldn't check for uncommitted changes (${messageOf(this.cause)}). Fix the worktree first.`;
+        return `Couldn't check for uncommitted changes (${clauseOf(this.cause)}). Fix the worktree first.`;
       case "overwrite": {
         const more = count > 3 ? ` and ${count - 3} more` : "";
         return `Applying would overwrite existing file(s) the capture adds: ${names.join(", ")}${more}. Move or delete them first.`;
       }
       case "overlap":
-        return `The worktree's local changes overlap the capture, so git refused to apply it. Commit or discard them first. (${messageOf(this.cause)})`;
+        return `The worktree's local changes overlap the capture, so git refused to apply it. Commit or discard them first. (${clauseOf(this.cause)})`;
     }
   }
 }

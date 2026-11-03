@@ -16,7 +16,7 @@
 import * as Effect from "effect/Effect";
 import { stamp } from "@shigomori/engine/keptAnswers";
 import { PeerReach } from "@host/ipc/PeerReach";
-import { messageOf } from "@shigomori/engine/errorDocument";
+import { clauseOf } from "@shigomori/engine/errorDocument";
 import type { MirrorEngine } from "../MirrorEngine";
 import {
   carriedLabels,
@@ -68,7 +68,7 @@ export const makeMoves = ({
               daemon.noteEvent(
                 moved.id,
                 "stopped",
-                `This worktree moved and the mirror could not re-open (${messageOf(error)}). The copy on the other device stays as a worktree.`,
+                `This worktree moved and the mirror could not re-open (${clauseOf(error)}). The copy on the other device stays as a worktree.`,
               );
             }),
           ),
