@@ -10,10 +10,7 @@ import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useConvertExternalWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
-import {
-  layoutInputsFor,
-  worktreePathFor,
-} from "@shigomori/contracts/git/worktreeLayout";
+import { worktreePathFor } from "@shigomori/contracts/git/worktreeLayout";
 import { ConvertExternalView } from "@shigomori/ui/views/convertExternal/ConvertExternalView.tsx";
 import { withToggled } from "@shigomori/ui/lib/toggleSet.ts";
 import { isConvertRefusedError } from "@shigomori/contracts/errors";
@@ -53,7 +50,12 @@ function ConvertExternalBody({ project }: { project: Project }) {
     // leaf.
     return tildify(
       worktreePathFor(
-        layoutInputsFor(config ?? null, project.path, device),
+        {
+          ...device,
+          layout: config?.worktreeLayout,
+          projectPath: project.path,
+          customPath: config?.customWorktreePath,
+        },
         adoptedDirName(worktree) || "(generated name)",
       ),
       home,

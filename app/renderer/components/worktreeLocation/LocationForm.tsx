@@ -2,7 +2,7 @@ import { useState } from "react";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useShigomoriPatch } from "@/hooks/config/useShigomoriPatch";
-import type { DeviceLayout } from "@shigomori/ui/views/worktreeLocation/layoutOptions.ts";
+import type { DeviceLayout } from "@shigomori/contracts/git/worktreeLayout";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useRelocateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useRelocationPlan } from "@/hooks/worktrees/useRelocationPlan";

@@ -4,10 +4,7 @@
 // create itself use, and tildified against that device's home. Null
 // until the device's runtime paths and settings are read.
 import type { Project } from "@shigomori/contracts/schemas";
-import {
-  layoutInputsFor,
-  worktreeBaseFor,
-} from "@shigomori/contracts/git/worktreeLayout";
+import { worktreeBase } from "@shigomori/contracts/git/worktreeLayout";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { tildify } from "@shigomori/contracts/projectPaths";
@@ -19,7 +16,12 @@ export function useWorktreeBaseLabel(
   const device = useDeviceLayout();
   if (!device) return null;
   return tildify(
-    worktreeBaseFor(layoutInputsFor(config ?? null, project.path, device)),
+    worktreeBase({
+      ...device,
+      layout: config?.worktreeLayout,
+      projectPath: project.path,
+      customPath: config?.customWorktreePath,
+    }),
     device.homedir,
   );
 }

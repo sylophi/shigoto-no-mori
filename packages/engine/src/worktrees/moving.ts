@@ -10,6 +10,7 @@
 // `wt/` and relocate's. A create refuses a path a record still names.
 import * as Cause from "effect/Cause";
 import { UnknownWorktreeError } from "@shigomori/contracts/errors";
+import { cleanPath } from "@shigomori/contracts/git/worktreeLayout";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -26,11 +27,7 @@ import { copyTree } from "../entries.ts";
 import { startOf, stillRunning, UNKNOWN_BIRTH } from "../processes.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
-import {
-  cleanPath,
-  stagingName,
-  worktreeIdFromPath,
-} from "../worktreeLayout.ts";
+import { stagingName, worktreeIdFromPath } from "../worktreeLayout.ts";
 import {
   type Located,
   type WorktreeIdentity,
