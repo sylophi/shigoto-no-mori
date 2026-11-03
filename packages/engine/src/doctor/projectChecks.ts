@@ -59,7 +59,7 @@ export const makeProjectChecks = ({
     const git = yield* Git.Git;
     const { home, binaryName } = paths;
     const {
-      capture,
+      run,
       lstatIn,
       statOf,
       isMissing,
@@ -404,17 +404,17 @@ export const makeProjectChecks = ({
               apply: Effect.forEach(
                 missing,
                 (worktree) =>
-                  Effect.flatMap(
-                    capture("port-pool", ["ensure", worktree.path]),
-                    ({ code }) =>
-                      code === 0
-                        ? Effect.void
-                        : Effect.fail(
-                            new LeaseRefused({
+                  run("port-pool", ["ensure", worktree.path]).pipe(
+                    Effect.catchTag("CommandError", (error) =>
+                      Effect.fail(
+                        error.exitCode === null
+                          ? error
+                          : new LeaseRefused({
                               worktree: path.basename(worktree.path),
-                              code,
+                              code: error.exitCode,
                             }),
-                          ),
+                      ),
+                    ),
                   ),
                 { discard: true },
               ),

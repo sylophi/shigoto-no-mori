@@ -252,7 +252,14 @@ const make = Effect.gen(function* () {
         (row) => again || row.error === null,
       );
       if (project === undefined || rows.length === 0) return;
-      const running = yield* Effect.result(working(spawner));
+      const running = yield* Effect.result(
+        working.pipe(
+          Effect.provideService(
+            ChildProcessSpawner.ChildProcessSpawner,
+            spawner,
+          ),
+        ),
+      );
       for (const row of rows) {
         yield* report?.(row.from_path, false) ?? Effect.void;
         yield* moveOne(project, row.from_path, running);

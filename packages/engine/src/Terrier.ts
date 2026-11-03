@@ -1,4 +1,5 @@
 import type { TerrierReadiness } from "@shigomori/contracts/schemas/terrier";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,9 +9,8 @@ import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Config from "./Config.ts";
 import * as Paths from "./Paths.ts";
-import { isNotFound } from "./platformErrors.ts";
 import { byPlatform } from "./platform.ts";
-import { captureWithin, exec, stderrOf } from "./processes.ts";
+import { type CommandError, exec, stderrOf } from "./processes.ts";
 import { keptAnswers } from "./keptAnswers.ts";
 import { terrierProjectId } from "./terrierId.ts";
 
@@ -136,11 +136,14 @@ const baseName = (path: string) => {
   return trimmed === "" ? "/" : trimmed.slice(trimmed.lastIndexOf("/") + 1);
 };
 
-// terrier answered with a failure.
-class TerrierCommandFailed extends Schema.TaggedError<TerrierCommandFailed>()(
-  "TerrierCommandFailed",
-  { args: Schema.Array(Schema.String), code: Schema.Int },
-) {}
+// Why `terrier ls --json` didn't answer, in Go's words for an exit and
+// a kill.
+const failureOf = (error: CommandError) => {
+  if (error.exitCode !== null) return `exit status ${error.exitCode}`;
+  return error.reason === "timed-out"
+    ? "signal: killed"
+    : errorMessageOf(error.cause);
+};
 
 // Code-unit order, as Go compares strings.
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -179,46 +182,23 @@ const make = Effect.gen(function* () {
   const config = yield* Config.Config;
   const { expandHome, binaryName } = yield* Paths.Paths;
 
-  // terrier's stdout, failing on a spawn error, a nonzero exit or a
-  // wedge: the listing runs before every command.
-  const output = (args: ReadonlyArray<string>) =>
-    captureWithin(spawner, "terrier", args, "10 seconds").pipe(
-      Effect.flatMap((ran) =>
-        ran.code === 0
-          ? Effect.succeed(ran.output)
-          : Effect.fail(
-              new TerrierCommandFailed({ args: [...args], code: ran.code }),
-            ),
-      ),
-    );
-
-  // What `terrier ls --json` answered, toggle or not.
-  const probe = output(["ls", "--json"]).pipe(
-    Effect.flatMap(parseListing),
+  // What `terrier ls --json` answered, toggle or not. The listing runs
+  // before every command, so a wedged terrier is ended.
+  const probe = exec("terrier", ["ls", "--json"], {
+    timeout: "10 seconds",
+  }).pipe(
+    Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+    Effect.flatMap(({ stdout }) => parseListing(stdout)),
     Effect.map((paths) => ({ kind: "listed" as const, paths })),
-    Effect.catchIf(
-      (error) =>
-        Predicate.isTagged(error, "PlatformError") && isNotFound(error),
-      () => Effect.succeed({ kind: "missing" as const }),
-    ),
     Effect.catchTags({
-      TerrierCommandFailed: ({ code }) =>
-        Effect.succeed({
-          kind: "unreadable" as const,
-          reason: `exit status ${code}`,
-        }),
       TerrierUnreadable: ({ reason }) =>
         Effect.succeed({ kind: "unreadable" as const, reason }),
-      CommandTimedOut: () =>
-        Effect.succeed({
-          kind: "unreadable" as const,
-          reason: "signal: killed",
-        }),
-      PlatformError: (error) =>
-        Effect.succeed({
-          kind: "unreadable" as const,
-          reason: error.message,
-        }),
+      CommandError: (error) =>
+        Effect.succeed(
+          error.reason === "not-found"
+            ? { kind: "missing" as const }
+            : { kind: "unreadable" as const, reason: failureOf(error) },
+        ),
     }),
   );
 

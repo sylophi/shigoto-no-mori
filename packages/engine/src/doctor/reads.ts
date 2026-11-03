@@ -1,4 +1,5 @@
 // The doctor's reads: the platform reads every check uses (a program's output, stat, realpath, a folder's entries).
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -8,22 +9,18 @@ import * as NativeFs from "../NativeFs.ts";
 import { parsePortPoolDirs } from "../doctorParse.ts";
 import { findExecutable } from "../executables.ts";
 import { isNotFound } from "../platformErrors.ts";
-import { captureWithin } from "../processes.ts";
+import { exec } from "../processes.ts";
 
 export const makeReads = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const nativeFs = yield* NativeFs.NativeFs;
-  // A program's stdout and exit code. Fails when it can't be spawned.
-  const capture = (
-    command: string,
-    args: ReadonlyArray<string>,
-    env?: Record<string, string>,
-  ) =>
-    // A check waits on nothing longer: gh asks GitHub, and a network
-    // that drops packets would hold the doctor for good.
-    captureWithin(spawner, command, args, "15 seconds", { env }).pipe(
-      Effect.map(({ output, code }) => ({ stdout: output, code })),
+  // A program run to its exit. A check waits on nothing longer: gh asks
+  // GitHub, and a network that drops packets would hold the doctor for
+  // good.
+  const run = (command: string, args: ReadonlyArray<string>) =>
+    exec(command, args, { timeout: "15 seconds" }).pipe(
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
     );
 
   // lstat(2) of names in a folder, by name: a symlink's own, as Go's
@@ -75,14 +72,13 @@ export const makeReads = Effect.gen(function* () {
     if (Option.isNone(yield* findExecutable("port-pool"))) {
       return { kind: "missing" } as const;
     }
-    const listed = yield* capture("port-pool", ["list"]).pipe(Effect.result);
+    const listed = yield* run("port-pool", ["list"]).pipe(Effect.result);
     if (Result.isFailure(listed)) {
-      return { kind: "failed", why: listed.failure.message } as const;
-    }
-    if (listed.success.code !== 0) {
+      const { exitCode, cause } = listed.failure;
       return {
         kind: "failed",
-        why: `exit status ${listed.success.code}`,
+        why:
+          exitCode === null ? errorMessageOf(cause) : `exit status ${exitCode}`,
       } as const;
     }
     return {
@@ -92,7 +88,7 @@ export const makeReads = Effect.gen(function* () {
   });
 
   return {
-    capture,
+    run,
     portPoolListing,
     lstatIn,
     statOf,

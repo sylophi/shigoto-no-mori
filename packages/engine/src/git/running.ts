@@ -29,9 +29,8 @@ import {
   stderrOf,
 } from "./documents.ts";
 import {
-  CommandTimedOut,
-  capture,
   captureToFiles,
+  exec,
   readAll,
   readAllBytes,
   readToExit,
@@ -178,18 +177,17 @@ export const makeRunning = Effect.gen(function* () {
           ),
         );
         if (Option.getOrUndefined(first) !== "/usr/bin/git") return "git";
-        const { output, code } = yield* capture(
-          spawner,
-          "/usr/bin/xcrun",
-          ["--find", "git"],
-          { env: { DEVELOPER_DIR: developerDir } },
-        );
-        const found = output.trim();
-        return code === 0 && found.startsWith("/") ? found : "git";
+        const { stdout } = yield* exec("/usr/bin/xcrun", ["--find", "git"], {
+          env: { DEVELOPER_DIR: developerDir },
+          extendEnv: true,
+        });
+        const found = stdout.trim();
+        return found.startsWith("/") ? found : "git";
       }).pipe(
         Effect.orElseSucceed(() => "git"),
         Effect.provideService(FileSystem.FileSystem, fs),
         Effect.provideService(Path.Path, path),
+        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       ),
     "1 minute",
   );
@@ -340,12 +338,9 @@ export const makeRunning = Effect.gen(function* () {
               orElse: () =>
                 Effect.fail(
                   failed(null)(
-                    new CommandTimedOut({
-                      command: `git ${subcommand}`,
-                      seconds: Duration.toSeconds(
-                        Duration.fromInputUnsafe(deadline),
-                      ),
-                    }),
+                    new Error(
+                      `git ${subcommand} didn't finish within ${Duration.toSeconds(Duration.fromInputUnsafe(deadline))} s.`,
+                    ),
                   ),
                 ),
             }),

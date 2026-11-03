@@ -61,7 +61,7 @@ export const makeEnvironmentChecks = ({
     // The shell wrapper's directive file, set while the hook is active.
     const cdFile = yield* envVar(CD_FILE_ENV);
 
-    const { capture, statOf, realPath, listDir } = reads;
+    const { run, statOf, realPath, listDir } = reads;
     const checkGit = Effect.gen(function* () {
       const line = check("Environment", "git", "git");
       const version = yield* git.run(home, ["--version"]).pipe(Effect.option);
@@ -97,16 +97,16 @@ export const makeEnvironmentChecks = ({
       }
       // Only success matters: `gh auth status` prints account details that
       // have no business in sm's output.
-      const auth = yield* capture("gh", ["auth", "status"]).pipe(Effect.option);
-      if (Option.isNone(auth) || auth.value.code !== 0) {
+      const auth = yield* run("gh", ["auth", "status"]).pipe(Effect.option);
+      if (Option.isNone(auth)) {
         return line.warn(
           "installed but not authenticated",
           "Run `gh auth login`.",
         );
       }
-      const version = yield* capture("gh", ["--version"]).pipe(Effect.option);
+      const version = yield* run("gh", ["--version"]).pipe(Effect.option);
       let shown = "installed";
-      if (Option.isSome(version) && version.value.code === 0) {
+      if (Option.isSome(version)) {
         const first = version.value.stdout.split("\n")[0] ?? "";
         const words = fields(first);
         shown =
@@ -159,11 +159,11 @@ export const makeEnvironmentChecks = ({
 
     // Empty when it can't be read.
     const bundleVersion = (bundle: string) =>
-      capture(
+      run(
         "plutil",
         bundleVersionArgs(path.join(bundle, "Contents", "Info.plist")),
       ).pipe(
-        Effect.map(({ stdout, code }) => (code === 0 ? stdout.trim() : "")),
+        Effect.map(({ stdout }) => stdout.trim()),
         Effect.orElseSucceed(() => ""),
       );
 

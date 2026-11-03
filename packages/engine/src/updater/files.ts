@@ -12,7 +12,7 @@ import { parseJson } from "../json.ts";
 import { linuxInstall } from "../linuxInstall.ts";
 import * as Paths from "../Paths.ts";
 import { byPlatform } from "../platform.ts";
-import { captureWithin } from "../processes.ts";
+import { exec } from "../processes.ts";
 import { type AppStatus, appStatusOf } from "../updateFeed.ts";
 import {
   type Ran,
@@ -43,15 +43,20 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
     ) =>
       // A stuck codesign, ditto or open would leave a headless install
       // waiting for good, with the app closed.
-      captureWithin(spawner, command, args, "5 minutes", { from }).pipe(
+      exec(command, args, {
+        timeout: "5 minutes",
+        all: from === "all",
+        anyExit: true,
+      }).pipe(
+        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.map(
-          ({ output, code }): Ran => ({
+          ({ stdout, code }): Ran => ({
             ok: code === 0,
-            output,
+            output: stdout,
             cause: new Error(`exit status ${code}`),
           }),
         ),
-        Effect.catch((cause) =>
+        Effect.catch(({ cause }) =>
           Effect.succeed<Ran>({ ok: false, output: "", cause }),
         ),
       );

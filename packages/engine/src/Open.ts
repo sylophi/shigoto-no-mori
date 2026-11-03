@@ -21,8 +21,9 @@ import * as Paths from "./Paths.ts";
 import { openEnvArgs } from "./relaunchEnv.ts";
 import { errnoText, isAbsent } from "./platformErrors.ts";
 import { byPlatform } from "./platform.ts";
-import { capture } from "./processes.ts";
+import { exec } from "./processes.ts";
 import { NO_SCREEN, screenOpener } from "./screen.ts";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import * as Usage from "./Usage.ts";
 import * as Worktrees from "./Worktrees.ts";
@@ -237,10 +238,11 @@ const make = Effect.gen(function* () {
 
   // Runs a program to its exit: its exit code, and what it printed.
   const ran = (program: string, args: ReadonlyArray<string>) =>
-    capture(spawner, program, args, { from: "all" }).pipe(
-      Effect.map(({ code, output }) => ({ code, output: output.trim() })),
-      Effect.catch((error) =>
-        Effect.succeed({ code: -1, output: error.message }),
+    exec(program, args, { all: true, anyExit: true }).pipe(
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Effect.map(({ code, stdout }) => ({ code, output: stdout.trim() })),
+      Effect.catch(({ cause }) =>
+        Effect.succeed({ code: -1, output: errorMessageOf(cause) }),
       ),
     );
 

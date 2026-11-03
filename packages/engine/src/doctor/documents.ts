@@ -15,7 +15,7 @@ import * as Config from "../Config.ts";
 import type { ConfigDoc } from "../configDoc.ts";
 import * as NativeFs from "../NativeFs.ts";
 import * as Git from "../Git.ts";
-import type { CommandTimedOut } from "../processes.ts";
+import type { CommandError } from "../processes.ts";
 import { decodedLaunchers } from "../Launchers.ts";
 import * as Layout from "../Layout.ts";
 import { StoreImportError } from "../migrations/importJson.ts";
@@ -125,7 +125,7 @@ type RepairError =
   | Worktrees.CaptureNotCarried
   | WorktreesNotMoved
   | LeaseRefused
-  | CommandTimedOut
+  | CommandError
   | Git.GitError
   | PlatformError.PlatformError
   | MovedWorktreePending

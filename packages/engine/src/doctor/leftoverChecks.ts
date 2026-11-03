@@ -21,7 +21,7 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     const paths = yield* Paths.Paths;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const { flavor, binaryName } = paths;
-    const { capture, readText } = reads;
+    const { run, readText } = reads;
     // What stops a process the host left behind: its next start.
     const STOPS_LEFTOVERS = byPlatform({
       darwin: "Open the app, which stops",
@@ -36,14 +36,14 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       if (Option.isNone(raw)) return [];
       const pid = readTunnelPid(raw.value);
       if (pid === undefined || pid < 2) return [];
-      const ps = yield* capture("ps", [
+      const ps = yield* run("ps", [
         "-o",
         "ppid=,comm=",
         "-p",
         String(pid),
       ]).pipe(Effect.option);
       // Gone, which is the ordinary case.
-      if (Option.isNone(ps) || ps.value.code !== 0) return [];
+      if (Option.isNone(ps)) return [];
       const output = ps.value.stdout.trim();
       const space = output.indexOf(" ");
       const ppid = space < 0 ? output : output.slice(0, space);
