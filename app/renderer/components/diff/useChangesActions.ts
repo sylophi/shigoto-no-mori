@@ -13,16 +13,13 @@ import {
 } from "@/hooks/worktrees/useWorktreeChanges";
 import { useAmendDraft } from "@/hooks/worktrees/useAmendDraft";
 import { useWarmGitPages } from "@/hooks/worktrees/useWarmGitPages";
-import {
-  updatePicks,
-  useChangesPicks,
-} from "@/hooks/worktrees/useChangesPicks";
+import { updatePicks, useChangesPicks } from "@/store/changesPicks";
 import {
   useResolveConflict,
   useStashChanges,
 } from "@/hooks/worktrees/useGitHistory";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
-import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
+import { setCommitDraft, useCommitDraft } from "@/store/commitDraft";
 import { pluralize } from "@shigomori/contracts/words";
 import { useBinding, useKeymapAction } from "@/hooks/ui/useKeymap";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
@@ -70,9 +67,10 @@ export function useChangesActions(
     statusError,
     worktree.changedCount,
   );
-  const picks = useChangesPicks(deviceId, projectId, worktreeId);
-  const setPicks = (change: Parameters<typeof updatePicks>[3]) =>
-    updatePicks(deviceId, projectId, worktreeId, change);
+  const ref = { deviceId, projectId, worktreeId };
+  const picks = useChangesPicks(ref);
+  const setPicks = (change: Parameters<typeof updatePicks>[1]) =>
+    updatePicks(ref, change);
   // The pick is held as the row's key and resolved against the live
   // list, so a file that stops being changed (discarded, committed,
   // reverted in an editor) falls back to the first row instead of
@@ -95,7 +93,7 @@ export function useChangesActions(
     if (!files) return;
     const pane =
       paneKey && fileHunks ? { key: paneKey, hunks: fileHunks } : undefined;
-    updatePicks(deviceId, projectId, worktreeId, (current) =>
+    updatePicks({ deviceId, projectId, worktreeId }, (current) =>
       prunedPicks(current, files, pane),
     );
   }, [deviceId, projectId, worktreeId, files, paneKey, fileHunks]);
@@ -108,7 +106,7 @@ export function useChangesActions(
   const undo = useUndoCommits(worktree);
   const stash = useStashChanges();
   const resolve = useResolveConflict();
-  const [draft, setDraft] = useCommitDraft(deviceId, projectId, worktreeId);
+  const draft = useCommitDraft(ref);
 
   // The last commit is only up for rewriting while no remote has it. A
   // requested amend only takes effect while that holds (a push from
@@ -129,8 +127,6 @@ export function useChangesActions(
     worktreeId,
     amending,
     hash: lastCommit?.hash,
-    draft,
-    setDraft,
   });
 
   const onCommit = () => {
@@ -148,7 +144,6 @@ export function useChangesActions(
         onSuccess: () => {
           setPicks(afterCommit);
           resetAmendDraft();
-          setDraft(EMPTY_DRAFT);
           if (wasAmend) setAmending(false);
         },
       },
@@ -264,7 +259,7 @@ export function useChangesActions(
           files: list,
           included: countIncluded(picks, list),
           draft,
-          onDraftChange: setDraft,
+          onDraftChange: (next) => setCommitDraft(ref, next),
           commitKeys,
           pending: commit.isPending,
           error: commit.error,

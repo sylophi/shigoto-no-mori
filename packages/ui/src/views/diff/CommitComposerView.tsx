@@ -30,7 +30,7 @@ const SUMMARY_SOFT_LIMIT = 72;
 
 // The message box at the foot of the changes list. Summary is the
 // commit's first line. Description, when given, is its body. The draft
-// itself belongs to the page (lib/commitDraft), which also empties it
+// itself belongs to the page (store/commitDraft), which also empties it
 // once the commit lands. Which branch it lands on is the branch bar's
 // to say, right above.
 //

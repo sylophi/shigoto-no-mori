@@ -6,10 +6,7 @@ import {
 } from "@shigomori/contracts/schemas";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { toast } from "@/lib/toast";
-import {
-  dropPullRequestDraft,
-  pullRequestDraftKey,
-} from "@/store/pullRequestDrafts";
+import { dropPullRequestDraft } from "@/store/pullRequestDrafts";
 import { invalidatePullRequestsForProject } from "../projects/useProjectPullRequests";
 
 // The create pull request dialog's starting point, read once as it opens:
@@ -143,7 +140,7 @@ export function useCreatePullRequest() {
       api.run(api.githubCli.createPullRequest(input)),
     onSuccess: ({ warning }, { projectId, worktreeId, branch }) => {
       invalidatePullRequestsForProject(qc, keys, projectId);
-      dropPullRequestDraft(pullRequestDraftKey(deviceId, worktreeId, branch));
+      dropPullRequestDraft({ deviceId, projectId, worktreeId }, branch);
       if (warning) {
         toast.warning("Some attachments didn't upload", {
           description: warning,

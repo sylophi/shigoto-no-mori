@@ -12,6 +12,11 @@ import {
 } from "@shigomori/ui/lib/externalStore.ts";
 import { readStored, removeStored, writeStored } from "@/lib/localStorage";
 import { slotToParam, type ScriptSlot } from "./scriptSlot";
+import {
+  createWorktreeStore,
+  useWorktreeStore,
+  type WorktreeRef,
+} from "./worktreeState";
 
 type Drawer = {
   readonly open: boolean;
@@ -20,35 +25,30 @@ type Drawer = {
   readonly picked: string | null;
 };
 
-type DrawerState = {
-  readonly drawers: ReadonlyMap<string, Drawer>;
-  readonly height: number | null;
-  readonly width: number | null;
-};
-
 const CLOSED: Drawer = { open: false, scripts: [], picked: null };
+
+const drawers = createWorktreeStore<Drawer>({ empty: CLOSED, moves: false });
+
+export const useDrawer = (ref: WorktreeRef): Drawer =>
+  useWorktreeStore(drawers, ref);
 
 const HEIGHT_KEY = "terminalDrawer.height";
 const WIDTH_KEY = "terminalDrawer.width";
 const readSize = (key: string): number | null =>
   Number(readStored(key)) || null;
 
-const store = createExternalStore<DrawerState>({
-  drawers: new Map(),
-  height: readSize(HEIGHT_KEY),
-  width: readSize(WIDTH_KEY),
-});
+const sizeStore = createExternalStore<{
+  readonly height: number | null;
+  readonly width: number | null;
+}>({ height: readSize(HEIGHT_KEY), width: readSize(WIDTH_KEY) });
 
-export const useTerminalDrawer = () => useExternalStore(store);
+export const useDrawerSizes = () => useExternalStore(sizeStore);
 
 // Docked at the side rather than the bottom, kept across launches.
 const SIDE_KEY = "terminalDrawer.side";
 const sideStore = createExternalStore(readStored(SIDE_KEY) === "true");
 
 export const useDrawerSide = () => useExternalStore(sideStore);
-
-export const drawerOf = (state: DrawerState, key: string): Drawer =>
-  state.drawers.get(key) ?? CLOSED;
 
 // The tab a script's console is.
 export const scriptTabId = (slot: ScriptSlot): string =>
@@ -59,45 +59,35 @@ export const scriptTabId = (slot: ScriptSlot): string =>
 export const terminalTabLabel = (index: number): string =>
   `Terminal ${index + 1}`;
 
-// The key a worktree's drawer is kept by, on the device it lives on.
-export const drawerKey = (
-  deviceId: string,
-  projectId: string,
-  worktreeId: string,
-): string => `${deviceId}/${projectId}/${worktreeId}`;
-
-function update(key: string, change: (drawer: Drawer) => Drawer): void {
-  const state = store.get();
-  const drawers = new Map(state.drawers);
-  drawers.set(key, change(drawerOf(state, key)));
-  store.publish({ ...state, drawers });
-}
-
-export function setDrawerOpen(key: string, open: boolean): void {
-  update(key, (drawer) => ({ ...drawer, open }));
+export function setDrawerOpen(ref: WorktreeRef, open: boolean): void {
+  drawers.update(ref, (drawer) => ({ ...drawer, open }));
 }
 
 // A worktree's last terminal closed away from its drawer (on Live): with
 // no console in it either, the drawer hides as it does when its own
 // last tab closes, so the next visit opens no shell.
-export function hideEmptyDrawer(key: string): void {
-  const drawer = drawerOf(store.get(), key);
-  if (drawer.open && drawer.scripts.length === 0) setDrawerOpen(key, false);
+export function hideEmptyDrawer(ref: WorktreeRef): void {
+  const drawer = drawers.get(ref);
+  if (drawer.open && drawer.scripts.length === 0) setDrawerOpen(ref, false);
 }
 
-export function pickDrawerTab(key: string, tab: string): void {
-  update(key, (drawer) => ({ ...drawer, picked: tab }));
+export function pickDrawerTab(ref: WorktreeRef, tab: string): void {
+  drawers.update(ref, (drawer) => ({ ...drawer, picked: tab }));
 }
 
 // Opens the drawer on a terminal's tab.
-export function openTerminalTab(key: string, terminalId: string): void {
-  update(key, (drawer) => ({ ...drawer, open: true, picked: terminalId }));
+export function openTerminalTab(ref: WorktreeRef, terminalId: string): void {
+  drawers.update(ref, (drawer) => ({
+    ...drawer,
+    open: true,
+    picked: terminalId,
+  }));
 }
 
 // Opens the drawer on a script's console, its tab added if it has none.
-export function openScriptTab(key: string, slot: ScriptSlot): void {
+export function openScriptTab(ref: WorktreeRef, slot: ScriptSlot): void {
   const param = slotToParam(slot);
-  update(key, (drawer) => ({
+  drawers.update(ref, (drawer) => ({
     open: true,
     scripts: drawer.scripts.includes(param)
       ? drawer.scripts
@@ -106,13 +96,15 @@ export function openScriptTab(key: string, slot: ScriptSlot): void {
   }));
 }
 
-export function closeScriptTab(key: string, slot: ScriptSlot): void {
+export function closeScriptTab(ref: WorktreeRef, slot: ScriptSlot): void {
   const param = slotToParam(slot);
-  update(key, (drawer) => ({
+  drawers.update(ref, (drawer) => ({
     ...drawer,
     scripts: drawer.scripts.filter((open) => open !== param),
   }));
 }
+
+export const forgetDrawer = drawers.forget;
 
 export function setDrawerSide(side: boolean): void {
   writeStored(SIDE_KEY, String(side));
@@ -121,22 +113,16 @@ export function setDrawerSide(side: boolean): void {
 
 // The height at the bottom, or the width at the side.
 export function setDrawerSize(size: number): void {
-  const state = store.get();
+  const sizes = sizeStore.get();
   const side = sideStore.get();
   writeStored(side ? WIDTH_KEY : HEIGHT_KEY, String(size));
-  store.publish(side ? { ...state, width: size } : { ...state, height: size });
+  sizeStore.publish(
+    side ? { ...sizes, width: size } : { ...sizes, height: size },
+  );
 }
 
 export function resetDrawerSizes(): void {
   removeStored(HEIGHT_KEY);
   removeStored(WIDTH_KEY);
-  store.publish({ ...store.get(), height: null, width: null });
-}
-
-export function forgetDrawer(key: string): void {
-  const state = store.get();
-  if (!state.drawers.has(key)) return;
-  const drawers = new Map(state.drawers);
-  drawers.delete(key);
-  store.publish({ ...state, drawers });
+  sizeStore.publish({ height: null, width: null });
 }

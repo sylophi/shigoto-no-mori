@@ -6,12 +6,7 @@ import { SquareTerminal } from "lucide-react";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useBinding } from "@/hooks/ui/useKeymap";
-import {
-  drawerKey,
-  drawerOf,
-  setDrawerOpen,
-  useTerminalDrawer,
-} from "@/store/terminalDrawer";
+import { setDrawerOpen, useDrawer } from "@/store/terminalDrawer";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { FooterActionButtonView } from "@shigomori/ui/views/worktreeDetail/FooterActionButtonView.tsx";
 import { LABEL_RANK } from "@shigomori/ui/views/worktreeDetail/FooterVerbView.tsx";
@@ -19,10 +14,13 @@ import { LABEL_RANK } from "@shigomori/ui/views/worktreeDetail/FooterVerbView.ts
 export function TerminalButton({ worktree }: { worktree: Worktree }) {
   const { deviceId, hasHost } = useHostScope();
   const { canCommand } = useCommandAccess();
-  const state = useTerminalDrawer();
   const keys = useBinding("terminal");
-  const key = drawerKey(deviceId, worktree.projectId, worktree.id);
-  const open = drawerOf(state, key).open;
+  const ref = {
+    deviceId,
+    projectId: worktree.projectId,
+    worktreeId: worktree.id,
+  };
+  const { open } = useDrawer(ref);
   if (!canCommand || !hasHost) return null;
   return (
     <FooterActionButtonView
@@ -31,7 +29,7 @@ export function TerminalButton({ worktree }: { worktree: Worktree }) {
       label="Terminal"
       tip={keys.label}
       expanded={open}
-      onClick={() => setDrawerOpen(key, !open)}
+      onClick={() => setDrawerOpen(ref, !open)}
     />
   );
 }

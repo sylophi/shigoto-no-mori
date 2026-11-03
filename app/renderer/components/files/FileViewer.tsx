@@ -52,7 +52,7 @@ export function FileViewer({
   const missing = data?.kind === "missing";
   useEffect(() => {
     if (read) {
-      rememberFile(deviceId, projectId, worktreeId, missing ? null : path);
+      rememberFile({ deviceId, projectId, worktreeId }, missing ? null : path);
     }
   }, [deviceId, projectId, worktreeId, path, read, missing]);
   const remoteImage = useRemoteImage(projectId);

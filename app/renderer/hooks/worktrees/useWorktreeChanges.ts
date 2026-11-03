@@ -20,7 +20,7 @@ import {
   type HostApi,
   type HostScope,
 } from "@/hooks/remote/useHostScope";
-import { clearCommitDraft } from "@/lib/commitDraft";
+import { EMPTY_DRAFT, setCommitDraft } from "@/store/commitDraft";
 import { onWindowFocus } from "@/lib/focus";
 import {
   type LiveViewState,
@@ -224,11 +224,18 @@ export function useCommitChanges() {
   return useMutation<CommitChangesResult, Error, CommitInput>({
     mutationFn: (input) => api.run(api.worktrees.commit(input)),
     onSuccess: (data, vars) => {
-      // The page empties its own draft state. This covers the stored
-      // copy when the page was left before the commit landed. A commit
-      // that kept HEAD's message never used the draft.
+      // Here rather than on the page, which may be left before the
+      // commit lands. A commit that kept HEAD's message never used the
+      // draft.
       if (vars.summary !== undefined) {
-        clearCommitDraft(deviceId, vars.projectId, vars.worktreeId);
+        setCommitDraft(
+          {
+            deviceId,
+            projectId: vars.projectId,
+            worktreeId: vars.worktreeId,
+          },
+          EMPTY_DRAFT,
+        );
       }
       writeBack(vars, data.worktree);
     },

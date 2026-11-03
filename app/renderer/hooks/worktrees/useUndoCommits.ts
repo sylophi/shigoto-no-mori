@@ -6,7 +6,7 @@ import {
   useResetSoft,
 } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { fillEmptyCommitDraft } from "@/lib/commitDraft";
+import { fillEmptyCommitDraft } from "@/store/commitDraft";
 import { pluralize } from "@shigomori/contracts/words";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import type { CommitRewrite } from "@shigomori/ui/lib/commitRewrite.ts";
@@ -39,7 +39,10 @@ export function useUndoCommits(worktree: Worktree) {
       ),
     ).then(
       (message) =>
-        fillEmptyCommitDraft(scope.deviceId, projectId, worktreeId, message),
+        fillEmptyCommitDraft(
+          { deviceId: scope.deviceId, projectId, worktreeId },
+          message,
+        ),
       () => {},
     );
 

@@ -13,11 +13,8 @@ import { inboxTopRow } from "@/components/sidebar/inbox/inboxOrder";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { WORKTREE_ROUTE_PATHS, type WorktreeDialog } from "@/lib/routePaths";
 import { paramToSlot, slotToParam, type ScriptSlot } from "@/store/scriptSlot";
-import {
-  drawerKey,
-  openScriptTab,
-  openTerminalTab,
-} from "@/store/terminalDrawer";
+import { openScriptTab, openTerminalTab } from "@/store/terminalDrawer";
+import { createWorktreeStore, type WorktreeRef } from "@/store/worktreeState";
 import { terminalsAtom } from "@/hooks/terminals/useTerminals";
 import { useRegistry, whenViewShows } from "@/lib/runtime/viewHooks";
 
@@ -47,28 +44,17 @@ interface WorktreePageParams {
 
 // The file each worktree's Files page last showed this session, which
 // the page opens on again unless it is asked for another.
-const lastFiles = new Map<string, string>();
-const lastFileKey = (deviceId: string, projectId: string, worktreeId: string) =>
-  `${deviceId}\n${projectId}\n${worktreeId}`;
+const lastFiles = createWorktreeStore<string | null>({
+  empty: null,
+  moves: true,
+});
 
-export function rememberFile(
-  deviceId: string,
-  projectId: string,
-  worktreeId: string,
-  path: string | null,
-): void {
-  const key = lastFileKey(deviceId, projectId, worktreeId);
-  if (path === null) lastFiles.delete(key);
-  else lastFiles.set(key, path);
+export function rememberFile(ref: WorktreeRef, path: string | null): void {
+  lastFiles.update(ref, () => path);
 }
 
-export function rememberedFile(
-  deviceId: string,
-  projectId: string,
-  worktreeId: string,
-): string | undefined {
-  return lastFiles.get(lastFileKey(deviceId, projectId, worktreeId));
-}
+export const rememberedFile = (ref: WorktreeRef): string | null =>
+  lastFiles.get(ref);
 
 export function useWorktreeNav() {
   const navigate = useNavigate();
@@ -91,7 +77,14 @@ export function useWorktreeNav() {
     if (page === "script") {
       const slot = paramToSlot(params.scriptKey ?? "");
       if (slot !== null) {
-        openScriptTab(drawerKey(on, params.projectId, params.worktreeId), slot);
+        openScriptTab(
+          {
+            deviceId: on,
+            projectId: params.projectId,
+            worktreeId: params.worktreeId,
+          },
+          slot,
+        );
       }
       goOn(on, "detail", {
         projectId: params.projectId,
@@ -100,8 +93,12 @@ export function useWorktreeNav() {
       return;
     }
     if (page === "files" && search?.["path"] === undefined) {
-      const last = rememberedFile(on, params.projectId, params.worktreeId);
-      if (last !== undefined) search = { ...search, path: last };
+      const last = rememberedFile({
+        deviceId: on,
+        projectId: params.projectId,
+        worktreeId: params.worktreeId,
+      });
+      if (last !== null) search = { ...search, path: last };
     }
     void navigate({
       to: WORKTREE_ROUTE_PATHS[page],
@@ -250,7 +247,7 @@ export function useWorktreeNav() {
       void whenViewShows(registry, terminalsAtom(on), ({ terminals }) =>
         terminals.some((terminal) => terminal.terminalId === terminalId),
       ).then(() => {
-        openTerminalTab(drawerKey(on, projectId, worktreeId), terminalId);
+        openTerminalTab({ deviceId: on, projectId, worktreeId }, terminalId);
         goOn(on, "detail", { projectId, worktreeId });
       });
     },

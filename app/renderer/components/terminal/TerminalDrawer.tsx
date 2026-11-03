@@ -8,15 +8,14 @@ import { useApi } from "@/lib/runtime/pageApi";
 import { paramToSlot } from "@/store/scriptSlot";
 import {
   closeScriptTab,
-  drawerKey,
-  drawerOf,
   forgetDrawer,
   pickDrawerTab,
   setDrawerOpen,
   setDrawerSide,
   setDrawerSize,
+  useDrawer,
   useDrawerSide,
-  useTerminalDrawer,
+  useDrawerSizes,
 } from "@/store/terminalDrawer";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { TerminalScope } from "./TerminalScope";
@@ -40,18 +39,22 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
   const hasLocalHost = useHasLocalHost();
   const { deviceId, hasHost } = useHostScope();
   const { canCommand } = useCommandAccess();
-  const state = useTerminalDrawer();
   const side = useDrawerSide();
-  const key = drawerKey(deviceId, worktree.projectId, worktree.id);
-  const drawer = drawerOf(state, key);
+  const sizes = useDrawerSizes();
+  const ref = {
+    deviceId,
+    projectId: worktree.projectId,
+    worktreeId: worktree.id,
+  };
+  const drawer = useDrawer(ref);
   useKeymapAction(
     "terminal",
     () => {
       const section = document.querySelector('[data-slot="terminal-drawer"]');
       if (!drawer.open || !section) {
-        setDrawerOpen(key, true);
+        setDrawerOpen(ref, true);
       } else if (section.contains(document.activeElement)) {
-        setDrawerOpen(key, false);
+        setDrawerOpen(ref, false);
       } else {
         section.querySelector<HTMLElement>(".xterm-helper-textarea")?.focus();
       }
@@ -66,13 +69,13 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
     setSlideIn(drawer.open);
   }
   if (!drawer.open) return null;
-  const close = () => setDrawerOpen(key, false);
+  const close = () => setDrawerOpen(ref, false);
   const slots = drawer.scripts.flatMap((param) => paramToSlot(param) ?? []);
   return (
     <TerminalScope>
       <TerminalDrawerView
         side={side}
-        size={side ? state.width : state.height}
+        size={side ? sizes.width : sizes.height}
         slideIn={slideIn}
         onSize={setDrawerSize}
       >
@@ -80,29 +83,21 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
           <TerminalTabs
             worktree={worktree}
             slots={slots}
-            onCloseScript={(slot) => closeScriptTab(key, slot)}
+            onCloseScript={(slot) => closeScriptTab(ref, slot)}
             picked={drawer.picked}
-            onPick={(tab) => pickDrawerTab(key, tab)}
+            onPick={(tab) => pickDrawerTab(ref, tab)}
             onEmpty={close}
             side={side}
             onDock={() => setDrawerSide(!side)}
             onPopOut={
               hasLocalHost
                 ? () => {
-                    openTerminalsInNewWindow(
-                      api,
-                      {
-                        deviceId,
-                        projectId: worktree.projectId,
-                        worktreeId: worktree.id,
-                      },
-                      {
-                        scripts: drawer.scripts,
-                        ...(drawer.picked !== null && { tab: drawer.picked }),
-                      },
-                    );
+                    openTerminalsInNewWindow(api, ref, {
+                      scripts: drawer.scripts,
+                      ...(drawer.picked !== null && { tab: drawer.picked }),
+                    });
                     // Its tabs move to the window.
-                    forgetDrawer(key);
+                    forgetDrawer(ref);
                   }
                 : undefined
             }

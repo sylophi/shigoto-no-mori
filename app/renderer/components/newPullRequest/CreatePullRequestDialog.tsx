@@ -33,8 +33,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { toast } from "@/lib/toast";
 import {
   patchPullRequestDraft,
-  pullRequestDraftForm as formOf,
-  pullRequestDraftKey,
+  pullRequestDraftForm,
   usePullRequestDraftForm,
 } from "@/store/pullRequestDrafts";
 
@@ -52,10 +51,14 @@ export function CreatePullRequestDialog({
   onClose: () => void;
 }) {
   const { api, deviceId } = useHostScope();
-  const key = pullRequestDraftKey(deviceId, worktree.id, worktree.branch);
-  const form = usePullRequestDraftForm(key);
-  const patch = (next: Parameters<typeof patchPullRequestDraft>[1]) =>
-    patchPullRequestDraft(key, next);
+  const ref = {
+    deviceId,
+    projectId: worktree.projectId,
+    worktreeId: worktree.id,
+  };
+  const form = usePullRequestDraftForm(ref, worktree.branch);
+  const patch = (next: Parameters<typeof patchPullRequestDraft>[2]) =>
+    patchPullRequestDraft(ref, worktree.branch, next);
 
   const { data: seed, error: seedError } = usePullRequestDraft(worktree);
   const { data: options, isPending: optionsPending } = usePullRequestOptions(
@@ -203,7 +206,11 @@ export function CreatePullRequestDialog({
       api.run(api.githubCli.stageAttachmentFromUrl({ id, stem, url })).then(
         ({ name, type }) => {
           // Taken out while it was fetched: what came goes too.
-          if (!formOf(key).attachments.some((a) => a.id === id)) {
+          if (
+            !pullRequestDraftForm(ref, worktree.branch).attachments.some(
+              (a) => a.id === id,
+            )
+          ) {
             removeAttachment(api, id);
             return;
           }

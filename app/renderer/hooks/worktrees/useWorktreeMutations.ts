@@ -34,13 +34,10 @@ import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { isOwnPullRequest } from "@shigomori/ui/lib/worktreeTitle.ts";
 import type { QueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
-import { clearCommitDraft, moveCommitDraft } from "@/lib/commitDraft";
-import { forgetPicks } from "@/hooks/worktrees/useChangesPicks";
 import {
-  forgetPullRequestDrafts,
-  movePullRequestDrafts,
-} from "@/store/pullRequestDrafts";
-import { drawerKey, forgetDrawer } from "@/store/terminalDrawer";
+  forgetWorktreeStores,
+  moveWorktreeStores,
+} from "@/store/worktreeState";
 
 interface CreateWorktreeInput {
   projectId: string;
@@ -322,14 +319,12 @@ function forgetWorktreeState(
     else cache.remove(query);
   }
   forgetWorktreeViews(deviceId, worktreeId);
-  clearCommitDraft(deviceId, projectId, worktreeId);
-  forgetPicks(deviceId, projectId, worktreeId);
-  forgetPullRequestDrafts(deviceId, worktreeId);
-  forgetDrawer(drawerKey(deviceId, projectId, worktreeId));
+  forgetWorktreeStores({ deviceId, projectId, worktreeId });
 }
 
 // Once a worktree moved to another id: the messages being written for
-// it go along, and the rest is forgotten with the old id.
+// it and the file its Files page showed go along, and the rest is
+// forgotten with the old id.
 function moveWorktreeState(
   queryClient: QueryClient,
   registry: AtomRegistry.AtomRegistry,
@@ -338,8 +333,10 @@ function moveWorktreeState(
   from: string,
   to: string,
 ): void {
-  moveCommitDraft(deviceId, projectId, from, to);
-  movePullRequestDrafts(deviceId, from, to);
+  moveWorktreeStores(
+    { deviceId, projectId, worktreeId: from },
+    { deviceId, projectId, worktreeId: to },
+  );
   forgetWorktreeState(queryClient, registry, deviceId, projectId, from);
 }
 

@@ -40,8 +40,8 @@ export function useWarmFilesPage(worktree: Worktree) {
     file,
     page: () => {
       folder("");
-      const last = rememberedFile(deviceId, projectId, worktreeId);
-      if (last === undefined) return;
+      const last = rememberedFile({ deviceId, projectId, worktreeId });
+      if (last === null) return;
       for (const ancestor of ancestorsOf(last)) folder(ancestor);
       file(last);
     },
