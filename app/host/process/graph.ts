@@ -82,7 +82,7 @@ export const failed = (reason: string): void => {
   );
 };
 
-// The listeners' services (host/socket/DeviceLink.ts LateServices).
+// The handlers. services (host/socket/hostRpc.ts HostGraph).
 export const services = Effect.suspend(() => Deferred.await(ready)).pipe(
   Effect.map((up) => up.context),
   Effect.mapError(callFailureOf),

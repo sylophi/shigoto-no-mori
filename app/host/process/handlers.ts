@@ -1,10 +1,10 @@
-// Every handler the host serves, assembled and put on the wires. The
-// wires themselves are wires.ts (the loopback, the device link, and the
-// hub and direct plane's lifecycle). This file is what rides them: it
-// builds each host-side module's handler map from host/ipc/modules,
-// gives the host's peer reach the same peer sessions the windows use,
-// and registers the lot in registerHostHandlers, once at start. The
-// account's changes arrive from the shell (applyAccount).
+// Every handler the host serves, assembled for the wires. The wires
+// themselves are wires.ts (the loopback, the device link, and the hub
+// and direct plane's lifecycle). This file is what rides them: each
+// host-side module's handlers from host/ipc/modules as one layer
+// (hostHandlers), and the host's peer reach over the same peer sessions
+// the windows use. The account's changes arrive from the shell
+// (applyAccount).
 import { join } from "node:path";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { branchesContract } from "@shigomori/contracts/modules/branches";
@@ -103,6 +103,7 @@ import { updaterHandlers } from "@host/ipc/modules/updater";
 import { villagersHandlers } from "@host/ipc/modules/villagers";
 import { worktreesHandlers, worktreesViews } from "@host/ipc/modules/worktrees";
 import * as PeerReach from "@host/ipc/PeerReach";
+import * as HostRpc from "@host/socket/hostRpc";
 import * as MirrorDaemon from "@host/mirror/MirrorDaemon";
 import { ProjectScopedPayloadSchema } from "@shigomori/contracts/schemas/payloads";
 import { dataDir } from "@shared/paths";
@@ -113,9 +114,6 @@ import {
   broadcastAll,
   clearDirectTickets,
   refreshHubConnection,
-  registerContract,
-  registerLoopbackContract,
-  registerViews,
   hubHandlers,
   onPeerPush,
   peerAdmissions,
@@ -471,20 +469,10 @@ const stopPortForwardsTo = (
     ),
   );
 
-export function registerHostHandlers(): void {
-  // The windows' bridge onto the host's hub socket: status, invokes
-  // over the keeper-held direct sessions, and the peerPush and
-  // statusChanged fan-outs. Built in wires.ts, which owns every dep.
-  // The bridge is shared with the web client, which serves it the same.
-  const hub = servedHub(hubHandlers);
-  registerContract(hubContract, hub.handlers);
-  registerViews(hubContract, hub.views);
-  // The listeners belong to this machine, so the surface never mounts
-  // on a remote wire.
-  registerContract(portForwardContract, portForwardHandlers);
-  // The follower's peer-side signals: a peer's git state moved (its
-  // git-directory watcher) or a served worktree's index did. And a
-  // peer's worktree gone, which ends the mirrors into it running here.
+// The follower's peer-side signals: a peer's git state moved (its
+// git-directory watcher) or a served worktree's index did. And a peer's
+// worktree gone, which ends the mirrors into it running here.
+export function followPeerPushes(): void {
   onPeerPush((push) => {
     if (push.channel === "git:projectChanged") {
       const { payload } = push;
@@ -512,53 +500,72 @@ export function registerHostHandlers(): void {
       ).catch(() => {});
     }
   });
-  registerContract(mirrorContract, mirrorHandlers);
-  registerViews(mirrorContract, mirrorViews);
-  registerContract(projectsContract, projectsHandlers);
-  registerViews(projectsContract, projectsViews);
-  registerContract(runtimeContract, runtimeHandlers);
-  registerContract(branchesContract, branchesHandlers);
-  registerContract(globalConfigContract, globalConfigHandlers);
-  registerViews(globalConfigContract, globalConfigViews);
-  registerContract(portPoolContract, portPoolHandlers);
-  registerContract(portsContract, portsHandlers);
-  registerViews(portsContract, portsViews);
-  registerContract(terrierContract, terrierHandlers);
-  registerContract(agentsContract, agentsHandlers);
-  registerContract(launchersContract, launchersHandlers);
-  registerContract(packageScriptsContract, packageScriptsHandlers);
-  registerContract(fsContract, fsHandlers);
-  registerContract(gitContract, gitHandlers);
-  registerContract(githubCliContract, githubCliHandlers);
-  registerViews(githubCliContract, githubCliViews);
-  registerContract(worktreesContract, worktreesHandlers);
-  registerViews(worktreesContract, worktreesViews);
-  registerContract(hygieneContract, hygieneHandlers);
-  registerContract(scriptsContract, scriptsHandlers);
-  registerViews(scriptsContract, scriptsViews);
-  registerContract(terminalsContract, terminalsHandlers);
-  registerViews(terminalsContract, terminalsViews);
-  registerContract(sharedSettingsContract, sharedSettingsHandlers);
-  registerViews(sharedSettingsContract, sharedSettingsViews);
-  registerContract(sharingContract, sharingHandlers);
-  registerViews(sharingContract, sharingViews);
-  registerContract(cliContract, cliHandlers);
-  // The terminal's cross-device verbs, on the loopback alone
-  // (packages/contracts/src/modules/control.ts), over the account
-  // (rootServices) and the peers' reach.
-  registerLoopbackContract(controlContract, controlHandlers, controlTransfers);
-  registerLoopbackContract(guideDriveContract, guideDriveHandlers);
-  registerContract(shigomoriContract, shigomoriHandlers);
-  registerContract(worktreeDataContract, worktreeDataHandlers);
-  registerContract(syncContract, syncHandlers);
+}
+
+// The windows' bridge onto the host's hub socket: status, invokes over
+// the keeper-held direct sessions, and the peerPush and statusChanged
+// fan-outs. Built in wires.ts, which owns every dep. The bridge is shared
+// with the web client, which serves it the same.
+const hub = servedHub(hubHandlers);
+
+// Every host-side module, which the loopback and the device link both
+// serve. The link's group holds only the remote calls, and its gates
+// read each call's own annotations (host/socket/DeviceLink.ts): a peer
+// asking for one that is not remote (runtime:nuke, launchers:launch)
+// gets the same no-handler answer as for a call the host does not serve.
+export const hostHandlers = Layer.mergeAll(
+  HostRpc.handlers(hubContract, hub.handlers, hub.views),
+  // The listeners belong to this machine, so the surface never mounts
+  // on a remote wire.
+  HostRpc.handlers(portForwardContract, portForwardHandlers),
+  HostRpc.handlers(mirrorContract, mirrorHandlers, mirrorViews),
+  HostRpc.handlers(projectsContract, projectsHandlers, projectsViews),
+  HostRpc.handlers(runtimeContract, runtimeHandlers),
+  HostRpc.handlers(branchesContract, branchesHandlers),
+  HostRpc.handlers(
+    globalConfigContract,
+    globalConfigHandlers,
+    globalConfigViews,
+  ),
+  HostRpc.handlers(portPoolContract, portPoolHandlers),
+  HostRpc.handlers(portsContract, portsHandlers, portsViews),
+  HostRpc.handlers(terrierContract, terrierHandlers),
+  HostRpc.handlers(agentsContract, agentsHandlers),
+  HostRpc.handlers(launchersContract, launchersHandlers),
+  HostRpc.handlers(packageScriptsContract, packageScriptsHandlers),
+  HostRpc.handlers(fsContract, fsHandlers),
+  HostRpc.handlers(gitContract, gitHandlers),
+  HostRpc.handlers(githubCliContract, githubCliHandlers, githubCliViews),
+  HostRpc.handlers(worktreesContract, worktreesHandlers, worktreesViews),
+  HostRpc.handlers(hygieneContract, hygieneHandlers),
+  HostRpc.handlers(scriptsContract, scriptsHandlers, scriptsViews),
+  HostRpc.handlers(terminalsContract, terminalsHandlers, terminalsViews),
+  HostRpc.handlers(
+    sharedSettingsContract,
+    sharedSettingsHandlers,
+    sharedSettingsViews,
+  ),
+  HostRpc.handlers(sharingContract, sharingHandlers, sharingViews),
+  HostRpc.handlers(cliContract, cliHandlers),
+  HostRpc.handlers(shigomoriContract, shigomoriHandlers),
+  HostRpc.handlers(worktreeDataContract, worktreeDataHandlers),
+  HostRpc.handlers(syncContract, syncHandlers),
   // Host side of the port-forward wire: host-scoped, so it mounts on
-  // the loopback and the direct listener, whose command-access
-  // gate covers every verb (all gated).
-  registerContract(forwardContract, forwardHandlers);
+  // the loopback and the direct listener, whose command-access gate
+  // covers every verb (all gated).
+  HostRpc.handlers(forwardContract, forwardHandlers),
   // Host-scoped: a peer's Settings page reads this device's update
   // state and, when granted, checks or restarts into an update here.
-  registerContract(updaterContract, updaterHandlers);
+  HostRpc.handlers(updaterContract, updaterHandlers),
   // Local only: the villager data in this device's data dir, for its
   // own window's Village life.
-  registerContract(villagersContract, villagersHandlers);
-}
+  HostRpc.handlers(villagersContract, villagersHandlers),
+);
+
+// The loopback's alone: the terminal's cross-device verbs
+// (packages/contracts/src/modules/control.ts), over the account
+// (rootServices) and the peers' reach, and the guide's drive.
+export const loopbackHandlers = Layer.mergeAll(
+  HostRpc.handlers(controlContract, controlHandlers, controlTransfers),
+  HostRpc.handlers(guideDriveContract, guideDriveHandlers),
+);

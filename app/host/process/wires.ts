@@ -1,9 +1,9 @@
-// The wires the host serves on, and the registrar that mounts its
-// handlers there: the device link's listener (host/socket/DeviceLink.ts)
-// for peers, fronted by the tunnel; the same link on loopback
-// (host/socket/Loopback.ts) for this machine's windows, its shell and
-// its terminal; and the hub socket with the direct plane, which dials
-// the peers. Every host-side module (`isHostSide`) registers here.
+// The wires the host serves on. The device link's listener
+// (host/socket/DeviceLink.ts) is for peers, fronted by the tunnel. The
+// same link on loopback (host/socket/Loopback.ts) is for this machine's
+// windows, its shell and its terminal. The hub socket with the direct
+// plane dials the peers. The handlers they serve are layer.ts's to give
+// them (handlers.ts).
 import { hubConnectInputs } from "@shared/account/hubConnect";
 import { ROSTER_UNAVAILABLE, STALE_TICKET } from "@shared/remote/sealedSocket";
 import * as Duration from "effect/Duration";
@@ -14,28 +14,19 @@ import * as Stream from "effect/Stream";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import * as Terrier from "@shigomori/engine/Terrier";
 import * as HostPushes from "@host/lib/HostPushes";
-import type { HostServices } from "./services";
 import * as Graph from "./graph";
 import { join } from "node:path";
 import { WebSocket as WsWebSocket } from "ws";
-import { type ContractModule, nameOf } from "@shigomori/contracts/contract";
-import { isHostSide, LOOPBACK_FILE } from "@shigomori/contracts/link";
+import type { ContractModule } from "@shigomori/contracts/contract";
+import { LOOPBACK_FILE } from "@shigomori/contracts/link";
 import {
   hubContract,
   type HubPeerPush,
   type HubStatus,
 } from "@shigomori/contracts/modules/hub";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
-import { projectsContract } from "@shigomori/contracts/modules/projects";
-import type {
-  EffectHandlers,
-  PushKeys,
-  PushProducerPayload,
-  ViewHandlers,
-} from "@shigomori/contracts/types";
-import { createServed } from "@shared/ipc/served";
+import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
 import { resolvePush } from "@shared/ipc/push";
-import type { HandlerContext } from "@shared/ipc/transport";
 import * as DirectPlane from "@shared/hub/directPlane";
 import type { HubConnection } from "@shared/hub/connection";
 import * as TunnelService from "@host/direct/Tunnel";
@@ -46,8 +37,6 @@ import { createConnectTicketStore } from "@host/direct/tickets";
 import * as HubConnectionNode from "@host/hub/connection";
 import { LayerDownError, layerLatch } from "@shared/layerLatch";
 import * as DeviceId from "@host/lib/config/DeviceId";
-import * as Engine from "@host/lib/Engine";
-import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import { dataDir } from "@shared/paths";
 import * as Sharing from "@host/lib/Sharing";
 import * as PeerReach from "@host/ipc/PeerReach";
@@ -66,8 +55,8 @@ import * as EngineConfig from "@shigomori/engine/Config";
 // (acceptsPeerCommands): every ticketed peer is a device of this
 // account, so the switches are the whole verdict. The gates are the
 // only enforcement; everything else that shows the switches is a
-// reading of them. The registrar records the handlers at start, while
-// listening follows enrollment in refreshDirectHost below.
+// reading of them. Listening follows enrollment in refreshDirectHost
+// below.
 const directTickets = createConnectTicketStore();
 
 // Every push the host makes, published synchronously so pushes keep
@@ -76,27 +65,7 @@ const directTickets = createConnectTicketStore();
 const pushes = Effect.runSync(PubSub.unbounded<HostPushes.Push>());
 export const pushesLayer = HostPushes.layerOn(pushes);
 
-// Actions that opt in via `tracksProjectUsage` rank their project for
-// the sidebar's usage sorts, which reorder live on this push.
-const onUsageTracked = (input: unknown) => {
-  void Graph.run(recordProjectActionUsage(input)).then(
-    (bumpedProjectId) => {
-      if (bumpedProjectId) {
-        broadcastAll(projectsContract, "usageBumped", {
-          projectId: bumpedProjectId,
-        });
-      }
-    },
-    () => {},
-  );
-};
-
-const linkRegistrar: DeviceLink.LinkRegistrar = createServed({
-  failure: Engine.hostCallFailure,
-  onUsageTracked,
-});
 export const deviceLinkLayer = DeviceLink.layer({
-  registrar: linkRegistrar,
   auth: {
     opens: {
       check: (ticket, arrivedAs) => {
@@ -121,7 +90,6 @@ export const deviceLinkLayer = DeviceLink.layer({
     },
     isCommandGranted: acceptsPeerCommands,
   },
-  services: Graph.services,
 });
 
 // The sharing switch the link's gate reads. Its changes go to this
@@ -157,20 +125,14 @@ export const tunnelLayer = TunnelService.layer({
 
 // The device link again, on loopback, for the processes on this
 // machine: the windows, the shell, and the terminal's control ops.
-const loopbackRegistrar: DeviceLink.LinkRegistrar = createServed({
-  failure: Engine.hostCallFailure,
-  onUsageTracked,
-});
 export const loopbackLayer = Layer.unwrap(
   Effect.map(DeviceId.current, (deviceId) =>
     Loopback.layer({
-      registrar: loopbackRegistrar,
       deviceId: () => deviceId,
       appVersion: hostFacts().appVersion,
       file: () => join(dataDir(), LOOPBACK_FILE),
       // The window's own page dials it, from the renderer scheme.
       allowedOrigin: hostFacts().rendererOrigin,
-      services: Graph.services,
     }),
   ),
 );
@@ -310,49 +272,6 @@ export const remotePlanesLayer = Layer.effectDiscard(
     }),
   ),
 );
-
-function assertHostSide(module: ContractModule): void {
-  if (!isHostSide(module)) {
-    throw new Error(`${nameOf(module)} is the shell's, not the host's`);
-  }
-}
-
-// A host module, on the loopback and, for each call that opted into
-// remote exposure, on the device link, whose gates read each call's own
-// annotations (host/socket/DeviceLink.ts, CommandGate). A host call that is
-// not remote (runtime:nuke, launchers:launch) is never there, and a
-// peer asking for it gets the same no-handler answer as for a call the
-// host does not serve at all. The device hub is not a wire here: it
-// answers connectInfo and nothing else.
-export function registerContract<M extends ContractModule>(
-  module: M,
-  handlers: EffectHandlers<M, HandlerContext, HostServices>,
-): void {
-  assertHostSide(module);
-  loopbackRegistrar.serve(module, handlers);
-  linkRegistrar.serve(module, handlers);
-}
-
-// A module's views (contract.ts, view), served on the device link to
-// the peers its annotations admit, and on the loopback.
-export function registerViews<M extends ContractModule>(
-  module: M,
-  views: ViewHandlers<M, HostServices>,
-): void {
-  linkRegistrar.view(module, views);
-  loopbackRegistrar.view(module, views);
-}
-
-// A contract on the loopback alone (the control contract, and the
-// shell's session with its host): its calls, and its views.
-export function registerLoopbackContract<M extends ContractModule>(
-  module: M,
-  handlers: EffectHandlers<M, HandlerContext, HostServices>,
-  views?: ViewHandlers<M, HostServices>,
-): void {
-  loopbackRegistrar.serve(module, handlers);
-  if (views !== undefined) loopbackRegistrar.view(module, views);
-}
 
 // A push from the host: to every window and process on the loopback,
 // which serves every one off the host's pushes, and, when annotated

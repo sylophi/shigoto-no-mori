@@ -1,11 +1,11 @@
-// What a side serves, module by module, for its RPC server to answer
-// the group's calls from (host/socket/DeviceLink.ts, main/ipc/ShellLink.ts,
-// web/ipc/localRegistrar.ts). A module registers whole or not at all:
+// What the shell and a web tab serve, module by module, for the shell's
+// RPC server and the tab's link to answer from (main/ipc/ShellLink.ts,
+// web/ipc/localRegistrar.ts). The host's are layers (host/socket/
+// hostRpc.ts). A module registers whole or not at all:
 // every invoke needs a handler. The server's group decodes each payload
 // and encodes each answer with the call's own schemas, so a handler sees
 // only what its call's input schema let through.
 import {
-  annotation,
   type ContractCall,
   type ContractModule,
   callOf,
@@ -14,7 +14,6 @@ import {
   isInvoke,
   isPush,
   keyOf,
-  TracksProjectUsage,
 } from "@shigomori/contracts/contract";
 import { type CallFailure, callFailureOf } from "@shigomori/contracts/errors";
 import type {
@@ -33,7 +32,7 @@ export type Invoke<Ctx, Services, E = CallFailure> = (
   ctx: Ctx,
 ) => Effect.Effect<unknown, E, Services>;
 
-export type View<Services> = (
+type View<Services> = (
   input: unknown,
 ) => Stream.Stream<unknown, unknown, Services>;
 
@@ -62,15 +61,17 @@ export type Served<Ctx, Services = never, E = CallFailure> = {
   readonly viewOf: (call: ContractCall) => View<Services> | undefined;
 };
 
+function check(call: ContractCall, handler: unknown): void {
+  if (handler === undefined) {
+    throw new Error(`no handler for ${channelOf(call)}`);
+  }
+}
+
 export function createServed<Ctx, Services = never, E = CallFailure>(
   options: {
     // What a handler's failure crosses as: callFailureOf on a wire, the
     // failure as it is in the page, which has none.
     readonly failure?: (error: unknown) => E;
-    // Runs after a call that opts in via TracksProjectUsage resolves,
-    // with its input. Required whenever a module declares a tracked
-    // call: registration throws otherwise.
-    readonly onUsageTracked?: (input: unknown) => void;
   } = {},
 ): Served<Ctx, Services, E> {
   const failure =
@@ -84,27 +85,10 @@ export function createServed<Ctx, Services = never, E = CallFailure>(
     }
     return channel;
   };
-  const check = (call: ContractCall, handler: unknown) => {
-    if (handler === undefined) {
-      throw new Error(`no handler for ${channelOf(call)}`);
-    }
-    if (
-      annotation(call, TracksProjectUsage) === true &&
-      options.onUsageTracked === undefined
-    ) {
-      throw new Error(
-        `${channelOf(call)} tracks project usage, and nothing here hears it`,
-      );
-    }
-  };
   const mount = (
     call: ContractCall,
     handler: (input: unknown, ctx: Ctx) => unknown,
   ) => {
-    const tracked =
-      annotation(call, TracksProjectUsage) === true
-        ? options.onUsageTracked
-        : undefined;
     invokes.set(once(call), (input, ctx) =>
       Effect.try({
         try: () => handler(input, ctx),
@@ -119,7 +103,6 @@ export function createServed<Ctx, Services = never, E = CallFailure>(
               }),
         ),
         Effect.mapError(failure),
-        Effect.tap(() => Effect.sync(() => tracked?.(input))),
       ),
     );
   };

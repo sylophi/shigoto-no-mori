@@ -62,8 +62,7 @@ import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import * as HostAccount from "@host/lib/HostAccount";
 import * as Loopback from "@host/socket/Loopback";
-import type { LinkRegistrar } from "@host/socket/DeviceLink";
-import { createServed } from "@shared/ipc/served";
+import * as HostRpc from "@host/socket/hostRpc";
 import * as Views from "@host/lib/Views";
 import * as HostPushes from "@host/lib/HostPushes";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
@@ -92,9 +91,6 @@ const loopbackFile = join(dataDir, LOOPBACK_FILE);
 // handlers and transfers over the proof file's host services. Answers
 // its stop.
 async function startLoopback() {
-  const registrar: LinkRegistrar = createServed();
-  registrar.serve(controlContract, controlHandlers);
-  registrar.view(controlContract, controlTransfers);
   const host = await hostContext();
   const scope = Scope.makeUnsafe();
   await runHost(
@@ -102,12 +98,21 @@ async function startLoopback() {
       Layer.unwrap(
         Effect.map(Effect.context<HostServices>(), (services) =>
           Loopback.layer({
-            registrar,
             deviceId: () => DIALER,
             appVersion: "9.9.9",
             file: () => loopbackFile,
-            services: Effect.succeed(services),
-          }),
+          }).pipe(
+            Layer.provide(
+              HostRpc.handlers(
+                controlContract,
+                controlHandlers,
+                controlTransfers,
+              ),
+            ),
+            Layer.provide(
+              Layer.succeed(HostRpc.HostGraph, Effect.succeed(services)),
+            ),
+          ),
         ),
       ).pipe(
         Layer.provide(

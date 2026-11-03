@@ -65,6 +65,7 @@ async function main(): Promise<void> {
     facts,
     shell: HeadlessShell.layer(facts, account),
     openSpans: new Map(),
+    loopback: account.login,
     ready: async ({ port, deviceId }) => {
       log.info(`[host] up on 127.0.0.1:${port} as device ${deviceId}`);
       await account.boot(deviceId);

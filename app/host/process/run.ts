@@ -34,13 +34,15 @@ import { storeFailureReport } from "@host/lib/storeFailure";
 import * as Observability from "@shared/observability";
 import { initDataDir } from "@shared/paths";
 import * as Graph from "./graph";
+import type * as HostRpc from "@host/socket/hostRpc";
 import * as Loopback from "@host/socket/Loopback";
 import { reapOrphanedConnector } from "@host/direct/Tunnel";
 import { TUNNEL_PID_FILE } from "@shigomori/engine/tunnelPid";
 import { setHostFacts } from "./facts";
+import { followPeerPushes } from "./handlers";
 import * as HostLayer from "./layer";
 import * as HostNodeServices from "./nodeServices";
-import { startHost } from "./session";
+import { sessionHandlers } from "./session";
 
 // Every span that ends, a JSON line in host-trace.log beside the
 // shell's trace.log, rotated to host-trace.old.log past 1 MB as the
@@ -119,6 +121,8 @@ export async function runHost<E>(root: {
   >;
   // The spans open now, which the Electron shell's beat reads.
   readonly openSpans: Observability.OpenSpans;
+  // What the entry serves on the loopback beside the host's own.
+  readonly loopback?: HostRpc.HandlerLayer;
   // The host is up, on the loopback at `address`.
   readonly ready: (address: {
     readonly port: number;
@@ -150,7 +154,7 @@ export async function runHost<E>(root: {
   // The shell has opened the data folder already, and says so when it
   // can't: this only names it for the host.
   await initDataDir(flavor);
-  startHost({ quit });
+  followPeerPushes();
   const engine = {
     flavor,
     nativefs: bundledBinaryPath(facts, NATIVEFS_DIST_DIR, NATIVEFS_BINARY_NAME),
@@ -162,7 +166,15 @@ export async function runHost<E>(root: {
   const graph = ManagedRuntime.make(
     Graph.layer.pipe(
       Layer.provideMerge(
-        HostLayer.layer({ hurried: () => hurried, engine, migration }),
+        HostLayer.layer({
+          hurried: () => hurried,
+          engine,
+          migration,
+          loopback: Layer.mergeAll(
+            sessionHandlers({ quit }),
+            root.loopback ?? Layer.empty,
+          ),
+        }),
       ),
       // What the entry handed over: its facts and its calls.
       Layer.provideMerge(

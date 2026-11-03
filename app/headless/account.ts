@@ -18,7 +18,6 @@ import {
   loginContract,
   type LoginStatus,
 } from "@shigomori/contracts/modules/login";
-import type { EffectHandlers } from "@shigomori/contracts/types";
 import { current as currentPlatform } from "@shigomori/engine/platform";
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
@@ -29,8 +28,8 @@ import {
   type Named,
 } from "@host/lib/control/plan";
 import { applyAccount, noteAccountDevices } from "@host/process/handlers";
-import type { HostServices } from "@host/process/services";
-import { onHubStatus, registerLoopbackContract } from "@host/process/wires";
+import { onHubStatus } from "@host/process/wires";
+import * as HostRpc from "@host/socket/hostRpc";
 import { createAccountStore } from "@shared/account/credentialFile";
 import { defaultDesktopDeviceName } from "@shared/account/defaultDeviceName";
 import { retryParkedRevoke } from "@shared/account/enroll";
@@ -46,7 +45,6 @@ import {
 } from "@shared/account/hostShell";
 import { createAccountService } from "@shared/account/service";
 import type { HostFacts } from "@shared/hostFacts";
-import type { HandlerContext } from "@shared/ipc/transport";
 import { credentialRevoked } from "@shared/remote/supervisor";
 import { log } from "@shared/log";
 
@@ -142,11 +140,7 @@ export function headlessAccount(facts: HostFacts) {
     }
   };
 
-  const login: EffectHandlers<
-    typeof loginContract,
-    HandlerContext,
-    HostServices
-  > = {
+  const login = HostRpc.handlers(loginContract, {
     status: () =>
       call(async () => loginStatus(await account.status(undefined, null))),
     start: () =>
@@ -217,10 +211,11 @@ export function headlessAccount(facts: HostFacts) {
         await listDevices();
         return device.name;
       }),
-  };
-  registerLoopbackContract(loginContract, login);
+  });
 
   return {
+    // The login contract, which the loopback serves.
+    login,
     setAcceptsCommands,
     // The account as this start finds it, and a revoke a sign-out
     // couldn't deliver, delivered now.

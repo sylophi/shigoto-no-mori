@@ -28,11 +28,7 @@ import {
   loopbackPartialOf,
 } from "@shigomori/contracts/link";
 import { mintHexId } from "@host/lib/hexId";
-import {
-  type LateServices,
-  type LinkRegistrar,
-  make as makeLink,
-} from "./DeviceLink";
+import { make as makeLink } from "./DeviceLink";
 
 class LoopbackBindError extends Schema.TaggedError<LoopbackBindError>()(
   "LoopbackBindError",
@@ -63,7 +59,6 @@ export class Loopback extends Context.Service<
 >()("sm/host/Loopback") {}
 
 const make = (options: {
-  readonly registrar: LinkRegistrar;
   readonly deviceId: () => string;
   readonly appVersion: string;
   // Where loopback.json goes: the data dir's, resolved late because the
@@ -72,17 +67,14 @@ const make = (options: {
   // The one page origin the listener admits beside an origin-less dial:
   // the desktop window's (its renderer scheme), which dials it too.
   readonly allowedOrigin?: string;
-  readonly services: LateServices;
 }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const token = mintHexId();
     const shellToken = mintHexId();
     const link = yield* makeLink({
-      registrar: options.registrar,
       group: LoopbackGroup,
       local: true,
-      services: options.services,
       auth: {
         opens: { token, shellToken },
         // Its callers command this machine as its owner.

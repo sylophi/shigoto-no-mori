@@ -1,49 +1,33 @@
-// Wires the host up as it starts, ahead of its graph: the handlers on
-// its wires, and the shell's session (packages/contracts/src/modules/
-// session.ts) on the loopback.
+// The shell's session with its host (packages/contracts/src/modules/
+// session.ts), on the loopback alone.
 import { sessionContract } from "@shigomori/contracts/modules/session";
-import type { EffectHandlers } from "@shigomori/contracts/types";
-import type { HandlerContext } from "@shared/ipc/transport";
 import { updaterContract } from "@shigomori/contracts/modules/updater";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as Scripts from "@host/lib/Scripts";
 import * as Graph from "./graph";
-import type { HostServices } from "./services";
 import * as BackgroundFetch from "@host/lib/BackgroundFetch";
 import * as Tunnel from "@host/direct/Tunnel";
 import * as Agents from "@shigomori/engine/Agents";
 import { dirname } from "node:path";
 import * as HostFacts from "@host/lib/HostFacts";
-import {
-  applyAccount,
-  noteAccountDevices,
-  registerHostHandlers,
-} from "./handlers";
+import * as HostRpc from "@host/socket/hostRpc";
+import { applyAccount, noteAccountDevices } from "./handlers";
 import * as Shell from "@host/lib/Shell";
 import * as WtFolder from "@shigomori/engine/WtFolder";
 import { asCall, changing } from "@host/lib/Engine";
-import {
-  broadcastAll,
-  probeRemoteConnections,
-  registerLoopbackContract,
-} from "./wires";
+import { broadcastAll, probeRemoteConnections } from "./wires";
 
 // The root's own Promise work, for the session's calls.
 const onRoot = <A>(run: () => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: callFailureOf });
 
-export function startHost(options: {
+export const sessionHandlers = (options: {
   // The shell asked the host to stop. `hurried` is an update install or
   // a relaunch, which signals scripts instead of waiting them out.
   readonly quit: (hurried: boolean) => void;
-}): void {
-  registerHostHandlers();
-  const session: EffectHandlers<
-    typeof sessionContract,
-    HandlerContext,
-    HostServices
-  > = {
+}) =>
+  HostRpc.handlers(sessionContract, {
     account: (facts) => onRoot(() => applyAccount(facts)),
     accountDevices: (deviceIds) =>
       Effect.sync(() => noteAccountDevices(deviceIds)),
@@ -106,6 +90,4 @@ export function startHost(options: {
         ),
       ),
     quit: ({ hurried }) => Effect.sync(() => options.quit(hurried)),
-  };
-  registerLoopbackContract(sessionContract, session);
-}
+  });
