@@ -64,7 +64,8 @@ export function parseRemoteUrl(url: string): Remote | null {
   const scheme = raw.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):\/\//);
   if (scheme) {
     if (scheme[1]?.toLowerCase() === "file") return null;
-    const rest = raw.slice(scheme[0].length);
+    // Only a URL has a query or a fragment. In scp-style they are path.
+    const rest = raw.slice(scheme[0].length).replace(/[?#].*$/, "");
     const slash = rest.indexOf("/");
     const authority = slash === -1 ? rest : rest.slice(0, slash);
     const path = slash === -1 ? "" : rest.slice(slash + 1);
