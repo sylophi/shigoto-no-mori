@@ -74,11 +74,13 @@ export const makeReads = Effect.gen(function* () {
     }
     const listed = yield* run("port-pool", ["list"]).pipe(Effect.result);
     if (Result.isFailure(listed)) {
-      const { exitCode, cause } = listed.failure;
+      const { failure } = listed;
       return {
         kind: "failed",
         why:
-          exitCode === null ? errorMessageOf(cause) : `exit status ${exitCode}`,
+          failure.exitCode === null
+            ? errorMessageOf(failure.cause ?? failure)
+            : `exit status ${failure.exitCode}`,
       } as const;
     }
     return {

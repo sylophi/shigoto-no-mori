@@ -142,7 +142,7 @@ const failureOf = (error: CommandError) => {
   if (error.exitCode !== null) return `exit status ${error.exitCode}`;
   return error.reason === "timed-out"
     ? "signal: killed"
-    : errorMessageOf(error.cause);
+    : errorMessageOf(error.cause ?? error);
 };
 
 // Code-unit order, as Go compares strings.

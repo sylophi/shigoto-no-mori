@@ -56,8 +56,12 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
             cause: new Error(`exit status ${code}`),
           }),
         ),
-        Effect.catch(({ cause }) =>
-          Effect.succeed<Ran>({ ok: false, output: "", cause }),
+        Effect.catch((error) =>
+          Effect.succeed<Ran>({
+            ok: false,
+            output: "",
+            cause: error.cause ?? error,
+          }),
         ),
       );
 

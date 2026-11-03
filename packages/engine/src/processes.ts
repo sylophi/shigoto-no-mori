@@ -307,14 +307,16 @@ export const readToExit = <A, E, R>(
   });
 
 // A command that did not answer. `cause` holds what it said on stderr,
-// the spawn failure, or how long it was given. `command` is the
-// binary's name, never its arguments, which can carry a path or a query.
+// or the spawn failure. `command` is the binary's name, never its
+// arguments, which can carry a path or a query. `seconds` is a timed-out
+// command's limit.
 export class CommandError extends Schema.TaggedError<CommandError>()(
   "CommandError",
   {
     command: Schema.String,
     reason: Schema.Literals(["not-found", "timed-out", "too-large", "failed"]),
     exitCode: Schema.NullOr(Schema.Int),
+    seconds: Schema.optional(Schema.Finite),
     cause: Schema.Defect(),
   },
 ) {
@@ -323,7 +325,7 @@ export class CommandError extends Schema.TaggedError<CommandError>()(
       case "not-found":
         return `${this.command} is not installed.`;
       case "timed-out":
-        return `${this.command} timed out.`;
+        return `${this.command} didn't finish within ${this.seconds} s.`;
       case "too-large":
         return `${this.command} printed more than the app reads.`;
       case "failed":
@@ -432,8 +434,8 @@ interface ExecOptions {
   readonly anyExit?: boolean | undefined;
 }
 
-// Runs `command` to its exit. Anything but exit 0 fails, unless
-// `anyExit`, with what it wrote as the cause (stderrOf, stdoutOf).
+// Runs `command` to its exit. Anything but exit 0 fails with what it
+// wrote as the cause (stderrOf, stdoutOf), unless `anyExit`.
 export const exec = Effect.fn("exec")(function* (
   command: string,
   args: readonly string[],
@@ -500,12 +502,13 @@ export const exec = Effect.fn("exec")(function* (
       duration: timeout,
       orElse: () =>
         Effect.fail(
-          fail(
-            "timed-out",
-            new Error(
-              `${name} didn't finish within ${Duration.toSeconds(timeout)} s.`,
-            ),
-          ),
+          new CommandError({
+            command: name,
+            reason: "timed-out",
+            exitCode: null,
+            seconds: Duration.toSeconds(timeout),
+            cause: undefined,
+          }),
         ),
     }),
   );
