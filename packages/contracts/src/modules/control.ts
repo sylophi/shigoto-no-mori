@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { defineContract, invoke, Remote, view } from "../contract.ts";
+import { defineContract, invoke, view } from "../contract.ts";
 import { DeviceIdSchema } from "../hubProtocol.ts";
 import {
   SyncCloneIntoSchema,
@@ -215,7 +215,7 @@ const ControlMirrorTargetSchema = Schema.Struct({
 
 export const controlContract = defineContract(
   "control",
-  "host",
+  { scope: "host", remote: false },
   invoke(
     "devices",
     strict(
@@ -324,7 +324,7 @@ export const controlContract = defineContract(
     ),
     ControlAccessSchema,
   ),
-).annotateRpcs(Remote, false);
+);
 
 // So the CLI keys its exit handling on a code, not the prose.
 export const CONTROL_ERROR_CODES = [

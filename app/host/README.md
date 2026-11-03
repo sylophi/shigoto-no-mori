@@ -11,8 +11,8 @@ on what that found.
   whichever shell started it, and `host.ts` the Electron shell's entry
   to it. `layer.ts` is the host's layer
   graph, `services.ts` names the services the handlers answer on
-  (`HostServices`), `handlers.ts` registers every module's handlers,
-  `wires.ts` puts them on the loopback and the device link, and
+  (`HostServices`), `handlers.ts` holds every module's handlers as
+  one layer, `wires.ts` holds the loopback and the device link, and
   `graph.ts` is the root's one way into the graph from callbacks that
   are not Effect (EFFECT.md, section 3), which nothing outside
   `process/` uses.
@@ -24,8 +24,9 @@ on what that found.
   rules for services read it (`lint/README.md`); lowercase modules are
   helpers, Promise code and the engine calls, and `lib/cli/shell.ts`
   holds the one service among them, `HookShell`.
-- `socket/`: the device link's server and its byte channels, and the
-  loopback the windows dial. `direct/`, `hub/`: reaching peers.
+- `socket/`: the device link's server and its byte channels, the
+  loopback the windows dial, and the layer a module's handlers are
+  served from (`hostRpc.ts`). `direct/`, `hub/`: reaching peers.
   `mirror/`, `fileSync/`, `portForward/`: the remote mechanisms.
 
 ## A process of its own
@@ -103,8 +104,8 @@ commits it (`EFFECT.md`, section 5); the engine's are in
 3. The handler in `ipc/modules/<module>.ts`: decode, call the method,
    nothing else. The table `satisfies` the contract's handlers type, so
    typecheck fails until the call has one.
-4. A new module's table is registered in `process/handlers.ts`
-   (`registerContract`, onto `shared/ipc/served.ts`); a new call in an
+4. A new module's table joins `hostHandlers` in `process/handlers.ts`
+   (`HostRpc.handlers`, `socket/hostRpc.ts`); a new call in an
    existing module needs nothing there. The group's RPC server decodes
    each payload and encodes each answer with the call's schemas.
 5. The renderer reaches it through its client; the lab's fake host

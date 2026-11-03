@@ -15,6 +15,7 @@ import * as Layer from "effect/Layer";
 import * as DeviceId from "@host/lib/config/DeviceId";
 import * as HostAccount from "@host/lib/HostAccount";
 import { DataDirHolders } from "@host/lib/DataDirHolders";
+import * as HostRpc from "@host/socket/hostRpc";
 import * as Loopback from "@host/socket/Loopback";
 import * as ProjectSettingsSync from "@host/lib/sharedSettings/projectSettings";
 import * as SharedSettingsStore from "@host/lib/sharedSettings/store";
@@ -49,6 +50,8 @@ import * as MirrorLedger from "@host/mirror/MirrorLedger";
 import * as ScratchIndex from "@host/mirror/ScratchIndex";
 import {
   announceProjectChanged,
+  hostHandlers,
+  loopbackHandlers,
   mirrorChangesLayer,
   mirrorDaemonChangesLayer,
   mirrorDaemonLayer,
@@ -293,12 +296,24 @@ const scriptsAndFoundation = (options: {
     Layer.provideMerge(foundation(options.engine, options.migration)),
   );
 
+// Handlers whose calls run on the graph as it is when each comes.
+const onGraph = (handlers: HostRpc.HandlerLayer) =>
+  handlers.pipe(
+    Layer.provide(Layer.succeed(HostRpc.HostGraph, Graph.services)),
+  );
+
+// Built once, for both listeners.
+const served = onGraph(hostHandlers);
+
 // Built from the bottom up, so the scope closes from the top down: read
 // downward, this is the quit sequence.
 export const layer = (options: {
   readonly hurried: () => boolean;
   readonly engine: Parameters<typeof Engine.layer>[0];
   readonly migration: Migration.Migration["Service"];
+  // What the loopback serves beside every host module: the shell's
+  // session, and the entry's own.
+  readonly loopback: HostRpc.HandlerLayer;
 }) =>
   dataDirHolders.pipe(
     Layer.provideMerge(scriptGate),
@@ -308,7 +323,16 @@ export const layer = (options: {
     // The loopback the terminal reaches the app on. It unpublishes its
     // address first as it stops, so a terminal run during the quit
     // reads "not running" instead of dialing a closing listener.
-    Layer.provideMerge(loopbackLayer),
+    Layer.provideMerge(
+      loopbackLayer.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            served,
+            onGraph(Layer.mergeAll(loopbackHandlers, options.loopback)),
+          ),
+        ),
+      ),
+    ),
     // The worktree moves and removals, around the scripts and terminals
     // they stop and refuse for and the mirrors they carry or end, and the
     // carry-over reads.
@@ -322,7 +346,7 @@ export const layer = (options: {
     Layer.provideMerge(tunnelLayer),
     // The listener peers dial, which connected peers see go away
     // cleanly.
-    Layer.provideMerge(deviceLinkLayer),
+    Layer.provideMerge(deviceLinkLayer.pipe(Layer.provide(served))),
     // The switch the listener's gate reads.
     Layer.provideMerge(sharingLayer),
     Layer.provideMerge(gitWatcher),

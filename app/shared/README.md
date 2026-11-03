@@ -9,9 +9,10 @@ is here is the app's own.
   client and its sealed socket, the loopback the windows dial
   (`remote/hostLink.ts`), the hub connection and the direct plane that
   dials peers through it, and the Noise handshake and device keys.
-- `ipc/`: what a side serves, module by module, for its RPC server
-  (`served.ts`); a module's client, its invokes as effects over a link
-  (`effectClient.ts`); and the window's port to its shell (`shell.ts`).
+- `ipc/`: what the shell and a web tab serve, module by module
+  (`served.ts`), a push as it goes out, checked at its source
+  (`push.ts`), a module's client, its invokes as effects over a link
+  (`effectClient.ts`), and the window's port to its shell (`shell.ts`).
 - `paths.ts`, `shellEnv.ts`, `observability.ts`, `lifetimes.ts`,
   `layerLatch.ts`, `hostFacts.ts`: what the host and the shell both
   compile (the data dir, the login shell's environment, the logger and

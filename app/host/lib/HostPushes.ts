@@ -3,7 +3,7 @@
 // host's view streams re-read off it, and the device link serves it.
 import type { ContractModule } from "@shigomori/contracts/contract";
 import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
-import { resolvePush } from "@shared/ipc/served";
+import { resolvePush } from "@shared/ipc/push";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

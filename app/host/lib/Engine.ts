@@ -176,7 +176,7 @@ export const hostCallFailure = (error: unknown): CallFailure =>
 // An operation that changes a worktree on disk, run only while no
 // data-folder move can start (`DataDirLock`): every hold of the lock the
 // host takes passes here. A call that changes code is held by the link
-// that serves it (socket/DeviceLink.ts), and what the host runs past
+// that serves it (socket/hostRpc.ts), and what the host runs past
 // such a call or apart from one (a create's whole run, a removal, a
 // move, a landing, a capture, an auto-pull, a project added or removed)
 // is held by the service that runs it. A create, removal or move asked

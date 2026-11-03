@@ -38,7 +38,8 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import type { HandlerContext, Link } from "@shared/ipc/transport";
 import { pushFanOut } from "@shared/remote/rpcTransport";
-import { createServed, resolvePush, type Served } from "@shared/ipc/served";
+import { resolvePush } from "@shared/ipc/push";
+import { createServed, type Served } from "@shared/ipc/served";
 import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "./stubDefaults";
 

@@ -34,7 +34,8 @@ import type { ContractModule } from "@shigomori/contracts/contract";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import type { HubPeerPush } from "@shigomori/contracts/modules/hub";
 import type { EffectHandlers } from "@shigomori/contracts/types";
-import { createServed, resolvePush } from "@shared/ipc/served";
+import { resolvePush } from "@shared/ipc/push";
+import * as HostRpc from "@host/socket/hostRpc";
 import type { HostServices } from "@host/process/services";
 import { hostContext } from "./hostRuntime.mts";
 import type { HandlerContext } from "@shared/ipc/transport";
@@ -83,13 +84,12 @@ async function startDirectListener<const C extends readonly ContractModule[]>(
   const tickets = createConnectTicketStore();
   let accepts = false;
   const sharing = Effect.runSync(SubscriptionRef.make(true));
-  const registrar: DeviceLink.LinkRegistrar = createServed({
-    // The host's usage bump is its own concern.
-    onUsageTracked: () => {},
-  });
-  for (const [contract, handlers] of contracts) {
-    registrar.serve(contract, handlers);
-  }
+  const served = Layer.mergeAll(
+    Layer.empty,
+    ...contracts.map(([contract, handlers]) =>
+      HostRpc.handlers(contract, handlers),
+    ),
+  );
   const host = await hostContext();
   const runtime = ManagedRuntime.make(
     Layer.provideMerge(
@@ -97,8 +97,6 @@ async function startDirectListener<const C extends readonly ContractModule[]>(
       Layer.unwrap(
         Effect.map(Effect.context<HostServices>(), (services) =>
           DeviceLink.layer({
-            services: Effect.succeed(services),
-            registrar,
             auth: {
               // The roster's keys are the test keys (hubStub.mts), and
               // the listener seals with its own.
@@ -121,7 +119,12 @@ async function startDirectListener<const C extends readonly ContractModule[]>(
               },
               isCommandGranted: () => accepts,
             },
-          }),
+          }).pipe(
+            Layer.provide(served),
+            Layer.provide(
+              Layer.succeed(HostRpc.HostGraph, Effect.succeed(services)),
+            ),
+          ),
         ),
       ),
       Layer.mergeAll(
@@ -286,12 +289,8 @@ export type DirectWire = {
 // keeper establishes the session eagerly, before any invoke, which is
 // the supervised model the transfer checks ride. Everything registers
 // its teardown on the caller's tracker. `opts.contracts` lists the
-// [contract, handlers] pairs the listener serves, each registered with
-// output validation and a no-op usage hook: the hook is the host's
-// concern, and the registrar only calls it for defs marked
-// tracksProjectUsage (and requires it for a module that has one), so
-// passing it everywhere satisfies the registrar and changes nothing
-// else.
+// [contract, handlers] pairs the listener serves, each as the host
+// serves it (host/socket/hostRpc.ts).
 export async function bootDirectWire<const C extends readonly ContractModule[]>(
   track: Track,
   opts: { contracts: ServedContracts<C>; provide?: Layer.Layer<never> },

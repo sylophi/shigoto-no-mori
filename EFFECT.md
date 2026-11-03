@@ -167,10 +167,12 @@ export const layer = Layer.effect(Registry, make);
   is interrupted when its subscriber stops, and nothing outlives the
   page.
 - A host handler answers with an effect on the services of the host's
-  graph (`app/host/process/services.ts`), run where the call is served
-  (`registerHostContract`), and a view reads with one (`Views.view`).
-  Its handler table `satisfies` the contract's `Handlers`, so each
-  method keeps its own type for a caller in the host.
+  graph (`app/host/process/services.ts`), and a view reads with one
+  (`Views.view`). Its handler table `satisfies` the contract's
+  `Handlers`, so each method keeps its own type for a caller in the
+  host. `HostRpc.handlers` (`app/host/socket/hostRpc.ts`) makes a
+  module's tables the layer the loopback and the device link serve it
+  from, and runs each call on the graph as it is when the call comes.
 - The host's composition root reaches its graph from the callbacks it
   hands code that is not Effect (the hub connection, the account
   fan-out, the store changes) through one door,
@@ -330,8 +332,8 @@ export const layer = Layer.effect(Registry, make);
   (served to a peer only with the command switch on),
   `tracksProjectUsage`, `grant` (the consent text that covers the
   call), and `busy` (what a quit waits on the call for). A host-scoped
-  call classifies itself, and middleware fails closed
-  on a missing annotation.
+  call classifies itself: `defineContract` throws as the module loads
+  on a missing annotation, and middleware fails closed on one too.
 - Subscriptions are streaming RPCs. There are no broadcast channels. A
   client that needs a view subscribes and stops asking what changed.
 - Cancellation is RPC interruption. No cancel registries, no

@@ -1,9 +1,9 @@
 // The host side of the device link (shared/remote/link.ts): the
 // listener another device dials, serving every contract call annotated
 // `remote` over Effect RPC, the pushes as streams, and the byte
-// channels. Registration and listening are apart on purpose:
-// host/process/wires.ts registers every module at boot whether or not
-// the device is enrolled, so signing in later only starts the listener.
+// channels. The handlers (hostRpc.ts) are the layer's, there from boot
+// whether or not the device is enrolled, so signing in later only starts
+// the listener.
 //
 // A peer's socket opens sealed (shared/remote/sealedSocket.ts): the
 // ticket minted for it over the hub, checked before any crypto runs,
@@ -49,8 +49,6 @@ import {
 } from "@shigomori/contracts/contract";
 import {
   CommandRefusedError,
-  type CallFailure,
-  callFailureOf,
   LinkRefusedError,
   LinkUnauthenticatedError,
   NotSharingError,
@@ -59,7 +57,6 @@ import {
 } from "@shigomori/contracts/errors";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
-import { GRANTS } from "@shigomori/contracts/grants";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { sessionContract } from "@shigomori/contracts/modules/session";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
@@ -73,6 +70,8 @@ import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
+import type * as Rpc from "effect/rpc/Rpc";
+import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
 import * as Schedule from "effect/Schedule";
@@ -80,13 +79,7 @@ import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
-import {
-  type Invoke,
-  resolvePush,
-  type Served,
-  type View,
-} from "@shared/ipc/served";
-import type { HandlerContext } from "@shared/ipc/transport";
+import { resolvePush } from "@shared/ipc/push";
 import { log } from "@shared/log";
 import {
   CLOSE_TRY_AGAIN,
@@ -109,13 +102,9 @@ import {
   HELLO_TIMEOUT_MS,
   HOST_LIVENESS_TIMEOUT_MS,
 } from "@shared/remote/link";
-import { changing, hostCallFailure } from "@host/lib/Engine";
-import { storeErrorOf } from "@shigomori/engine/storeErrors";
 import * as HostPushes from "@host/lib/HostPushes";
 import { secretsMatch } from "@host/lib/util/secretCompare";
 import * as Sharing from "@host/lib/Sharing";
-import type { HostServices } from "@host/process/services";
-import { changeKindOf } from "./changeKinds";
 import { type HostChannels, makeHostChannels } from "./channels";
 
 // The listener's auth: what opens a socket, and the host's command
@@ -323,65 +312,6 @@ function closeThenTerminate(
 
 type Push = { readonly channel: string; readonly payload: unknown };
 
-// What the app registers to serve on a link (shared/ipc/served.ts):
-// its modules' handlers and views. The pushes it serves are the host's
-// (HostPushes).
-export type LinkRegistrar = Served<HandlerContext, HostServices>;
-
-// The graph's services, once the root has them: a call or a view that
-// comes first waits for them, and is refused if the graph failed.
-export type LateServices = Effect.Effect<
-  Context.Context<HostServices>,
-  CallFailure
->;
-
-// The calls that change code (a peer needs the grant for them), which
-// run only while no data-folder move can start, and the git work among
-// them a quit waits on (`changing`, ./changeKinds.ts).
-const changesCode: ReadonlySet<string> = new Set(GRANTS.changeCode.calls);
-
-// A contract call: the registered handler, run with the graph's
-// services, interrupted when the peer cancels it or its link drops, its
-// failure crossing as the contract error it is, or as RemoteCallError
-// with its message and code.
-const serve =
-  (
-    channel: string,
-    fn: Invoke<HandlerContext, HostServices>,
-    services: LateServices,
-  ) =>
-  (payload: unknown) =>
-    Effect.gen(function* () {
-      const peer = yield* LinkPeer;
-      const context = yield* services;
-      const call = fn(payload, {
-        connection: peer.closed,
-        callerDeviceId: peer.deviceId,
-        channels: peer.channels,
-        notifier: (module, key) => (push) => peer.notify(module, key, push),
-      });
-      return yield* (
-        changesCode.has(channel)
-          ? changing(call, {}, changeKindOf(channel)).pipe(
-              Effect.catchTag(
-                ["DataDirMoving", "DataDirMoved", "DataDirLockUnavailable"],
-                (error) => Effect.fail(callFailureOf(error)),
-              ),
-            )
-          : call
-      ).pipe(
-        // The engine reads the store as a given, so a write the store
-        // refuses (a data-folder move holding it still, a full disk)
-        // ends the call as a defect, which crosses in the store's words.
-        Effect.catchDefect((defect) =>
-          storeErrorOf(defect) === undefined
-            ? Effect.die(defect)
-            : Effect.fail(hostCallFailure(defect)),
-        ),
-        Effect.provideContext(context),
-      );
-    }).pipe(Effect.annotateSpans({ channel }));
-
 // The answer for a call the link carries and nothing here serves.
 const unserved = (tag: string) =>
   new RemoteCallError({ text: `No handler registered for channel "${tag}"` });
@@ -439,22 +369,23 @@ export class DeviceLink extends Context.Service<
 // processes on this machine the app's own credential admits, each its
 // own caller with no device of its own, hearing every host push.
 export const make = (options: {
-  readonly registrar: LinkRegistrar;
   readonly auth: WsServerTicketAuth;
   readonly group?: typeof LinkGroup | typeof LoopbackGroup;
   readonly local?: boolean;
   readonly sharing?: LinkSharing;
-  readonly services: LateServices;
 }) =>
   Effect.gen(function* () {
     const clock = yield* Clock.Clock;
-    const { registrar, auth, sharing, services } = options;
+    const { auth, sharing } = options;
     const group = (options.group ?? LinkGroup) as typeof LinkGroup;
     const local = options.local === true;
     const sharingNow =
       sharing === undefined ? Effect.succeed(true) : sharing.current;
     // The pushes every peer hears.
     const hostPushes = yield* HostPushes.HostPushes;
+    // The listener's context, whose RPC handlers are the host's
+    // (hostRpc.ts).
+    const served = yield* Effect.context<Rpc.Handler<string>>();
     const runFork = yield* FiberSet.makeRuntime<never>();
     const lifecycle = yield* Semaphore.make(1);
     const failedAuth = new Map<string, { count: number; until: number }>();
@@ -725,39 +656,24 @@ export const make = (options: {
               ),
             ).pipe(boundedMessages);
 
-        // A view, failing as an invoke does (hostCallFailure).
-        const watch = (view: View<HostServices>) => (payload: unknown) =>
-          Stream.unwrap(
-            Effect.map(services, (context) =>
-              view(payload).pipe(Stream.provideContext(context)),
-            ),
-          ).pipe(Stream.mapError(hostCallFailure), boundedMessages);
-
-        const handlers: Record<string, unknown> = { ...linkHandlers };
+        // What the link answers itself: its own calls, the pushes, and
+        // every call the host's handlers don't serve.
+        const servedKeys = served.mapUnsafe;
+        const own: Record<string, unknown> = { ...linkHandlers };
         for (const call of group.requests.values()) {
           const tag = channelOf(call);
-          if (tag in handlers) continue;
+          if (tag in own) continue;
           if (isPush(call)) {
-            handlers[tag] = push(
-              tag,
-              local || annotation(call, Remote) === true,
-            );
-            continue;
-          }
-          if (!isInvoke(call)) {
-            const view = registrar.viewOf(call);
-            handlers[tag] =
-              view === undefined
-                ? () => Stream.fail(unserved(tag))
-                : watch(view);
-            continue;
-          }
-          const fn = registrar.invokeOf(call);
-          handlers[tag] =
-            fn === undefined
+            own[tag] = push(tag, local || annotation(call, Remote) === true);
+          } else if (!servedKeys.has(call.key)) {
+            own[tag] = isInvoke(call)
               ? () => Effect.fail(unserved(tag))
-              : serve(tag, fn, services);
+              : () => Stream.fail(unserved(tag));
+          }
         }
+        const ownCalls = [...group.requests.values()].filter(
+          (call) => channelOf(call) in own,
+        );
 
         const peerAuth = Layer.succeed(PeerAuth, (effect, { client, rpc }) =>
           Effect.suspend(() => {
@@ -881,7 +797,8 @@ export const make = (options: {
         }).pipe(
           Effect.provide(
             Layer.mergeAll(
-              group.toLayer(Effect.succeed(handlers as never)),
+              Layer.succeedContext(served),
+              RpcGroup.make(...ownCalls).toLayer(Effect.succeed(own as never)),
               peerAuth,
               sharingGate,
               commandGate,
@@ -1274,19 +1191,13 @@ export const make = (options: {
     });
   });
 
-export const layer = (options: {
-  readonly registrar: LinkRegistrar;
-  readonly auth: WsServerTicketAuth;
-  readonly services: LateServices;
-}) =>
+export const layer = (options: { readonly auth: WsServerTicketAuth }) =>
   Layer.effect(
     DeviceLink,
     Effect.gen(function* () {
       const sharing = yield* Sharing.Sharing;
       return yield* make({
-        registrar: options.registrar,
         auth: options.auth,
-        services: options.services,
         sharing: {
           current: sharing.current,
           now: sharing.now,

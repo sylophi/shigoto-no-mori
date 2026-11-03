@@ -3,7 +3,7 @@
 // device over a REAL DIRECT websocket between the two fixtures,
 // brokered by the stub device hub exactly as production does
 // (test/lib/directBoot.mts), and the source goes only once the copy
-// holds it. The listener registers the REAL sync and worktrees
+// holds it. The listener serves the REAL sync and worktrees
 // contracts and handlers on a real direct listener, and the handlers
 // run the REAL engine in-process, which runs REAL git against fixture
 // repos. Asserts:
