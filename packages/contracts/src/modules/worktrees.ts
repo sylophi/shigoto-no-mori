@@ -1,7 +1,7 @@
 import * as Schema from "effect/Schema";
-import type { ContractSchema } from "../codec.ts";
 import type { ChangeKind } from "./session.ts";
 import {
+  type ContractSchema,
   push,
   defineContract,
   invoke,

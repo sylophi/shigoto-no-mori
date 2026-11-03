@@ -8,9 +8,12 @@ import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
-import type { ContractSchema } from "./codec.ts";
 import { CallFailureSchema } from "./errors.ts";
 import type { GrantId } from "./grants.ts";
+
+// A schema a call carries. Its decoded value serializes to the JSON it
+// decodes from, so the wires send values as they are and only decode.
+export type ContractSchema = Schema.Codec<unknown, unknown>;
 
 // "host": the process that owns the projects, this machine's or a
 // peer's. "client": the machine the window runs on.

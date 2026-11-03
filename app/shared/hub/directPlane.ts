@@ -13,7 +13,6 @@ import type { DeviceKind } from "@shigomori/contracts/modules/link";
 import { callOf, channelOf, payloadOf } from "@shigomori/contracts/contract";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
-import { safeDecode } from "@shigomori/contracts/codec";
 import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
 import type { HubPeerPush, HubStatus } from "@shigomori/contracts/modules/hub";
 import type { HubConnectionStatus } from "@shared/hub/connectionTypes";
@@ -23,6 +22,8 @@ import * as DirectKeeper from "@shared/hub/directKeeper";
 import { applyDirectPresence } from "@shared/hub/directPresence";
 import type { OpenClientSocket } from "@shared/remote/deviceLink";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 
 // The peer's command-access switch flipping, as its direct listener
@@ -125,18 +126,23 @@ export const make = (
         // pushes there are (the device hub carries none).
         onAnyPush: (deviceId, channel, payload) => {
           if (channel === channelOf(COMMAND_ACCESS_CHANGED)) {
-            const accepts = safeDecode(
+            const accepts = Schema.decodeUnknownResult(
               payloadOf(COMMAND_ACCESS_CHANGED),
-              payload,
-            );
-            if (accepts.success) {
-              handlers.setPeerFact(deviceId, "acceptsCommands", accepts.data);
+            )(payload);
+            if (Result.isSuccess(accepts)) {
+              handlers.setPeerFact(
+                deviceId,
+                "acceptsCommands",
+                accepts.success,
+              );
             }
           }
           if (channel === channelOf(SHARING_CHANGED)) {
-            const shares = safeDecode(payloadOf(SHARING_CHANGED), payload);
-            if (shares.success) {
-              handlers.setPeerFact(deviceId, "sharesData", shares.data);
+            const shares = Schema.decodeUnknownResult(
+              payloadOf(SHARING_CHANGED),
+            )(payload);
+            if (Result.isSuccess(shares)) {
+              handlers.setPeerFact(deviceId, "sharesData", shares.success);
             }
           }
           deps.broadcastPeerPush({ deviceId, channel, payload });
