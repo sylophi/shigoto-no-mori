@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import type { UpdaterState } from "@shigomori/contracts/schemas";
 import { Button } from "../../primitives/button.tsx";
+import { ConfirmDestructiveButton } from "../../primitives/confirm-destructive-button.tsx";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { peerReadOnlyNote } from "../../lib/commandAccessCopy.ts";
@@ -162,7 +163,6 @@ export function ChangelogButtonView({
 // until the device goes.
 export function RestartToUpdateButtonView({
   version,
-  remote,
   canCommand,
   deviceLabel,
   armed,
@@ -171,7 +171,6 @@ export function RestartToUpdateButtonView({
   onClick,
 }: {
   version: string;
-  remote: boolean;
   canCommand: boolean;
   deviceLabel: string;
   // A remote restart asked for once.
@@ -182,24 +181,15 @@ export function RestartToUpdateButtonView({
   onClick: () => void;
 }) {
   return (
-    <SimpleTooltip tip={canCommand ? undefined : peerReadOnlyNote(deviceLabel)}>
-      <Button
-        size="sm"
-        disabled={pending || restarting || !canCommand}
-        aria-pressed={remote ? armed : undefined}
-        onClick={onClick}
-      >
-        {pending || restarting ? (
-          <Loader2 className="animate-spin" />
-        ) : (
-          <RefreshCw />
-        )}
-        {restarting
-          ? "Restarting…"
-          : armed
-            ? "Click again to confirm"
-            : `Restart to update to v${version}`}
-      </Button>
-    </SimpleTooltip>
+    <ConfirmDestructiveButton
+      variant="default"
+      armed={armed}
+      pending={pending || restarting}
+      pendingLabel="Restarting…"
+      idleLabel={`Restart to update to v${version}`}
+      icon={<RefreshCw />}
+      disabledReason={canCommand ? undefined : peerReadOnlyNote(deviceLabel)}
+      onClick={onClick}
+    />
   );
 }

@@ -1,5 +1,5 @@
-import { Loader2, RefreshCw } from "lucide-react";
-import { Button } from "../../primitives/button.tsx";
+import { RefreshCw } from "lucide-react";
+import { ConfirmDestructiveButton } from "../../primitives/confirm-destructive-button.tsx";
 
 // Updates every device behind the newest release (useOutdatedDevices),
 // from the end of the Settings General section's tab bar, the chore of
@@ -21,22 +21,19 @@ export function UpdateAllButtonView({
   onClick: () => void;
 }) {
   return (
-    <Button
-      size="xs"
-      disabled={updating}
-      aria-pressed={armed}
-      onClick={onClick}
+    <ConfirmDestructiveButton
       // The loud fill of each device's own Restart to update, in the
       // tabs' pill shape at the row's height (DeviceTabBarView's trailing
       // slot stretches it), so it matches the tabs at either density.
+      variant="default"
+      size="xs"
       className="h-auto rounded-full px-2.5"
-    >
-      {updating ? (
-        <Loader2 aria-hidden className="animate-spin" />
-      ) : (
-        <RefreshCw aria-hidden />
-      )}
-      {updating ? "Updating…" : armed ? "Click again to confirm" : "Update all"}
-    </Button>
+      armed={armed}
+      pending={updating}
+      pendingLabel="Updating…"
+      idleLabel="Update all"
+      icon={<RefreshCw aria-hidden />}
+      onClick={onClick}
+    />
   );
 }

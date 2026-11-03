@@ -4,7 +4,6 @@ import {
   ChevronRight,
   CircleAlert,
   CircleCheck,
-  Loader2,
   RefreshCw,
   Stethoscope,
   Wrench,
@@ -15,6 +14,7 @@ import type {
   DoctorReport,
 } from "@shigomori/contracts/modules/cli";
 import { Button } from "../../primitives/button.tsx";
+import { ConfirmDestructiveButton } from "../../primitives/confirm-destructive-button.tsx";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import { RowTag } from "../../primitives/row-tag.tsx";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
@@ -188,23 +188,17 @@ export function DoctorDialogView({
           Check again
         </Button>
         {repairable > 0 && (
-          <Button
-            size="sm"
-            disabled={busy}
-            aria-pressed={armed}
+          <ConfirmDestructiveButton
+            variant="default"
+            armed={armed}
+            pending={repairing}
+            pendingLabel="Repairing…"
+            armedLabel="Click again to repair"
+            idleLabel={`Repair ${repairable}`}
+            icon={<Wrench />}
+            disabled={isFetching}
             onClick={onRepair}
-          >
-            {repairing ? (
-              <Loader2 aria-hidden className="animate-spin" />
-            ) : (
-              <Wrench />
-            )}
-            {repairing
-              ? "Repairing…"
-              : armed
-                ? "Click again to repair"
-                : `Repair ${repairable}`}
-          </Button>
+          />
         )}
         <Button variant="ghost" size="sm" onClick={onClose}>
           Close

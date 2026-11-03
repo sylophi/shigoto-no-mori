@@ -71,7 +71,6 @@ function RestartToUpdateButton({ version }: { version: string }) {
   return (
     <RestartToUpdateButtonView
       version={version}
-      remote={remote}
       canCommand={canCommand}
       deviceLabel={deviceLabel}
       armed={confirm.armed}
