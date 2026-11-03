@@ -34,7 +34,6 @@ import type { ContractModule } from "@shigomori/contracts/contract";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import type { HubPeerPush } from "@shigomori/contracts/modules/hub";
 import type { EffectHandlers } from "@shigomori/contracts/types";
-import { resolvePush } from "@shared/ipc/push";
 import * as HostRpc from "@host/socket/hostRpc";
 import type { HostServices } from "@host/process/services";
 import { hostContext } from "./hostRuntime.mts";
@@ -172,11 +171,7 @@ async function startDirectListener<const C extends readonly ContractModule[]>(
     setAccepts: (next) => {
       accepts = next;
       runtime.runSync(
-        Effect.flatMap(HostPushes.HostPushes, (pushes) =>
-          pushes.publish(
-            resolvePush(accountContract, "commandAccessChanged", next),
-          ),
-        ),
+        HostPushes.push(accountContract, "commandAccessChanged", next),
       );
     },
     sharesData: () => Effect.runSync(SubscriptionRef.get(sharing)),
@@ -300,9 +295,9 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
     opts.contracts,
     opts.provide ?? Layer.empty,
   );
-  // The listener's pushes on the session, as the host's peer-push
-  // fan-out hands them on (host/process/wires.ts onPeerPush), for the
-  // peer transport's subscribe.
+  // The listener's pushes on the session, as the host's hub:peerPush
+  // hands them on (host/process/wires.ts), for the peer transport's
+  // subscribe.
   const pushListeners = new Set<(push: HubPeerPush) => void>();
   const bridge = await bridgeTo(track, listener, (push) => {
     for (const hear of pushListeners) hear(push);

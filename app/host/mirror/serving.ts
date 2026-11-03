@@ -5,10 +5,12 @@
 // a peer can only mirror what this device lists, and the grant is the
 // wall, as everywhere on the byte-stream surface.
 import { join } from "node:path";
-import type {
-  MirrorApplyGitStatePayload,
-  MirrorOpenStreamPayload,
-  MirrorWorktreePayload,
+import { gitContract } from "@shigomori/contracts/modules/git";
+import {
+  type MirrorApplyGitStatePayload,
+  type MirrorOpenStreamPayload,
+  type MirrorWorktreePayload,
+  mirrorContract,
 } from "@shigomori/contracts/modules/mirror";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { callFailureOf } from "@shigomori/contracts/errors";
@@ -18,6 +20,7 @@ import * as Exit from "effect/Exit";
 import * as Stream from "effect/Stream";
 import { FileSync } from "@host/fileSync/FileSync";
 import { EngineChanges } from "@host/lib/Engine";
+import * as HostPushes from "@host/lib/HostPushes";
 import { dataDir } from "@shared/paths";
 import { findProjectAndWorktree } from "@host/lib/projects";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
@@ -25,7 +28,6 @@ import { applyGitState, readGitState, watchIndexFile } from "./gitState";
 import { log } from "@shared/log";
 import { MirrorError } from "./MirrorEngine";
 import { MirrorLedger } from "./MirrorLedger";
-import { MirrorSignals } from "./MirrorSignals";
 
 // A worktree being deleted here serves no stream and takes no git
 // state (MirrorLedger's holdServing).
@@ -59,7 +61,7 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
   ctx: HandlerContext,
 ) {
   requireChannels(ctx, channelId);
-  const signals = yield* MirrorSignals;
+  const pushes = yield* HostPushes.HostPushes;
   const ledger = yield* MirrorLedger;
   const { worktree } = yield* findProjectAndWorktree(projectId, worktreeId);
   yield* refuseHeld(ledger, worktree.id);
@@ -129,15 +131,22 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
       .pipe(Effect.forkIn(child.scope));
   }
   // A stage or unstage in the served worktree is the one git change the
-  // peer's follower cannot learn from the git-directory watcher. Told
-  // under the id the peer's session holds, and this device's own, for as
-  // long as the child serves.
+  // peer's follower cannot learn from the git-directory watcher. Told to
+  // the device mirroring it (the push is remote) under the id the peer's
+  // session holds, and this device's own, for as long as the child
+  // serves.
   yield* watchIndexFile(worktreePath).pipe(
     Stream.runForEach(() =>
-      Effect.sync(() => {
-        signals.gitChanged({ projectId, worktreeId });
+      Effect.gen(function* () {
+        yield* pushes.publish(mirrorContract, "gitChanged", {
+          projectId,
+          worktreeId,
+        });
         if (worktree.id !== worktreeId) {
-          signals.gitChanged({ projectId, worktreeId: worktree.id });
+          yield* pushes.publish(mirrorContract, "gitChanged", {
+            projectId,
+            worktreeId: worktree.id,
+          });
         }
       }),
     ),
@@ -175,6 +184,12 @@ export const applyServedGitState = ({
       { id: worktree.id, path: worktree.path },
       { expect, state, sweep },
     );
-    if (result.applied) (yield* MirrorSignals).gitApplied(project.id);
+    // A peer's follower landed its side here (a push into a copy): the
+    // pages showing the project refetch, as for the follower's own pulls.
+    if (result.applied) {
+      yield* HostPushes.push(gitContract, "projectChanged", {
+        projectId: project.id,
+      });
+    }
     return result;
   });

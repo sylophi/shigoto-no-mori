@@ -116,7 +116,7 @@ const runtime = ManagedRuntime.make(
         PullRequestMaps.layer,
         Villagers.deviceLayer,
         Views.layer,
-        Sharing.layer({ announce: () => {} }),
+        Sharing.layer,
         // Unreported, as the host starts.
         HostAccount.layer,
         Moves.layer,
@@ -138,10 +138,10 @@ const runtime = ManagedRuntime.make(
     // The engine's deletes stop the mirrors of what they take first.
     Layer.provideMerge(Layer.effect(MirrorsOnDelete, mirrorsOnDelete("both"))),
     Layer.provideMerge(MirrorLedger.layer),
-    Layer.provideMerge(HostPushes.layer),
-    Layer.provideMerge(EngineStoreChanges.layer),
     // What the app's root provides from its own wiring.
     Layer.provideMerge(HostStandIns.layer),
+    Layer.provideMerge(HostPushes.layer),
+    Layer.provideMerge(EngineStoreChanges.layer),
     Layer.provideMerge(ScriptRuns.layer),
     Layer.provideMerge(ScriptChanges.layer),
     Layer.provideMerge(FileSync.layer(() => null)),

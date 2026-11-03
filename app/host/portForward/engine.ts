@@ -26,12 +26,14 @@ import {
   errorCodeOf,
   isForwardConnectFailedError,
 } from "@shigomori/contracts/errors";
-import type {
-  PortForwardSummary,
-  PortForwardWorktree,
+import {
+  portForwardContract,
+  type PortForwardSummary,
+  type PortForwardWorktree,
 } from "@shigomori/contracts/modules/portForward";
 import type { PeerCalls } from "@host/ipc/PeerReach";
 import { mintHexId } from "@host/lib/hexId";
+import * as HostPushes from "@host/lib/HostPushes";
 import {
   type BridgedConn,
   bridgeSocket,
@@ -84,14 +86,14 @@ export type PortForwardEngine = Effect.Success<
   ReturnType<typeof makePortForwardEngine>
 >;
 
-// The changed signal and every forward run in the caller's scope.
+// The changed push and every forward run in the caller's scope.
 export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
   forwardApiFor: (deviceId: string) => ForwardApi;
   // The peer session's byte channels (bridge.ts PeerChannels).
   channelsFor: (deviceId: string) => PeerChannels;
-  onChange?: () => void;
 }) {
   const engineScope = yield* Effect.scope;
+  const pushes = yield* HostPushes.HostPushes;
   // The conns' opens run on the engine's own services, not a caller's.
   const services = yield* Effect.context<never>();
   const forwards = new Map<string, Forward>();
@@ -103,7 +105,9 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
   const changed = () => void Queue.offerUnsafe(changes, undefined);
   yield* Stream.fromQueue(changes).pipe(
     Stream.groupedWithin(Infinity, CHANGE_WINDOW_MS),
-    Stream.runForEach(() => Effect.sync(() => deps.onChange?.())),
+    Stream.runForEach(() =>
+      pushes.publish(portForwardContract, "changed", undefined),
+    ),
     Effect.forkScoped,
   );
 

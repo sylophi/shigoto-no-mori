@@ -17,15 +17,14 @@ export class PortForwards extends Context.Service<
 
 // Every forward is a scope of the layer's, so the graph closing stops
 // them all, and a start under way as it closes leaves nothing bound.
-export const layer = (options: { readonly onChange: () => void }) =>
-  Layer.effect(
-    PortForwards,
-    Effect.gen(function* () {
-      const reach = yield* PeerReach;
-      return yield* makePortForwardEngine({
-        forwardApiFor: (deviceId) => reach.calls(forwardContract, deviceId),
-        channelsFor: reach.channels,
-        onChange: options.onChange,
-      });
-    }),
-  );
+// Their changes go to every window.
+export const layer = Layer.effect(
+  PortForwards,
+  Effect.gen(function* () {
+    const reach = yield* PeerReach;
+    return yield* makePortForwardEngine({
+      forwardApiFor: (deviceId) => reach.calls(forwardContract, deviceId),
+      channelsFor: reach.channels,
+    });
+  }),
+);

@@ -730,10 +730,10 @@ it("only a copy's delete of both sides takes the original, and one that stays sa
 });
 
 // What the original's device does with a copy's delete of both sides
-// (host/process/handlers.ts deleteOriginals): the original goes only if
-// it still holds what its device read of it at the look, so an edit or
-// a branch switch since keeps it, with its scripts running and its
-// cleanup unrun.
+// (host/mirror/peerRemovals.ts): the original goes only if it still
+// holds what its device read of it at the look, so an edit or a branch
+// switch since keeps it, with its scripts running and its cleanup
+// unrun.
 it("an original taken by its copy's delete goes only if it still holds what its device read of it", async () => {
   const { project } = await repoAt("original-taken");
   const fox = await create(project, { worktreeName: "fox" });

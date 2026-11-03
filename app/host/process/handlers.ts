@@ -16,18 +16,12 @@ import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig"
 import { hygieneContract } from "@shigomori/contracts/modules/hygiene";
 import { launchersContract } from "@shigomori/contracts/modules/launchers";
 import { servedHub } from "@shared/hub/bridgeHandlers";
-import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
+import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
-import {
-  MirrorWorktreePayloadSchema,
-  mirrorContract,
-} from "@shigomori/contracts/modules/mirror";
+import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
@@ -65,12 +59,9 @@ import { hygieneHandlers } from "@host/ipc/modules/hygiene";
 import { launchersHandlers } from "@host/ipc/modules/launchers";
 import { mirrorHandlers, mirrorViews } from "@host/ipc/modules/mirror";
 import { MirrorLedger } from "@host/mirror/MirrorLedger";
-import type { Taken } from "@host/mirror/ledger/peers";
-import * as HostWorktrees from "@host/lib/Worktrees";
 import { MirrorEngine } from "@host/mirror/MirrorEngine";
-import * as MirrorEngineLayer from "@host/mirror/MirrorEngineLayer";
-import { MirrorSignals } from "@host/mirror/MirrorSignals";
 import { ScriptChanges } from "@host/lib/scripts/ScriptChanges";
+import * as HostPushes from "@host/lib/HostPushes";
 import { packageScriptsHandlers } from "@host/ipc/modules/packageScripts";
 import { portForwardHandlers } from "@host/ipc/modules/portForward";
 import * as PortForwards from "@host/portForward/PortForwards";
@@ -105,17 +96,14 @@ import { worktreesHandlers, worktreesViews } from "@host/ipc/modules/worktrees";
 import * as PeerReach from "@host/ipc/PeerReach";
 import * as HostRpc from "@host/socket/hostRpc";
 import * as MirrorDaemon from "@host/mirror/MirrorDaemon";
-import { ProjectScopedPayloadSchema } from "@shigomori/contracts/schemas/payloads";
 import { dataDir } from "@shared/paths";
 import type { AccountFacts } from "@shigomori/contracts/modules/session";
 import { HostAccount } from "@host/lib/HostAccount";
 import { acceptsPeerCommands, listAccountDevices } from "./account";
 import {
-  broadcastAll,
   clearDirectTickets,
   refreshHubConnection,
   hubHandlers,
-  onPeerPush,
   peerAdmissions,
 } from "./wires";
 import { log, warnOnFailure } from "@shared/log";
@@ -125,6 +113,10 @@ import * as Graph from "./graph";
 // LayerDownError before the hub is up.
 const bridge = Effect.try({ try: hubHandlers, catch: callFailureOf });
 
+// The byte channels of a peer's cached session.
+const channelsFor = (deviceId: string) => () =>
+  Effect.runPromise(hubHandlers().peerChannels(deviceId));
+
 // Every peer reach of the host (host/ipc/PeerReach.ts), the
 // pull/transplant orchestrations' and the port-forward engine's among
 // them, routed through the SAME invokePeer path (and so the same
@@ -132,23 +124,36 @@ const bridge = Effect.try({ try: hubHandlers, catch: callFailureOf });
 // Opening a second session directly would supersede-kill the one every
 // remote-forest query is riding, since the host keeps one authed
 // socket per device.
-const peerReach = PeerReach.make({
-  invoke: (deviceId, channel, input) =>
-    Effect.flatMap(bridge, (hub) => hub.invokeOnPeer(deviceId, channel, input)),
-  // Off the same session's fan-out (onPeerPush): what a start the peer
-  // runs for this device streams back, which the control ops relay to
-  // the CLI.
-  onPush: (deviceId, channel, handler) =>
-    onPeerPush((push) => {
-      if (push.deviceId === deviceId && push.channel === channel) {
-        handler(push.payload);
-      }
-    }),
-  channelsFor: (deviceId) => () =>
-    Effect.runPromise(hubHandlers().peerChannels(deviceId)),
-  admissions: peerAdmissions.admissions,
-  admits: peerAdmissions.admits,
-});
+const peerReachLayer = Layer.effect(
+  PeerReach.PeerReach,
+  Effect.gen(function* () {
+    const runFork = yield* FiberSet.makeRuntime<HostPushes.HostPushes>();
+    return PeerReach.make({
+      invoke: (deviceId, channel, input) =>
+        Effect.flatMap(bridge, (hub) =>
+          hub.invokeOnPeer(deviceId, channel, input),
+        ),
+      // Off the same session's pushes: what a start the peer runs for
+      // this device streams back, which the control ops relay to the CLI.
+      onPush: (deviceId, channel, handler) => {
+        const fiber = runFork(
+          Stream.unwrap(HostPushes.payloads(hubContract, "peerPush")).pipe(
+            Stream.filter(
+              (push) => push.deviceId === deviceId && push.channel === channel,
+            ),
+            Stream.runForEach((push) =>
+              Effect.sync(() => handler(push.payload)),
+            ),
+          ),
+        );
+        return () => fiber.interruptUnsafe();
+      },
+      channelsFor,
+      admissions: peerAdmissions.admissions,
+      admits: peerAdmissions.admits,
+    });
+  }),
+);
 
 // A change push's window: a burst goes out as one ping this long after
 // its first member.
@@ -164,16 +169,19 @@ export const mirrorChangesLayer = Layer.effectDiscard(
   Effect.flatMap(MirrorLedger, (ledger) =>
     ledger.watch.pipe(
       Stream.runForEach((list) =>
-        Effect.sync(() => {
-          try {
-            broadcastAll(mirrorContract, "changed", list);
-          } catch (error) {
-            log.warn(
-              `[mirror] the changed broadcast goes without its list: ${messageOf(error)}`,
-            );
-            broadcastAll(mirrorContract, "changed", undefined);
-          }
-        }),
+        HostPushes.push(mirrorContract, "changed", list).pipe(
+          Effect.catchDefect((error) =>
+            Effect.sync(() =>
+              log.warn(
+                `[mirror] the changed broadcast goes without its list: ${messageOf(error)}`,
+              ),
+            ).pipe(
+              Effect.andThen(
+                HostPushes.push(mirrorContract, "changed", undefined),
+              ),
+            ),
+          ),
+        ),
       ),
       Effect.catchDefect((defect) => Effect.fail(defect)),
       Effect.tapError((error) =>
@@ -202,23 +210,13 @@ export const scriptsChangedLayer = Layer.effectDiscard(
     changes.pipe(
       Stream.groupedWithin(Infinity, CHANGE_WINDOW_MS),
       Stream.runForEach(() =>
-        Effect.sync(() => broadcastAll(scriptsContract, "changed", undefined)),
+        HostPushes.push(scriptsContract, "changed", undefined),
       ),
       Effect.forkScoped,
     ),
   ),
 );
 const fileSyncDir = () => join(dataDir(), "file-sync");
-const decodeMirrorWorktreePayload = Schema.decodeUnknownOption(
-  MirrorWorktreePayloadSchema,
-);
-// The daemon's sessions as they stand, for the root's synchronous
-// callbacks: none before the graph is up.
-export const mirrorSessionsNow = () =>
-  Graph.readNow(
-    MirrorDaemon.onDaemon((daemon) => daemon.sessions),
-    () => [],
-  );
 
 // Continuous worktree mirroring, this device's half: the daemon
 // (host/mirror/MirrorDaemon.ts), which dials peers through the
@@ -227,62 +225,6 @@ export const mirrorSessionsNow = () =>
 // without the engine binary (a dev run before file-sync:build)
 // reports "unavailable" and keeps retrying.
 export const mirrorDaemonLayer = MirrorDaemon.layer({ dataDir: fileSyncDir });
-export const mirrorEngineLayer = MirrorEngineLayer.layer({
-  projectChanged: (projectId) =>
-    broadcastAll(gitContract, "projectChanged", { projectId }),
-});
-
-const ORIGINAL_KEPT_DETAIL =
-  "The two were in step when the copy was deleted, but this worktree changed since or couldn't be deleted, so it stays.";
-
-const ORIGINAL_CONTROL_OFF_DETAIL =
-  "The two were in step when the copy was deleted, but control from other devices is off here, so this worktree stays.";
-
-// A mirror is one worktree on two devices: the originals here whose
-// copy was deleted on its device while the two were in step go too,
-// forced, since that delete stood for both, each only if it still holds
-// what this device read of it when the two were found in step
-// (`expect`, checked before its scripts stop and again right before its
-// files go). Only under the command switch, as the peer's own delete
-// call here would be. One that stays says why on its thread.
-const deleteOriginals = (originals: readonly Taken[]) =>
-  Effect.gen(function* () {
-    const engine = yield* MirrorEngine;
-    const stays = (worktreeId: string, detail: string) =>
-      engine.noteEvent(worktreeId, "stopped", detail);
-    if (!acceptsPeerCommands()) {
-      for (const original of originals) {
-        stays(original.worktreeId, ORIGINAL_CONTROL_OFF_DETAIL);
-      }
-      return;
-    }
-    const worktrees = yield* HostWorktrees.Worktrees;
-    yield* Effect.forEach(
-      originals,
-      (original) =>
-        Effect.map(
-          Effect.exit(
-            worktrees.remove(
-              { ...original, force: true, oneSide: true },
-              () => {},
-            ),
-          ),
-          (removed) => {
-            const stayed = Exit.isFailure(removed)
-              ? messageOf(Cause.squash(removed.cause))
-              : removed.value.ok
-                ? undefined
-                : `its ${removed.value.cleanupError.phase} step failed`;
-            if (stayed === undefined) return;
-            log.warn(
-              `[mirror] the original of a deleted copy stayed: ${stayed}`,
-            );
-            stays(original.worktreeId, ORIGINAL_KEPT_DETAIL);
-          },
-        ),
-      { discard: true },
-    );
-  });
 
 // Every daemon snapshot and status change, to every window.
 export const mirrorDaemonChangesLayer = Layer.effectDiscard(
@@ -295,13 +237,6 @@ export const mirrorDaemonChangesLayer = Layer.effectDiscard(
   }),
 );
 
-// The command-access switch as it now stands, to every connected peer
-// (the push is annotated remote). The windows hear it from the shell,
-// whose account page flipped it.
-function broadcastCommandAccessChanged(): void {
-  broadcastAll(accountContract, "commandAccessChanged", acceptsPeerCommands());
-}
-
 // A step of the account fan-out that must not take the rest with it:
 // its failure is a warning in the host's log, and the fan-out goes on.
 // It needs no graph, so it runs while one stops too (a sign-out under
@@ -309,23 +244,6 @@ function broadcastCommandAccessChanged(): void {
 function teardownStep(what: string, run: () => unknown): Promise<void> {
   return warnOnFailure(`[account] ${what} failed`, run);
 }
-
-// "This project's git state moved on this machine": the project-scoped
-// ping on every wire (this window and every device viewing this host
-// refetch that project's rows), and the mirror's git follower
-// re-looking at every session in the project (a commit or checkout
-// here must reach the peer). Sent by the git-directory watcher for
-// every ref move but the app's own, and by the app-run git commands
-// that tell it at once rather than wait out the watcher's debounce.
-export function announceProjectChanged(projectId: string): void {
-  broadcastAll(gitContract, "projectChanged", { projectId });
-  toMirrorEngine((engine) => engine.localProjectChanged(projectId));
-}
-
-// The mirror engine told something now. Before the graph is up nothing
-// is following yet.
-const toMirrorEngine = (tell: (engine: MirrorEngine["Service"]) => void) =>
-  Graph.readNow(Effect.map(MirrorEngine, tell), () => undefined);
 
 // The account's facts as the shell reports them: at start and after
 // every sign-in, sign-out, rename, credential rotation or switch flip.
@@ -355,11 +273,19 @@ export async function applyAccount(next: AccountFacts | null): Promise<void> {
       Graph.run(Effect.flatMap(MirrorEngine, (engine) => engine.leaveAccount)),
     );
   }
-  // The switch as it now stands, to every connected peer, whose bridge
-  // records it for its UI and CLI. An account switch also restarts the
-  // listener, so peers learn it from their next dial either way.
+  // The switch as it now stands, to every connected peer (the push is
+  // annotated remote), whose bridge records it for its UI and CLI. The
+  // windows hear it from the shell, whose account page flipped it. An
+  // account switch also restarts the listener, so peers learn it from
+  // their next dial either way.
   if (!first && previous.facts?.acceptsCommands !== next?.acceptsCommands) {
-    broadcastCommandAccessChanged();
+    await Graph.run(
+      HostPushes.push(
+        accountContract,
+        "commandAccessChanged",
+        acceptsPeerCommands(),
+      ),
+    );
   }
   // Every report, as the socket's own inputs decide whether anything
   // changed: a device enrolled again under the same account (Retry
@@ -407,24 +333,10 @@ export function noteAccountDevices(deviceIds: ReadonlyArray<string>): void {
 }
 
 // The services the root provides the graph from its own wiring: the
-// peers' reach, what the mirror's serving side tells, and the account
-// the control ops read, its device registry riding the stored
-// credential.
+// peers' reach, and the account the control ops read, its device
+// registry riding the stored credential.
 export const rootServices = Layer.mergeAll(
-  Layer.succeed(PeerReach.PeerReach, peerReach),
-  Layer.succeed(
-    MirrorSignals,
-    MirrorSignals.of({
-      // A served worktree's index moved: to the device mirroring it
-      // (remote, so it rides the peer push path to the follower there).
-      gitChanged: (change) =>
-        broadcastAll(mirrorContract, "gitChanged", change),
-      // A peer's follower landed its side here (a push into a copy):
-      // the pages showing the project refetch, as for the follower's
-      // own pulls.
-      gitApplied: announceProjectChanged,
-    }),
-  ),
+  peerReachLayer,
   Layer.succeed(
     AccountPeers,
     AccountPeers.of({
@@ -453,11 +365,6 @@ export const rootServices = Layer.mergeAll(
   ),
 );
 
-// The port forwards, whose changes go to every window.
-export const portForwardsLayer = PortForwards.layer({
-  onChange: () => broadcastAll(portForwardContract, "changed", undefined),
-});
-
 // The forwards onto devices no longer on the account, stopped. Before
 // the graph is up there are none.
 const stopPortForwardsTo = (
@@ -468,39 +375,6 @@ const stopPortForwardsTo = (
       engine.stopForwardsTo(keep),
     ),
   );
-
-// The follower's peer-side signals: a peer's git state moved (its
-// git-directory watcher) or a served worktree's index did. And a peer's
-// worktree gone, which ends the mirrors into it running here.
-export function followPeerPushes(): void {
-  onPeerPush((push) => {
-    if (push.channel === "git:projectChanged") {
-      const { payload } = push;
-      if (Schema.is(ProjectScopedPayloadSchema)(payload)) {
-        toMirrorEngine((engine) =>
-          engine.peerProjectChanged(push.deviceId, payload.projectId),
-        );
-      }
-    } else if (push.channel === "mirror:gitChanged") {
-      const parsed = decodeMirrorWorktreePayload(push.payload);
-      if (Option.isSome(parsed)) {
-        toMirrorEngine((engine) =>
-          engine.peerWorktreeChanged(
-            push.deviceId,
-            parsed.value.projectId,
-            parsed.value.worktreeId,
-          ),
-        );
-      }
-    } else if (push.channel === "worktrees:removal") {
-      void Graph.run(
-        Effect.flatMap(MirrorLedger, (ledger) =>
-          ledger.endMirrorsOnPeerRemoval(push.deviceId, push.payload),
-        ).pipe(Effect.flatMap(deleteOriginals)),
-      ).catch(() => {});
-    }
-  });
-}
 
 // The windows' bridge onto the host's hub socket: status, invokes over
 // the keeper-held direct sessions, and the peerPush and statusChanged

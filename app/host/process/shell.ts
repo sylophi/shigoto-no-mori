@@ -7,7 +7,9 @@ import type { EffectClient } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
+import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
+import * as Stream from "effect/Stream";
 import * as Shell from "@host/lib/Shell";
 
 const ask = <A>(call: Effect.Effect<A, unknown>) =>
@@ -18,6 +20,7 @@ export const layer = (calls: EffectClient<typeof shellCallsContract>) =>
     Shell.Shell,
     Effect.gen(function* () {
       const state = yield* Ref.make<UpdaterState>({ kind: "idle" });
+      const states = yield* PubSub.unbounded<UpdaterState>();
       // What is asked without waiting, run for as long as the layer is.
       const runFork = yield* FiberSet.makeRuntime<never>();
       const tell = (call: Effect.Effect<void, unknown>) =>
@@ -30,7 +33,14 @@ export const layer = (calls: EffectClient<typeof shellCallsContract>) =>
           install: (unattended) => ask(calls.updaterInstall({ unattended })),
           update: (unattended) => ask(calls.updaterUpdate({ unattended })),
           state: Ref.get(state),
-          noteState: (next) => Ref.set(state, next),
+          noteState: (next) =>
+            Ref.set(state, next).pipe(
+              Effect.andThen(PubSub.publish(states, next)),
+              Effect.asVoid,
+            ),
+          states: PubSub.subscribe(states).pipe(
+            Effect.map(Stream.fromSubscription),
+          ),
         },
         holdUpdater: (forWhat) =>
           calls

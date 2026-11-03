@@ -85,15 +85,6 @@ export class MirrorEngine extends Context.Service<
     readonly forgetHistory: (localWorktreeId: string) => void;
     // Moves a worktree's thread to the id it has after a move.
     readonly moveHistory: (from: string, to: string) => void;
-    // A project's git state moved here, or on a peer, or a worktree a
-    // peer serves: the git follower looks at the sessions it touches.
-    readonly localProjectChanged: (projectId: string) => void;
-    readonly peerProjectChanged: (deviceId: string, projectId: string) => void;
-    readonly peerWorktreeChanged: (
-      deviceId: string,
-      projectId: string,
-      worktreeId: string,
-    ) => void;
     // This device left its account: every mirror and transfer ends,
     // copies kept, for as long as the sweep's bound allows.
     readonly leaveAccount: Effect.Effect<void>;

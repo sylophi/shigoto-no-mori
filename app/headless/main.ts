@@ -14,6 +14,7 @@ import { quit, runHost } from "@host/process/run";
 import { log } from "@shared/log";
 import { finishPendingNuke } from "@shared/nuke";
 import { applyUserShellEnv } from "@shared/shellEnv";
+import * as Layer from "effect/Layer";
 import { takeUpdateEndpointOverrides } from "@shared/updater/endpoints";
 import { headlessAccount } from "./account";
 import { headlessFacts } from "./facts";
@@ -60,12 +61,12 @@ async function main(): Promise<void> {
   process.on("SIGTERM", () => quit(false));
   process.on("SIGINT", () => quit(false));
   const account = headlessAccount(facts);
-  followSharedSettings();
   await runHost({
     facts,
     shell: HeadlessShell.layer(facts, account),
     openSpans: new Map(),
     loopback: account.login,
+    follows: Layer.merge(account.signsOutRevoked, followSharedSettings),
     ready: async ({ port, deviceId }) => {
       log.info(`[host] up on 127.0.0.1:${port} as device ${deviceId}`);
       await account.boot(deviceId);

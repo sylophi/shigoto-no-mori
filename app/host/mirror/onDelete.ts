@@ -88,12 +88,12 @@ export const mirrorsOnDelete = (sides: "both" | "this") =>
                 releaseRoots();
                 return;
               }
-              yield* HostPushes.push(worktreesContract, "removal", {
+              yield* pushes.publish(worktreesContract, "removal", {
                 projectId,
                 worktreeId,
                 state: "removed",
                 ...(original === undefined ? {} : { expect: original }),
-              }).pipe(Effect.provideService(HostPushes.HostPushes, pushes));
+              });
               // The delete is done here: the copy's, a call to another
               // device, doesn't hold it up.
               yield* Effect.forkDetach(

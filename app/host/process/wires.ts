@@ -9,7 +9,6 @@ import { ROSTER_UNAVAILABLE, STALE_TICKET } from "@shared/remote/sealedSocket";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import * as Terrier from "@shigomori/engine/Terrier";
@@ -17,16 +16,8 @@ import * as HostPushes from "@host/lib/HostPushes";
 import * as Graph from "./graph";
 import { join } from "node:path";
 import { WebSocket as WsWebSocket } from "ws";
-import type { ContractModule } from "@shigomori/contracts/contract";
 import { LOOPBACK_FILE } from "@shigomori/contracts/link";
-import {
-  hubContract,
-  type HubPeerPush,
-  type HubStatus,
-} from "@shigomori/contracts/modules/hub";
-import { sharingContract } from "@shigomori/contracts/modules/sharing";
-import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
-import { resolvePush } from "@shared/ipc/push";
+import { hubContract } from "@shigomori/contracts/modules/hub";
 import * as DirectPlane from "@shared/hub/directPlane";
 import type { HubConnection } from "@shared/hub/connection";
 import * as TunnelService from "@host/direct/Tunnel";
@@ -59,12 +50,6 @@ import * as EngineConfig from "@shigomori/engine/Config";
 // below.
 const directTickets = createConnectTicketStore();
 
-// Every push the host makes, published synchronously so pushes keep
-// their order, and never waiting on the graph: the hub is the root's,
-// served into the graph by pushesLayer.
-const pushes = Effect.runSync(PubSub.unbounded<HostPushes.Push>());
-export const pushesLayer = HostPushes.layerOn(pushes);
-
 export const deviceLinkLayer = DeviceLink.layer({
   auth: {
     opens: {
@@ -90,12 +75,6 @@ export const deviceLinkLayer = DeviceLink.layer({
     },
     isCommandGranted: acceptsPeerCommands,
   },
-});
-
-// The sharing switch the link's gate reads. Its changes go to this
-// device's windows and, the push being remote, to every peer.
-export const sharingLayer = Sharing.layer({
-  announce: (on) => broadcastAll(sharingContract, "changed", on),
 });
 
 // The listener and the tunnel, as the root's callbacks reach them.
@@ -144,29 +123,6 @@ const deviceIdNow = () =>
   (deviceId ??= Graph.readNow(DeviceId.current, () => {
     throw new Error("The device id was asked before launch read it.");
   }));
-
-// The host's own consumers of peer pushes (the mirror's git follower
-// reacts to a peer's git:projectChanged and mirror:gitChanged), beside
-// the fan-out to this machine's windows. Returns the unsubscribe.
-type PeerPushListener = (push: HubPeerPush) => void;
-const peerPushListeners = new Set<PeerPushListener>();
-
-export function onPeerPush(listener: PeerPushListener): () => void {
-  peerPushListeners.add(listener);
-  return () => {
-    peerPushListeners.delete(listener);
-  };
-}
-
-// The hub's status for the host's own followers, beside the windows':
-// a headless host's, which has no window to act on it
-// (headless/account.ts, headless/sharedSettings.ts).
-type HubStatusListener = (status: HubStatus) => void;
-const hubStatusListeners = new Set<HubStatusListener>();
-
-export function onHubStatus(listener: HubStatusListener): void {
-  hubStatusListeners.add(listener);
-}
 
 // Each peer as it comes to take this device's calls (PeerReach's
 // admissions), off the status snapshots.
@@ -231,19 +187,17 @@ const remote = layerLatch<{
 export const remotePlanesLayer = Layer.effectDiscard(
   remote.provide(
     Effect.gen(function* () {
+      const pushes = yield* HostPushes.HostPushes;
       const plane: DirectPlane.DirectPlane = yield* DirectPlane.make({
         connection: () => hub,
         localDeviceId: deviceIdNow,
         localAppVersion: () => hostFacts().appVersion,
         broadcastStatus: (status) => {
           peerAdmissions.note(status);
-          broadcastAll(hubContract, "statusChanged", status);
-          for (const listener of hubStatusListeners) listener(status);
+          pushes.publishUnsafe(hubContract, "statusChanged", status);
         },
-        broadcastPeerPush: (push) => {
-          broadcastAll(hubContract, "peerPush", push);
-          for (const listener of peerPushListeners) listener(push);
-        },
+        broadcastPeerPush: (push) =>
+          pushes.publishUnsafe(hubContract, "peerPush", push),
         // The candidate sockets ride the `ws` package so a failed dial
         // names its errno (see OpenClientSocket in
         // shared/remote/deviceLink.ts). Neither ws nor Node's global
@@ -272,19 +226,6 @@ export const remotePlanesLayer = Layer.effectDiscard(
     }),
   ),
 );
-
-// A push from the host: to every window and process on the loopback,
-// which serves every one off the host's pushes, and, when annotated
-// `remote`, to the device link's peers. A push of a shell module
-// annotated `remote` is the host's to send its peers too
-// (account:commandAccessChanged, as the switch the shell reported).
-export function broadcastAll<M extends ContractModule, K extends PushKeys<M>>(
-  module: M,
-  key: K,
-  payload: PushProducerPayload<M, K>,
-): void {
-  PubSub.publishUnsafe(pushes, resolvePush(module, key, payload));
-}
 
 // Reconciles the hub socket with the account. Runs at start and after
 // every account change, so the socket follows the credential. The
