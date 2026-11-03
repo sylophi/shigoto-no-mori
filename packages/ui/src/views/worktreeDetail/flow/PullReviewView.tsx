@@ -31,7 +31,7 @@ import { Switch } from "../../../primitives/switch.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 import { cn } from "../../../lib/utils.ts";
 import type { LandingTarget } from "./pullSteps.ts";
-import { FlowBodyView, FlowFooterView } from "./FlowChromeView.tsx";
+import { DialogBody, DialogFooter } from "../../../primitives/dialog.tsx";
 import type { DeviceTarget } from "../../../lib/deviceRoster.ts";
 
 // A peer that could take the worktree, with its checkout of the repo
@@ -80,7 +80,7 @@ export function PullReviewStepView({
   const Link = link === "mirror" ? ArrowLeftRight : ArrowRight;
   return (
     <>
-      <FlowBodyView>
+      <DialogBody>
         <div className="flex flex-col gap-6">
           <div className="relative grid overflow-hidden rounded-xl border border-border bg-card @min-[48rem]:grid-cols-2">
             {source}
@@ -109,7 +109,7 @@ export function PullReviewStepView({
             )}
           </div>
         </div>
-      </FlowBodyView>
+      </DialogBody>
       {footer}
     </>
   );
@@ -144,7 +144,7 @@ export function PullReviewFooterView({
   onStart: () => void;
 }) {
   return (
-    <FlowFooterView
+    <DialogFooter
       note={
         refusal ??
         blocked ??
@@ -162,7 +162,7 @@ export function PullReviewFooterView({
         {startLabel}
         <ArrowRight />
       </Button>
-    </FlowFooterView>
+    </DialogFooter>
   );
 }
 

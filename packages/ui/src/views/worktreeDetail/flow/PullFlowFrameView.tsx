@@ -4,7 +4,8 @@
 import type { ReactNode } from "react";
 import { Ban, Check, Loader2, X, type LucideIcon } from "lucide-react";
 import { TONE_PILL } from "../../../primitives/status-dot.tsx";
-import { FlowHeaderView, StepRailView } from "./FlowChromeView.tsx";
+import { StepRailView } from "./FlowChromeView.tsx";
+import { DialogHeader } from "../../../primitives/dialog.tsx";
 import type { FlowStage } from "./pullSteps.ts";
 
 const STAGE_STEP: Record<FlowStage, number> = {
@@ -65,7 +66,7 @@ export function PullFlowFrameView({
       : STAGE_LOOK[stage];
   return (
     <>
-      <FlowHeaderView
+      <DialogHeader
         tint={look.tint}
         icon={look.icon}
         spin={look.spin}
@@ -81,7 +82,7 @@ export function PullFlowFrameView({
         onClose={onClose}
       >
         {headline}
-      </FlowHeaderView>
+      </DialogHeader>
       <StepRailView
         current={STAGE_STEP[stage]}
         steps={steps}

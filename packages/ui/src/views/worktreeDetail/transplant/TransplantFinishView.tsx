@@ -23,7 +23,7 @@ import { InlineError } from "../../../primitives/inline-error.tsx";
 import { peerReadOnlyNote } from "../../../lib/commandAccessCopy.ts";
 import { pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../../lib/utils.ts";
-import { FlowBodyView, FlowFooterView } from "../flow/FlowChromeView.tsx";
+import { DialogBody, DialogFooter } from "../../../primitives/dialog.tsx";
 import type { Landing } from "../flow/pullSteps.ts";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 
@@ -124,7 +124,7 @@ export function TransplantFinishView({
   const branch = result.worktree.branch;
   return (
     <>
-      <FlowBodyView>
+      <DialogBody>
         <div className="flex flex-col gap-5">
           <section className="space-y-2">
             <SectionHeading>Ready on {thisDeviceLabel}</SectionHeading>
@@ -246,9 +246,9 @@ export function TransplantFinishView({
             )
           )}
         </div>
-      </FlowBodyView>
+      </DialogBody>
 
-      <FlowFooterView
+      <DialogFooter
         note={`You can change this later from the worktree's page on ${sourceDeviceLabel}.`}
       >
         <Button variant="ghost" size="sm" onClick={onClose} disabled={pending}>
@@ -267,7 +267,7 @@ export function TransplantFinishView({
               ? "Click again to confirm"
               : FINISH_LABEL[choice]}
         </Button>
-      </FlowFooterView>
+      </DialogFooter>
     </>
   );
 }

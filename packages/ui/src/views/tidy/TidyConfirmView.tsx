@@ -1,5 +1,6 @@
 import { type ReactNode, useState } from "react";
 import { Button } from "../../primitives/button.tsx";
+import { DialogFrame } from "../../primitives/dialog.tsx";
 import { Checkbox } from "../../primitives/checkbox.tsx";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import { formatBytes } from "../../lib/formatBytes.ts";
@@ -46,13 +47,28 @@ export function TidyConfirmView({
   const covered = acknowledges(acknowledged, risky);
 
   return (
-    <div className="flex min-h-0 flex-col p-5">
-      <h2 className="text-base font-semibold">
-        Remove {pluralize(count, "worktree")}
-        {/* Named up front: a selection reaching into several repos is a
-              bigger act than tidying the one you were looking at. */}
-        {projectCount > 1 && ` across ${projectCount} projects`}?
-      </h2>
+    <DialogFrame
+      title={
+        <>
+          Remove {pluralize(count, "worktree")}
+          {/* Named up front: a selection reaching into several repos is a
+                bigger act than tidying the one you were looking at. */}
+          {projectCount > 1 && ` across ${projectCount} projects`}?
+        </>
+      }
+      destructive
+      onCancel={onCancel}
+      actions={
+        <Button
+          variant="destructive"
+          size="sm"
+          disabled={!covered}
+          onClick={() => onConfirm(acknowledged)}
+        >
+          Remove {pluralize(count, "worktree")}
+        </Button>
+      }
+    >
       <p className="mt-2 text-sm text-muted-foreground">
         Each one&apos;s directory is deleted from disk along with everything
         inside it: node_modules, build output, and any file that was never
@@ -123,26 +139,6 @@ export function TidyConfirmView({
           </label>
         </ErrorBanner>
       )}
-
-      <div className="mt-5 flex justify-end gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          // oxlint-disable-next-line jsx-a11y/no-autofocus -- focus the safe action so a stray Enter cancels
-          autoFocus
-          onClick={onCancel}
-        >
-          Cancel
-        </Button>
-        <Button
-          variant="destructive"
-          size="sm"
-          disabled={!covered}
-          onClick={() => onConfirm(acknowledged)}
-        >
-          Remove {pluralize(count, "worktree")}
-        </Button>
-      </div>
-    </div>
+    </DialogFrame>
   );
 }

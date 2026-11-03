@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Check, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
+import { DialogFrame } from "../../primitives/dialog.tsx";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import { Input } from "../../primitives/input.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
@@ -156,8 +157,22 @@ export function BranchDeleteDialogView({
   onDelete: () => void;
 }) {
   return (
-    <div className="p-5">
-      <h2 className="text-base font-semibold">Delete branch</h2>
+    <DialogFrame
+      title="Delete branch"
+      destructive
+      busy={pending}
+      onCancel={onCancel}
+      actions={
+        <Button
+          variant="destructive"
+          size="sm"
+          disabled={pending}
+          onClick={onDelete}
+        >
+          {pending ? "Deleting…" : needsForce ? "Force delete" : "Delete"}
+        </Button>
+      }
+    >
       <p className="mt-2 text-sm text-muted-foreground">
         Delete the local branch{" "}
         <span className="font-mono text-foreground">{name}</span>?{" "}
@@ -181,26 +196,6 @@ export function BranchDeleteDialogView({
             title="Couldn't delete the branch"
           />
         ))}
-      <div className="mt-5 flex justify-end gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          // oxlint-disable-next-line jsx-a11y/no-autofocus -- focus the safe action so a stray Enter cancels
-          autoFocus
-          onClick={onCancel}
-          disabled={pending}
-        >
-          Cancel
-        </Button>
-        <Button
-          variant="destructive"
-          size="sm"
-          disabled={pending}
-          onClick={onDelete}
-        >
-          {pending ? "Deleting…" : needsForce ? "Force delete" : "Delete"}
-        </Button>
-      </div>
-    </div>
+    </DialogFrame>
   );
 }

@@ -29,7 +29,7 @@ import {
 } from "@shigomori/contracts/git/branches";
 import { cn } from "../../../lib/utils.ts";
 import type { LandingTarget } from "./pullSteps.ts";
-import { FlowBodyView, FlowFooterView } from "./FlowChromeView.tsx";
+import { DialogBody, DialogFooter } from "../../../primitives/dialog.tsx";
 import {
   AFTER_PULL_POSITION,
   framePosition,
@@ -277,7 +277,7 @@ export function PullProgressView({
 
   return (
     <>
-      <FlowBodyView>
+      <DialogBody>
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-4">
             <DeviceEnd
@@ -344,19 +344,19 @@ export function PullProgressView({
               />
             ))}
         </div>
-      </FlowBodyView>
+      </DialogBody>
 
       {ended !== null ? (
-        <FlowFooterView note={cancelled ? cancelledWords : failedWords}>
+        <DialogFooter note={cancelled ? cancelledWords : failedWords}>
           <Button variant="ghost" size="sm" onClick={onClose}>
             Close
           </Button>
           <Button size="sm" onClick={onRetry}>
             Try again
           </Button>
-        </FlowFooterView>
+        </DialogFooter>
       ) : (
-        <FlowFooterView
+        <DialogFooter
           note={
             cancelling
               ? `Cancelling. Whatever landed ${landing.on} is being removed.`
@@ -371,7 +371,7 @@ export function PullProgressView({
           >
             {cancelling ? "Cancelling…" : "Cancel"}
           </Button>
-        </FlowFooterView>
+        </DialogFooter>
       )}
     </>
   );

@@ -1,15 +1,12 @@
-// The frame a multi-step worktree dialog wears: the header, the step
-// rail, the scroll body, the footer band and the card styles. The
-// transplant and the mirror (../transplant/, ../mirror/) walk all of it
-// through PullFlow.tsx, and the ports dialog and Settings' health check
-// borrow the header, body and footer. LandedPath (FlowChrome.tsx) reads
-// the landing machine's home.
-import { Check, X, type LucideIcon } from "lucide-react";
+// What a multi-step worktree dialog adds to the dialog's bands
+// (primitives/dialog.tsx): the step rail and the card styles. The
+// transplant and the mirror (../transplant/, ../mirror/) walk them
+// through PullFlow.tsx. LandedPath (FlowChrome.tsx) reads the landing
+// machine's home.
+import { Check } from "lucide-react";
 import type { ReactNode } from "react";
-import { Button } from "../../../primitives/button.tsx";
 import { Skeleton } from "../../../primitives/skeleton.tsx";
 import { cn } from "../../../lib/utils.ts";
-import { formatElapsed } from "./pullSteps.ts";
 
 export function StepRailView({
   current,
@@ -61,96 +58,6 @@ export function StepRailView({
         );
       })}
     </ol>
-  );
-}
-
-// The dialog's header: a tinted icon square, the title, one line
-// under it, any actions of the dialog's own, and either the close
-// button or (once the attempt runs) its clock in the same corner.
-export function FlowHeaderView({
-  tint,
-  icon: Icon,
-  spin = false,
-  title,
-  children,
-  elapsed,
-  actions,
-  onClose,
-}: {
-  tint: string;
-  icon: LucideIcon;
-  spin?: boolean;
-  title: ReactNode;
-  children: ReactNode;
-  elapsed?: { ms: number; label: "elapsed" | "total" };
-  actions?: ReactNode;
-  onClose: () => void;
-}) {
-  return (
-    <header className="flex items-start gap-3 px-5 py-4">
-      <span
-        className={cn(
-          "flex size-9 shrink-0 items-center justify-center rounded-lg",
-          tint,
-        )}
-      >
-        <Icon className={cn("size-4", spin && "animate-spin")} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <h2 className="text-base font-semibold">{title}</h2>
-        <div className="text-xs text-muted-foreground">{children}</div>
-      </div>
-      {actions}
-      {elapsed === undefined ? (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Close"
-          onClick={onClose}
-        >
-          <X />
-        </Button>
-      ) : (
-        <div className="shrink-0 text-right leading-tight">
-          <p className="font-mono text-lg font-semibold tabular-nums">
-            {formatElapsed(elapsed.ms)}
-          </p>
-          <p className="text-3xs tracking-wide text-muted-foreground uppercase">
-            {elapsed.label}
-          </p>
-        </div>
-      )}
-    </header>
-  );
-}
-
-export function FlowBodyView({ children }: { children: ReactNode }) {
-  return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
-  );
-}
-
-// A footer without a note is the buttons alone.
-export function FlowFooterView({
-  note,
-  children,
-}: {
-  note?: ReactNode;
-  children?: ReactNode;
-}) {
-  return (
-    <footer className="flex flex-wrap items-center gap-3 border-t border-border bg-muted/30 px-5 py-3">
-      {note && (
-        <p className="min-w-0 flex-1 basis-56 text-xs text-muted-foreground">
-          {note}
-        </p>
-      )}
-      {children && (
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          {children}
-        </div>
-      )}
-    </footer>
   );
 }
 

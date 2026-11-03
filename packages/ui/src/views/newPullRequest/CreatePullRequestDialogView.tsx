@@ -21,10 +21,10 @@ import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { pluralize } from "@shigomori/contracts/words";
 import type { Attachment } from "../../lib/pullRequestAttachments.ts";
 import {
-  FlowBodyView,
-  FlowFooterView,
-  FlowHeaderView,
-} from "../worktreeDetail/flow/FlowChromeView.tsx";
+  DialogBody,
+  DialogFooter,
+  DialogHeader,
+} from "../../primitives/dialog.tsx";
 import { DescriptionEditorView } from "./DescriptionEditorView.tsx";
 import { MultiPickerView } from "./MultiPickerView.tsx";
 
@@ -109,7 +109,7 @@ export function CreatePullRequestDialogView({
   }));
   return (
     <>
-      <FlowHeaderView
+      <DialogHeader
         tint={TONE_PILL.emerald}
         icon={GitPullRequest}
         title="Create pull request"
@@ -142,9 +142,9 @@ export function CreatePullRequestDialogView({
             </span>
           )}
         </div>
-      </FlowHeaderView>
+      </DialogHeader>
 
-      <FlowBodyView>
+      <DialogBody>
         <div className="flex flex-col gap-5">
           {seedError !== undefined && (
             <ErrorBanner title="Couldn't read the branch" message={seedError} />
@@ -218,9 +218,9 @@ export function CreatePullRequestDialogView({
             />
           )}
         </div>
-      </FlowBodyView>
+      </DialogBody>
 
-      <FlowFooterView
+      <DialogFooter
         note={unpushed > 0 && `Pushes ${pluralize(unpushed, "commit")} first`}
       >
         <Button
@@ -266,7 +266,7 @@ export function CreatePullRequestDialogView({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </FlowFooterView>
+      </DialogFooter>
     </>
   );
 }

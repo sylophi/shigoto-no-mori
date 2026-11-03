@@ -15,6 +15,7 @@ import {
   DropdownMenuSubTrigger,
 } from "../../primitives/dropdown-menu.tsx";
 import { Button } from "../../primitives/button.tsx";
+import { DialogFrame } from "../../primitives/dialog.tsx";
 import { Input } from "../../primitives/input.tsx";
 import { cn } from "../../lib/utils.ts";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
@@ -137,14 +138,16 @@ export function FolderNameDialogView({
   onCancel: () => void;
 }) {
   return (
-    <form
-      className="p-5"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSave();
-      }}
+    <DialogFrame
+      title={title}
+      onCancel={onCancel}
+      onSubmit={onSave}
+      actions={
+        <Button type="submit" keys="↩" size="sm" disabled={name.trim() === ""}>
+          {verb}
+        </Button>
+      }
     >
-      <h2 className="text-base font-semibold">{title}</h2>
       <Input
         className="mt-4 w-full"
         aria-label="Name"
@@ -155,14 +158,6 @@ export function FolderNameDialogView({
         // oxlint-disable-next-line jsx-a11y/no-autofocus -- the dialog exists to edit this field
         autoFocus
       />
-      <div className="mt-5 flex justify-end gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit" keys="↩" size="sm" disabled={name.trim() === ""}>
-          {verb}
-        </Button>
-      </div>
-    </form>
+    </DialogFrame>
   );
 }

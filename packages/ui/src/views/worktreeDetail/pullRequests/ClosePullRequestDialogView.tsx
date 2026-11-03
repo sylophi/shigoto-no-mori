@@ -6,10 +6,10 @@ import { ErrorBanner } from "../../../primitives/error-banner.tsx";
 import { TONE_PILL } from "../../../primitives/status-dot.tsx";
 import { DescriptionEditorView } from "../../newPullRequest/DescriptionEditorView.tsx";
 import {
-  FlowBodyView,
-  FlowFooterView,
-  FlowHeaderView,
-} from "../flow/FlowChromeView.tsx";
+  DialogBody,
+  DialogFooter,
+  DialogHeader,
+} from "../../../primitives/dialog.tsx";
 
 // A PR closed unmerged, with a closing comment if one is written.
 export function ClosePullRequestDialogView({
@@ -34,7 +34,7 @@ export function ClosePullRequestDialogView({
 }) {
   return (
     <>
-      <FlowHeaderView
+      <DialogHeader
         tint={TONE_PILL.rose}
         icon={GitPullRequestClosed}
         title="Close pull request"
@@ -43,9 +43,9 @@ export function ClosePullRequestDialogView({
         <p className="truncate">
           #{pr.number} {pr.title}
         </p>
-      </FlowHeaderView>
+      </DialogHeader>
 
-      <FlowBodyView>
+      <DialogBody>
         <div className="flex flex-col gap-5">
           <DescriptionEditorView
             label="Comment"
@@ -60,13 +60,15 @@ export function ClosePullRequestDialogView({
             />
           )}
         </div>
-      </FlowBodyView>
+      </DialogBody>
 
-      <FlowFooterView>
+      <DialogFooter>
         <Button
           type="button"
           variant="ghost"
           size="sm"
+          // oxlint-disable-next-line jsx-a11y/no-autofocus -- focus the safe action so a stray Enter cancels
+          autoFocus
           onClick={onCancel}
           disabled={busy}
         >
@@ -86,7 +88,7 @@ export function ClosePullRequestDialogView({
               ? "Close pull request"
               : "Close with comment"}
         </Button>
-      </FlowFooterView>
+      </DialogFooter>
     </>
   );
 }

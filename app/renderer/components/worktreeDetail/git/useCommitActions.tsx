@@ -4,7 +4,7 @@ import type { CommitActions } from "@shigomori/ui/lib/commitRewrite.ts";
 import { useQuery } from "@tanstack/react-query";
 import {
   RewordDialogView,
-  RewordFormView,
+  RewordLoadingView,
 } from "@shigomori/ui/views/worktreeDetail/git/RewordDialogView.tsx";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
@@ -134,21 +134,18 @@ function RewordDialog({
       onClose={onClose}
       popoverClassName="max-w-lg"
     >
-      <RewordDialogView
-        hash={hash}
-        form={
-          message.data && (
-            <RewordForm
-              worktree={worktree}
-              hash={hash}
-              head={head}
-              initial={message.data}
-              onClose={onClose}
-              onRewritten={onRewritten}
-            />
-          )
-        }
-      />
+      {message.data ? (
+        <RewordForm
+          worktree={worktree}
+          hash={hash}
+          head={head}
+          initial={message.data}
+          onClose={onClose}
+          onRewritten={onRewritten}
+        />
+      ) : (
+        <RewordLoadingView hash={hash} onCancel={onClose} />
+      )}
     </ModalShell>
   );
 }
@@ -193,7 +190,8 @@ function RewordForm({
     );
   };
   return (
-    <RewordFormView
+    <RewordDialogView
+      hash={hash}
       summary={summary}
       onSummaryChange={setSummary}
       description={description}

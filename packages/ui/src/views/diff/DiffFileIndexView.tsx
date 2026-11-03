@@ -30,6 +30,7 @@ import {
 } from "../../primitives/dropdown-menu.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { ModalShell } from "../../primitives/modal-shell.tsx";
+import { DialogFrame } from "../../primitives/dialog.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../lib/utils.ts";
@@ -525,22 +526,11 @@ export function DiscardConfirmView({
   onConfirm: () => void;
 }) {
   return (
-    <div className="p-5">
-      <h2 className="text-base font-semibold break-words">{label}</h2>
-      <p className="mt-2 text-sm text-muted-foreground">
-        The contents are snapshotted first, and the notification that follows
-        has Undo.
-      </p>
-      <div className="mt-5 flex justify-end gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          // oxlint-disable-next-line jsx-a11y/no-autofocus -- focus the safe action so a stray Enter cancels
-          autoFocus
-          onClick={onCancel}
-        >
-          Cancel
-        </Button>
+    <DialogFrame
+      title={label}
+      destructive
+      onCancel={onCancel}
+      actions={
         <Button
           variant="destructive"
           size="sm"
@@ -549,8 +539,13 @@ export function DiscardConfirmView({
         >
           Discard
         </Button>
-      </div>
-    </div>
+      }
+    >
+      <p className="mt-2 text-sm text-muted-foreground">
+        The contents are snapshotted first, and the notification that follows
+        has Undo.
+      </p>
+    </DialogFrame>
   );
 }
 

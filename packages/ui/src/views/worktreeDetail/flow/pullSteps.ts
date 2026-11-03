@@ -117,13 +117,6 @@ export function byteRatio(frame: {
   return total > 0 ? Math.min(1, (frame.bytes ?? 0) / total) : 0;
 }
 
-export function formatElapsed(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
 // Where a flow lands, as the words for it: this machine (the pulls), or
 // a peer (a transplant or a mirror to it), where "here" would name the
 // wrong machine. Made once per dialog and handed down, so every piece

@@ -8,7 +8,8 @@ import { SectionHeading } from "../../../primitives/section-heading.tsx";
 import { type StatusTone, StatusDot } from "../../../primitives/status-dot.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 import { cn } from "../../../lib/utils.ts";
-import { CARD, FlowBodyView, FlowFooterView } from "../flow/FlowChromeView.tsx";
+import { CARD } from "../flow/FlowChromeView.tsx";
+import { DialogBody, DialogFooter } from "../../../primitives/dialog.tsx";
 import type { FlowStage } from "../flow/pullSteps.ts";
 
 // A primary checkout's copy lands on a branch of its own
@@ -92,7 +93,7 @@ export function MirrorLiveView({
 }) {
   return (
     <>
-      <FlowBodyView>
+      <DialogBody>
         <section className="space-y-2">
           <SectionHeading>Copy on {thisDeviceLabel}</SectionHeading>
           <div className={cn(CARD, "space-y-1.5")}>
@@ -118,13 +119,13 @@ export function MirrorLiveView({
             </div>
           </div>
         </section>
-      </FlowBodyView>
+      </DialogBody>
       {/* One way out, to the copy's page (finish). */}
-      <FlowFooterView>
+      <DialogFooter>
         <Button size="sm" onClick={onDone}>
           Done
         </Button>
-      </FlowFooterView>
+      </DialogFooter>
     </>
   );
 }
