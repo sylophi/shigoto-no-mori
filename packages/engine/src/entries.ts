@@ -4,8 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as FileSystem from "effect/FileSystem";
-import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { capture } from "./processes.ts";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { exec } from "./processes.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
 // Whether anything is at a path: a file, a folder, or a symlink, a
@@ -53,20 +53,21 @@ export const copyTree = (
   flags: ReadonlyArray<string> = [],
 ) =>
   Effect.gen(function* () {
-    const { output, code } = yield* capture(
-      spawner,
+    const { stdout, code } = yield* exec(
       "cp",
       ["-R", "-P", ...flags, from, to],
-      { from: "all" },
+      { all: true, anyExit: true },
     );
     if (code !== 0) {
       return yield* new CopyFailed({
         to,
-        cause: new Error(output.trim() || `cp exited with ${code}`),
+        cause: new Error(stdout.trim() || `cp exited with ${code}`),
       });
     }
   }).pipe(
-    Effect.catchTags({
-      PlatformError: (cause) => Effect.fail(new CopyFailed({ to, cause })),
-    }),
+    Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+    // A cp that never started, in the platform's words.
+    Effect.catchTag("CommandError", ({ cause }) =>
+      Effect.fail(new CopyFailed({ to, cause })),
+    ),
   );

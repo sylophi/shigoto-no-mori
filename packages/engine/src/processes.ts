@@ -117,19 +117,14 @@ export const PS_BIRTH_ENV = { TZ: "UTC", LC_ALL: "C" };
 // the kernel took at its fork, which no later clock step moves. None
 // when ps can't say.
 export const startOf = (pid: number) =>
-  Effect.gen(function* () {
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const ran = yield* captureWithin(
-      spawner,
-      "ps",
-      ["-o", "lstart=", "-p", String(pid)],
-      "5 seconds",
-      { env: PS_BIRTH_ENV },
-    ).pipe(Effect.option);
-    if (Option.isNone(ran) || ran.value.code !== 0)
-      return Option.none<number>();
-    return parseLstart(ran.value.output);
-  });
+  exec("ps", ["-o", "lstart=", "-p", String(pid)], {
+    env: PS_BIRTH_ENV,
+    extendEnv: true,
+    timeout: "5 seconds",
+  }).pipe(
+    Effect.map(({ stdout }) => parseLstart(stdout)),
+    Effect.orElseSucceed(() => Option.none<number>()),
+  );
 
 // A record's birth when the process that wrote it couldn't read its own.
 export const UNKNOWN_BIRTH = 0;
@@ -158,59 +153,6 @@ export const stillRunning = (pid: number, startedAt: number) =>
 
 const text = <E>(stream: Stream.Stream<Uint8Array, E>) =>
   stream.pipe(Stream.decodeText(), Stream.mkString);
-
-// A command that ran past its deadline, and was ended.
-export class CommandTimedOut extends Schema.TaggedError<CommandTimedOut>()(
-  "CommandTimedOut",
-  { command: Schema.String, seconds: Schema.Finite },
-) {
-  override get message(): string {
-    return `${this.command} didn't finish within ${this.seconds} s.`;
-  }
-}
-
-// The exit code, and stdout or, with `from: "all"`, both streams as the
-// command interleaved them. The stream not kept is still drained, so a
-// command that says a lot there never stalls on a full pipe.
-export const capture = (
-  spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
-  command: string,
-  args: ReadonlyArray<string>,
-  options: {
-    readonly from?: "stdout" | "all";
-    // A variable set to undefined is unset.
-    readonly env?: Record<string, string | undefined> | undefined;
-    readonly cwd?: string;
-  } = {},
-) =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const handle = yield* spawner.spawn(
-        ChildProcess.make(command, [...args], {
-          stdin: "ignore",
-          ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-          ...(options.env === undefined
-            ? {}
-            : { env: options.env, extendEnv: true }),
-        }),
-      );
-      const all = options.from === "all";
-      const {
-        read: [output],
-        code,
-      } = yield* readToExit(
-        handle,
-        Effect.all(
-          [
-            text(all ? handle.all : handle.stdout),
-            all ? Effect.void : Stream.runDrain(handle.stderr),
-          ],
-          { concurrency: 2 },
-        ),
-      );
-      return { output, code };
-    }),
-  );
 
 // The shell captureToFiles runs its command under, which opens the
 // files and says the command's exit status on its own stdout, a pipe
@@ -364,41 +306,17 @@ export const readToExit = <A, E, R>(
     return { read: yield* Fiber.join(reading), code: Number(code) };
   });
 
-// `capture`, ended past `timeout` (its scope closes, so the command goes
-// with it) and failed.
-export const captureWithin = (
-  spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
-  command: string,
-  args: ReadonlyArray<string>,
-  timeout: Duration.Input,
-  options: {
-    readonly from?: "stdout" | "all";
-    readonly env?: Record<string, string | undefined> | undefined;
-    readonly cwd?: string;
-  } = {},
-) =>
-  capture(spawner, command, args, options).pipe(
-    Effect.timeoutOrElse({
-      duration: timeout,
-      orElse: () =>
-        Effect.fail(
-          new CommandTimedOut({
-            command,
-            seconds: Duration.toSeconds(Duration.fromInputUnsafe(timeout)),
-          }),
-        ),
-    }),
-  );
-
 // A command that did not answer. `cause` holds what it said on stderr,
 // or the spawn failure. `command` is the binary's name, never its
-// arguments, which can carry a path or a query.
+// arguments, which can carry a path or a query. `seconds` is a timed-out
+// command's limit.
 export class CommandError extends Schema.TaggedError<CommandError>()(
   "CommandError",
   {
     command: Schema.String,
     reason: Schema.Literals(["not-found", "timed-out", "too-large", "failed"]),
     exitCode: Schema.NullOr(Schema.Int),
+    seconds: Schema.optional(Schema.Finite),
     cause: Schema.Defect(),
   },
 ) {
@@ -407,7 +325,7 @@ export class CommandError extends Schema.TaggedError<CommandError>()(
       case "not-found":
         return `${this.command} is not installed.`;
       case "timed-out":
-        return `${this.command} timed out.`;
+        return `${this.command} didn't finish within ${this.seconds} s.`;
       case "too-large":
         return `${this.command} printed more than the app reads.`;
       case "failed":
@@ -508,18 +426,22 @@ interface ExecOptions {
   readonly env?: Record<string, string | undefined> | undefined;
   readonly extendEnv?: boolean | undefined;
   readonly timeout?: Duration.Input | undefined;
-  // Past it stdout fails the command and stderr is cut short.
+  // Past it stdout fails the command, and stderr or `all` is cut short.
   readonly maxOutputBytes?: number | undefined;
+  // Both streams as one, in the order written, as `stdout`.
+  readonly all?: boolean | undefined;
+  // Any exit answers, with its code.
+  readonly anyExit?: boolean | undefined;
 }
 
-// Runs `command` to its exit. Anything but exit 0 fails, with what it
-// wrote as the cause (stderrOf, stdoutOf).
+// Runs `command` to its exit. Anything but exit 0 fails with what it
+// wrote as the cause (stderrOf, stdoutOf), unless `anyExit`.
 export const exec = Effect.fn("exec")(function* (
   command: string,
   args: readonly string[],
   options: ExecOptions = {},
 ): Effect.fn.Return<
-  { readonly stdout: string; readonly stderr: string },
+  { readonly stdout: string; readonly stderr: string; readonly code: number },
   CommandError,
   ChildProcessSpawner.ChildProcessSpawner
 > {
@@ -532,6 +454,9 @@ export const exec = Effect.fn("exec")(function* (
     exitCode: number | null = null,
   ) => new CommandError({ command: name, reason, exitCode, cause });
   const limit = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT;
+  const timeout = Duration.fromInputUnsafe(
+    options.timeout ?? Duration.infinity,
+  );
   return yield* Effect.gen(function* () {
     const handle = yield* spawner.spawn(
       ChildProcess.make(command, [...args], {
@@ -546,24 +471,26 @@ export const exec = Effect.fn("exec")(function* (
       code,
     } = yield* readToExit(
       handle,
-      Effect.all(
-        [
-          readAll(handle.stdout, limit, {
-            tooLarge: () => fail("too-large", undefined),
-          }),
-          readAll(handle.stderr, limit),
-        ],
-        { concurrency: 2 },
-      ),
+      options.all === true
+        ? Effect.all([readAll(handle.all, limit), Effect.succeed("")])
+        : Effect.all(
+            [
+              readAll(handle.stdout, limit, {
+                tooLarge: () => fail("too-large", undefined),
+              }),
+              readAll(handle.stderr, limit),
+            ],
+            { concurrency: 2 },
+          ),
     );
-    if (code !== 0) {
+    if (code !== 0 && options.anyExit !== true) {
       return yield* fail(
         "failed",
         new ExitedError(stderr.trim(), stdout),
         code,
       );
     }
-    return { stdout, stderr };
+    return { stdout, stderr, code };
   }).pipe(
     Effect.scoped,
     Effect.mapError((error) =>
@@ -572,8 +499,17 @@ export const exec = Effect.fn("exec")(function* (
         : fail(isMissingProgram(error) ? "not-found" : "failed", error),
     ),
     Effect.timeoutOrElse({
-      duration: options.timeout ?? Duration.infinity,
-      orElse: () => Effect.fail(fail("timed-out", undefined)),
+      duration: timeout,
+      orElse: () =>
+        Effect.fail(
+          new CommandError({
+            command: name,
+            reason: "timed-out",
+            exitCode: null,
+            seconds: Duration.toSeconds(timeout),
+            cause: undefined,
+          }),
+        ),
     }),
   );
 });
@@ -598,31 +534,26 @@ class ProcessesUnlisted extends Schema.TaggedError<ProcessesUnlisted>()(
 // Every process lsof can see (the user's own) with the folder it works
 // in, this one left out. lsof runs from the root, so it doesn't list
 // itself in a folder it was asked about.
-export const working = (
-  spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
-) =>
-  captureWithin(
-    spawner,
-    "lsof",
-    ["-n", "-w", "+c0", "-d", "cwd", "-Fpcn"],
-    "10 seconds",
-    { cwd: "/" },
-  ).pipe(
-    Effect.flatMap(({ output, code }) => {
-      // lsof exits 1 when it couldn't read some process, and still lists
-      // the rest.
-      if (output === "") return Effect.fail(new ProcessesUnlisted({ code }));
-      const found: Working[] = [];
-      let pid = 0;
-      let command = "";
-      for (const line of output.split("\n")) {
-        const value = line.slice(1);
-        if (line.startsWith("p")) pid = Number(value);
-        else if (line.startsWith("c")) command = value;
-        else if (line.startsWith("n") && pid !== process.pid) {
-          found.push({ pid, command, cwd: value });
-        }
+export const working = exec("lsof", ["-n", "-w", "+c0", "-d", "cwd", "-Fpcn"], {
+  cwd: "/",
+  timeout: "10 seconds",
+  anyExit: true,
+}).pipe(
+  Effect.flatMap(({ stdout, code }) => {
+    // lsof exits 1 when it couldn't read some process, and still lists
+    // the rest.
+    if (stdout === "") return Effect.fail(new ProcessesUnlisted({ code }));
+    const found: Working[] = [];
+    let pid = 0;
+    let command = "";
+    for (const line of stdout.split("\n")) {
+      const value = line.slice(1);
+      if (line.startsWith("p")) pid = Number(value);
+      else if (line.startsWith("c")) command = value;
+      else if (line.startsWith("n") && pid !== process.pid) {
+        found.push({ pid, command, cwd: value });
       }
-      return Effect.succeed(found as ReadonlyArray<Working>);
-    }),
-  );
+    }
+    return Effect.succeed(found as ReadonlyArray<Working>);
+  }),
+);

@@ -6,10 +6,9 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type { Flavor } from "./flavor.ts";
 import { type LinuxInstall, unitText } from "./linuxInstall.ts";
-import { captureWithin } from "./processes.ts";
+import { exec } from "./processes.ts";
 
 // The service manager refused, in its own words.
 class UnitFailed extends Schema.TaggedError<UnitFailed>()("UnitFailed", {
@@ -26,21 +25,18 @@ class UnitFailed extends Schema.TaggedError<UnitFailed>()("UnitFailed", {
 
 const run = (command: string, args: ReadonlyArray<string>) =>
   Effect.gen(function* () {
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const { output, code } = yield* captureWithin(
-      spawner,
-      command,
-      args,
-      "1 minute",
-      { from: "all" },
-    );
+    const { stdout, code } = yield* exec(command, args, {
+      timeout: "1 minute",
+      all: true,
+      anyExit: true,
+    });
     if (code !== 0) {
       return yield* new UnitFailed({
         command: [command, ...args].join(" "),
-        output,
+        output: stdout,
       });
     }
-    return output;
+    return stdout;
   });
 
 const systemctl = (...args: ReadonlyArray<string>) =>
