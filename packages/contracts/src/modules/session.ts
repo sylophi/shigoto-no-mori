@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { defineContract, invoke, Remote } from "../contract.ts";
+import { defineContract, invoke } from "../contract.ts";
 import { DeviceIdSchema } from "../hubProtocol.ts";
 import { GuideLaunchSchema } from "./guide.ts";
 import { UpdaterStateSchema } from "../schemas/runtime.ts";
@@ -69,7 +69,7 @@ export type BusyOperations = typeof BusyOperationsSchema.Type;
 
 export const sessionContract = defineContract(
   "session",
-  "host",
+  { scope: "host", remote: false },
   // Null when signed out or unconfigured. At start and after every change.
   invoke("account", Schema.NullOr(AccountFactsSchema), VoidSchema),
   invoke("accountDevices", Schema.Array(DeviceIdSchema), VoidSchema),
@@ -88,4 +88,4 @@ export const sessionContract = defineContract(
     strict(Schema.Struct({ hurried: Schema.Boolean })),
     VoidSchema,
   ),
-).annotateRpcs(Remote, false);
+);

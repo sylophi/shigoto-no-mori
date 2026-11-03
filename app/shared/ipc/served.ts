@@ -1,11 +1,9 @@
 // What a side serves, module by module, for its RPC server to answer
 // the group's calls from (host/socket/DeviceLink.ts, main/ipc/ShellLink.ts,
 // web/ipc/localRegistrar.ts). A module registers whole or not at all:
-// every invoke needs a handler, and a host call that never classified
-// itself is refused at registration (classificationGap). The server's
-// group decodes each payload and encodes each answer with the call's
-// own schemas, so a handler sees only what its call's input schema let
-// through.
+// every invoke needs a handler. The server's group decodes each payload
+// and encodes each answer with the call's own schemas, so a handler sees
+// only what its call's input schema let through.
 import {
   annotation,
   type ContractCall,
@@ -13,55 +11,19 @@ import {
   callOf,
   callsOf,
   channelOf,
-  Gated,
-  Grant,
   isInvoke,
   isPush,
   keyOf,
-  nameOf,
-  payloadOf,
-  Remote,
-  Scope,
   TracksProjectUsage,
 } from "@shigomori/contracts/contract";
 import { type CallFailure, callFailureOf } from "@shigomori/contracts/errors";
 import type {
   EffectHandlers,
   Handlers,
-  PushKeys,
-  PushProducerPayload,
   ViewHandlers,
 } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import type * as Stream from "effect/Stream";
-
-// Fails closed on a host call that never classified itself: a host
-// invoke must say whether it is remote, a remote one whether it is
-// gated, and a remote gated one which consent line covers it.
-function classificationGap(call: ContractCall): string | null {
-  if (isPush(call)) return null;
-  const host = annotation(call, Scope) === "host";
-  const remote = annotation(call, Remote);
-  if (host && remote === undefined) {
-    return `${channelOf(call)} does not say whether it is remote`;
-  }
-  const gated = remote === true ? annotation(call, Gated) : false;
-  if (host && gated === undefined) {
-    return `${channelOf(call)} is remote but does not say whether it is gated`;
-  }
-  // A grant names what the switch hands to other devices, so exactly
-  // the remote gated host calls carry one.
-  const handedOver = host && remote === true && gated === true;
-  const grant = annotation(call, Grant);
-  if (handedOver && grant === undefined) {
-    return `${channelOf(call)} is remote and gated but names no grant`;
-  }
-  if (!handedOver && grant !== undefined) {
-    return `${channelOf(call)} names a grant but the switch does not hand it over`;
-  }
-  return null;
-}
 
 // One invoke as the server runs it: the handler's answer, an effect, a
 // promise or a value, as an effect whose failure crosses as the
@@ -105,17 +67,12 @@ export function createServed<Ctx, Services = never, E = CallFailure>(
     // What a handler's failure crosses as: callFailureOf on a wire, the
     // failure as it is in the page, which has none.
     readonly failure?: (error: unknown) => E;
-    // Which of a module's calls this side serves: the device link
-    // serves only the remote ones, so a call that is not is never
-    // there for a peer to ask.
-    readonly serves?: (call: ContractCall) => boolean;
     // Runs after a call that opts in via TracksProjectUsage resolves,
     // with its input. Required whenever a module declares a tracked
     // call: registration throws otherwise.
     readonly onUsageTracked?: (input: unknown) => void;
   } = {},
 ): Served<Ctx, Services, E> {
-  const serves = options.serves ?? (() => true);
   const failure =
     options.failure ?? ((error: unknown) => callFailureOf(error) as E);
   const invokes = new Map<string, Invoke<Ctx, Services, E>>();
@@ -128,8 +85,6 @@ export function createServed<Ctx, Services = never, E = CallFailure>(
     return channel;
   };
   const check = (call: ContractCall, handler: unknown) => {
-    const gap = classificationGap(call);
-    if (gap !== null) throw new Error(gap);
     if (handler === undefined) {
       throw new Error(`no handler for ${channelOf(call)}`);
     }
@@ -146,7 +101,6 @@ export function createServed<Ctx, Services = never, E = CallFailure>(
     call: ContractCall,
     handler: (input: unknown, ctx: Ctx) => unknown,
   ) => {
-    if (!serves(call)) return;
     const tracked =
       annotation(call, TracksProjectUsage) === true
         ? options.onUsageTracked
@@ -207,24 +161,5 @@ export function createServed<Ctx, Services = never, E = CallFailure>(
     },
     invokeOf: (call) => invokes.get(channelOf(call)),
     viewOf: (call) => views.get(channelOf(call)),
-  };
-}
-
-// A push as it goes out: its channel, whether a peer may hear it, and
-// its payload decoded at the source, so a producer bug surfaces here
-// rather than as a shape the far end can't read.
-export function resolvePush<M extends ContractModule, K extends PushKeys<M>>(
-  module: M,
-  key: K,
-  payload: PushProducerPayload<M, K>,
-): { channel: string; payload: unknown; remote: boolean } {
-  const call = callOf(module, key);
-  if (!isPush(call)) {
-    throw new Error(`${nameOf(module)}:${key} is not a push`);
-  }
-  return {
-    channel: channelOf(call),
-    payload: Schema.decodeUnknownSync(payloadOf(call))(payload),
-    remote: annotation(call, Remote) === true,
   };
 }

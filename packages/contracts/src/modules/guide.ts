@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { push, defineContract, invoke, Remote } from "../contract.ts";
+import { push, defineContract, invoke } from "../contract.ts";
 import { harnessLabel, KNOWN_HARNESS_IDS } from "../harnesses.ts";
 import { VoidSchema } from "../schemas/index.ts";
 import { TerminalIdSchema } from "../schemas/launchers.ts";
@@ -147,9 +147,9 @@ export const guideContract = defineContract(
 // carries them.
 export const guideDriveContract = defineContract(
   "guideDrive",
-  "host",
+  { scope: "host", remote: false },
   invoke("drive", GuideDrivePayloadSchema, GuideReplySchema),
-).annotateRpcs(Remote, false);
+);
 
 export const GuideLaunchSchema = strict(
   Schema.Struct({

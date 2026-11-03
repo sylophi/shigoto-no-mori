@@ -16,7 +16,7 @@ import type {
   Handlers,
   ViewHandlers,
 } from "@shigomori/contracts/types";
-import { resolvePush } from "@shared/ipc/served";
+import { resolvePush } from "@shared/ipc/push";
 import { SHELL_PORT_CHANNEL } from "@shared/ipc/shell";
 import type { HandlerContext } from "@shared/ipc/transport";
 import * as ShellLink from "./ShellLink";

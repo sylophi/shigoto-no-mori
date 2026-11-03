@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { defineContract, invoke, Remote } from "../contract.ts";
+import { defineContract, invoke } from "../contract.ts";
 import { DeviceIconSchema } from "../deviceIcon.ts";
 import { VoidSchema } from "../schemas/index.ts";
 import { strict } from "../schemas/strict.ts";
@@ -43,7 +43,7 @@ export type LoginStatus = typeof LoginStatusSchema.Type;
 
 export const loginContract = defineContract(
   "login",
-  "host",
+  { scope: "host", remote: false },
   invoke("status", VoidSchema, LoginStatusSchema),
   // Refused while signed in.
   invoke("start", VoidSchema, LoginCodeSchema),
@@ -62,4 +62,4 @@ export const loginContract = defineContract(
   // either) picks, answering its name. Refused when it picks none or
   // several.
   invoke("removeDevice", Schema.String, Schema.String),
-).annotateRpcs(Remote, false);
+);

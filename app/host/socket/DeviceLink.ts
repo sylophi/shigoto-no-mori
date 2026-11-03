@@ -80,12 +80,8 @@ import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
-import {
-  type Invoke,
-  resolvePush,
-  type Served,
-  type View,
-} from "@shared/ipc/served";
+import { resolvePush } from "@shared/ipc/push";
+import { type Invoke, type Served, type View } from "@shared/ipc/served";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { log } from "@shared/log";
 import {

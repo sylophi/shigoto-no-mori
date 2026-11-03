@@ -18,12 +18,7 @@ import type { HostServices } from "./services";
 import * as Graph from "./graph";
 import { join } from "node:path";
 import { WebSocket as WsWebSocket } from "ws";
-import {
-  annotation,
-  type ContractModule,
-  nameOf,
-  Remote,
-} from "@shigomori/contracts/contract";
+import { type ContractModule, nameOf } from "@shigomori/contracts/contract";
 import { isHostSide, LOOPBACK_FILE } from "@shigomori/contracts/link";
 import {
   hubContract,
@@ -38,7 +33,8 @@ import type {
   PushProducerPayload,
   ViewHandlers,
 } from "@shigomori/contracts/types";
-import { createServed, resolvePush } from "@shared/ipc/served";
+import { createServed } from "@shared/ipc/served";
+import { resolvePush } from "@shared/ipc/push";
 import type { HandlerContext } from "@shared/ipc/transport";
 import * as DirectPlane from "@shared/hub/directPlane";
 import type { HubConnection } from "@shared/hub/connection";
@@ -97,7 +93,6 @@ const onUsageTracked = (input: unknown) => {
 
 const linkRegistrar: DeviceLink.LinkRegistrar = createServed({
   failure: Engine.hostCallFailure,
-  serves: (call) => annotation(call, Remote) === true,
   onUsageTracked,
 });
 export const deviceLinkLayer = DeviceLink.layer({

@@ -22,7 +22,7 @@ export type ContractScope = "host" | "client";
 const ModuleName = Context.Service<"sm/contracts/ModuleName", string>(
   "sm/contracts/ModuleName",
 );
-export const Scope = Context.Service<"sm/contracts/Scope", ContractScope>(
+const Scope = Context.Service<"sm/contracts/Scope", ContractScope>(
   "sm/contracts/Scope",
 );
 
@@ -48,7 +48,7 @@ export const TracksProjectUsage = Context.Service<
   boolean
 >("sm/contracts/TracksProjectUsage");
 
-export const Grant = Context.Service<"sm/contracts/Grant", GrantId>(
+const Grant = Context.Service<"sm/contracts/Grant", GrantId>(
   "sm/contracts/Grant",
 );
 
@@ -80,7 +80,7 @@ export const trackedCodeChange = {
   tracksProjectUsage: true,
 } as const;
 
-// Only when given, so the registrar can fail closed on an absent one.
+// Only when given, so defineContract can fail closed on an absent one.
 function annotationsOf(options: InvokeOptions): Context.Context<never> {
   let annotations = Context.empty();
   const add = <S>(key: Context.Key<string, S>, value: S | undefined) => {
@@ -161,13 +161,43 @@ export type Contract<
   readonly "~contract"?: { readonly name: Name; readonly scope: S };
 };
 
+// Fails closed on a host call that never classified itself: a host
+// invoke or view must say whether it is remote, a remote one whether it
+// is gated, and a remote gated one which consent line covers it.
+function classificationGap(
+  channel: string,
+  rpc: Rpc.AnyWithProps,
+): string | null {
+  if (isPush(rpc)) return null;
+  const remote = annotation(rpc, Remote);
+  if (remote === undefined) {
+    return `${channel} does not say whether it is remote`;
+  }
+  const gated = remote ? annotation(rpc, Gated) : false;
+  if (gated === undefined) {
+    return `${channel} is remote but does not say whether it is gated`;
+  }
+  // A grant names what the switch hands to other devices, so exactly
+  // the remote gated calls carry one.
+  const grant = annotation(rpc, Grant);
+  if (remote && gated && grant === undefined) {
+    return `${channel} is remote and gated but names no grant`;
+  }
+  if (!(remote && gated) && grant !== undefined) {
+    return `${channel} names a grant but the switch does not hand it over`;
+  }
+  return null;
+}
+
+// `remote: false` keeps every call of a host module off the device link
+// (the loopback's own modules).
 export const defineContract = <
   const Name extends string,
   const S extends ContractScope,
   const Rpcs extends ReadonlyArray<Rpc.Any>,
 >(
   name: Name,
-  scope: S,
+  scope: S | { readonly scope: S; readonly remote: false },
   ...rpcs: Rpcs
 ): Contract<Name, S, Rpc.Prefixed<Rpcs[number], `${Name}:`>> => {
   // The group keys by tag, so a second call under one name would
@@ -175,11 +205,21 @@ export const defineContract = <
   const keys = rpcs.map((rpc) => rpc["_tag"]);
   const twice = keys.find((key, i) => keys.indexOf(key) !== i);
   if (twice !== undefined) throw new Error(`${name}:${twice} is defined twice`);
-  return RpcGroup.make(...rpcs)
+  const local = typeof scope === "object";
+  const scopeName = local ? scope.scope : scope;
+  const group = RpcGroup.make(...rpcs)
     .prefix(`${name}:`)
     .annotate(ModuleName, name)
-    .annotate(Scope, scope)
-    .annotateRpcs(Scope, scope);
+    .annotate(Scope, scopeName)
+    .annotateRpcs(Scope, scopeName);
+  const module = local ? group.annotateRpcs(Remote, false) : group;
+  if (scopeName === "host") {
+    for (const [channel, rpc] of module.requests) {
+      const gap = classificationGap(channel, rpc as Rpc.AnyWithProps);
+      if (gap !== null) throw new Error(gap);
+    }
+  }
+  return module;
 };
 
 // ---- Reading a module ----
