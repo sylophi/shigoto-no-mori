@@ -6,7 +6,7 @@ import {
   usePathSteps,
 } from "@/components/shared/PathPickerModal";
 import type { PathPickerProps } from "@shigomori/ui/views/shared/PathPickerView.tsx";
-import type { PickerEntry } from "@shigomori/ui/views/shared/PickerRowView.tsx";
+import type { PickerEntry } from "@shigomori/ui/views/shared/PathPickerView.tsx";
 import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync";
 import { useWorktreeFolder } from "@/hooks/remote/useWorktreeFolder";
 import type { IgnoreSelection } from "./ignoreChoice";

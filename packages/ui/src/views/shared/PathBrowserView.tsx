@@ -1,26 +1,19 @@
 import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { Command } from "cmdk";
-import { CornerLeftUp, Folder } from "lucide-react";
+import { Folder } from "lucide-react";
 import type { BrowseListing } from "../../lib/browseListing.ts";
 import { cn } from "../../lib/utils.ts";
 import { Button } from "../../primitives/button.tsx";
 import {
-  EMPTY_CLASS,
-  ITEM_CLASS,
   keepFocusInInput,
   MODAL_COMMAND_CLASS,
 } from "../../primitives/cmdk-classes.ts";
 import { FooterRow } from "../../primitives/footer-row.tsx";
-import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { BrowseKeyHintsView } from "./BrowseListPartsView.tsx";
-
-// The cmdk value's prefix on every row of the list, `..` included, so
-// isBrowseRow tells "a row is highlighted" from "nothing is".
-export const BROWSE_VALUE_PREFIX = "browse:";
-
-export function isBrowseRow(highlighted: string): boolean {
-  return highlighted.startsWith(BROWSE_VALUE_PREFIX);
-}
+import {
+  BrowseKeyHintsView,
+  BrowseListView,
+  isBrowseRow,
+} from "./BrowseListPartsView.tsx";
 
 type BrowseEntry = BrowseListing["filtered"][number];
 
@@ -113,57 +106,27 @@ export function PathBrowserView({
         </p>
       )}
 
-      <Command.List
-        onMouseDown={keepFocusInInput}
-        className="min-h-0 flex-1 overflow-y-auto p-2"
-      >
-        {canBrowseUp && (
-          <Command.Item
-            value={`${BROWSE_VALUE_PREFIX}up`}
-            keywords={[".."]}
-            onSelect={browse.browseUp}
-            className={ITEM_CLASS}
-          >
-            <CornerLeftUp className="size-4 text-muted-foreground/80" />
-            <span className="font-mono text-muted-foreground">..</span>
-          </Command.Item>
-        )}
-
-        {filtered.map((entry) => {
-          const entryPath = `${browseDir}${entry.name}`;
-          return (
-            <Command.Item
-              key={entry.name}
-              value={`${BROWSE_VALUE_PREFIX}${entryPath}`}
-              keywords={[entry.name]}
-              onSelect={() => browse.browseTo(entry.name)}
-              className={ITEM_CLASS}
-            >
-              {renderIcon?.(entry) ?? (
-                <Folder className="size-4 text-muted-foreground/80" />
-              )}
-              <SimpleTooltip whenTruncated lazy tip={entry.name}>
-                <span className="min-w-0 flex-1 truncate font-mono">
-                  {entry.name}
-                </span>
-              </SimpleTooltip>
-              {renderTrailing?.(entry, entryPath)}
-            </Command.Item>
-          );
-        })}
-
-        {isLoading && !listing && (
-          <div className="p-3 text-xs text-muted-foreground">Loading…</div>
-        )}
-        {!isLoading && !error && filtered.length === 0 && (
-          <div className={EMPTY_CLASS}>
-            {leafFilter.length > 0
-              ? `No folders matching "${leafFilter}".`
-              : "Empty directory."}
-          </div>
-        )}
-        {error && <div className={EMPTY_CLASS}>Couldn't read folder.</div>}
-      </Command.List>
+      <BrowseListView
+        entries={filtered}
+        pathOf={(entry) => `${browseDir}${entry.name}`}
+        highlighted={highlighted}
+        onUp={canBrowseUp ? browse.browseUp : undefined}
+        onOpen={(entry) => browse.browseTo(entry.name)}
+        renderIcon={(entry) =>
+          renderIcon?.(entry) ?? (
+            <Folder className="size-4 text-muted-foreground/80" />
+          )
+        }
+        renderTrailing={renderTrailing}
+        loading={isLoading && !listing}
+        error={error !== null}
+        noMatch={
+          leafFilter.length > 0
+            ? `No folders matching "${leafFilter}".`
+            : undefined
+        }
+        className="min-h-0 flex-1 p-2"
+      />
 
       <FooterRow className="justify-between">
         <div className="flex items-center gap-3">

@@ -2,7 +2,7 @@
 // disk: browsing a peer's works the same as this one's.
 import { useState, type KeyboardEvent } from "react";
 import { FolderPickerView } from "@shigomori/ui/views/shared/FolderPickerView.tsx";
-import { isBrowseRow } from "@shigomori/ui/views/shared/PathBrowserView.tsx";
+import { isBrowseRow } from "@shigomori/ui/views/shared/BrowseListPartsView.tsx";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { useBrowseListing } from "@/hooks/fs/useBrowseListing";
 import { useHostScope } from "@/hooks/remote/useHostScope";

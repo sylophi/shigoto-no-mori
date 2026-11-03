@@ -1,6 +1,6 @@
 import { useQueries } from "@tanstack/react-query";
 import type { Project } from "@shigomori/contracts/schemas";
-import type { PickerEntry } from "@shigomori/ui/views/shared/PickerRowView.tsx";
+import type { PickerEntry } from "@shigomori/ui/views/shared/PathPickerView.tsx";
 import type { RepoEntryHolder } from "@shigomori/ui/views/configure/OnlyInWorktreesView.tsx";
 import { isHolder, useDeviceTargets } from "@/components/shared/deviceTargets";
 import { carryOverListingQueryOptions } from "@/hooks/projects/useCarryOverListing";

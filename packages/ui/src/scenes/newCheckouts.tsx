@@ -24,7 +24,7 @@ import {
 } from "../views/newWorktree/NewWorktreeView.tsx";
 import { PullRequestSourceView } from "../views/newWorktree/PullRequestPickerView.tsx";
 import { BranchComboboxView } from "../views/shared/BranchComboboxView.tsx";
-import { BROWSE_VALUE_PREFIX } from "../views/shared/PathBrowserView.tsx";
+import { BROWSE_VALUE_PREFIX } from "../views/shared/BrowseListPartsView.tsx";
 import { DeviceTabBarView } from "../views/shared/DeviceTabBarView.tsx";
 import {
   VillagerFaceView,
