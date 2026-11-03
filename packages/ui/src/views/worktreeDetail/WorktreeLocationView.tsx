@@ -4,8 +4,8 @@
 // the path's place with the folder's name, the one thing a rename
 // changes. A phone has no room for the path, so neither shows there.
 import { Pencil } from "lucide-react";
-import { InlineNameEditorView } from "../shared/InlineNameEditorView.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
+import { InlineEdit } from "../../primitives/inline-edit.tsx";
 import { PathSpan } from "../../primitives/path-span.tsx";
 
 export function WorktreeLocationView({
@@ -29,13 +29,14 @@ export function WorktreeLocationView({
   if (rename?.editing) {
     return (
       <span className="min-w-0 flex-1 phone:hidden">
-        <InlineNameEditorView
-          name={folder}
-          label="Folder"
+        <InlineEdit
+          variant="text"
+          value={folder}
+          label="Folder name"
           pending={rename.pending}
           onSave={rename.onRename}
           onCancel={() => rename.onEditingChange(false)}
-          className="w-40 font-mono text-xs"
+          inputClassName="w-40 font-mono text-xs"
         />
       </span>
     );

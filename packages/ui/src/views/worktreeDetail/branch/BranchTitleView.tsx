@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from "react";
-import { Check, ChevronDown, Pencil, X } from "lucide-react";
+import { ChevronDown, Pencil } from "lucide-react";
 import { BranchLabel } from "../../../primitives/branch-label.tsx";
 import { CopyButton } from "../../../primitives/copy-button.tsx";
 import {
@@ -8,33 +8,25 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../../../primitives/dropdown-menu.tsx";
+import { InlineEdit } from "../../../primitives/inline-edit.tsx";
 import { InlineError } from "../../../primitives/inline-error.tsx";
-import { Input } from "../../../primitives/input.tsx";
 import { sanitizeBranchName } from "@shigomori/contracts/git/branches";
 import { IconButton } from "../../../primitives/icon-button.tsx";
 import { cn } from "../../../lib/utils.ts";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 
 // The branch's two sizes: the page's title, or a line under the work's
-// own title. The rename field is as tall as the line it stands in for,
-// and pulled back by its padding and border so the name stays put:
-// starting a rename doesn't move the page.
+// own title.
 const SIZES = {
   title: {
     heading: "h1",
     text: "text-2xl font-medium tracking-tight",
     suffix: "text-base tracking-normal",
-    input: "-ml-2.25 h-8 px-2 text-2xl font-medium tracking-tight",
-    button: "p-1.5",
-    icon: "size-4",
   },
   subtitle: {
     heading: "p",
     text: "text-sm text-muted-foreground",
     suffix: undefined,
-    input: "-ml-1.75 h-5.5 px-1.5 text-sm",
-    button: "p-1",
-    icon: "size-3.5",
   },
 } as const;
 
@@ -58,11 +50,9 @@ export function BranchTitleView({
   subtitle?: boolean;
   // The rename under way, in place of the name.
   editing?: {
-    draft: string;
-    onDraftChange: (draft: string) => void;
     pending: boolean;
     error: string | undefined;
-    onCommit: () => void;
+    onSave: (branch: string) => void;
     onCancel: () => void;
   };
   // The branch's buttons (BranchActionsView), beside the name.
@@ -74,53 +64,27 @@ export function BranchTitleView({
   const Heading = size.heading;
 
   if (editing) {
-    const { draft, pending, onCommit: commit, onCancel: cancel } = editing;
     return (
-      // Grows to the room it's given, where a row has more beside it.
-      <div className="flex min-w-0 grow flex-wrap items-center gap-2">
-        <Input
-          // oxlint-disable-next-line jsx-a11y/no-autofocus -- intentional: editing
-          autoFocus
-          value={draft}
-          disabled={pending}
-          onChange={(e) =>
-            editing.onDraftChange(sanitizeBranchName(e.target.value))
-          }
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commit();
-            } else if (e.key === "Escape") {
-              e.preventDefault();
-              cancel();
-            }
-          }}
-          className={cn("min-w-0 flex-1 py-0 font-mono", size.input)}
-        />
-        <IconButton
-          onClick={commit}
-          disabled={pending}
-          aria-label="Confirm rename"
-          className={size.button}
-        >
-          <Check className={size.icon} />
-        </IconButton>
-        <IconButton
-          onClick={cancel}
-          disabled={pending}
-          aria-label="Cancel rename"
-          className={size.button}
-        >
-          <X className={size.icon} />
-        </IconButton>
-        {editing.error !== undefined && (
-          <InlineError
-            message={editing.error}
-            title="Couldn't rename the branch"
-            className="basis-full text-xs text-destructive"
-          />
-        )}
-      </div>
+      <InlineEdit
+        variant="icons"
+        size={subtitle ? "subtitle" : "title"}
+        value={branch}
+        label="Branch name"
+        pending={editing.pending}
+        sanitize={sanitizeBranchName}
+        onSave={editing.onSave}
+        onCancel={editing.onCancel}
+        error={
+          editing.error !== undefined && (
+            <InlineError
+              message={editing.error}
+              title="Couldn't rename the branch"
+              className="text-xs text-destructive"
+            />
+          )
+        }
+        inputClassName="font-mono"
+      />
     );
   }
 

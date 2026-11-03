@@ -7,29 +7,21 @@ import type { TitleEdit } from "@shigomori/ui/views/worktreeDetail/EditableTitle
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useDescribeWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 
-export function useTitleEdit(
-  worktree: Worktree,
-  title: string,
-  editable: boolean,
-): TitleEdit {
-  const [draft, setDraft] = useState<string | null>(null);
+export function useTitleEdit(worktree: Worktree, editable: boolean): TitleEdit {
+  const [editing, setEditing] = useState(false);
   const describe = useDescribeWorktree("Couldn't save the title");
   const { canCommand } = useCommandAccess();
 
-  const cancel = () => setDraft(null);
+  const cancel = () => setEditing(false);
   return {
-    draft,
+    editing,
     saving: describe.isPending,
-    ...(canCommand && editable ? { onEdit: () => setDraft(title) } : {}),
-    onDraft: setDraft,
-    onCommit: () => {
-      const next = (draft ?? "").trim();
-      if (next === title) return cancel();
+    ...(canCommand && editable ? { onEdit: () => setEditing(true) } : {}),
+    onSave: (next) =>
       describe.mutate(
         { projectId: worktree.projectId, worktreeId: worktree.id, title: next },
         { onSuccess: cancel },
-      );
-    },
+      ),
     onCancel: cancel,
   };
 }

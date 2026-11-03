@@ -25,10 +25,7 @@ export function BranchRow({
   const rename = useRenameAnyBranch();
   const del = useDeleteBranch();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  // Null when not editing, otherwise the in-flight edit value.
-  // Folding "editing" and "draft" together avoids initializing local
-  // state from the `name` prop.
-  const [draft, setDraft] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   // A safe delete refused for unmerged commits swaps the modal into its
   // force-delete stage until it closes (sticky, so a transient force
@@ -44,27 +41,21 @@ export function BranchRow({
     del.reset();
   };
 
-  const commitRename = () => {
-    const next = (draft ?? "").trim();
-    if (!next || next === name) {
-      setDraft(null);
-      return;
-    }
+  const renameTo = (newName: string) =>
     rename.mutate(
-      { projectId, oldName: name, newName: next },
-      { onSettled: () => setDraft(null) },
+      { projectId, oldName: name, newName },
+      { onSuccess: () => setEditing(false) },
     );
-  };
 
   return (
     <BranchRowView
       name={name}
       worktree={worktree}
       kindIcon={worktree && <WorktreeKindIcon worktree={worktree} />}
-      draft={draft}
-      onDraft={setDraft}
+      editing={editing}
+      onEditingChange={setEditing}
       renamePending={rename.isPending}
-      onCommitRename={commitRename}
+      onRename={renameTo}
       onOpenWorktree={() => worktree && toWorktree(projectId, worktree.id)}
       onDelete={() => setConfirmingDelete(true)}
       deletePending={del.isPending}

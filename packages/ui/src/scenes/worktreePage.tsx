@@ -285,14 +285,12 @@ export function WorktreePagePartsScene() {
         </ScenePart>
         <ScenePart label="Renaming">
           <BranchTitleView
-            branch={QUAIL.branch}
+            branch="port-pool-retry-2"
             detached={false}
             editing={{
-              draft: "port-pool-retry-2",
-              onDraftChange: noop,
               pending: false,
               error: "A branch named port-pool-retry-2 already exists.",
-              onCommit: noop,
+              onSave: noop,
               onCancel: noop,
             }}
             actions={null}
@@ -302,11 +300,10 @@ export function WorktreePagePartsScene() {
           <WorktreeHeaderView
             title="Retry port-pool leases"
             titleEdit={{
-              draft: null,
+              editing: false,
               saving: false,
               onEdit: noop,
-              onDraft: noop,
-              onCommit: noop,
+              onSave: noop,
               onCancel: noop,
             }}
             branchTitle={branchTitle(QUAIL, true)}
@@ -322,12 +319,11 @@ export function WorktreePagePartsScene() {
         </ScenePart>
         <ScenePart label="Editing the title and description">
           <EditableTitleView
-            title="Retry port-pool leases"
+            title="Retry port-pool leases twice"
             edit={{
-              draft: "Retry port-pool leases twice",
+              editing: true,
               saving: false,
-              onDraft: noop,
-              onCommit: noop,
+              onSave: noop,
               onCancel: noop,
             }}
           />
