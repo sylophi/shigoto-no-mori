@@ -14,6 +14,7 @@ import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as SharedSettings from "@shigomori/engine/SharedSettings";
 import * as HostPushes from "@host/lib/HostPushes";
 import * as SharedSettingsStore from "@host/lib/sharedSettings/store";
 import { hubHandlers } from "@host/process/wires";
@@ -29,9 +30,7 @@ const peerDoc = (deviceId: string, channel: string, input?: unknown) =>
 export const followSharedSettings = Layer.effectDiscard(
   Effect.gen(function* () {
     const run =
-      yield* FiberSet.makeRuntimePromise<
-        Effect.Services<ReturnType<typeof SharedSettingsStore.merge>>
-      >();
+      yield* FiberSet.makeRuntimePromise<SharedSettings.SharedSettings>();
     const mergeHere = (doc: SharedSettingsDoc) =>
       run(SharedSettingsStore.merge(doc));
 

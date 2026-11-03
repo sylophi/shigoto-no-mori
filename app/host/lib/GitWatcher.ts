@@ -818,8 +818,8 @@ const make = Effect.gen(function* () {
     }).pipe(serial.withPermits(1));
 
   // The projects as the last reconcile listed them. A store change
-  // reconciles (host/process/layer.ts), so the beat reads only their
-  // files, not the list again.
+  // reconciles (storeChanges.ts), so the beat reads only their files,
+  // not the list again.
   let projects: ReadonlyArray<Registry.ListedProject> = [];
 
   // Each project's files read with no lock held and at most one read

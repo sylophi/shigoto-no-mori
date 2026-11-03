@@ -1,7 +1,6 @@
 // Every push the host makes (a contract's streaming Rpc with no
-// payload), as one stream: the host's view streams re-read off it, the
-// device link and the loopback serve it, and the host's own followers
-// (the mirror engine, a headless host's account) read it.
+// payload), as one stream: the host's view streams re-read off it, and
+// the device link and the loopback serve it.
 import {
   callOf,
   channelOf,

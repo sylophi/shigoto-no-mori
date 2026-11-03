@@ -17,7 +17,6 @@ import * as Stream from "effect/Stream";
 import * as HostAccount from "@host/lib/HostAccount";
 import * as HostPushes from "@host/lib/HostPushes";
 import * as Worktrees from "@host/lib/Worktrees";
-import { log } from "@shared/log";
 import type { Taken } from "./ledger/peers";
 import { MirrorEngine } from "./MirrorEngine";
 import { MirrorLedger } from "./MirrorLedger";
@@ -44,7 +43,7 @@ const deleteOriginals = (originals: readonly Taken[]) =>
     yield* Effect.forEach(
       originals,
       (original) =>
-        Effect.map(
+        Effect.flatMap(
           Effect.exit(
             worktrees.remove(
               { ...original, force: true, oneSide: true },
@@ -57,11 +56,11 @@ const deleteOriginals = (originals: readonly Taken[]) =>
               : removed.value.ok
                 ? undefined
                 : `its ${removed.value.cleanupError.phase} step failed`;
-            if (stayed === undefined) return;
-            log.warn(
+            if (stayed === undefined) return Effect.void;
+            stays(original.worktreeId, ORIGINAL_KEPT_DETAIL);
+            return Effect.logWarning(
               `[mirror] the original of a deleted copy stayed: ${stayed}`,
             );
-            stays(original.worktreeId, ORIGINAL_KEPT_DETAIL);
           },
         ),
       { discard: true },
