@@ -33,7 +33,7 @@ export function githubPageOf(remote: string | null | undefined): string | null {
   return host?.includes("github") ? `https://${remote}` : null;
 }
 
-// `host/owner/repo`.
+// `host/path`, a remote's identity across devices and in clone folder names.
 export function normalizeRemoteUrl(url: string): string | null {
   const remote = parseRemoteUrl(url);
   return remote && `${remote.host}/${remote.path}`;
@@ -64,7 +64,8 @@ export function parseRemoteUrl(url: string): Remote | null {
   const scheme = raw.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):\/\//);
   if (scheme) {
     if (scheme[1]?.toLowerCase() === "file") return null;
-    // Only a URL has a query or a fragment. In scp-style they are path.
+    // A query or fragment is never part of a repo's path here. In scp-style
+    // they are path.
     const rest = raw.slice(scheme[0].length).replace(/[?#].*$/, "");
     const slash = rest.indexOf("/");
     const authority = slash === -1 ? rest : rest.slice(0, slash);

@@ -304,7 +304,7 @@ const make = Effect.gen(function* () {
       if ((yield* unavailableFor(cwd)) !== null) return null;
       return yield* mergeConfigs.get(cwd);
     }),
-    // Of the repo the project is (GitHub.repoOf), not gh's base repo.
+    // The About of GitHub.repoOf's repo, not gh's base repo (a fork's parent).
     description: Effect.fn("GithubCli.description")(function* (cwd) {
       const reason = yield* unavailableReason;
       if (reason === "integration-off") return null;

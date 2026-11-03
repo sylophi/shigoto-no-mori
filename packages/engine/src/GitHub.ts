@@ -517,7 +517,8 @@ const make = Effect.gen(function* () {
     );
 
   const hostOf = Effect.fn("GitHub.hostOf")(function* (cwd: string) {
-    return ghHostFor(...(yield* remotesAndHosts(cwd)));
+    const [remotes, known] = yield* remotesAndHosts(cwd);
+    return ghHostFor(remotes, known);
   });
 
   const repoOf = Effect.fn("GitHub.repoOf")(function* (cwd: string) {
