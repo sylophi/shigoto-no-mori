@@ -1,21 +1,21 @@
 import type { ReactNode, Ref } from "react";
-import { ChevronDown, CircleSlash, Layers2, Loader2 } from "lucide-react";
+import { CircleSlash, Layers2, Loader2 } from "lucide-react";
 import { Button } from "../../../primitives/button.tsx";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
 } from "../../../primitives/dropdown-menu.tsx";
 import { ErrorBanner } from "../../../primitives/error-banner.tsx";
 import { SegmentedControl } from "../../../primitives/segmented-control.tsx";
+import {
+  SPLIT_BUTTON_MAIN,
+  SplitButton,
+} from "../../../primitives/split-button.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 import {
   type describeMergeVerdict,
   MERGE_METHOD_LABEL,
 } from "../../../lib/pullRequest.ts";
-import { cn } from "../../../lib/utils.ts";
 import type {
   MergeMethod,
   PullRequestDetail,
@@ -138,7 +138,7 @@ export function MergeBoxView({
       variant={merge.armed ? "default" : "outline"}
       disabled={merge.disabled}
       onClick={merge.onMerge}
-      className={cn(merge.mode !== "armed" && "rounded-r-none border-r-0")}
+      className={SPLIT_BUTTON_MAIN}
     >
       {merge.pending ? (
         <>
@@ -193,49 +193,35 @@ export function MergeBoxView({
               optionClassName="px-2 py-0.5 text-xs"
             />
           )}
-          <div className="inline-flex items-stretch">
-            {merge.mode === "armed" ? (
-              disableButton
-            ) : (
-              <SimpleTooltip tip={merge.blocked}>{mergeButton}</SimpleTooltip>
-            )}
-            {merge.mode !== "armed" && (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={merge.pending || merge.draftPending}
-                      aria-label="More ways to finish the pull request"
-                      className="rounded-l-none px-1.5"
-                    >
-                      <ChevronDown aria-hidden className="size-3.5" />
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent align="end" sideOffset={4}>
-                  {merge.others.map((method) => (
-                    <DropdownMenuItem
-                      key={method}
-                      disabled={merge.disabled}
-                      onClick={() => merge.onPickMethod(method)}
-                    >
-                      {MERGE_METHOD_LABEL[method]}
-                    </DropdownMenuItem>
-                  ))}
-                  {merge.others.length > 0 && <DropdownMenuSeparator />}
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={merge.onClosePullRequest}
-                  >
-                    Close pull request…
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
+          {merge.mode === "armed" ? (
+            disableButton
+          ) : (
+            <SplitButton
+              main={
+                <SimpleTooltip tip={merge.blocked}>{mergeButton}</SimpleTooltip>
+              }
+              variant="outline"
+              disabled={merge.pending || merge.draftPending}
+              menuLabel="More ways to finish the pull request"
+            >
+              {merge.others.map((method) => (
+                <DropdownMenuItem
+                  key={method}
+                  disabled={merge.disabled}
+                  onClick={() => merge.onPickMethod(method)}
+                >
+                  {MERGE_METHOD_LABEL[method]}
+                </DropdownMenuItem>
+              ))}
+              {merge.others.length > 0 && <DropdownMenuSeparator />}
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={merge.onClosePullRequest}
+              >
+                Close pull request…
+              </DropdownMenuItem>
+            </SplitButton>
+          )}
         </div>
       </div>
       {merge.error !== undefined && (
