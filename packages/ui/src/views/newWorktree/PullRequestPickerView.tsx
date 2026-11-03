@@ -1,4 +1,6 @@
 import { GitPullRequest, GitPullRequestDraft } from "lucide-react";
+import { Radio } from "@base-ui/react/radio";
+import { RadioGroup } from "@base-ui/react/radio-group";
 import type {
   PullRequestCandidate,
   PullRequestCandidateList,
@@ -114,36 +116,38 @@ function PullRequestPicker({
     );
   }
   return (
-    <div
-      role="radiogroup"
+    <RadioGroup<number | null>
+      value={selected?.number ?? null}
+      onValueChange={(number) => {
+        const pr = pullRequests.find(
+          (candidate) => candidate.number === number,
+        );
+        if (pr) onSelect(pr);
+      }}
       aria-label="Pull request"
-      className="max-h-72 divide-y divide-border overflow-y-auto rounded-md border border-input"
+      // Each row is followed by Radio.Root's hidden input, so the last
+      // row is the second child from the end.
+      className="max-h-72 divide-y divide-border overflow-y-auto rounded-md border border-input [&>:nth-last-child(2)]:border-b-0"
     >
       {pullRequests.map((pr) => (
         <PullRequestRow
           key={pr.number}
           pr={pr}
-          selected={selected?.number === pr.number}
           occupiedBy={pullRequestBlockedBy(pr, worktreeByBranch)}
-          onSelect={() => onSelect(pr)}
           disabled={disabled}
         />
       ))}
-    </div>
+    </RadioGroup>
   );
 }
 
 function PullRequestRow({
   pr,
-  selected,
   occupiedBy,
-  onSelect,
   disabled,
 }: {
   pr: PullRequestCandidate;
-  selected: boolean;
   occupiedBy: Worktree | undefined;
-  onSelect: () => void;
   disabled?: boolean;
 }) {
   const now = useNow();
@@ -157,18 +161,13 @@ function PullRequestRow({
           : undefined
       }
     >
-      <button
-        type="button"
-        role="radio"
-        aria-checked={selected}
-        onClick={onSelect}
+      <Radio.Root
+        value={pr.number}
         disabled={disabled || taken}
-        className={cn(
-          "flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors",
-          selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
-          (disabled || taken) &&
-            "cursor-not-allowed opacity-50 hover:bg-transparent",
-        )}
+        nativeButton
+        // oxlint-disable-next-line jsx-a11y/control-has-associated-label -- Radio.Root renders the row's content into it
+        render={<button type="button" />}
+        className="flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors not-data-checked:enabled:hover:bg-accent/50 disabled:cursor-not-allowed disabled:opacity-50 data-checked:bg-accent data-checked:text-accent-foreground"
       >
         <Icon
           className={cn(
@@ -193,7 +192,7 @@ function PullRequestRow({
         <span className="shrink-0 pt-0.5 text-xs text-muted-foreground/70">
           {formatRelativeTime(new Date(pr.updatedAt).getTime(), now)}
         </span>
-      </button>
+      </Radio.Root>
     </SimpleTooltip>
   );
 }
