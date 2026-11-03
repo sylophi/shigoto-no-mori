@@ -37,7 +37,11 @@ import {
   MirrorError,
 } from "./MirrorEngine";
 import { MirrorLedger } from "./MirrorLedger";
-import { LEFT_ACCOUNT_DETAIL, mirrorSessions } from "./registry";
+import {
+  LEFT_ACCOUNT_DETAIL,
+  MIRROR_LABEL_LOCAL_PROJECT,
+  mirrorSessions,
+} from "./registry";
 
 // A device leaving its account ends its mirrors within this, so a stuck
 // daemon request cannot hold the sign-out: the hub refresh that follows
@@ -164,6 +168,26 @@ const make = Effect.gen(function* () {
   yield* moved.pipe(
     Stream.runForEach(({ projectId }) =>
       Effect.sync(() => follower.onLocalProjectChanged(projectId)),
+    ),
+    Effect.forkScoped,
+  );
+  // A store write the terminal or the app made (git:externalChange) may be
+  // a title `sm describe` wrote, announced like a git change so a mirror
+  // of the worktree carries it now (gitFollow.ts). Which worktree it was
+  // is not told, so every mirrored project is.
+  const written = yield* HostPushes.payloads(gitContract, "externalChange");
+  yield* written.pipe(
+    Stream.runForEach(() =>
+      Effect.gen(function* () {
+        const mirrored = new Set(
+          (yield* daemon.sessions)
+            .map((session) => session.labels[MIRROR_LABEL_LOCAL_PROJECT])
+            .filter((projectId) => projectId !== undefined),
+        );
+        for (const projectId of mirrored) {
+          yield* pushes.publish(gitContract, "projectChanged", { projectId });
+        }
+      }),
     ),
     Effect.forkScoped,
   );

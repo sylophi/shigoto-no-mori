@@ -12,8 +12,6 @@ import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import * as MirrorDaemon from "@host/mirror/MirrorDaemon";
-import { MIRROR_LABEL_LOCAL_PROJECT } from "@host/mirror/registry";
 import * as GitWatcher from "./GitWatcher";
 import * as HostPushes from "./HostPushes";
 import * as Scripts from "./Scripts";
@@ -43,7 +41,6 @@ const forest: readonly Table[] = [
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const pushes = yield* HostPushes.HostPushes;
-    const daemon = yield* MirrorDaemon.MirrorDaemon;
     const terrier = yield* Terrier.Terrier;
     const scripts = yield* Scripts.Scripts;
     // A watcher that failed to start has nothing to follow.
@@ -88,22 +85,14 @@ export const layer = Layer.effectDiscard(
     );
 
     const changes = yield* (yield* StoreChanges.StoreChanges).subscribe;
+    // What was written before the subscription, since the watcher's
+    // reconcile at its start.
+    yield* FiberSet.run(follows, followProjects);
     yield* changes.pipe(
       Stream.filter((tables) => forest.some((table) => tables.has(table))),
       Stream.runForEach(() =>
         Effect.gen(function* () {
           yield* pushes.publish(gitContract, "externalChange", undefined);
-          // A title `sm describe` wrote, announced like a git change so a
-          // mirror of the worktree carries it now (host/mirror/gitFollow.ts).
-          // Which worktree it was is not told, so every mirrored project is.
-          const mirrored = new Set(
-            (yield* daemon.sessions)
-              .map((session) => session.labels[MIRROR_LABEL_LOCAL_PROJECT])
-              .filter((projectId) => projectId !== undefined),
-          );
-          for (const projectId of mirrored) {
-            yield* pushes.publish(gitContract, "projectChanged", { projectId });
-          }
           yield* FiberSet.run(follows, followProjects);
           yield* FiberSet.run(follows, reapRemoved);
         }),

@@ -280,10 +280,6 @@ export const layer = (options: {
     // they stop and refuse for and the mirrors they carry or end, and the
     // carry-over reads.
     Layer.provideMerge(Worktrees.layer),
-    // Every store write, the terminal's or the app's own, as pushes, and
-    // what the scripts, the projects' git watches and the mirrors
-    // follow of it.
-    Layer.provideMerge(logged("the store's changes", StoreChanges.layer)),
     // The mirror's changed push, over the engine whose sessions it lists.
     Layer.provideMerge(mirrorChangesLayer),
     Layer.provideMerge(mirrors),
@@ -297,6 +293,9 @@ export const layer = (options: {
     // The switch the listener's gate reads. Its changes go to this
     // device's windows and, the push being remote, to every peer.
     Layer.provideMerge(Sharing.layer),
+    // Every store write, the terminal's or the app's own, as pushes, and
+    // what the scripts and the projects' git watches follow of it.
+    Layer.provideMerge(logged("the store's changes", StoreChanges.layer)),
     Layer.provideMerge(gitWatcher),
     Layer.provideMerge(BackgroundFetch.layer),
     // Installing the CLI link is a Settings action. A start only
