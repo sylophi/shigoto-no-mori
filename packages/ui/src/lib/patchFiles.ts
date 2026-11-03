@@ -136,15 +136,13 @@ export function patchEntries(files: readonly FileDiffMetadata[]): IndexEntry[] {
 // row is picked. Order is the list's own (listChangedFiles sorts by
 // path), so the rail, the first pick and the commit all agree on it.
 export function changeEntries(files: readonly ChangedFile[]): IndexEntry[] {
-  return files.map(
-    (row): IndexEntry => ({
-      key: changeKey(row),
-      path: row.path,
-      prevPath: row.prevPath ?? null,
-      mark: row.conflicted ? CONFLICTED : STATUS_MARKS[row.kind],
-      stats: row.counts ?? null,
-      deleted: row.kind === "deleted",
-      row,
-    }),
-  );
+  return files.map((row): IndexEntry => ({
+    key: changeKey(row),
+    path: row.path,
+    prevPath: row.prevPath ?? null,
+    mark: row.conflicted ? CONFLICTED : STATUS_MARKS[row.kind],
+    stats: row.counts ?? null,
+    deleted: row.kind === "deleted",
+    row,
+  }));
 }

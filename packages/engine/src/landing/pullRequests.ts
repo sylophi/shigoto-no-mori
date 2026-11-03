@@ -133,19 +133,17 @@ export const makePullRequests = Effect.gen(function* () {
   // until GitHub has merged it.
   const readBack = (repo: string, number: number, asked: MergeOutcome) =>
     github.mergeProgress(repo, number).pipe(
-      Effect.map(
-        (after): MergeOutcome =>
-          after.state === "MERGED"
-            ? { ...asked, outcome: "merged" }
-            : after.isInMergeQueue
-              ? { ...asked, outcome: "queued" }
-              : after.autoMergeMethod !== undefined
-                ? { ...asked, outcome: "auto-merge" }
-                : asked,
+      Effect.map((after): MergeOutcome =>
+        after.state === "MERGED"
+          ? { ...asked, outcome: "merged" }
+          : after.isInMergeQueue
+            ? { ...asked, outcome: "queued" }
+            : after.autoMergeMethod !== undefined
+              ? { ...asked, outcome: "auto-merge" }
+              : asked,
       ),
-      Effect.orElseSucceed(
-        (): MergeOutcome =>
-          asked.outcome === "merged" ? { ...asked, outcome: "queued" } : asked,
+      Effect.orElseSucceed((): MergeOutcome =>
+        asked.outcome === "merged" ? { ...asked, outcome: "queued" } : asked,
       ),
     );
 
@@ -241,12 +239,10 @@ export const makePullRequests = Effect.gen(function* () {
       Effect.catchTags({
         GitHubCliError: (failure) =>
           mergeStackedAlone(repo, number, method, failure, verb, reporter).pipe(
-            Effect.map(
-              (queued): MergeOutcome => ({
-                method,
-                outcome: queued ? "queued" : "merged",
-              }),
-            ),
+            Effect.map((queued): MergeOutcome => ({
+              method,
+              outcome: queued ? "queued" : "merged",
+            })),
           ),
       }),
     );

@@ -608,43 +608,41 @@ function IndexRow({
         collapsed && "opacity-55",
       )}
     >
-      {row &&
-        ticked &&
-        onSetTicked && (
-          // The tick is the row's own control, not a way into the file:
-          // its click stops here rather than selecting.
-          <span
-            role="presentation"
-            onClick={(e) => e.stopPropagation()}
-            className="flex shrink-0"
+      {row && ticked && onSetTicked && (
+        // The tick is the row's own control, not a way into the file:
+        // its click stops here rather than selecting.
+        <span
+          role="presentation"
+          onClick={(e) => e.stopPropagation()}
+          className="flex shrink-0"
+        >
+          <SimpleTooltip
+            tip={
+              ticked === "partial"
+                ? "Partly ticked: tick to include the whole file"
+                : undefined
+            }
           >
-            <SimpleTooltip
-              tip={
-                ticked === "partial"
-                  ? "Partly ticked: tick to include the whole file"
-                  : undefined
-              }
-            >
-              {/* A native button: Base UI looks for a <span> checkbox's
+            {/* A native button: Base UI looks for a <span> checkbox's
                   <label> through its input's `labels` on every render, a
                   walk of the whole document, which a list of 2,000 rows
                   paid two seconds for. A button needs no such search. */}
-              <Checkbox
-                nativeButton
-                render={(props) => <button type="button" {...props} />}
-                checked={ticked === "all"}
-                indeterminate={ticked === "partial"}
-                disabled={busy}
-                onCheckedChange={(next) => onSetTicked([row], next)}
-                aria-label={
-                  ticked === "all"
-                    ? `Leave ${row.path} out of the commit`
-                    : `Include ${row.path} in the commit`
-                }
-              />
-            </SimpleTooltip>
-          </span>
-        )}
+            <Checkbox
+              nativeButton
+              render={(props) => <button type="button" {...props} />}
+              checked={ticked === "all"}
+              indeterminate={ticked === "partial"}
+              disabled={busy}
+              onCheckedChange={(next) => onSetTicked([row], next)}
+              aria-label={
+                ticked === "all"
+                  ? `Leave ${row.path} out of the commit`
+                  : `Include ${row.path} in the commit`
+              }
+            />
+          </SimpleTooltip>
+        </span>
+      )}
       <button
         type="button"
         data-slot="diff-index-jump"

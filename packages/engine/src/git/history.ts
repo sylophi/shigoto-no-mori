@@ -226,9 +226,8 @@ export const makeHistory = ({
         `-n${FIRST_PARENT_LIMIT + 1}`,
         ref,
       ]).pipe(
-        Effect.map(
-          (stdout): Option.Option<ReadonlySet<string>> =>
-            Option.some(new Set(splitLines(stdout))),
+        Effect.map((stdout): Option.Option<ReadonlySet<string>> =>
+          Option.some(new Set(splitLines(stdout))),
         ),
         Effect.orElseSucceed(() => Option.none()),
       );

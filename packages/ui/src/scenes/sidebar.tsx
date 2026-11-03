@@ -145,16 +145,14 @@ function forestItems(shell: SceneShell): ForestItem[] {
     .filter((device) => device.reachable)
     .flatMap((device) => {
       const forest = forests[device.deviceId];
-      return (forest?.projects ?? []).map(
-        (project): ForestItem => ({
-          device,
-          project,
-          worktrees: forest?.worktrees[project.id] ?? [],
-          listing: "ready",
-          pullRequests: unposedPullRequests(project.id),
-          showPrimaryInInbox: false,
-        }),
-      );
+      return (forest?.projects ?? []).map((project): ForestItem => ({
+        device,
+        project,
+        worktrees: forest?.worktrees[project.id] ?? [],
+        listing: "ready",
+        pullRequests: unposedPullRequests(project.id),
+        showPrimaryInInbox: false,
+      }));
     });
 }
 

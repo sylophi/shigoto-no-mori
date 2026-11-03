@@ -75,26 +75,24 @@ export function ProjectRowView({
         )}
       >
         {header}
-        {!arrangeMode &&
-          branches !== undefined &&
-          branches > 0 && (
-            // On the list a project says how much work it holds. The number
-            // sits where the `+` and `…` come up and gives way to them,
-            // so the line has one right edge. A phone shows the actions
-            // at rest, so there it takes a place of its own before them.
-            <span
-              aria-label={pluralize(branches, "worktree")}
-              className={cn(
-                "pointer-events-none absolute right-2 text-3xs text-muted-foreground tabular-nums transition-opacity phone:static phone:px-1",
-                // The actions also come up for an open menu and for
-                // keyboard focus, with no hover to go by.
-                "group-has-[[data-icon-button]:focus-visible]/project:opacity-0 group-has-[[data-icon-button][aria-expanded=true]]/project:opacity-0",
-                isHovered && "opacity-0 phone:opacity-100",
-              )}
-            >
-              {branches}
-            </span>
-          )}
+        {!arrangeMode && branches !== undefined && branches > 0 && (
+          // On the list a project says how much work it holds. The number
+          // sits where the `+` and `…` come up and gives way to them,
+          // so the line has one right edge. A phone shows the actions
+          // at rest, so there it takes a place of its own before them.
+          <span
+            aria-label={pluralize(branches, "worktree")}
+            className={cn(
+              "pointer-events-none absolute right-2 text-3xs text-muted-foreground tabular-nums transition-opacity phone:static phone:px-1",
+              // The actions also come up for an open menu and for
+              // keyboard focus, with no hover to go by.
+              "group-has-[[data-icon-button]:focus-visible]/project:opacity-0 group-has-[[data-icon-button][aria-expanded=true]]/project:opacity-0",
+              isHovered && "opacity-0 phone:opacity-100",
+            )}
+          >
+            {branches}
+          </span>
+        )}
         {!arrangeMode && actions}
       </div>
       {picker}

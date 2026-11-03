@@ -177,10 +177,10 @@
    move only their greens below: sage, a cooler grey-green, and mocha,
    a brown rail with a sage action. */
 [data-theme-scope].doubutsu:is(
-  [data-palette="latte"],
-  [data-palette="latte-sage"],
-  [data-palette="latte-mocha"]
-) {
+    [data-palette="latte"],
+    [data-palette="latte-sage"],
+    [data-palette="latte-mocha"]
+  ) {
   --background: oklch(0.92 0.018 66);
   --foreground: oklch(0.35 0.045 54);
   --card: oklch(0.96 0.009 69);

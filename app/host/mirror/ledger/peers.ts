@@ -106,12 +106,10 @@ export const makePeers = ({
         goneCopies.set(`${deviceId}:${projectId}:${worktreeId}`, {
           at: now,
           // Read before the sessions end, as their threads' ids are.
-          originals: doomed.map(
-            (raw): Original => ({
-              projectId: raw.labels[MIRROR_LABEL_LOCAL_PROJECT] ?? "",
-              worktreeId: marks.worktreeIdNow(raw),
-            }),
-          ),
+          originals: doomed.map((raw): Original => ({
+            projectId: raw.labels[MIRROR_LABEL_LOCAL_PROJECT] ?? "",
+            worktreeId: marks.worktreeIdNow(raw),
+          })),
         });
       }
       yield* ends.endSessions(
@@ -143,13 +141,11 @@ export const makePeers = ({
       if (gone === undefined || ageOf(gone.at, yield* stamp) > GONE_COPY_MS) {
         return [];
       }
-      return gone.originals.map(
-        (original): Taken => ({
-          projectId: original.projectId,
-          worktreeId: original.worktreeId,
-          expect,
-        }),
-      );
+      return gone.originals.map((original): Taken => ({
+        projectId: original.projectId,
+        worktreeId: original.worktreeId,
+        expect,
+      }));
     });
 
     // A copy the peer no longer lists (deleted while this device missed

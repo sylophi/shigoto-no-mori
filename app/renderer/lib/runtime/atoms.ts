@@ -49,10 +49,8 @@ export const clientAtoms = Atom.runtime((get) => {
 // One device's api: the page's for this machine, a peer's (peerApi)
 // over the hub hop.
 export const deviceApi = (deviceId: string, localDeviceId: string) =>
-  Effect.map(
-    Api,
-    (api): HostApi =>
-      deviceId === localDeviceId ? api : api.peerApi(deviceId),
+  Effect.map(Api, (api): HostApi =>
+    deviceId === localDeviceId ? api : api.peerApi(deviceId),
   );
 
 // A stream on one device's api.

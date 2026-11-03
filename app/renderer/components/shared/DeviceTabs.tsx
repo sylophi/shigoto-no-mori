@@ -43,16 +43,14 @@ const leads = (entry: DeviceRosterEntry) =>
 // command grant on it, and the sidebar's device filter reads it as is.
 export function useDeviceRoster(): DeviceRosterEntry[] {
   const page = useApi();
-  const entries = useHostDevices().map(
-    (device): DeviceRosterEntry => ({
-      deviceId: device.deviceId,
-      label: device.label,
-      icon: device.icon,
-      isThisDevice: device.isThisDevice,
-      status: statusViewOf(device),
-      api: liveApi(page, device),
-    }),
-  );
+  const entries = useHostDevices().map((device): DeviceRosterEntry => ({
+    deviceId: device.deviceId,
+    label: device.label,
+    icon: device.icon,
+    isThisDevice: device.isThisDevice,
+    status: statusViewOf(device),
+    api: liveApi(page, device),
+  }));
   return [
     ...entries.filter(leads),
     ...entries.filter((entry) => !leads(entry)),
