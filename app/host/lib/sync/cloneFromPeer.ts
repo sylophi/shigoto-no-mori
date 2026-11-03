@@ -42,7 +42,7 @@ import { pidAlive } from "@shigomori/engine/processes";
 import { expandHome } from "@shared/paths";
 import * as EngineConfig from "@shigomori/engine/Config";
 import * as Identity from "@shigomori/engine/Identity";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import {
   addProject,
   findProjectByIdentity,
@@ -126,7 +126,7 @@ const registerClone = (dest: string) =>
       (error) =>
         new CloneUnregisteredError({
           path: dest,
-          reason: errorWordsOf(error),
+          reason: messageOf(error),
         }),
     ),
   );
@@ -479,7 +479,7 @@ export const clonePeerProject = Effect.fnUntraced(function* (
     Effect.map((stored) => ({ settings: { copied: true }, stored })),
     Effect.catch((error) =>
       Effect.succeed({
-        settings: { copied: false, error: errorWordsOf(error) },
+        settings: { copied: false, error: messageOf(error) },
         stored: undefined,
       }),
     ),
@@ -521,7 +521,7 @@ export const clonePeerProject = Effect.fnUntraced(function* (
       Effect.succeed({
         crossed: false,
         conflicts: 0,
-        error: errorWordsOf(error),
+        error: messageOf(error),
       }),
     ),
   );

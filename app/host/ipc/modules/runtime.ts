@@ -7,7 +7,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { uninstallCliEverything } from "@host/lib/cli/install";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import * as Agents from "@shigomori/engine/Agents";
 import { leftIf, nukeEverything } from "@host/lib/nuke";
 import * as Terminals from "@host/lib/terminals/Terminals";
@@ -175,7 +175,7 @@ export const runtimeHandlers = {
             // asked here restarts once the user has read why (the shell's
             // dialog, whose one button restarts and whose dismissal quits).
             if (unattended) return shell.relaunch;
-            return shell.moveFailed(errorWordsOf(Cause.squash(cause)));
+            return shell.moveFailed(messageOf(Cause.squash(cause)));
           }),
         ),
       );

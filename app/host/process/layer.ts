@@ -6,7 +6,7 @@
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import { log } from "@shared/log";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -128,7 +128,7 @@ function onExternalStateChange() {
     })
     .catch((error: unknown) => {
       log.warn(
-        `[scripts] reap after external change failed: ${errorWordsOf(error)}`,
+        `[scripts] reap after external change failed: ${messageOf(error)}`,
       );
     });
 }

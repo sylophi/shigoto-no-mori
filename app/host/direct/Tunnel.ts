@@ -36,7 +36,7 @@ import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { clauseOf, messageOf } from "@shigomori/engine/errorDocument";
 import * as HostAccount from "@host/lib/HostAccount";
 import * as HostFacts from "@host/lib/HostFacts";
 import * as EngineConfig from "@shigomori/engine/Config";
@@ -562,7 +562,7 @@ const make = (options: Options) =>
                 } else {
                   yield* setStatus({ state: "error", hostname: null });
                   yield* Effect.logWarning(
-                    `[tunnel] tunnel start failed: ${errorWordsOf(error.cause)}, ` +
+                    `[tunnel] tunnel start failed: ${clauseOf(error.cause)}, ` +
                       "asking again with the hub's unconfigured answer",
                   );
                 }
@@ -584,13 +584,13 @@ const make = (options: Options) =>
               // is exactly when the inputs can have changed.
               yield* remember({ denied: true });
               yield* Effect.logWarning(
-                `[tunnel] provisioning denied (${errorWordsOf(error)}), ` +
+                `[tunnel] provisioning denied (${clauseOf(error)}), ` +
                   "waiting for the next account or config change",
               );
               return yield* park;
             }
             return yield* failAttempt(
-              `tunnel start failed: ${errorWordsOf(error)}`,
+              `tunnel start failed: ${messageOf(error)}`,
             );
           }
           provision = {
@@ -695,7 +695,7 @@ const make = (options: Options) =>
         // Anything else this attempt did not expect goes onto the
         // retry rails like a provision failure.
         Effect.catchDefect((defect) =>
-          failAttempt(`tunnel start failed: ${errorWordsOf(defect)}`),
+          failAttempt(`tunnel start failed: ${messageOf(defect)}`),
         ),
       );
 

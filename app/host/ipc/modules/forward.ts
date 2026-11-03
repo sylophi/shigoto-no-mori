@@ -13,7 +13,7 @@ import {
   callFailureOf,
   ForwardConnectFailedError,
 } from "@shigomori/contracts/errors";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import * as Effect from "effect/Effect";
 import { forwardContract } from "@shigomori/contracts/modules/forward";
 import type { HandlerContext } from "@shared/ipc/transport";
@@ -48,7 +48,7 @@ async function open(port: number, channelId: string, ctx: HandlerContext) {
   } catch (error) {
     throw new ForwardConnectFailedError({
       port,
-      reason: errorWordsOf(error),
+      reason: messageOf(error),
     });
   }
   // Nagle batches small writes against the wire's round trips, so

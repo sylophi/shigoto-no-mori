@@ -18,6 +18,10 @@ export class UnknownProjectError extends Schema.TaggedError<UnknownProjectError>
   "UnknownProjectError",
   { projectId: Schema.String },
 ) {
+  get documentCode(): string {
+    return "unknown-project";
+  }
+
   override get message(): string {
     return `Unknown project: ${this.projectId}`;
   }
@@ -27,6 +31,10 @@ export class UnknownWorktreeError extends Schema.TaggedError<UnknownWorktreeErro
   "UnknownWorktreeError",
   { worktreeId: Schema.String },
 ) {
+  get documentCode(): string {
+    return "unknown-worktree";
+  }
+
   override get message(): string {
     return `Unknown worktree: ${this.worktreeId}`;
   }

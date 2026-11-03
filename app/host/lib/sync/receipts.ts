@@ -9,7 +9,7 @@ import {
   type SyncTeardownSourceResult,
 } from "@shigomori/contracts/modules/sync";
 import * as Moves from "@host/lib/sync/Moves";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import { movedSourceChange } from "@shigomori/contracts/movedSource";
 import {
   DeleteWorktreeResultSchema,
@@ -207,7 +207,7 @@ const tearDown = <R>(
     Effect.catch((error) =>
       Effect.succeed({
         sourceRemoved: false,
-        sourceError: errorWordsOf(error),
+        sourceError: messageOf(error),
       }),
     ),
   );

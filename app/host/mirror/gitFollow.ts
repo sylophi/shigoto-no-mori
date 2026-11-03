@@ -34,7 +34,7 @@ import {
   isNoDirectConnectionError,
   isPeerRefusal,
 } from "@shigomori/contracts/errors";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import * as Effect from "effect/Effect";
 import * as Cause from "effect/Cause";
 import * as Exit from "effect/Exit";
@@ -166,7 +166,7 @@ export const makeGitFollower = (deps: {
             Effect.catchCause((cause) =>
               Effect.sync(() => {
                 warn(
-                  `[mirror] git follow: agreed store unreadable: ${errorWordsOf(Cause.squash(cause))}`,
+                  `[mirror] git follow: agreed store unreadable: ${messageOf(Cause.squash(cause))}`,
                 );
                 return {};
               }),
@@ -254,7 +254,7 @@ const reconcileOf = (
     if (Result.isFailure(found)) {
       setStatus(record, {
         status: "error",
-        detail: errorWordsOf(found.failure),
+        detail: messageOf(found.failure),
       });
       return;
     }
@@ -300,7 +300,7 @@ const reconcileOf = (
                 if (helpers.descriptionFailed.has(session.session)) return;
                 helpers.descriptionFailed.add(session.session);
                 warn(
-                  `[mirror] following the title and description failed: ${errorWordsOf(error)}`,
+                  `[mirror] following the title and description failed: ${messageOf(error)}`,
                 );
               }),
             ),
@@ -409,7 +409,7 @@ const reconcileOf = (
             setStatus(record, { status: "off", detail: "" });
             return;
           }
-          const message = errorWordsOf(failure);
+          const message = messageOf(failure);
           warn(`[mirror] git follow ${session.session}: ${message}`);
           setStatus(record, { status: "error", detail: message });
         }),
@@ -459,7 +459,7 @@ function makeFollower(
           Effect.catchCause((cause) =>
             Effect.sync(() =>
               warn(
-                `[mirror] git follow: agreed store unwritable: ${errorWordsOf(Cause.squash(cause))}`,
+                `[mirror] git follow: agreed store unwritable: ${messageOf(Cause.squash(cause))}`,
               ),
             ),
           ),
@@ -487,7 +487,7 @@ function makeFollower(
         deps.onCopyGone(session);
       } catch (error) {
         warn(
-          `[mirror] git follow ${session.session}: ending a gone copy failed: ${errorWordsOf(error)}`,
+          `[mirror] git follow ${session.session}: ending a gone copy failed: ${messageOf(error)}`,
         );
       }
     });

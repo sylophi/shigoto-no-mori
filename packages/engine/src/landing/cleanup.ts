@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
-import { errorDocument } from "../errorDocument.ts";
+import { errorDocument, messageOf } from "../errorDocument.ts";
 import * as Git from "../Git.ts";
 import * as GitHub from "../GitHub.ts";
 import type { PullRequestSummary } from "../GitHub.ts";
@@ -160,7 +160,7 @@ export const makeCleanup = ({
         }
         const listed = yield* Effect.result(identities);
         if (Result.isFailure(listed)) {
-          return { catchUpSkipped: errorDocument(listed.failure).error };
+          return { catchUpSkipped: messageOf(listed.failure) };
         }
         const checkout = listed.success.find(
           (id) => !id.detached && id.branch === base,
@@ -172,7 +172,7 @@ export const makeCleanup = ({
           Effect.result,
         );
         if (Result.isFailure(pulled)) {
-          return { catchUpSkipped: errorDocument(pulled.failure).error };
+          return { catchUpSkipped: messageOf(pulled.failure) };
         }
         return {
           caughtUp: {
@@ -271,7 +271,7 @@ export const makeCleanup = ({
           target.primaryBranch,
         ).pipe(Effect.result);
         return Result.isFailure(pulled)
-          ? { deleted, catchUpSkipped: errorDocument(pulled.failure).error }
+          ? { deleted, catchUpSkipped: messageOf(pulled.failure) }
           : { deleted };
       });
 
@@ -395,16 +395,12 @@ export const makeCleanup = ({
             )
             .pipe(Effect.result);
           if (Result.isFailure(guarded)) {
+            const refusal = errorDocument(guarded.failure);
             return yield* refuse(
               "land",
               "guard",
               [],
-              [
-                other.name,
-                other.branch,
-                errorDocument(guarded.failure).error,
-                errorDocument(guarded.failure).hint ?? "",
-              ],
+              [other.name, other.branch, refusal.error, refusal.hint ?? ""],
             );
           }
           const layer = chain.find((pr) => pr.headRefName === other.branch);

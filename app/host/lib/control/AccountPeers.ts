@@ -4,7 +4,7 @@
 // provides it (host/process/handlers.ts). The peers themselves are
 // reached through PeerReach (host/ipc/PeerReach.ts).
 import { ControlError } from "@shigomori/contracts/modules/control";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import {
   type HubRateLimitedError,
   isHubRateLimitedError,
@@ -84,5 +84,5 @@ export function listDevicesFailure(
         "signed-out",
         `This device's access to the account was removed. ${byPlatform({ darwin: "Sign in again from the app.", linux: "Sign in again (`login`)." })}`,
       )
-    : new AccountUnreachableError({ reason: errorWordsOf(error) });
+    : new AccountUnreachableError({ reason: messageOf(error) });
 }

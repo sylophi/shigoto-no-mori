@@ -15,7 +15,7 @@ import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import { PeerReach } from "@host/ipc/PeerReach";
 import type { MirrorStatus } from "@shigomori/contracts/modules/mirror";
 import * as HostAccount from "@host/lib/HostAccount";
@@ -400,7 +400,7 @@ const make = (options: {
         }).pipe(
           Effect.catchDefect((defect) =>
             Effect.logWarning(
-              `[mirror] a daemon change went unread: ${errorWordsOf(defect)}`,
+              `[mirror] a daemon change went unread: ${messageOf(defect)}`,
             ),
           ),
           Effect.andThen(endSignedOut),

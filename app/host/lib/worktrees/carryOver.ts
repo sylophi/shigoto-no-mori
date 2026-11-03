@@ -21,7 +21,7 @@ import type {
 import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync";
 import * as Git from "@shigomori/engine/Git";
 import * as Arr from "effect/Array";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -91,7 +91,7 @@ const readFolderVerdicts = Effect.fnUntraced(function* (
       Effect.tryPromise({
         try: () =>
           readdir(join(checkoutPath, relative), { withFileTypes: true }),
-        catch: (error) => new FolderReadError({ reason: errorWordsOf(error) }),
+        catch: (error) => new FolderReadError({ reason: messageOf(error) }),
       }),
       ignoredPaths(checkoutPath),
     ],

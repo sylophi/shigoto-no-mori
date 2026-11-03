@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { errorCodeOf } from "@shigomori/contracts/errors";
 import { mediaTypeOf } from "@shigomori/contracts/mediaTypes";
 import * as Git from "@shigomori/engine/Git";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -29,7 +29,7 @@ const BINARY_SNIFF_BYTES = 8000;
 export const readWorktreeFile = (worktreePath: string, relative: string) =>
   Effect.tryPromise({
     try: () => readFileAt(worktreePath, relative),
-    catch: (error) => new WorktreeFileError({ reason: errorWordsOf(error) }),
+    catch: (error) => new WorktreeFileError({ reason: messageOf(error) }),
   });
 
 // A file that could not be read for a reason other than its being gone.

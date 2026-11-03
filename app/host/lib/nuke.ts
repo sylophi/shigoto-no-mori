@@ -19,7 +19,7 @@ import type {
   NukeReport,
   Project,
 } from "@shigomori/contracts/schemas";
-import { errorWordsOf } from "@host/lib/errorWords";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -73,7 +73,7 @@ export const leftIf = <R>(
 ): Effect.Effect<ReadonlyArray<Left>, never, R> =>
   Effect.map(Effect.exit(run), (exit) =>
     Exit.isFailure(exit)
-      ? [{ what, why: errorWordsOf(Cause.squash(exit.cause)) }]
+      ? [{ what, why: messageOf(Cause.squash(exit.cause)) }]
       : [],
   );
 
@@ -156,7 +156,7 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
               })
               .pipe(
                 Effect.as(null),
-                Effect.catch((error) => Effect.succeed(errorWordsOf(error))),
+                Effect.catch((error) => Effect.succeed(messageOf(error))),
               );
             // One inside the data dir goes with it at the next start.
             if (failed !== null && !isSameOrInside(target.path, dataDir())) {
