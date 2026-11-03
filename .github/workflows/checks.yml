@@ -69,17 +69,11 @@ jobs:
       - name: Contract fixtures
         run: pnpm run check:contracts
 
-  # Everything on each OS but the proofs, in one job, since the account
-  # gets few macOS runners at a time. Each check runs even when one
-  # before it failed, so a run reports every failure. The macOS job
-  # keeps the name the branch's rules require.
+  # Everything but the proofs, in one job. Each check runs even when one
+  # before it failed, so a run reports every failure. A Mac runs all of
+  # it too, in macos.yml.
   engine:
-    name: ${{ matrix.os == 'macos-latest' && 'engine' || 'engine-linux' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -89,11 +83,11 @@ jobs:
       - uses: ./.github/actions/install-workspace
         id: install
 
-      # Fails on missing or unknown license metadata. The notices cover
-      # the darwin-arm64 packages, the only ones pnpm installs on a Mac,
-      # and the Go modules linked into file-sync and the filesystem helper.
+      # Fails on missing or unknown license metadata, for the packages
+      # pnpm installs here and the Go modules linked into file-sync and
+      # the filesystem helper.
       - name: Third-party notices have license metadata
-        if: ${{ runner.os == 'macOS' && !cancelled() && steps.install.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm -C app run licenses --out "$RUNNER_TEMP/licenses"
 
       # The engine's and the terminal's tests drive the filesystem helper,
@@ -106,22 +100,15 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm run check:cli
 
-      # file-sync watches through each OS's own calls.
       - name: Go tests
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm run check:go
 
-  # Every proof in app/test, on each OS the host runs on: they drive the
-  # real sm and file-sync binaries (built with Bun from packages/cli, and
-  # from file-sync/ and nativefs/ with Go) and real git. The macOS job
-  # keeps the name the branch's rules require.
+  # Every proof in app/test: they drive the real sm and file-sync
+  # binaries (built with Bun from packages/cli, and from file-sync/ and
+  # nativefs/ with Go) and real git.
   proofs:
-    name: ${{ matrix.os == 'macos-latest' && 'proofs' || 'proofs-linux' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -130,8 +117,8 @@ jobs:
 
       # No install scripts, so no Electron download (no proof opens a
       # window). The app's own postinstall still runs: the proofs that
-      # start scripts need node-pty's spawn-helper made executable, and
-      # on Linux its addon compiled, which ships no Linux prebuild.
+      # start scripts need node-pty's addon compiled, which ships no
+      # Linux prebuild.
       - uses: ./.github/actions/install-workspace
 
       - name: App postinstall

@@ -1,0 +1,56 @@
+name: macOS
+
+# The engine and proofs jobs of checks.yml, on a Mac. The account gets
+# few macOS runners at a time, so this runs on main, and on a branch
+# when asked, and no branch rule waits on it.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A run finishes, and only the newest push waits behind it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  # One job, so a run takes one runner.
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: ./.github/actions/setup-toolchains
+
+      - uses: ./.github/actions/install-workspace
+        id: install
+
+      - name: Third-party notices have license metadata
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm -C app run licenses --out "$RUNNER_TEMP/licenses"
+
+      - name: Engine
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:engine
+
+      - name: Terminal
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:cli
+
+      - name: Go tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:go
+
+      # The proofs that start scripts need node-pty's spawn-helper made
+      # executable.
+      - name: App postinstall
+        id: postinstall
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm -C app run postinstall
+
+      - name: Proofs
+        if: ${{ !cancelled() && steps.postinstall.outcome == 'success' }}
+        run: pnpm run check:proofs
