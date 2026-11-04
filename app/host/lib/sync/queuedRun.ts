@@ -14,6 +14,7 @@ import {
   selectionOfPreset,
 } from "@shigomori/contracts/leaveOutRule";
 import type {
+  SyncPullWorktreeResult,
   SyncQueuedMove,
   SyncQueueMovePayload,
 } from "@shigomori/contracts/modules/sync";
@@ -26,12 +27,15 @@ import { startMirrorFrom, startMirrorTo } from "@host/mirror/sessions";
 import { pullWorktree, sendWorktree } from "./move";
 import { pullSettle, sendSettle, settleSource } from "./receipts";
 
-class QueuedSourceGoneError extends Schema.TaggedError<QueuedSourceGoneError>()(
-  "QueuedSourceGoneError",
-  {},
+// The source is not what the review queued: gone, or on another branch.
+class QueuedSourceChangedError extends Schema.TaggedError<QueuedSourceChangedError>()(
+  "QueuedSourceChangedError",
+  { gone: Schema.Boolean },
 ) {
   override get message(): string {
-    return "The worktree is no longer on the other device.";
+    return this.gone
+      ? "The worktree is no longer on the other device."
+      : "The worktree is on another branch now.";
   }
 }
 
@@ -58,18 +62,35 @@ const choiceOf = (
   ...(move.cloneInto === undefined ? {} : { cloneInto: move.cloneInto }),
 });
 
+// Ignored files the files step meant to bring and could not are only
+// on the source, so a teardown asked for stays undone, as the finish
+// step would not offer it by default.
 const settled = <R>(
   move: SyncQueueMovePayload,
-  landed: QueuedOutcome["landed"],
+  deviceId: string,
+  result: Pick<SyncPullWorktreeResult, "worktree" | "files">,
   settle: Parameters<typeof settleSource<R>>[1],
-) =>
-  Effect.map(
+) => {
+  const landed = {
+    deviceId,
+    projectId: result.worktree.projectId,
+    worktreeId: result.worktree.id,
+  };
+  const filesFailed = result.files !== undefined && !result.files.crossed;
+  if (move.source === "teardown" && filesFailed) {
+    return Effect.succeed<QueuedOutcome>({
+      landed,
+      sourceError: "its ignored files didn't make it across.",
+    });
+  }
+  return Effect.map(
     settleSource(move.source ?? "keep", settle),
     (source): QueuedOutcome =>
       source.error === undefined
         ? { landed }
         : { landed, sourceError: source.error },
   );
+};
 
 const sendQueued = Effect.fnUntraced(function* (
   move: SyncQueueMovePayload,
@@ -79,6 +100,9 @@ const sendQueued = Effect.fnUntraced(function* (
     move.projectId,
     move.worktreeId,
   );
+  if (worktree.branch !== move.branch) {
+    return yield* new QueuedSourceChangedError({ gone: false });
+  }
   const patterns = needsIgnoredList(selection)
     ? yield* (yield* Git.Git).listIgnoreRules(worktree.path)
     : [];
@@ -101,11 +125,8 @@ const sendQueued = Effect.fnUntraced(function* (
   const { result } = yield* sendWorktree(payload, unattended);
   return yield* settled(
     move,
-    {
-      deviceId: move.deviceId,
-      projectId: result.worktree.projectId,
-      worktreeId: result.worktree.id,
-    },
+    move.deviceId,
+    result,
     sendSettle(move, worktree, unattended),
   );
 });
@@ -119,7 +140,9 @@ const pullQueued = Effect.fnUntraced(function* (
     move.projectId,
     move.worktreeId,
   );
-  if (source === undefined) return yield* new QueuedSourceGoneError();
+  if (source?.branch !== move.branch) {
+    return yield* new QueuedSourceChangedError({ gone: source === undefined });
+  }
   const patterns = needsIgnoredList(selection)
     ? (yield* peerSyncFor(move.deviceId).ignoredPaths({
         projectId: move.projectId,
@@ -156,15 +179,7 @@ const pullQueued = Effect.fnUntraced(function* (
     },
     unattended,
   );
-  return yield* settled(
-    move,
-    {
-      deviceId: here,
-      projectId: pulled.worktree.projectId,
-      worktreeId: pulled.worktree.id,
-    },
-    pullSettle(move, unattended),
-  );
+  return yield* settled(move, here, pulled, pullSettle(move, unattended));
 });
 
 export const runQueued = (move: SyncQueueMovePayload) => {

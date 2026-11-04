@@ -238,11 +238,12 @@ function underWay(busy: BusyOperations, there = false) {
         : `${listed(parts)} ${plural(n, "is", "are")} still ${doing}`,
     );
   }
-  // Nothing runs yet: what a quit loses is the wait.
+  // A queued move, waiting on another device or under way: a quit
+  // drops it.
   const queued = busy.queuedMoves;
   if (queued > 0) {
     clauses.push(
-      `${queued === 1 ? "a queued move" : `${queued} queued moves`} ${plural(queued, "is", "are")} still waiting for another device`,
+      `${queued === 1 ? "a queued move" : `${queued} queued moves`} ${plural(queued, "isn't", "aren't")} done yet`,
     );
   }
   const total =
@@ -256,7 +257,8 @@ function underWay(busy: BusyOperations, there = false) {
     obj: plural(total, "it", "them"),
     runningOnly: running !== null && groups.size === 0 && queued === 0,
     queuedOnly: queued > 0 && running === null && groups.size === 0,
-    removingOnly: removing && running === null && groups.size === 1,
+    removingOnly:
+      removing && running === null && groups.size === 1 && queued === 0,
     removing,
     running: running !== null,
   };

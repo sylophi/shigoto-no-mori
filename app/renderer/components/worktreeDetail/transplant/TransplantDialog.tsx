@@ -178,8 +178,9 @@ function TransplantFlow({
   onClose: () => void;
 }) {
   // What a queued transplant does with its source once it lands, the
-  // last step's question asked ahead.
-  const [fate, setFate] = useState<SourceChoice>("teardown");
+  // last step's question asked ahead. It runs with nobody there, so
+  // nothing goes unless asked.
+  const [fate, setFate] = useState<SourceChoice>("keep");
   const flow = usePullFlow({
     mutation: pull,
     worktree,

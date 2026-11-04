@@ -63,8 +63,8 @@ const BusyOperationsSchema = strict(
     engineChanges: Schema.Array(ChangeKindSchema),
     // Terminals whose shell runs something.
     busyTerminals: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-    // Moves waiting on another device to come online, which a quit
-    // drops (sync:queued).
+    // Queued moves waiting on another device or under way, which a
+    // quit drops (sync:queued).
     queuedMoves: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   }),
 );

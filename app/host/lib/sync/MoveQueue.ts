@@ -42,8 +42,7 @@ export class MoveQueue extends Context.Service<
       unknown,
       Views.Services
     >;
-    // The ones a quit would lose that nothing else counts: a running
-    // one is a move the session counts already.
+    // The ones a quit would lose: waiting or running.
     readonly pending: Effect.Effect<number>;
   }
 >()("sm/host/MoveQueue") {}
@@ -55,9 +54,9 @@ const make = Effect.gen(function* () {
     new Map(),
   );
   const running = yield* FiberMap.make<string>();
-  // One start at a time, so an admission and a queue never both start
-  // the same move.
-  const starting = yield* Semaphore.make(1);
+  // One change of the queue at a time: an admission, a queue and a
+  // drop never interleave, so a drop always has the last word.
+  const lock = yield* Semaphore.make(1);
 
   const settle = (key: string, state: SyncQueuedMove["state"]) =>
     SubscriptionRef.update(held, (moves) => {
@@ -66,33 +65,30 @@ const make = Effect.gen(function* () {
       return new Map(moves).set(key, { ...move, state });
     });
 
-  const start = (key: string) =>
-    starting.withPermit(
-      Effect.gen(function* () {
-        const move = (yield* SubscriptionRef.get(held)).get(key);
-        if (move?.state.status !== "waiting") return;
-        yield* settle(key, { status: "running" });
-        // A drop interrupts it, and takes the entry with it.
-        yield* FiberMap.run(
-          running,
-          key,
-          runQueued(move).pipe(
-            Effect.provideContext(services),
-            Effect.matchCauseEffect({
-              onSuccess: (outcome) =>
-                settle(key, { status: "done", ...outcome }),
-              onFailure: (cause) =>
-                Cause.hasInterruptsOnly(cause)
-                  ? Effect.void
-                  : settle(key, {
-                      status: "failed",
-                      error: messageOf(Cause.squash(cause)),
-                    }),
-            }),
-          ),
-        );
-      }),
+  // Under the lock.
+  const start = Effect.fnUntraced(function* (key: string) {
+    const move = (yield* SubscriptionRef.get(held)).get(key);
+    if (move?.state.status !== "waiting") return;
+    yield* settle(key, { status: "running" });
+    // A drop interrupts it, and takes the entry with it.
+    yield* FiberMap.run(
+      running,
+      key,
+      runQueued(move).pipe(
+        Effect.provideContext(services),
+        Effect.matchCauseEffect({
+          onSuccess: (outcome) => settle(key, { status: "done", ...outcome }),
+          onFailure: (cause) =>
+            Cause.hasInterruptsOnly(cause)
+              ? Effect.void
+              : settle(key, {
+                  status: "failed",
+                  error: messageOf(Cause.squash(cause)),
+                }),
+        }),
+      ),
     );
+  });
 
   yield* reach.admissions.pipe(
     Stream.runForEach((deviceId) =>
@@ -102,7 +98,7 @@ const make = Effect.gen(function* () {
           ([key]) => start(key),
           { discard: true },
         ),
-      ),
+      ).pipe(lock.withPermit),
     ),
     Effect.forkScoped,
   );
@@ -116,7 +112,7 @@ const make = Effect.gen(function* () {
       new Map(moves).set(key, { ...move, state: { status: "waiting" } }),
     );
     if (reach.admits(move.deviceId)) yield* start(key);
-  });
+  }, lock.withPermit);
 
   const drop = Effect.fn("MoveQueue.drop")(function* (ref: SyncMoveRef) {
     const key = queuedMoveKey(ref);
@@ -126,7 +122,7 @@ const make = Effect.gen(function* () {
       return next;
     });
     yield* FiberMap.remove(running, key);
-  });
+  }, lock.withPermit);
 
   const list = Effect.map(SubscriptionRef.get(held), (moves) => [
     ...moves.values(),
@@ -145,15 +141,19 @@ const make = Effect.gen(function* () {
     ),
     pending: Effect.map(
       list,
-      (moves) => moves.filter((move) => move.state.status === "waiting").length,
+      (moves) =>
+        moves.filter(
+          (move) =>
+            move.state.status === "waiting" || move.state.status === "running",
+        ).length,
     ),
   });
 });
 
 export const layer = Layer.effect(MoveQueue, make);
 
-// What a quit, an update or a data-folder move would interrupt: the
-// work under way, and the moves still waiting, which it drops.
+// What a quit, an update or a peer's data-folder move would interrupt:
+// the work under way, and the queued moves not done yet, which it drops.
 export const hostBusy = Effect.all([
   Effect.flatMap(Scripts.Scripts, (scripts) => scripts.busy),
   Effect.flatMap(MoveQueue, (queue) => queue.pending),
