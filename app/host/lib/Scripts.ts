@@ -5,7 +5,6 @@
 // The layer's close is the quit's stop of every run.
 import type { WorktreeSettingUpError } from "@shigomori/contracts/errors";
 import type { RunningScript } from "@shigomori/contracts/schemas";
-import type { BusyOperations } from "@shigomori/contracts/modules/session";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -28,7 +27,7 @@ import {
 import { makeRemoving } from "./scripts/removing";
 import { type LifecycleRuns, makeRuns } from "./scripts/runs";
 import type { PtySpawnError } from "./scripts/ScriptRuns";
-import { makeUnderWay } from "./scripts/underWay";
+import { makeUnderWay, type ScriptsBusy } from "./scripts/underWay";
 
 export type {
   Mark,
@@ -111,7 +110,7 @@ export class Scripts extends Context.Service<
       projectId: string,
       effect: Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E, R>;
-    readonly busy: Effect.Effect<BusyOperations>;
+    readonly busy: Effect.Effect<ScriptsBusy>;
     readonly refuseNew: Effect.Effect<void>;
     readonly reapRemoved: Effect.Effect<ReadonlyArray<RunningScriptWorktree>>;
     // The scripts and terminals of every project no longer registered

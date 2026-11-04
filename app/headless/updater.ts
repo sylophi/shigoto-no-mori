@@ -9,9 +9,9 @@ import * as Layer from "effect/Layer";
 import type { UpdaterState } from "@shigomori/contracts/schemas";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Updater from "@shigomori/engine/Updater";
-import * as Scripts from "@host/lib/Scripts";
 import * as Graph from "@host/process/graph";
 import { quit } from "@host/process/run";
+import { hostBusy } from "@host/lib/sync/MoveQueue";
 import type { HostFacts } from "@shared/hostFacts";
 import { bundledBinaryPath } from "@shared/packaging/bundledBinary.mts";
 import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
@@ -29,8 +29,7 @@ export const makeHeadlessUpdater = (
     version: facts.appVersion,
     cliBinary,
     noteState,
-    busy: () =>
-      Graph.run(Effect.flatMap(Scripts.Scripts, (scripts) => scripts.busy)),
+    busy: () => Graph.run(hostBusy),
     confirmRestart: null,
     handOff: Effect.flatMap(Updater.Updater, (engine) =>
       engine.install({

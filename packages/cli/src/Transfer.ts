@@ -24,10 +24,12 @@ import {
   controlContract,
   ControlLeaveOutSchema,
   type ControlPeerWorktree,
-  ControlSourceFateSchema,
   type ControlTransferResult,
 } from "@shigomori/contracts/modules/control";
-import type { SyncPullProgress } from "@shigomori/contracts/modules/sync";
+import {
+  type SyncPullProgress,
+  SyncSourceFateSchema,
+} from "@shigomori/contracts/modules/sync";
 import type { ViewInput } from "@shigomori/contracts/types";
 import type * as Git from "@shigomori/engine/Git";
 import * as Paths from "@shigomori/engine/Paths";
@@ -295,7 +297,7 @@ type TransferOptions = Omit<
   "projectId" | "worktreeId"
 >;
 const isLeaveOut = Schema.is(ControlLeaveOutSchema);
-const isSourceFate = Schema.is(ControlSourceFateSchema);
+const isSourceFate = Schema.is(SyncSourceFateSchema);
 
 // The options every transfer takes, as the control op takes them.
 // Nothing asked is nothing sent: the app then applies the project's

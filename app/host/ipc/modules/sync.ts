@@ -1,30 +1,36 @@
 // The wire for moving a worktree between devices: the handlers decode,
 // call and answer. The landing is host/lib/sync/landing.ts, the pull
 // and the send host/lib/sync/move.ts, the teardown
-// host/lib/sync/receipts.ts, and a source's answers
-// host/lib/sync/sourceLink.ts.
+// host/lib/sync/receipts.ts, a source's answers
+// host/lib/sync/sourceLink.ts, and the queue host/lib/sync/MoveQueue.ts.
 import {
   SYNC_IGNORED_PATHS_LIMIT,
   syncContract,
 } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { EffectHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers, ViewHandlers } from "@shigomori/contracts/types";
 import * as Git from "@shigomori/engine/Git";
 import * as Worktrees from "@host/lib/Worktrees";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { findProject, findWorktreePath } from "@host/lib/projects";
 import * as Moves from "@host/lib/sync/Moves";
+import * as MoveQueue from "@host/lib/sync/MoveQueue";
 import {
   attachLinkFarEnd,
   linkSource,
   serveOpened,
 } from "@host/lib/sync/sourceLink";
-import { scriptEventNotifier } from "../scriptRun";
 import type { HostServices } from "@host/process/services";
 import { cloneDestination } from "@host/lib/sync/cloneFromPeer";
 import { landForSender } from "@host/lib/sync/landing";
 import { pullWorktree, sendWorktree } from "@host/lib/sync/move";
-import { teardownSource } from "@host/lib/sync/receipts";
+import { teardownMoveSource } from "@host/lib/sync/receipts";
+
+export const syncViews: ViewHandlers<typeof syncContract, HostServices> = {
+  queued: () =>
+    Stream.unwrap(Effect.map(MoveQueue.MoveQueue, (queue) => queue.watch)),
+};
 
 export const syncHandlers = {
   hasCommits: ({ projectId, commits }) =>
@@ -108,12 +114,12 @@ export const syncHandlers = {
   sendWorktree: (input, ctx) =>
     Effect.map(sendWorktree(input, ctx), ({ result }) => result),
 
+  // The moves waiting on another device (host/lib/sync/MoveQueue.ts).
+  queueMove: (move) =>
+    Effect.flatMap(MoveQueue.MoveQueue, (queue) => queue.queue(move)),
+  dropQueuedMove: (ref) =>
+    Effect.flatMap(MoveQueue.MoveQueue, (queue) => queue.drop(ref)),
+
   // The source teardown, after either move (host/lib/sync/receipts.ts).
-  // A send's source is this device's own, removed by the ordinary delete.
-  teardownSource: (move, ctx: HandlerContext) =>
-    teardownSource(move, (removal) =>
-      Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
-        worktrees.remove(removal, scriptEventNotifier(ctx)),
-      ),
-    ),
+  teardownSource: teardownMoveSource,
 } satisfies EffectHandlers<typeof syncContract, HandlerContext, HostServices>;

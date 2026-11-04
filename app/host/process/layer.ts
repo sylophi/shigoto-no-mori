@@ -39,6 +39,7 @@ import * as BackgroundFetch from "@host/lib/BackgroundFetch";
 import { repairCliLinks } from "@host/lib/cli/install";
 import * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
 import * as Moves from "@host/lib/sync/Moves";
+import * as MoveQueue from "@host/lib/sync/MoveQueue";
 import * as FileSyncRunner from "@host/fileSync/runner";
 import * as MirrorGateway from "@host/mirror/MirrorGateway";
 import * as MirrorEngineLayer from "@host/mirror/MirrorEngineLayer";
@@ -255,6 +256,12 @@ export const layer = (options: {
   // session, and the entry's own.
   readonly loopback: HostRpc.HandlerLayer;
 }) =>
+  // The moves queued on another device run on everything below, and
+  // go first: a queued move running at the quit is rolled back while
+  // what it runs on is still up.
+  MoveQueue.layer.pipe(Layer.provideMerge(below(options)));
+
+const below = (options: Parameters<typeof layer>[0]) =>
   dataDirHolders.pipe(
     Layer.provideMerge(scriptGate),
     // Port forwards start on demand. Stopping them before the remote

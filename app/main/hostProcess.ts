@@ -132,6 +132,7 @@ const IDLE: HostBusy = {
   inflightMoves: 0,
   engineChanges: [],
   busyTerminals: 0,
+  queuedMoves: 0,
 };
 
 let child: UtilityProcess | null = null;

@@ -6,8 +6,10 @@
 // does. The pick is made in the review's destination column
 // (PullReview.tsx), which lists them all: with one device ready the
 // dialog opens on it, with several it opens on none and Start waits
-// for the pick. The handlers re-verify the identity match on the peer,
-// so this gate is UX.
+// for the pick. An offline device can be picked too, and the flow to it
+// is queued for when it is back (hooks/remote/useMoveQueue.ts). The
+// handlers re-verify the identity match on the peer, so this gate is
+// UX.
 import { only } from "@shigomori/contracts/util/only";
 import { useState } from "react";
 import type { Project } from "@shigomori/contracts/schemas";
@@ -18,7 +20,8 @@ import type {
   DestinationPick,
   PeerTarget as ViewPeerTarget,
 } from "@shigomori/ui/views/worktreeDetail/flow/PullReviewView.tsx";
-import type { HostApi } from "@/hooks/remote/useHostScope";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
+import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import {
   type Landing,
   landsOnPeer,
@@ -26,11 +29,6 @@ import {
 
 // A peer target with the API scoped to it, which the flow runs on.
 export type PeerTarget = ViewPeerTarget & { api: HostApi | undefined };
-type ReadyPeerTarget = PeerTarget & { api: HostApi };
-
-function isReadyTarget(target: PeerTarget): target is ReadyPeerTarget {
-  return target.block === undefined && target.api !== undefined;
-}
 
 export function usePeerTargets(project: Project): PeerTarget[] {
   // A device without a checkout reads "no-project" among the targets,
@@ -59,22 +57,31 @@ export function usePeerTargets(project: Project): PeerTarget[] {
 // pull the destination (and the running view with it) out from under
 // the flow. A peer that really went away fails the run, which says so.
 export function usePeerDestination(targets: PeerTarget[]): {
-  picked: ReadyPeerTarget | null;
+  picked: PeerTarget | null;
   flow: {
     localProject: Project | undefined;
     sourceDeviceLabel: string;
     thisDeviceLabel: string;
     landing: Landing;
     toPeer: DestinationPick;
+    waitsFor: string | null;
   };
 } {
-  const ready = targets.filter(isReadyTarget);
-  const [picked, setPicked] = useState<ReadyPeerTarget | null>(
-    only(ready) ?? null,
+  const pickable = targets.filter(
+    (target) => target.ready || target.block === "offline",
+  );
+  // The one ready device, or with none ready the one it can wait for.
+  const ready = pickable.filter((target) => target.ready);
+  const [picked, setPicked] = useState<PeerTarget | null>(
+    only(ready.length > 0 ? ready : pickable) ?? null,
   );
   const onPick = (deviceId: string) =>
-    setPicked(ready.find((target) => target.deviceId === deviceId) ?? null);
+    setPicked(pickable.find((target) => target.deviceId === deviceId) ?? null);
   const label = picked?.label ?? "another device";
+  // Whether it is offline now, off the live list: one that came back
+  // takes the flow at once, one that went takes it queued.
+  const live =
+    targets.find((target) => target.deviceId === picked?.deviceId) ?? picked;
   return {
     picked,
     flow: {
@@ -83,6 +90,30 @@ export function usePeerDestination(targets: PeerTarget[]): {
       thisDeviceLabel: label,
       landing: landsOnPeer(label),
       toPeer: { targets, pickedId: picked?.deviceId ?? null, onPick },
+      waitsFor: live?.block === "offline" ? label : null,
     },
   };
+}
+
+function useScopedPeerOffline(): boolean {
+  const { deviceId } = useHostScope();
+  return (
+    useDeviceTabs().find((tab) => tab.deviceId === deviceId)?.block ===
+    "offline"
+  );
+}
+
+// What a dialog bringing the scoped peer's worktree here waits for: the
+// peer, named, while it is offline, which queues the flow.
+export function useSourceWaits(sourceDeviceLabel: string): string | null {
+  return useScopedPeerOffline() ? sourceDeviceLabel : null;
+}
+
+// Whether this device may move the scoped host's worktrees. An offline
+// peer's grant can't be read until it's back, so one not refused yet
+// offers the move, which waits for it and its grant (MoveQueue.ts).
+export function useMayTransfer(): boolean {
+  const { granted, canCommand } = useCommandAccess();
+  const offline = useScopedPeerOffline();
+  return granted || (offline && canCommand);
 }

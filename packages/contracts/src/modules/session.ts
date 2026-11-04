@@ -63,6 +63,9 @@ const BusyOperationsSchema = strict(
     engineChanges: Schema.Array(ChangeKindSchema),
     // Terminals whose shell runs something.
     busyTerminals: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    // Queued moves waiting on another device or under way, which a
+    // quit drops (sync:queued).
+    queuedMoves: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   }),
 );
 export type BusyOperations = typeof BusyOperationsSchema.Type;

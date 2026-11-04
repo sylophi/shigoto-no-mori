@@ -29,7 +29,11 @@ import type { MoveMutation } from "@/hooks/remote/useMoveWorktree";
 import { useApi } from "@/lib/runtime/pageApi";
 import { PullFlowFrame, usePullFlow } from "../flow/PullFlow";
 import { LandedPath } from "../flow/FlowChrome";
-import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
+import {
+  type PeerTarget,
+  usePeerDestination,
+  useSourceWaits,
+} from "../flow/peerTargets";
 import type { DestinationPick } from "@shigomori/ui/views/worktreeDetail/flow/PullReviewView.tsx";
 import {
   type FlowStage,
@@ -87,6 +91,7 @@ export function MirrorDialog({
       localProject={localProject}
       sourceDeviceLabel={sourceDeviceLabel}
       thisDeviceLabel={thisDeviceLabel}
+      waitsFor={useSourceWaits(sourceDeviceLabel)}
       mirror={mirror}
       onClose={onClose}
     />
@@ -140,6 +145,7 @@ function MirrorFlow({
   thisDeviceLabel,
   landing = LANDS_HERE,
   toPeer,
+  waitsFor,
   mirror,
   onClose,
 }: {
@@ -158,6 +164,8 @@ function MirrorFlow({
   // which peer (flow/peerTargets.ts makes both).
   landing?: Landing;
   toPeer?: DestinationPick;
+  // The other device while it is offline, which queues the mirror.
+  waitsFor: string | null;
   mirror: MoveMutation<{
     worktree: Worktree;
     captured: boolean;
@@ -173,6 +181,8 @@ function MirrorFlow({
     sourceIdentity,
     localProject,
     toPeer,
+    waitsFor,
+    queueAs: { kind: "mirror" },
     onClose,
   });
   const { stage, progress, start, open, pull, target } = flow;
@@ -240,6 +250,8 @@ function MirrorFlow({
           landing={landing}
           toPeer={toPeer}
           pull={pull}
+          waitsFor={waitsFor}
+          queueing={flow.queueing}
           onCancel={onClose}
           onStart={start}
         />

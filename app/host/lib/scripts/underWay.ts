@@ -8,6 +8,10 @@ import { Terminals } from "../terminals/Terminals";
 import type { Marks } from "./marks";
 import type { Runs } from "./runs";
 
+// The host's own work under way. The moves queued on another device
+// are the move queue's to count (sync/MoveQueue.ts).
+export type ScriptsBusy = Omit<BusyOperations, "queuedMoves">;
+
 export const makeUnderWay = ({
   marks,
   runs,
@@ -19,7 +23,7 @@ export const makeUnderWay = ({
     const terminals = yield* Terminals;
     const engineChanges = yield* EngineChanges;
     return {
-      busy: Effect.map(terminals.busy, (busyTerminals): BusyOperations => ({
+      busy: Effect.map(terminals.busy, (busyTerminals): ScriptsBusy => ({
         runningScripts: runs.count(),
         inflightDeletes: marks.removals(),
         inflightMoves: marks.moves(),

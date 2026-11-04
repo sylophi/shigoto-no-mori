@@ -23,6 +23,7 @@ import { MirrorAction } from "./mirror/MirrorAction";
 import { MirrorCopyTabs, useMirrorCopies } from "./mirror/MirrorCopyTabs";
 import type { TransferDialog } from "@shigomori/ui/views/worktreeDetail/TransferActionsView.tsx";
 import { TransferActions } from "./TransferActions";
+import { QueuedMoveAction } from "./QueuedMoveAction";
 import { FilesButton } from "./FilesButton";
 import { PortsSection } from "./ports/PortsSection";
 import { PullRequestLead } from "./pullRequests/PullRequestLead";
@@ -183,6 +184,7 @@ export function WorktreeDetailInner({
                 asked={mirrorAsked}
                 onOpened={() => setMirrorAsked(false)}
               />
+              <QueuedMoveAction worktree={worktree} />
               <TransferActions part="footer" {...transfers} />
             </>
           }

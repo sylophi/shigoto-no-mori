@@ -37,7 +37,8 @@ function isBusy(busy: BusyOperations): boolean {
     busy.busyTerminals > 0 ||
     busy.inflightDeletes > 0 ||
     busy.inflightMoves > 0 ||
-    busy.engineChanges.length > 0
+    busy.engineChanges.length > 0 ||
+    busy.queuedMoves > 0
   );
 }
 
@@ -237,16 +238,27 @@ function underWay(busy: BusyOperations, there = false) {
         : `${listed(parts)} ${plural(n, "is", "are")} still ${doing}`,
     );
   }
+  // A queued move, waiting on another device or under way: a quit
+  // drops it.
+  const queued = busy.queuedMoves;
+  if (queued > 0) {
+    clauses.push(
+      `${queued === 1 ? "a queued move" : `${queued} queued moves`} ${plural(queued, "isn't", "aren't")} done yet`,
+    );
+  }
   const total =
     busy.runningScripts +
     busy.busyTerminals +
+    queued +
     [...groups.values()].reduce((sum, group) => sum + group.n, 0);
   const removing = groups.has("being removed");
   return {
     clauses,
     obj: plural(total, "it", "them"),
-    runningOnly: running !== null && groups.size === 0,
-    removingOnly: removing && running === null && groups.size === 1,
+    runningOnly: running !== null && groups.size === 0 && queued === 0,
+    queuedOnly: queued > 0 && running === null && groups.size === 0,
+    removingOnly:
+      removing && running === null && groups.size === 1 && queued === 0,
     removing,
     running: running !== null,
   };
@@ -263,9 +275,11 @@ export function busyDetail(
   const what = underWay(busy);
   const then = what.runningOnly
     ? `stop ${what.obj}`
-    : what.removingOnly
-      ? "interrupt cleanup and may leave files behind"
-      : `interrupt ${what.obj}${what.removing ? " and may leave files behind" : ""}`;
+    : what.queuedOnly
+      ? `drop ${what.obj}`
+      : what.removingOnly
+        ? "interrupt cleanup and may leave files behind"
+        : `interrupt ${what.obj}${what.removing ? " and may leave files behind" : ""}`;
   return `${capitalized(listed(what.clauses))}. ${gerund} now will ${then}.`;
 }
 
@@ -287,9 +301,11 @@ export function busyRemoteRefusal(
   const what = underWay(busy, true);
   const then = what.runningOnly
     ? `Stop ${what.obj}`
-    : what.running
-      ? "Stop or wait for them"
-      : `Wait for ${what.obj} to finish`;
+    : what.queuedOnly
+      ? `Cancel ${what.obj}`
+      : what.running
+        ? "Stop or wait for them"
+        : `Wait for ${what.obj} to finish`;
   return `On that device, ${listed(what.clauses)}. ${then} before ${verb}.`;
 }
 

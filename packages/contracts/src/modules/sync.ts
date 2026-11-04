@@ -3,7 +3,7 @@ import { errorMessageOf } from "../errors.ts";
 import { MIRROR_IGNORES_LIMIT } from "../mirrorIgnores.ts";
 import { isValidWorktreeDirName } from "../predicates/worktreeDirName.ts";
 import { isSafeRelPath } from "../predicates/relPath.ts";
-import { push, defineContract, invoke, gatedBy } from "../contract.ts";
+import { push, defineContract, invoke, gatedBy, view } from "../contract.ts";
 import { DeviceIdSchema } from "../hubProtocol.ts";
 import {
   CloneFolderNameSchema,
@@ -351,7 +351,7 @@ export type SyncTeardownSourceResult =
 // worktreeId is the source's. What the move captured is not on the wire:
 // the host reads its own receipt.
 const SyncMoveDirectionSchema = Schema.Literals(["pull", "send"]);
-const SyncTeardownSourcePayloadSchema = strict(
+const SyncMoveRefSchema = strict(
   Schema.Struct({
     direction: SyncMoveDirectionSchema,
     deviceId: DeviceIdSchema,
@@ -359,7 +359,7 @@ const SyncTeardownSourcePayloadSchema = strict(
     worktreeId: WorktreeIdSchema,
   }),
 );
-export type SyncMoveRef = typeof SyncTeardownSourcePayloadSchema.Type;
+export type SyncMoveRef = typeof SyncMoveRefSchema.Type;
 
 // Keyed by the source worktree id. Remote, for a move the asking device
 // doesn't run, since a host only finds the asking device's own moves.
@@ -381,6 +381,82 @@ export const MOVE_CANCELLED = "The move was cancelled";
 export function isMoveCancelledError(error: unknown): boolean {
   return errorMessageOf(error).includes(MOVE_CANCELLED);
 }
+
+// A move asked for while the other device was offline (a send's
+// destination, a pull's source), which this device runs once that
+// device is back, on what the review picked. The leave-out rule rides
+// as the selection and is resolved then, over the source's own list,
+// which an offline source can't give. Held while the app runs.
+const QueuedPathsSchema = Schema.Array(Schema.String).check(
+  Schema.isMaxLength(MIRROR_IGNORES_LIMIT),
+);
+const SyncQueuedRuleSchema = strict(
+  Schema.Struct({
+    base: Schema.Literals(["everything", "gitignored"]),
+    leftOut: QueuedPathsSchema,
+    brought: QueuedPathsSchema,
+  }),
+);
+
+// What a transplant does with its source once it landed.
+export const SyncSourceFateSchema = Schema.Literals([
+  "keep",
+  "shelve",
+  "teardown",
+]);
+export type SyncSourceFate = typeof SyncSourceFateSchema.Type;
+
+// One move per source worktree, named on the device holding it.
+export const queuedMoveKey = (ref: SyncMoveRef): string =>
+  ref.direction === "pull"
+    ? `pull:${ref.deviceId}:${ref.worktreeId}`
+    : `send:${ref.worktreeId}`;
+
+const SyncQueueMovePayloadSchema = strict(
+  Schema.Struct({
+    ...SyncMoveRefSchema.struct.fields,
+    kind: Schema.Literals(["transplant", "mirror"]),
+    branch: GitRefNameSchema,
+    // The repo's, which a pull lands by.
+    identity: Schema.NonEmptyString,
+    rule: SyncQueuedRuleSchema,
+    runSetup: Schema.Boolean,
+    cloneInto: Schema.optional(SyncCloneIntoSchema),
+    source: Schema.optional(SyncSourceFateSchema),
+  }),
+);
+export type SyncQueueMovePayload = typeof SyncQueueMovePayloadSchema.Type;
+
+const SyncQueuedStateSchema = Schema.Union([
+  strict(Schema.Struct({ status: Schema.Literal("waiting") })),
+  strict(Schema.Struct({ status: Schema.Literal("running") })),
+  strict(
+    Schema.Struct({ status: Schema.Literal("failed"), error: Schema.String }),
+  ),
+  strict(
+    Schema.Struct({
+      status: Schema.Literal("done"),
+      // Where the copy is.
+      landed: strict(
+        Schema.Struct({
+          deviceId: DeviceIdSchema,
+          projectId: Schema.NonEmptyString,
+          worktreeId: WorktreeIdSchema,
+        }),
+      ),
+      // The source fate that could not be carried out. The move stands.
+      sourceError: Schema.optional(Schema.String),
+    }),
+  ),
+]);
+
+const SyncQueuedMoveSchema = strict(
+  Schema.Struct({
+    ...SyncQueueMovePayloadSchema.struct.fields,
+    state: SyncQueuedStateSchema,
+  }),
+);
+export type SyncQueuedMove = typeof SyncQueuedMoveSchema.Type;
 
 // So a sender can thin a bundle, and skip a ref whose tip the receiver
 // has (`git bundle create` would drop it silently).
@@ -469,11 +545,22 @@ export const syncContract = defineContract(
     gatedBy("changeCode"),
   ),
   // After a pull, its remote half is the peer's worktrees:delete.
-  invoke(
-    "teardownSource",
-    SyncTeardownSourcePayloadSchema,
-    SyncTeardownSourceResultSchema,
-    { remote: false, gated: true },
-  ),
+  invoke("teardownSource", SyncMoveRefSchema, SyncTeardownSourceResultSchema, {
+    remote: false,
+    gated: true,
+  }),
+  view("queued", VoidSchema, Schema.Array(SyncQueuedMoveSchema), {
+    remote: false,
+  }),
+  // Replaces the source's queued move, a failed one's retry included.
+  invoke("queueMove", SyncQueueMovePayloadSchema, VoidSchema, {
+    remote: false,
+    gated: true,
+  }),
+  // Cancels a waiting or running move, or clears what became of it.
+  invoke("dropQueuedMove", SyncMoveRefSchema, VoidSchema, {
+    remote: false,
+    gated: true,
+  }),
   push("pullProgress", SyncPullProgressSchema),
 );

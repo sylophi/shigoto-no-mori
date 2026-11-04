@@ -3,7 +3,7 @@
 import { sessionContract } from "@shigomori/contracts/modules/session";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
-import * as Scripts from "@host/lib/Scripts";
+import { hostBusy } from "@host/lib/sync/MoveQueue";
 import * as Graph from "./graph";
 import * as BackgroundFetch from "@host/lib/BackgroundFetch";
 import * as Tunnel from "@host/direct/Tunnel";
@@ -49,7 +49,7 @@ export const sessionHandlers = (options: {
           Effect.flatMap(Tunnel.Tunnel, (tunnel) => tunnel.recheck),
         ).catch(() => {});
       }),
-    busy: () => Effect.flatMap(Scripts.Scripts, (scripts) => scripts.busy),
+    busy: () => hostBusy,
     updaterState: (state) =>
       Effect.flatMap(Shell.Shell, (shell) => shell.updater.noteState(state)),
     // The user's agent on a guide session the shell minted for one of its

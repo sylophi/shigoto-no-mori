@@ -13,6 +13,7 @@ import { leftIf, nukeEverything } from "@host/lib/nuke";
 import * as Terminals from "@host/lib/terminals/Terminals";
 import { moveDataDir, sessionPlace } from "@host/lib/dataDirMove";
 import * as Scripts from "@host/lib/Scripts";
+import { hostBusy } from "@host/lib/sync/MoveQueue";
 import { busyRemoteRefusal } from "@shared/busy";
 import { DataDirHolders } from "@host/lib/DataDirHolders";
 import * as HostPushes from "@host/lib/HostPushes";
@@ -133,7 +134,7 @@ export const runtimeHandlers = {
       }
       if (unattended) {
         // It reaps every running script, and nobody here was asked.
-        const refusal = busyRemoteRefusal(yield* scripts.busy, "move");
+        const refusal = busyRemoteRefusal(yield* hostBusy, "move");
         if (refusal !== null) {
           return yield* new MoveRefusedError({ reason: refusal });
         }

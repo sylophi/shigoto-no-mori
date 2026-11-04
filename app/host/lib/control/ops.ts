@@ -49,12 +49,7 @@ import {
   sharedSettingKeys,
   sharedStringSetting,
 } from "@shigomori/contracts/sharedSettings";
-import {
-  peerEffects,
-  peerSyncFor,
-  peerWorktree,
-  peerWorktreesFor,
-} from "@host/ipc/PeerReach";
+import { peerEffects, peerSyncFor, peerWorktree } from "@host/ipc/PeerReach";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as DeviceId from "@host/lib/config/DeviceId";
 import type { DirectPeer } from "./AccountPeers";
@@ -65,6 +60,7 @@ import {
 } from "@host/lib/projects";
 import { clonePeerProject } from "@host/lib/sync/cloneFromPeer";
 import { progressTo } from "@host/lib/sync/move";
+import { pullSettle, sendSettle, settleSource } from "@host/lib/sync/receipts";
 import * as SharedSettingsStore from "@host/lib/sharedSettings/store";
 import { MirrorLedger } from "@host/mirror/MirrorLedger";
 import {
@@ -75,7 +71,6 @@ import {
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { scriptEventNotifier } from "@host/ipc/scriptRun";
 import * as Worktrees from "@host/lib/Worktrees";
-import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import {
   BLOCK_REASON,
   blockWords,
@@ -187,52 +182,6 @@ const choiceFor = <E, R>(
     } as MirrorIgnoreChoice & { runSetup: boolean };
   });
 
-// A transfer done, with how to settle its source.
-type Settle = {
-  readonly shelve: Effect.Effect<unknown, unknown, HostServices>;
-  readonly teardown: Effect.Effect<
-    { sourceRemoved: boolean; sourceError?: string },
-    unknown,
-    HostServices
-  >;
-};
-
-// What became of the source, in the finish step's terms. A fate that
-// could not be carried out is an answer, never a throw: the transfer
-// already stands.
-const settleSource = (
-  fate: "keep" | "shelve" | "teardown",
-  run: Settle,
-): Effect.Effect<
-  NonNullable<ControlTransferResult["source"]>,
-  never,
-  HostServices
-> => {
-  if (fate === "keep") return Effect.succeed({ fate, done: true });
-  const outcome: Effect.Effect<
-    NonNullable<ControlTransferResult["source"]>,
-    unknown,
-    HostServices
-  > = fate === "shelve"
-    ? run.shelve.pipe(Effect.as({ fate, done: true }))
-    : run.teardown.pipe(
-        Effect.map((result) =>
-          result.sourceRemoved
-            ? { fate, done: true }
-            : {
-                fate,
-                done: false,
-                error: result.sourceError ?? "its teardown was refused.",
-              },
-        ),
-      );
-  return outcome.pipe(
-    Effect.catch((error) =>
-      Effect.succeed({ fate, done: false, error: messageOf(error) }),
-    ),
-  );
-};
-
 // A transfer, then the source settled as its input asked.
 const settled =
   <K extends "send" | "bring">(
@@ -241,7 +190,10 @@ const settled =
       ctx: HandlerContext,
     ) => Effect.Effect<
       | { readonly done: ControlTransferResult }
-      | { readonly moved: ControlTransferResult; readonly settle: Settle },
+      | {
+          readonly moved: ControlTransferResult;
+          readonly settle: ReturnType<typeof sendSettle | typeof pullSettle>;
+        },
       unknown,
       HostServices
     >,
@@ -452,20 +404,16 @@ export const send = settled<"send">((input, ctx) =>
     const sent = yield* syncHandlers.sendWorktree(payload, ctx);
     return {
       moved: { ...sent, device, copySide: "remote" as const },
-      settle: {
-        shelve: Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
-          worktrees.setShelved(worktree, true),
-        ),
-        teardown: syncHandlers.teardownSource(
-          {
-            direction: "send",
-            deviceId: payload.targetDeviceId,
-            projectId: project.id,
-            worktreeId: worktree.id,
-          },
-          ctx,
-        ),
-      },
+      settle: sendSettle(
+        {
+          direction: "send",
+          deviceId: payload.targetDeviceId,
+          projectId: project.id,
+          worktreeId: worktree.id,
+        },
+        worktree,
+        ctx,
+      ),
     };
   }),
 );
@@ -604,14 +552,7 @@ export const bring = settled<"bring">((input, ctx) =>
     };
     return {
       moved: { ...pulled, device: found.device, copySide: "local" as const },
-      settle: {
-        shelve: peerWorktreesFor(found.device.deviceId).setShelved({
-          projectId: found.projectId,
-          worktreeId: found.worktree.id,
-          shelved: true,
-        }),
-        teardown: syncHandlers.teardownSource(sourceRef, ctx),
-      },
+      settle: pullSettle(sourceRef, ctx),
     };
   }),
 );

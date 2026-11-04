@@ -6,8 +6,14 @@ import * as Schema from "effect/Schema";
 import {
   type SyncMoveRef,
   type SyncReceipt,
+  type SyncSourceFate,
   type SyncTeardownSourceResult,
 } from "@shigomori/contracts/modules/sync";
+import type { ControlTransferResult } from "@shigomori/contracts/modules/control";
+import * as EngineWorktrees from "@shigomori/engine/Worktrees";
+import type { HandlerContext } from "@shared/ipc/transport";
+import { scriptEventNotifier } from "@host/ipc/scriptRun";
+import * as Worktrees from "@host/lib/Worktrees";
 import * as Moves from "@host/lib/sync/Moves";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import { movedSourceChange } from "@shigomori/contracts/movedSource";
@@ -42,7 +48,7 @@ class NoReceiptError extends Schema.TaggedError<NoReceiptError>()(
 // source, so a refused or failed one can be retried. A pull's source is
 // the peer's worktree, checked over a link and removed through the
 // peer's grant-gated delete. A send's is this device's own.
-export const teardownSource = Effect.fn("Sync.teardownSource")(function* <E, R>(
+const teardownSource = Effect.fn("Sync.teardownSource")(function* <E, R>(
   move: SyncMoveRef,
   removeHere: (removal: {
     projectId: string;
@@ -209,6 +215,75 @@ const tearDown = <R>(
         sourceRemoved: false,
         sourceError: messageOf(error),
       }),
+    ),
+  );
+};
+
+// The teardown as a caller asks it: a send's source is this device's
+// own, removed by the ordinary delete.
+export const teardownMoveSource = (move: SyncMoveRef, ctx: HandlerContext) =>
+  teardownSource(move, (removal) =>
+    Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+      worktrees.remove(removal, scriptEventNotifier(ctx)),
+    ),
+  );
+
+// A transfer done, with how to settle its source.
+type Settle<R> = {
+  readonly shelve: Effect.Effect<unknown, unknown, R>;
+  readonly teardown: Effect.Effect<SyncTeardownSourceResult, unknown, R>;
+};
+
+// A send's source, this device's own worktree.
+export const sendSettle = (
+  move: SyncMoveRef,
+  worktree: EngineWorktrees.WorktreeIdentity,
+  ctx: HandlerContext,
+) => ({
+  shelve: Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
+    worktrees.setShelved(worktree, true),
+  ),
+  teardown: teardownMoveSource(move, ctx),
+});
+
+// A pull's source, the peer's worktree.
+export const pullSettle = (move: SyncMoveRef, ctx: HandlerContext) => ({
+  shelve: peerWorktreesFor(move.deviceId).setShelved({
+    projectId: move.projectId,
+    worktreeId: move.worktreeId,
+    shelved: true,
+  }),
+  teardown: teardownMoveSource(move, ctx),
+});
+
+// What became of the source, in the finish step's terms. A fate that
+// could not be carried out is an answer, never a throw: the transfer
+// already stands.
+export const settleSource = <R>(
+  fate: SyncSourceFate,
+  run: Settle<R>,
+): Effect.Effect<NonNullable<ControlTransferResult["source"]>, never, R> => {
+  if (fate === "keep") return Effect.succeed({ fate, done: true });
+  const outcome: Effect.Effect<
+    NonNullable<ControlTransferResult["source"]>,
+    unknown,
+    R
+  > = fate === "shelve"
+    ? run.shelve.pipe(Effect.as({ fate, done: true }))
+    : run.teardown.pipe(
+        Effect.map((result) =>
+          result.sourceRemoved
+            ? { fate, done: true }
+            : {
+                fate,
+                done: false,
+                error: result.sourceError ?? "its teardown was refused.",
+              },
+        ),
+      );
+  return outcome.pipe(
+    Effect.catch((error) =>
+      Effect.succeed({ fate, done: false, error: messageOf(error) }),
     ),
   );
 };
