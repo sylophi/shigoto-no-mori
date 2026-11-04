@@ -5,6 +5,7 @@ import {
   SyncCloneIntoSchema,
   SyncPullProgressSchema,
   SyncPullWorktreeResultSchema,
+  SyncSourceFateSchema,
 } from "./sync.ts";
 import {
   ClonedFromDeviceSchema,
@@ -53,20 +54,14 @@ const DeviceQuerySchema = Schema.optional(
 // Absent: the project's saved rule.
 export const ControlLeaveOutSchema = Schema.Literals(["nothing", "gitignored"]);
 
-// Never read for a mirror, whose source stays.
-export const ControlSourceFateSchema = Schema.Literals([
-  "keep",
-  "shelve",
-  "teardown",
-]);
-
 const TransferOptionsSchema = Schema.Struct({
   device: DeviceQuerySchema,
   mirror: Schema.optional(Schema.Boolean),
   leaveOut: Schema.optional(ControlLeaveOutSchema),
   // Absent follows the rule (setupDefaultFor).
   setup: Schema.optional(Schema.Boolean),
-  source: Schema.optional(ControlSourceFateSchema),
+  // Never read for a mirror, whose source stays.
+  source: Schema.optional(SyncSourceFateSchema),
 });
 
 // The folder the checkout goes in, on the device it lands on (`~` is
@@ -97,7 +92,7 @@ const ControlBringPayloadSchema = strict(
 
 const ControlSourceOutcomeSchema = strict(
   Schema.Struct({
-    fate: ControlSourceFateSchema,
+    fate: SyncSourceFateSchema,
     // The transfer stands either way.
     done: Schema.Boolean,
     error: Schema.optional(Schema.String),

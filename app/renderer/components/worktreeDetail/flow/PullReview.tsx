@@ -114,6 +114,10 @@ export type PullReviewProps = {
   toPeer?: DestinationPick;
   // The leave-out rule and the setup switch, the flows' shared pair.
   pull: PullChoiceState;
+  // The other device while it is offline, which the start queues the
+  // flow for (PullFlow.tsx), and that queueing under way.
+  waitsFor: string | null;
+  queueing: boolean;
   onCancel: () => void;
   onStart: () => void;
 };
@@ -130,6 +134,8 @@ export function PullReviewStep({
   landing,
   toPeer,
   pull,
+  waitsFor,
+  queueing,
   onCancel,
   onStart,
   link,
@@ -152,6 +158,7 @@ export function PullReviewStep({
   // carries the title over, so both cards lead with it.
   const { data: pr } = useWorktreePullRequest(project.id, worktree.branch);
   const title = worktreeTitle(worktree, pr);
+  const noun = link === "move" ? "transplant" : "mirror";
   return (
     <PullReviewStepView
       link={link}
@@ -176,6 +183,7 @@ export function PullReviewStep({
             landing={landing ?? LANDS_HERE}
             toPeer={toPeer}
             pull={pull}
+            offline={waitsFor !== null}
           />
         </DestinationScope>
       }
@@ -196,10 +204,14 @@ export function PullReviewStep({
             worktree={worktree}
             target={target}
             landing={landing}
-            waiting={pull.waiting}
+            waiting={pull.waiting || queueing}
             blocked={pull.blocked}
-            idleNote={idleNote}
-            startLabel={startLabel}
+            idleNote={
+              waitsFor === null
+                ? idleNote
+                : `${waitsFor} is offline, so the ${noun} waits and starts on its own once it's back. Keep the app running here until then.`
+            }
+            startLabel={waitsFor === null ? startLabel : `Queue ${noun}`}
             onCancel={onCancel}
             onStart={onStart}
           />
@@ -267,6 +279,7 @@ function DestinationCard({
   landing,
   toPeer,
   pull,
+  offline,
 }: {
   heading: string;
   title: string | null;
@@ -276,6 +289,8 @@ function DestinationCard({
   landing: Landing;
   toPeer: DestinationPick | undefined;
   pull: PullChoiceState;
+  // The flow waits on the other device, which is offline.
+  offline: boolean;
 }) {
   const { deviceId } = useDestinationScope();
   return (
@@ -303,7 +318,13 @@ function DestinationCard({
             landing={landing}
           />
         ) : (
-          <CloneLines clone={target.clone} title={title} worktree={worktree} />
+          <CloneLines
+            clone={target.clone}
+            title={title}
+            worktree={worktree}
+            // An offline destination's folders can't be browsed.
+            fixed={offline && landing.onPeer}
+          />
         )
       }
     />
@@ -355,10 +376,12 @@ function CloneLines({
   clone,
   title,
   worktree,
+  fixed,
 }: {
   clone: NonNullable<LandingTarget["clone"]>;
   title: string | null;
   worktree: Worktree;
+  fixed: boolean;
 }) {
   const [picking, setPicking] = useState(false);
   return (
@@ -366,7 +389,7 @@ function CloneLines({
       clone={clone}
       title={title}
       worktree={worktree}
-      onChange={() => setPicking(true)}
+      onChange={fixed ? undefined : () => setPicking(true)}
       picker={
         picking && (
           <FolderPickerModal

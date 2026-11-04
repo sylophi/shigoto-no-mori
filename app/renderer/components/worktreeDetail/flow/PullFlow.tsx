@@ -4,13 +4,23 @@
 // three-step frame: review, the pull with its progress frames, and a
 // last step that reports. The mutation's own status is the stage, with one reading
 // on top: a mutation that failed because the user cancelled it is the
-// cancelled stage, not a failure.
+// cancelled stage, not a failure. With the other device offline (a
+// send's destination, a pull's source), the start queues the move
+// instead and the dialog closes: the host runs it once that device is
+// back (hooks/remote/useMoveQueue.ts).
 import { useEffect, useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { isMoveCancelledError } from "@shigomori/contracts/modules/sync";
+import {
+  isMoveCancelledError,
+  type SyncSourceFate,
+} from "@shigomori/contracts/modules/sync";
+import { presetOfSelection } from "@shigomori/contracts/leaveOutRule";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import type { MoveMutation } from "@/hooks/remote/useMoveWorktree";
+import { useHostScope } from "@/hooks/remote/useHostScope";
+import { useQueueMove } from "@/hooks/remote/useMoveQueue";
+import { toast } from "@/lib/toast";
 import { usePullProgress } from "@/hooks/remote/usePullProgress";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useLandingTarget } from "./cloneDestination";
@@ -46,6 +56,8 @@ export function usePullFlow<Data extends Landed>({
   sourceIdentity,
   localProject,
   toPeer,
+  waitsFor,
+  queueAs,
   onClose,
 }: {
   mutation: MoveMutation<Data>;
@@ -58,12 +70,26 @@ export function usePullFlow<Data extends Landed>({
   localProject: Project | undefined;
   // A flow to a peer: the pick of which peer.
   toPeer: DestinationPick | undefined;
+  // The other device while it is offline, which the start then waits
+  // for. Null when the move can run now.
+  waitsFor: string | null;
+  // What the queue holds it as, and a transplant's source fate, which
+  // its last step would otherwise ask.
+  queueAs: { kind: "transplant" | "mirror"; source?: SyncSourceFate };
   onClose: () => void;
 }) {
   const localDeviceId = useApi().deviceId;
+  const scope = useHostScope();
   // The leave-out rule and the setup switch. Under the source scope:
-  // its ignored list walks the checkout over the device link.
-  const pull = usePullChoice(project.id, worktree.id, sourceIdentity);
+  // its ignored list walks the checkout over the device link, which an
+  // offline source can't, so a queued pull resolves it when it runs.
+  const pull = usePullChoice(
+    project.id,
+    worktree.id,
+    sourceIdentity,
+    waitsFor !== null && toPeer === undefined,
+  );
+  const queue = useQueueMove();
   const target = useLandingTarget({
     localProject,
     sourceProject: project,
@@ -91,6 +117,34 @@ export function usePullFlow<Data extends Landed>({
   const progress = usePullProgress(worktree.id);
 
   const start = () => {
+    if (waitsFor !== null) {
+      queue.mutate(
+        {
+          direction: toPeer === undefined ? "pull" : "send",
+          deviceId: toPeer?.pickedId ?? scope.deviceId,
+          projectId: project.id,
+          worktreeId: worktree.id,
+          kind: queueAs.kind,
+          branch: worktree.branch,
+          identity: sourceIdentity,
+          rule: presetOfSelection(pull.selection),
+          runSetup: pull.runSetup,
+          ...(target?.clone === undefined
+            ? {}
+            : { cloneInto: target.clone.cloneInto }),
+          ...(queueAs.source === undefined ? {} : { source: queueAs.source }),
+        },
+        {
+          onSuccess: () => {
+            onClose();
+            toast(`Queued for ${waitsFor}`, {
+              description: `The ${queueAs.kind} starts once ${waitsFor} is back online.`,
+            });
+          },
+        },
+      );
+      return;
+    }
     progress.reset();
     setCancelling(false);
     setStartedAt(performance.now());
@@ -138,6 +192,7 @@ export function usePullFlow<Data extends Landed>({
     pull,
     target,
     error: mutation.error,
+    queueing: queue.isPending,
   };
 }
 

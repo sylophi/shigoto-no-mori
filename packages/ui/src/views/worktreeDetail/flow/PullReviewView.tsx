@@ -36,7 +36,8 @@ import type { DeviceTarget } from "../../../lib/deviceRoster.ts";
 
 // A peer that could take the worktree, with its checkout of the repo
 // when it has one. Its `block` says why it cannot take the worktree
-// right now (asleep, or not granting this device control).
+// right now (asleep, which a flow to it waits out queued, or not
+// granting this device control).
 export type PeerTarget = DeviceTarget & {
   block: "offline" | "no-grant" | undefined;
   // Whether a flow can start to it now: no block, and a session up.
@@ -511,8 +512,9 @@ export function CloneLinesView({
   clone: NonNullable<LandingTarget["clone"]>;
   title: string | null;
   worktree: Worktree;
-  // Opens the folder picker, drawn in `picker` while it is up.
-  onChange: () => void;
+  // Opens the folder picker, drawn in `picker` while it is up. Absent
+  // for an offline destination, whose folders can't be browsed.
+  onChange: (() => void) | undefined;
   picker: ReactNode;
 }) {
   return (
@@ -527,12 +529,19 @@ export function CloneLinesView({
             clone.found === "taken" && "text-amber-700 dark:text-amber-300",
           )}
         />
-        <Button variant="outline" size="xs" onClick={onChange}>
-          Change
-        </Button>
+        {onChange !== undefined && (
+          <Button variant="outline" size="xs" onClick={onChange}>
+            Change
+          </Button>
+        )}
       </div>
       <p className="text-xs text-muted-foreground">
-        {clone.found === "same-repo" ? (
+        {onChange === undefined ? (
+          <>
+            Cloned there first, unless it holds a checkout of{" "}
+            {clone.projectName} by then.
+          </>
+        ) : clone.found === "same-repo" ? (
           <>
             A checkout of {clone.projectName} is already there, so the worktree
             lands in it.
@@ -584,7 +593,7 @@ function DevicePickView({
               // not a step under them like other menus.
               className="pl-1.5 text-sm"
               value={candidate.deviceId}
-              disabled={!candidate.ready}
+              disabled={!candidate.ready && candidate.block !== "offline"}
             >
               <DeviceGlyphView
                 icon={candidate.icon}

@@ -14,13 +14,13 @@
 // transplanted: it is the project itself and cannot be torn down. The
 // running mirror's button, on a worktree already part of one
 // (mirror/MirrorAction.tsx), stands in for these: a worktree holds one
-// mirror.
+// mirror. So does a move queued for an offline device, until it ran
+// (QueuedMoveAction.tsx).
 import {
   isRealBranch,
   type Project,
   type Worktree,
 } from "@shigomori/contracts/schemas";
-import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLocalProjectForIdentity } from "@/hooks/remote/useLocalProjectForIdentity";
 import {
@@ -29,13 +29,18 @@ import {
   useWorktreeMirrorLinks,
 } from "@/hooks/remote/useMirrors";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useDevices";
+import { useQueuedMoveOf } from "@/hooks/remote/useMoveQueue";
 import { useHasLocalHost } from "@/lib/localHost";
 import {
   type TransferDialog,
   TransferActionsView,
 } from "@shigomori/ui/views/worktreeDetail/TransferActionsView.tsx";
 import { NoIdentityNoteView } from "@shigomori/ui/views/worktreeDetail/NoIdentityNoteView.tsx";
-import { usePeerTargets, type PeerTarget } from "./flow/peerTargets";
+import {
+  useMayTransfer,
+  usePeerTargets,
+  type PeerTarget,
+} from "./flow/peerTargets";
 import { MirrorDialog, MirrorToDialog } from "./mirror/MirrorDialog";
 import {
   TransplantDialog,
@@ -84,9 +89,15 @@ export function useTransferOffers(
   // move here lands on this machine, which a browser is not.
   const hasLocalHost = useHasLocalHost();
   const links = useWorktreeMirrorLinks(worktree);
+  // A move queued for it stands in for both (QueuedMoveAction.tsx).
+  const queued = useQueuedMoveOf(worktree);
   // The branch is checked again for a dialog held open past it.
   const canOpen =
-    hasLocalHost && ready && hasOwnBranch(worktree) && links.length === 0;
+    hasLocalHost &&
+    ready &&
+    hasOwnBranch(worktree) &&
+    links.length === 0 &&
+    queued === undefined;
   return {
     mirror: canOpen,
     mirrorBlocker,
@@ -111,12 +122,11 @@ export function useToPeerSide(
 
 // A peer's worktree, under its scope, here.
 export function useHereSide(): TransferSide & { deviceLabel: string } {
-  const { granted } = useCommandAccess();
   const { deviceId } = useHostScope();
   const deviceLabel = useRemoteDeviceLabel(deviceId);
   return {
     deviceLabel,
-    ready: granted,
+    ready: useMayTransfer(),
     mirrorBlocker: useMirrorHereBlocker(deviceLabel),
   };
 }
@@ -131,9 +141,9 @@ export function TransferActions(props: TransferPartProps) {
   // grant reading undefined while the direct link blips, the mirror it
   // starts), and says what failed rather than vanishing mid-run.
   // Always granted locally.
-  const { granted } = useCommandAccess();
+  const mayTransfer = useMayTransfer();
   const hasLocalHost = useHasLocalHost();
-  if (!(granted && hasOwnBranch(worktree)) && open === null) return null;
+  if (!(mayTransfer && hasOwnBranch(worktree)) && open === null) return null;
   // A peer's project git couldn't identify can never match one here,
   // so no transfer of it will ever work. Say so: two controls
   // disappearing without a word reads as a bug, and the cause (the

@@ -10,6 +10,7 @@
 // change the socket phase, navigate the memory router.
 import { normalizeRemoteUrl } from "@shigomori/contracts/predicates/remoteUrl";
 import {
+  errorMessageOf,
   NotSharingError,
   RemoteCallError,
   UnknownProjectError,
@@ -59,7 +60,13 @@ import {
 import {
   MOVE_CANCELLED,
   pullBringsIgnoredFiles,
+  queuedMoveKey,
+  type SyncQueuedMove,
 } from "@shigomori/contracts/modules/sync";
+import {
+  resolveIgnores,
+  selectionOfPreset,
+} from "@shigomori/contracts/leaveOutRule";
 import type { PortForwardSummary } from "@shigomori/contracts/modules/portForward";
 import {
   pullLandingBranch,
@@ -1274,6 +1281,15 @@ function hostHandlersFor(
     ...(forest.deviceId === LOCAL_DEVICE_ID
       ? {
           "sync:pullWorktree": (input) => fakeSyncPull(forest, emit, input),
+          "sync:queued": () => [...fakeQueue.values()],
+          "sync:queueMove": (input) => {
+            const key = queuedMoveKey(input);
+            fakeQueue.set(key, { ...input, state: { status: "waiting" } });
+            if (directSessions.has(input.deviceId)) void runFakeQueued(key);
+          },
+          "sync:dropQueuedMove": (ref) => {
+            fakeQueue.delete(queuedMoveKey(ref));
+          },
           // "Mirror here" as the app runs it: the local start asks the
           // forest holding the original to run the mirror towards here.
           "mirror:startFrom": (input) => {
@@ -1340,6 +1356,93 @@ function evened(worktree: FakeWorktree): void {
 // The posed moves under way, by source worktree, and whether each was
 // asked to stop, so the dialogs' Cancel has something to cancel here.
 const posedMoves = new Map<string, { cancelled: boolean }>();
+
+// The moves queued on Studio Mac for a device that was offline
+// (host/lib/sync/MoveQueue.ts), each run when setPeer connects its
+// device, the way the host runs one on that device's admission.
+const fakeQueue = new Map<string, SyncQueuedMove>();
+
+function settleFakeQueued(key: string, state: SyncQueuedMove["state"]) {
+  const move = fakeQueue.get(key);
+  if (move === undefined) return;
+  fakeQueue.set(key, { ...move, state });
+  mirrorWires.get(LOCAL_DEVICE_ID)?.("mirror:changed", undefined);
+}
+
+async function runFakeQueued(key: string) {
+  const move = fakeQueue.get(key);
+  const local = forests[LOCAL_DEVICE_ID];
+  const peer = move && forests[move.deviceId];
+  const emit = mirrorWires.get(LOCAL_DEVICE_ID);
+  if (move?.state.status !== "waiting" || !local || !peer || !emit) return;
+  settleFakeQueued(key, { status: "running" });
+  const send = move.direction === "send";
+  const [from, to] = send ? [local, peer] : [peer, local];
+  const source = (from.worktrees[move.projectId] ?? []).find(
+    (entry) => entry.id === move.worktreeId,
+  );
+  try {
+    if (source === undefined) {
+      throw new Error("The worktree is no longer on the other device.");
+    }
+    const rule = resolveIgnores(selectionOfPreset(move.rule), {
+      paths: [...FAKE_IGNORED_PATHS],
+      total: FAKE_IGNORED_PATHS.length,
+      patterns: [...FAKE_IGNORED_PATHS],
+    });
+    const landed =
+      move.kind === "mirror"
+        ? await fakeMirrorStartTo(from, {
+            targetDeviceId: to.deviceId,
+            projectId: move.projectId,
+            worktreeId: move.worktreeId,
+            runSetup: move.runSetup,
+            ...rule,
+          })
+        : await fakeSyncPull(
+            to,
+            mirrorWires.get(to.deviceId) ?? emit,
+            {
+              sourceDeviceId: from.deviceId,
+              sourceProjectId: move.projectId,
+              sourceWorktreeId: move.worktreeId,
+              sourceIdentity: move.identity,
+              branch: source.branch,
+              worktreeName: pullWorktreeName(source),
+              runSetup: move.runSetup,
+              ignoreMode: rule.ignoreMode,
+            },
+            emit,
+          );
+    if (move.kind === "transplant" && move.source === "teardown") {
+      from.worktrees[move.projectId] = (
+        from.worktrees[move.projectId] ?? []
+      ).filter((entry) => entry.id !== move.worktreeId);
+    } else if (move.kind === "transplant" && move.source === "shelve") {
+      source.shelved = true;
+    }
+    emit("git:externalChange", undefined);
+    settleFakeQueued(key, {
+      status: "done",
+      landed: {
+        deviceId: to.deviceId,
+        projectId: landed.worktree.projectId,
+        worktreeId: landed.worktree.id,
+      },
+    });
+  } catch (error) {
+    settleFakeQueued(key, {
+      status: "failed",
+      error: errorMessageOf(error),
+    });
+  }
+}
+
+function runFakeQueuedFor(deviceId: string) {
+  for (const [key, move] of fakeQueue) {
+    if (move.deviceId === deviceId) void runFakeQueued(key);
+  }
+}
 
 // What git ignores on the posed worktree (FAKE_TREE's ignored entries,
 // folders collapsed), serving as its gitignore rules too.
@@ -2334,6 +2437,7 @@ export function installFakeHostBridge(
       if (state !== "offline") roster.add(deviceId);
       if (state === "connected") directSessions.add(deviceId);
       pushHub();
+      if (state === "connected") runFakeQueuedFor(deviceId);
     },
     setSocket(phase) {
       socketPhase = phase;

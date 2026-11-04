@@ -89,7 +89,7 @@ import { terrierHandlers } from "@host/ipc/modules/terrier";
 import { agentsHandlers } from "@host/ipc/modules/agents";
 import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
-import { syncHandlers } from "@host/ipc/modules/sync";
+import { syncHandlers, syncViews } from "@host/ipc/modules/sync";
 import { updaterHandlers } from "@host/ipc/modules/updater";
 import { villagersHandlers } from "@host/ipc/modules/villagers";
 import { worktreesHandlers, worktreesViews } from "@host/ipc/modules/worktrees";
@@ -423,7 +423,7 @@ export const hostHandlers = Layer.mergeAll(
   HostRpc.handlers(cliContract, cliHandlers),
   HostRpc.handlers(shigomoriContract, shigomoriHandlers),
   HostRpc.handlers(worktreeDataContract, worktreeDataHandlers),
-  HostRpc.handlers(syncContract, syncHandlers),
+  HostRpc.handlers(syncContract, syncHandlers, syncViews),
   // Host side of the port-forward wire: host-scoped, so it mounts on
   // the loopback and the direct listener, whose command-access gate
   // covers every verb (all gated).

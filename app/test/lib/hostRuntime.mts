@@ -33,6 +33,7 @@ import * as Terminals from "../../host/lib/terminals/Terminals.ts";
 import * as HostAccount from "../../host/lib/HostAccount.ts";
 import * as Sharing from "../../host/lib/Sharing.ts";
 import * as Moves from "../../host/lib/sync/Moves.ts";
+import * as MoveQueue from "../../host/lib/sync/MoveQueue.ts";
 import * as OrphanSweep from "../../host/lib/scripts/OrphanSweep.ts";
 import * as Views from "../../host/lib/Views.ts";
 import * as HostPushes from "../../host/lib/HostPushes.ts";
@@ -99,58 +100,60 @@ const engine = Engine.layer({
 // (mirror.mts). The services the host's handlers answer on
 // (host/process/services.ts) are here too, for a proof that runs a
 // handler or serves one (runHost, hostContext).
-const runtime = ManagedRuntime.make(
-  Worktrees.layer.pipe(
-    Layer.provideMerge(
-      Scripts.layer({ hurried: () => false, env: () => process.env }),
-    ),
-    Layer.provideMerge(
-      Terminals.layer({
-        start: terminalStart,
-        worktrees: terminalWorktrees,
-      }),
-    ),
-    Layer.provideMerge(
-      Layer.mergeAll(
-        Ports.layer,
-        PullRequestMaps.layer,
-        Villagers.deviceLayer,
-        Views.layer,
-        Sharing.layer,
-        // Unreported, as the host starts.
-        HostAccount.layer,
-        Moves.layer,
-        // No fetches behind a proof's back.
-        Layer.succeed(
-          BackgroundFetch.BackgroundFetch,
-          BackgroundFetch.BackgroundFetch.of({
-            refreshProject: () => Effect.void,
-            sweepForPeer: () => Effect.succeed({ leaseMs: 0 }),
-            setWindowFocused: () => {},
-          }),
-        ),
-        // Over the file's fresh store, with nothing a previous run left
-        // behind to sweep.
-        OrphanSweep.layer,
-        ScratchIndex.layer,
-      ),
-    ),
-    // The engine's deletes stop the mirrors of what they take first.
-    Layer.provideMerge(Layer.effect(MirrorsOnDelete, mirrorsOnDelete("both"))),
-    Layer.provideMerge(MirrorLedger.layer),
-    // What the app's root provides from its own wiring.
-    Layer.provideMerge(HostStandIns.layer),
-    Layer.provideMerge(HostPushes.layer),
-    Layer.provideMerge(EngineStoreChanges.layer),
-    Layer.provideMerge(ScriptRuns.layer),
-    Layer.provideMerge(ScriptChanges.layer),
-    Layer.provideMerge(FileSync.layer(() => null)),
-    Layer.provideMerge(GithubCli.layer),
-    Layer.provideMerge(CliShell.layer),
-    Layer.provideMerge(engine),
-    Layer.provideMerge(childDefaults),
-    Layer.provideMerge(NodeServices.layer),
+const hostBelow = Worktrees.layer.pipe(
+  Layer.provideMerge(
+    Scripts.layer({ hurried: () => false, env: () => process.env }),
   ),
+  Layer.provideMerge(
+    Terminals.layer({
+      start: terminalStart,
+      worktrees: terminalWorktrees,
+    }),
+  ),
+  Layer.provideMerge(
+    Layer.mergeAll(
+      Ports.layer,
+      PullRequestMaps.layer,
+      Villagers.deviceLayer,
+      Views.layer,
+      Sharing.layer,
+      // Unreported, as the host starts.
+      HostAccount.layer,
+      Moves.layer,
+      // No fetches behind a proof's back.
+      Layer.succeed(
+        BackgroundFetch.BackgroundFetch,
+        BackgroundFetch.BackgroundFetch.of({
+          refreshProject: () => Effect.void,
+          sweepForPeer: () => Effect.succeed({ leaseMs: 0 }),
+          setWindowFocused: () => {},
+        }),
+      ),
+      // Over the file's fresh store, with nothing a previous run left
+      // behind to sweep.
+      OrphanSweep.layer,
+      ScratchIndex.layer,
+    ),
+  ),
+  // The engine's deletes stop the mirrors of what they take first.
+  Layer.provideMerge(Layer.effect(MirrorsOnDelete, mirrorsOnDelete("both"))),
+  Layer.provideMerge(MirrorLedger.layer),
+  // What the app's root provides from its own wiring.
+  Layer.provideMerge(HostStandIns.layer),
+  Layer.provideMerge(HostPushes.layer),
+  Layer.provideMerge(EngineStoreChanges.layer),
+  Layer.provideMerge(ScriptRuns.layer),
+  Layer.provideMerge(ScriptChanges.layer),
+  Layer.provideMerge(FileSync.layer(() => null)),
+  Layer.provideMerge(GithubCli.layer),
+  Layer.provideMerge(CliShell.layer),
+  Layer.provideMerge(engine),
+  Layer.provideMerge(childDefaults),
+  Layer.provideMerge(NodeServices.layer),
+);
+
+const runtime = ManagedRuntime.make(
+  MoveQueue.layer.pipe(Layer.provideMerge(hostBelow)),
 );
 
 export type Services = ManagedRuntime.ManagedRuntime.Services<typeof runtime>;

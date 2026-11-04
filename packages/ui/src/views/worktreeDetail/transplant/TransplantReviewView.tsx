@@ -17,9 +17,12 @@ import {
 } from "../flow/FlowChromeView.tsx";
 
 export function TransplantDetailsView({
+  sourceFate,
   changes,
   carryOver,
 }: {
+  // What becomes of the source, asked ahead when the move is queued.
+  sourceFate?: ReactNode;
   // The changed files, on a dirty tree.
   changes: ReactNode;
   // The landing project's carry-over, once there is one.
@@ -27,6 +30,7 @@ export function TransplantDetailsView({
 }) {
   return (
     <>
+      {sourceFate}
       {changes && (
         <section className="space-y-2">
           <SectionHeading>

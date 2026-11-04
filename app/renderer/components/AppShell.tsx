@@ -25,6 +25,7 @@ import {
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { InstallFailedToast } from "@/components/InstallFailedToast";
 import { UpdateReadyToast } from "@/components/UpdateReadyToast";
+import { QueuedMoveToasts } from "@/components/QueuedMoveToasts";
 import {
   useAccountStatus,
   useWatchAccountChanges,
@@ -125,6 +126,7 @@ export function AppShell() {
         <>
           <UpdateReadyToast />
           <InstallFailedToast />
+          <QueuedMoveToasts />
         </>
       }
       backBar={

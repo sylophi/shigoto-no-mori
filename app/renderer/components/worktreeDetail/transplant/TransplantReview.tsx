@@ -17,11 +17,24 @@ import {
   ChangedFilesView,
   TransplantDetailsView,
 } from "@shigomori/ui/views/worktreeDetail/transplant/TransplantReviewView.tsx";
+import {
+  type SourceChoice,
+  SourceFateView,
+} from "@shigomori/ui/views/worktreeDetail/transplant/TransplantFinishView.tsx";
 
-export function TransplantReview(props: PullReviewProps) {
+export function TransplantReview({
+  fate,
+  onFate,
+  ...props
+}: PullReviewProps & {
+  // What a queued transplant does with its source once it lands.
+  fate: SourceChoice;
+  onFate: (fate: SourceChoice) => void;
+}) {
   const { worktree, project, target, sourceDeviceLabel, thisDeviceLabel } =
     props;
   const dirty = worktree.changedCount !== 0;
+  const queued = props.waitsFor !== null;
   return (
     <PullReviewStep
       {...props}
@@ -31,8 +44,17 @@ export function TransplantReview(props: PullReviewProps) {
       idleNote={`Nothing on ${sourceDeviceLabel} is deleted until you say so at the last step.`}
       startLabel="Start transplant"
       details={
-        (dirty || target?.project) && (
+        (queued || dirty || target?.project) && (
           <TransplantDetailsView
+            sourceFate={
+              queued && (
+                <SourceFateView
+                  sourceDeviceLabel={sourceDeviceLabel}
+                  choice={fate}
+                  onChoose={onFate}
+                />
+              )
+            }
             changes={
               dirty && <ChangedFiles worktree={worktree} project={project} />
             }

@@ -181,6 +181,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     ...(yield* scripts.busy),
     runningScripts: 0,
     busyTerminals: 0,
+    queuedMoves: 0,
   });
   if (refused !== null) {
     return yield* new DataDirMoveError({ reason: refused });

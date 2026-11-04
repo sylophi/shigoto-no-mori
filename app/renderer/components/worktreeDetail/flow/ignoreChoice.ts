@@ -56,11 +56,13 @@ export {
 // the repo identity both ends share) until the user picks. `choice` is
 // what the mutation takes, and `waiting` holds Start while the preset
 // or the gitignored list is still on its way (or the copy would land
-// with nothing left out).
+// with nothing left out). A `deferred` list is one an offline source
+// can't give: a queued move resolves the rule over it when it runs.
 export function usePullChoice(
   projectId: string,
   worktreeId: string,
   identity: string | null | undefined,
+  deferred: boolean,
 ) {
   const preset = useLeaveOutPreset(identity);
   const presetRead = useSharedSettingsSettled();
@@ -73,16 +75,23 @@ export function usePullChoice(
   const [picked, setSelection] = useState<IgnoreSelection | null>(null);
   const selection = picked ?? opened ?? selectionOfPreset(preset);
   const [setupChoice, setSetupChoice] = useState<boolean | null>(null);
-  const ignored = useWorktreeIgnoredPaths(projectId, worktreeId, {
-    enabled: selection.base === "gitignored",
+  const listed = useWorktreeIgnoredPaths(projectId, worktreeId, {
+    enabled: selection.base === "gitignored" && !deferred,
   });
+  const ignored = deferred
+    ? {
+        ...listed,
+        unavailable:
+          "The device is offline, so what it ignores is read when the move starts.",
+      }
+    : listed;
   const runSetup = setupChoice ?? setupDefaultFor(selection);
   const choice: PullChoice = {
     ...resolveIgnores(selection, ignored.data),
     runSetup,
   };
   const needsList =
-    selection.base === "gitignored" && ignored.data === undefined;
+    !deferred && selection.base === "gitignored" && ignored.data === undefined;
   return {
     selection,
     setSelection,

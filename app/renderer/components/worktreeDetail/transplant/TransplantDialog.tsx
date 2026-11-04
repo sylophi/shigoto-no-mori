@@ -8,6 +8,7 @@
 // worktree here (the pull), TransplantToDialog sends one of this
 // device's to a peer (the send, under that peer's DestinationProvider),
 // both through the one move mutation (hooks/remote/useMoveWorktree.ts).
+import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import type { UseMutationResult } from "@tanstack/react-query";
 import {
@@ -27,7 +28,12 @@ import { DestinationProvider } from "@/hooks/remote/useHostScope";
 import { modeOf, selectionSummary } from "../flow/ignoreChoice";
 import { PullFlowFrame, usePullFlow } from "../flow/PullFlow";
 import type { DestinationPick } from "@shigomori/ui/views/worktreeDetail/flow/PullReviewView.tsx";
-import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
+import {
+  type PeerTarget,
+  usePeerDestination,
+  useSourceWaits,
+} from "../flow/peerTargets";
+import type { SourceChoice } from "@shigomori/ui/views/worktreeDetail/transplant/TransplantFinishView.tsx";
 import { TransplantHeadlineView } from "@shigomori/ui/views/worktreeDetail/transplant/TransplantDialogView.tsx";
 import { TransplantFinish } from "./TransplantFinish";
 import { TransplantReview } from "./TransplantReview";
@@ -86,6 +92,7 @@ export function TransplantDialog({
       localProject={localProject}
       sourceDeviceLabel={sourceDeviceLabel}
       thisDeviceLabel={thisDeviceLabel}
+      waitsFor={useSourceWaits(sourceDeviceLabel)}
       pull={pull}
       teardown={teardown}
       onClose={onClose}
@@ -144,6 +151,7 @@ function TransplantFlow({
   thisDeviceLabel,
   landing = LANDS_HERE,
   toPeer,
+  waitsFor,
   pull,
   teardown,
   onClose,
@@ -163,10 +171,15 @@ function TransplantFlow({
   // which peer (flow/peerTargets.ts makes both).
   landing?: Landing;
   toPeer?: DestinationPick;
+  // The other device while it is offline, which queues the transplant.
+  waitsFor: string | null;
   pull: MoveMutation<SyncPullWorktreeResult>;
   teardown: UseMutationResult<SyncTeardownSourceResult, Error, void>;
   onClose: () => void;
 }) {
+  // What a queued transplant does with its source once it lands, the
+  // last step's question asked ahead.
+  const [fate, setFate] = useState<SourceChoice>("teardown");
   const flow = usePullFlow({
     mutation: pull,
     worktree,
@@ -174,6 +187,8 @@ function TransplantFlow({
     sourceIdentity,
     localProject,
     toPeer,
+    waitsFor,
+    queueAs: { kind: "transplant", source: fate },
     onClose,
   });
   // The leave-out rule and the setup switch, the mirror's pair.
@@ -225,6 +240,10 @@ function TransplantFlow({
           landing={landing}
           toPeer={toPeer}
           pull={choice}
+          waitsFor={waitsFor}
+          queueing={flow.queueing}
+          fate={fate}
+          onFate={setFate}
           onCancel={onClose}
           onStart={start}
         />

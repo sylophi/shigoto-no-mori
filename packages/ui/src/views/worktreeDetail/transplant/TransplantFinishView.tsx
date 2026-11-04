@@ -12,7 +12,10 @@
 import { ArrowRight, Check } from "lucide-react";
 import type { ReactNode } from "react";
 import { RadioGroup } from "@base-ui/react/radio-group";
-import type { SyncPullWorktreeResult } from "@shigomori/contracts/modules/sync";
+import type {
+  SyncPullWorktreeResult,
+  SyncSourceFate,
+} from "@shigomori/contracts/modules/sync";
 import {
   errorMessageOf,
   isCommandRefusedError,
@@ -28,7 +31,7 @@ import { DialogBody, DialogFooter } from "../../../primitives/dialog.tsx";
 import type { Landing } from "../flow/pullSteps.ts";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 
-export type SourceChoice = "keep" | "shelve" | "teardown";
+export type SourceChoice = SyncSourceFate;
 
 // The three fates of the source copy, in card order. Tear down is
 // preselected when the work landed whole: the worktree moved, and a
@@ -71,6 +74,43 @@ const CHOICES: {
       }.`,
   },
 ];
+
+// The same choice made ahead, on the review of a transplant queued for
+// a device that is offline: nobody is there when it lands. The
+// guarded teardown still refuses a source that changed since, or
+// whose changes didn't make it across, and keeps it.
+export function SourceFateView({
+  sourceDeviceLabel,
+  choice,
+  onChoose,
+}: {
+  sourceDeviceLabel: string;
+  choice: SourceChoice;
+  onChoose: (choice: SourceChoice) => void;
+}) {
+  return (
+    <section className="space-y-2">
+      <SectionHeading>
+        Once it lands, the copy on {sourceDeviceLabel}
+      </SectionHeading>
+      <RadioGroup
+        value={choice}
+        onValueChange={onChoose}
+        aria-label={`What to do with the copy on ${sourceDeviceLabel} once it lands`}
+        className="grid gap-2"
+      >
+        {CHOICES.map((entry) => (
+          <OptionCard
+            key={entry.key}
+            value={entry.key}
+            title={<span className="font-medium">{entry.title}</span>}
+            detail={entry.body(sourceDeviceLabel, null)}
+          />
+        ))}
+      </RadioGroup>
+    </section>
+  );
+}
 
 const FINISH_LABEL: Record<SourceChoice, string> = {
   keep: "Keep and finish",

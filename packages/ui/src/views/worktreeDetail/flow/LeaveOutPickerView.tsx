@@ -71,6 +71,8 @@ export type IgnoredPaths = {
   readonly data: SyncIgnoredPathsResult | undefined;
   readonly isPending: boolean;
   readonly isError: boolean;
+  // Why there is no list to read now, in its place.
+  readonly unavailable?: string;
 };
 
 // The rule as the picker edits it: which list the exceptions are, and
@@ -238,6 +240,9 @@ function IgnoredList({
   ignored: IgnoredPaths;
   brought: ReadonlySet<string>;
 }) {
+  if (ignored.unavailable !== undefined) {
+    return <p className={CARD_NOTE}>{ignored.unavailable}</p>;
+  }
   if (ignored.isPending) return <CardSkeletonView />;
   if (ignored.isError) {
     return <p className={CARD_NOTE}>Couldn't list the ignored files.</p>;

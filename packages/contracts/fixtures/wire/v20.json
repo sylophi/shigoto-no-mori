@@ -1009,7 +1009,12 @@
   "menu:setGuideChoices": {
     "payload": {
       "harnesses": ["claude", "codex"],
-      "terminals": [{ "id": "ghostty", "label": "Ghostty" }]
+      "terminals": [
+        {
+          "id": "ghostty",
+          "label": "Ghostty"
+        }
+      ]
     }
   },
   "menu:setLaunchToolsEnabled": {
@@ -2123,7 +2128,8 @@
       "inflightDeletes": 1,
       "inflightMoves": 1,
       "engineChanges": ["pull", "push"],
-      "busyTerminals": 1
+      "busyTerminals": 1,
+      "queuedMoves": 1
     }
   },
   "session:guideLaunch": {
@@ -2358,6 +2364,14 @@
     },
     "success": "taken"
   },
+  "sync:dropQueuedMove": {
+    "payload": {
+      "direction": "send",
+      "deviceId": "-1",
+      "projectId": "a",
+      "worktreeId": "063396972d3b"
+    }
+  },
   "sync:hasCommits": {
     "payload": {
       "projectId": "\n",
@@ -2441,6 +2455,50 @@
       },
       "captured": true,
       "dirtyApplied": true
+    }
+  },
+  "sync:queued": {
+    "success": [
+      {
+        "direction": "send",
+        "deviceId": "e:",
+        "projectId": "😀",
+        "worktreeId": "119dc2ef24e6",
+        "kind": "mirror",
+        "branch": "z",
+        "identity": "😀",
+        "rule": {
+          "base": "gitignored",
+          "leftOut": [],
+          "brought": []
+        },
+        "runSetup": false,
+        "state": {
+          "status": "done",
+          "landed": {
+            "deviceId": "7",
+            "projectId": "w",
+            "worktreeId": "d1d58be1e122"
+          }
+        }
+      }
+    ]
+  },
+  "sync:queueMove": {
+    "payload": {
+      "direction": "send",
+      "deviceId": "O",
+      "projectId": "S",
+      "worktreeId": "dfe6531cb6a6",
+      "kind": "mirror",
+      "branch": "[q",
+      "identity": "L",
+      "rule": {
+        "base": "everything",
+        "leftOut": ["r{", "\ud800"],
+        "brought": []
+      },
+      "runSetup": false
     }
   },
   "sync:receiveBundle": {
