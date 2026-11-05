@@ -17,7 +17,6 @@ import {
   pullLandingBranch,
   pullWorktreeName,
 } from "@shigomori/contracts/git/branches";
-import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { useWorktreeBaseLabel } from "@/hooks/config/useWorktreeBaseLabel";
 import { useBranches } from "@/hooks/git/useBranches";
 import {
@@ -30,6 +29,7 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import { worktreeTitle } from "@shigomori/ui/lib/worktreeTitle.ts";
+import { CloneFolderPicker } from "./cloneDestination";
 import { useCreatePlan } from "./createPlan";
 import type { PullChoiceState } from "./ignoreChoice";
 import { PullLeaveOut } from "./PullLeaveOut";
@@ -225,6 +225,7 @@ function PullReviewFooter({
   worktree,
   target,
   landing,
+  waiting,
   ...props
 }: {
   worktree: Worktree;
@@ -244,6 +245,8 @@ function PullReviewFooter({
     <PullReviewFooterView
       refusal={refusal ?? cloneRefusal(target?.clone)}
       unpicked={target === null}
+      // A clone's folder is the home folder until its default is read.
+      waiting={waiting || target?.clone?.ready === false}
       {...props}
     />
   );
@@ -322,8 +325,7 @@ function DestinationCard({
             clone={target.clone}
             title={title}
             worktree={worktree}
-            // An offline destination's folders can't be browsed.
-            fixed={offline && landing.onPeer}
+            offline={offline && landing.onPeer}
           />
         )
       }
@@ -376,12 +378,12 @@ function CloneLines({
   clone,
   title,
   worktree,
-  fixed,
+  offline,
 }: {
   clone: NonNullable<LandingTarget["clone"]>;
   title: string | null;
   worktree: Worktree;
-  fixed: boolean;
+  offline: boolean;
 }) {
   const [picking, setPicking] = useState(false);
   return (
@@ -389,19 +391,11 @@ function CloneLines({
       clone={clone}
       title={title}
       worktree={worktree}
-      onChange={fixed ? undefined : () => setPicking(true)}
+      offline={offline}
+      onChange={() => setPicking(true)}
       picker={
         picking && (
-          <FolderPickerModal
-            initialPath={clone.cloneInto.parentDir}
-            title="Clone into"
-            hint={`${clone.projectName} becomes a new folder inside the one you pick.`}
-            onPick={(chosen) => {
-              clone.setParent(chosen);
-              setPicking(false);
-            }}
-            onClose={() => setPicking(false)}
-          />
+          <CloneFolderPicker clone={clone} onClose={() => setPicking(false)} />
         )
       }
     />

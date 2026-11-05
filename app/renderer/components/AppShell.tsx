@@ -11,6 +11,7 @@
 import { useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { AddProjectModal } from "@/components/AddProjectModal";
+import { AddToDeviceDialog } from "@/components/sidebar/AddToDeviceSubmenu";
 import { FolderNameDialog } from "@/components/sidebar/ProjectFolder";
 import { GuideBand } from "@/components/guide/GuideBand";
 import { HostBand } from "@/components/HostBand";
@@ -157,6 +158,7 @@ export function AppShell() {
           <WorktreePalette />
           <AddProjectModal />
           <FolderNameDialog />
+          <AddToDeviceDialog />
           {hasLocalHost && <GuideCallout />}
           {hasLocalHost && <GuideMenu />}
         </>

@@ -20,6 +20,7 @@ export function FolderPickerView({
   highlighted,
   setHighlighted,
   browse,
+  browsable,
   canBrowseUp,
   canConfirm,
   onConfirm,
@@ -35,6 +36,7 @@ export function FolderPickerView({
   highlighted: string;
   setHighlighted: (value: string) => void;
   browse: BrowseListing;
+  browsable?: boolean;
   canBrowseUp: boolean;
   canConfirm: boolean;
   onConfirm: () => void;
@@ -55,6 +57,7 @@ export function FolderPickerView({
       highlighted={highlighted}
       onHighlight={setHighlighted}
       browse={browse}
+      browsable={browsable}
       canBrowseUp={canBrowseUp}
       primary={{
         label: confirmLabel,
