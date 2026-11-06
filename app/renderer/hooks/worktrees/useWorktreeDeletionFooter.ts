@@ -33,15 +33,12 @@ export function useWorktreeDeletionFooter(
   const { toScript } = useWorktreeNav();
   const scriptRuns = useScriptRuns();
   const {
-    deleteMutation,
-    needsForce,
-    cleanupError,
+    stall,
     runDelete,
     deleteBlockedReason,
-    cancelForce,
     retryCleanup,
     skipCleanup,
-    clearCleanupError,
+    dismiss,
   } = useDeleteAndNavigate(worktree, siblings);
   const { armed: confirmDelete, trigger: confirmDeleteTrigger } =
     useConfirmTwice(CONFIRM_QUICK_MS);
@@ -66,9 +63,9 @@ export function useWorktreeDeletionFooter(
 
   const openCleanupConsole = () => {
     let slot: ScriptSlot;
-    if (cleanupError) {
+    if (stall?.kind === "cleanupFailed") {
       slot =
-        cleanupError.phase === "teardown"
+        stall.error.phase === "teardown"
           ? { kind: "teardown" }
           : { kind: "portPool", phase: "release" };
     } else if (releaseState.runId) {
@@ -81,32 +78,27 @@ export function useWorktreeDeletionFooter(
     toScript(worktree.projectId, worktree.id, slot);
   };
 
-  // Order is priority: a cleanup failure and a pending force-delete
-  // each override the running/normal views, matching how a delete
-  // attempt walks through these phases.
-  const state: WorktreeFooterState = cleanupError
-    ? { kind: "cleanupError", error: cleanupError }
-    : needsForce
-      ? {
-          kind: "needsForce",
-          errorMessage: deleteMutation.error?.message,
-          busy,
-        }
-      : cleanupRunning
-        ? { kind: "cleanupRunning", cancelling: cleanupCancelling }
-        : {
-            kind: "normal",
-            confirmDelete,
-            busy,
-            deleteBlockedReason,
-          };
+  // A stalled delete overrides the running/normal views.
+  const state: WorktreeFooterState =
+    stall?.kind === "cleanupFailed"
+      ? { kind: "cleanupError", error: stall.error }
+      : stall?.kind === "refused"
+        ? { kind: "needsForce", errorMessage: stall.message, busy }
+        : cleanupRunning
+          ? { kind: "cleanupRunning", cancelling: cleanupCancelling }
+          : {
+              kind: "normal",
+              confirmDelete,
+              busy,
+              deleteBlockedReason,
+            };
 
   const actions: WorktreeFooterActions = {
-    onCancelCleanupError: clearCleanupError,
+    onCancelCleanupError: dismiss,
     onOpenCleanupConsole: openCleanupConsole,
     onRetryCleanup: retryCleanup,
     onSkipCleanup: skipCleanup,
-    onCancelForce: cancelForce,
+    onCancelForce: dismiss,
     onForceDelete: () => runDelete({ force: true }),
     onCancelCleanup: () => {
       if (teardownState.runId) void scriptRuns.cancel(teardownKey);

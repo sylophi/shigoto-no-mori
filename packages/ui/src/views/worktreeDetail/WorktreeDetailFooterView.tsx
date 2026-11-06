@@ -17,7 +17,7 @@ import {
 // the footer only decides how to render, not which branch is live.
 export type WorktreeFooterState =
   | { kind: "cleanupError"; error: CleanupError }
-  | { kind: "needsForce"; errorMessage: string | undefined; busy: boolean }
+  | { kind: "needsForce"; errorMessage: string; busy: boolean }
   | { kind: "cleanupRunning"; cancelling: boolean }
   | {
       kind: "normal";
@@ -175,14 +175,14 @@ function NeedsForceRow({
   busy,
   actions,
 }: {
-  errorMessage: string | undefined;
+  errorMessage: string;
   busy: boolean;
   actions: WorktreeFooterActions;
 }) {
   return (
     <>
       <InlineError
-        message={errorMessage ?? "Has uncommitted changes."}
+        message={errorMessage}
         title="Couldn't delete the worktree"
         className="flex-1 text-xs text-destructive"
       />

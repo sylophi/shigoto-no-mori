@@ -354,7 +354,7 @@ export function WorktreePagePartsScene() {
           {footer({ kind: "cleanupRunning", cancelling: false })}
           {footer({
             kind: "needsForce",
-            errorMessage: undefined,
+            errorMessage: "Has uncommitted changes.",
             busy: false,
           })}
           {footer({
