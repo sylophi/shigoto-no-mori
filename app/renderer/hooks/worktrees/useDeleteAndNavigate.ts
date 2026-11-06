@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   isCommandRefusedError,
   isWorktreeSettingUpError,
@@ -30,12 +30,20 @@ interface DeleteOpts {
   skipCleanup?: boolean;
 }
 
+// Where a delete stands once it came back with the worktree still
+// there: the host refused it (offer to force it, with what it said), or
+// a cleanup script failed (retry or skip it, keeping the force the run
+// had, since a dirty worktree is still dirty).
+export type DeleteStall =
+  | { kind: "refused"; message: string }
+  | { kind: "cleanupFailed"; error: CleanupError; force: boolean };
+
 // Delete `worktree` and, on success, route the user to a neighbouring
 // worktree (or home if it was the last one), or with the inbox showing
 // to its newest work, so the page never lingers on a removed entry.
-// Owns the force/cleanup retry state that the deletion affordances hang
-// off of, since both the detail footer and the closed-PR box drive the
-// same deletion.
+// Owns where a stalled delete stands (DeleteStall), which the deletion
+// affordances hang off of, since both the detail footer and the
+// closed-PR box drive the same deletion.
 export function useDeleteAndNavigate(
   worktree: Worktree,
   siblings: readonly Worktree[],
@@ -43,14 +51,7 @@ export function useDeleteAndNavigate(
   const nav = useWorktreeNav();
   const deleteMutation = useDeleteWorktree();
   const deleteBlockedReason = useDeleteBlockedReason(worktree);
-  const [needsForce, setNeedsForce] = useState(false);
-  const [cleanupError, setCleanupError] = useState<CleanupError | null>(null);
-
-  // Tracks the flags from the most recent delete attempt so that the
-  // retry/skip affordances on a cleanup failure carry the user's
-  // original intent (notably: a force-delete that hit a cleanup error
-  // should stay force on retry/skip, since the worktree is still dirty).
-  const lastDeleteOptsRef = useRef<{ force?: boolean }>({});
+  const [stall, setStall] = useState<DeleteStall | null>(null);
 
   // `gone` widens the removal past this worktree: a stack removal
   // takes its neighbours too, and the page must not land on one of
@@ -81,19 +82,23 @@ export function useDeleteAndNavigate(
     }
   };
 
+  // A refusal stays up while the force it offered runs, so its row
+  // can show the run as busy.
   const runDelete = (opts: DeleteOpts = {}) => {
-    if (!opts.skipCleanup) {
-      lastDeleteOptsRef.current = { force: opts.force };
-    }
-    setCleanupError(null);
+    setStall((now) => (now?.kind === "refused" ? now : null));
     deleteMutation.mutate(
       { projectId: worktree.projectId, worktreeId: worktree.id, ...opts },
       {
         onSuccess: (data) => {
           if (data.ok) {
+            setStall(null);
             navigateToSibling();
           } else {
-            setCleanupError(data.cleanupError);
+            setStall({
+              kind: "cleanupFailed",
+              error: data.cleanupError,
+              force: opts.force === true,
+            });
           }
         },
         onError: (error) => {
@@ -101,34 +106,31 @@ export function useDeleteAndNavigate(
           // delete for it would only be refused again. So would one
           // for a worktree still being set up (a peer's page doesn't
           // see the create phase to disable the button).
-          if (isWorktreeSettingUpError(error)) {
-            notifyError("Couldn't delete worktree", error);
-          } else if (!isCommandRefusedError(error)) {
-            setNeedsForce(true);
-          }
+          const settingUp = isWorktreeSettingUpError(error);
+          if (settingUp) notifyError("Couldn't delete worktree", error);
+          setStall(
+            settingUp || isCommandRefusedError(error)
+              ? null
+              : { kind: "refused", message: error.message },
+          );
         },
       },
     );
   };
 
-  const cancelForce = () => {
-    setNeedsForce(false);
-    deleteMutation.reset();
-  };
+  const cleanupForce = stall?.kind === "cleanupFailed" && stall.force;
 
   return {
     deleteMutation,
-    needsForce,
-    cleanupError,
+    stall,
     runDelete,
     deleteBlockedReason,
-    cancelForce,
     // For a removal made another way (a stack cleanup) that took this
     // worktree with it: the same move off the page.
     navigateAway: navigateToSibling,
-    retryCleanup: () => runDelete(lastDeleteOptsRef.current),
-    skipCleanup: () =>
-      runDelete({ ...lastDeleteOptsRef.current, skipCleanup: true }),
-    clearCleanupError: () => setCleanupError(null),
+    retryCleanup: () => runDelete({ force: cleanupForce }),
+    skipCleanup: () => runDelete({ force: cleanupForce, skipCleanup: true }),
+    // Back to the page's ordinary footer.
+    dismiss: () => setStall(null),
   };
 }
