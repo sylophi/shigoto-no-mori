@@ -113,33 +113,48 @@ function readyStateFrom(manifest: {
   };
 }
 
+// Where an install stands, beside what the checks found:
+// - armed: updateNow asked for one before anything was staged, and the
+//   next check to finish installs what it staged (unattended or not).
+//   `midCheck` when the arm landed while a check was already running,
+//   which may have asked before the release was out.
+// - installing: handed off, and the process quits once it has started.
+// - held: a move or a reset of the data folder is under way (hold), so
+//   no check or install starts until the restart that follows, or a
+//   move that failed before the folder moved resumes it. `words` answer
+//   an install asked for meanwhile.
+type Install =
+  | { readonly kind: "none" }
+  | {
+      readonly kind: "armed";
+      readonly unattended: boolean;
+      readonly midCheck: boolean;
+    }
+  | { readonly kind: "installing" }
+  | { readonly kind: "held"; readonly words: string };
+
 export const makeUpdater = (seat: UpdaterSeat) => {
   let state: UpdaterState = { kind: "idle" };
+  let install: Install = { kind: "none" };
   let started = false;
-  let installing = false;
-  // Set before a move or a reset of the data folder (hold): no check or
-  // install starts after it, until the restart that follows, or a move
-  // that failed before the folder moved resumes it.
-  let held = false;
   let checkInFlight = false;
   let failedChecks = 0;
   let ticksToCheck = 1;
-  // Armed by updateNow (whether the install is unattended), null when
-  // not: the next check to finish installs what it staged.
-  let installWhenStaged: boolean | null = null;
-  // Set when that arm landed while a check was already running, which
-  // may have asked before the release was out.
-  let armedMidCheck = false;
 
   // The bridge `sm update` reaches this updater through.
   const bridge = makeBridge(seat.version);
 
   // The install's handoff quits, and what installs after it (the app's
-  // installer, a host's unit) waits for this process to exit. This flag
-  // makes that a hurried quit, which signals scripts instead of waiting
-  // them out, so a slow cleanup cannot hold the update back.
+  // installer, a host's unit) waits for this process to exit. An install
+  // under way makes that a hurried quit, which signals scripts instead of
+  // waiting them out, so a slow cleanup cannot hold the update back.
   function isInstallingUpdate(): boolean {
-    return installing;
+    return install.kind === "installing";
+  }
+
+  // No install starts under a hold, which answers with its words.
+  function refuseUnderHold(): void {
+    if (install.kind === "held") throw new Error(install.words);
   }
 
   function setState(next: UpdaterState): void {
@@ -151,7 +166,7 @@ export const makeUpdater = (seat: UpdaterSeat) => {
   // `updating` while an install is under way or armed (updateNow), so
   // every button that would start one waits on it instead.
   function shownState(): UpdaterState {
-    const updating = installing || installWhenStaged !== null;
+    const updating = install.kind === "installing" || install.kind === "armed";
     return updating &&
       (state.kind === "checking" ||
         state.kind === "downloading" ||
@@ -259,7 +274,10 @@ export const makeUpdater = (seat: UpdaterSeat) => {
   // a check that ran clears it.
   const runCheck: Effect.Effect<void, never, UpdaterServices> = Effect.suspend(
     () =>
-      !started || held || checkInFlight || state.kind === "downloading"
+      !started ||
+      install.kind === "held" ||
+      checkInFlight ||
+      state.kind === "downloading"
         ? Effect.void
         : check,
   );
@@ -296,16 +314,16 @@ export const makeUpdater = (seat: UpdaterSeat) => {
       ticksToCheck = failed ? Math.min(failedChecks + 1, MAX_BACKOFF_TICKS) : 1;
       // updateNow's arm (see there). One that landed mid-check gets one
       // check of its own before a miss drops it.
-      const unattended = installWhenStaged;
-      if (unattended !== null && state.kind !== "ready" && armedMidCheck) {
-        armedMidCheck = false;
+      if (install.kind !== "armed") return;
+      if (install.midCheck && state.kind !== "ready") {
+        install = { ...install, midCheck: false };
         checkInFlight = false;
         yield* Effect.suspend(() => runCheck);
         return;
       }
-      installWhenStaged = null;
-      armedMidCheck = false;
-      if (unattended !== null && state.kind === "ready") {
+      const { unattended } = install;
+      install = { kind: "none" };
+      if (state.kind === "ready") {
         // Nobody waits on this call to hear a busy host's refusal, and the
         // update stays staged behind the usual restart button. The state
         // says `updating` until the install starts or is refused.
@@ -340,8 +358,8 @@ export const makeUpdater = (seat: UpdaterSeat) => {
   // from another device) cannot confirm anything, so a busy host throws
   // the refusal instead and the caller's toast carries it.
   async function installUpdate(unattended: boolean): Promise<InstallOutcome> {
-    if (installing) return "installing";
-    if (held) throw new Error(heldWords);
+    refuseUnderHold();
+    if (isInstallingUpdate()) return "installing";
     if (!(await hasInstallableStaged())) return "nothing-staged";
     const confirm = seat.confirmRestart;
     if (unattended || confirm === null) {
@@ -354,16 +372,17 @@ export const makeUpdater = (seat: UpdaterSeat) => {
       // update still exists: a terminal run whose feed answered 204
       // clears it, and quitting with nothing staged would be a quit the
       // installer can't follow with a relaunch.
-      if (installing) return "installing";
+      if (isInstallingUpdate()) return "installing";
       if (!(await hasInstallableStaged())) return "nothing-staged";
       // A quit the person chose meanwhile ends the app without the update
       // (its scripts stopping is what let this prompt go ahead).
       if (confirm.isQuitting()) return "declined";
     }
-    // A move or a reset of the data folder that began while the dialog
-    // was up.
-    if (held) throw new Error(heldWords);
-    installing = true;
+    // A move or a reset of the data folder, or another path's install,
+    // that began while this waited.
+    refuseUnderHold();
+    if (isInstallingUpdate()) return "installing";
+    install = { kind: "installing" };
     publish();
     try {
       // Settles only once the install has started: quitting on one that
@@ -374,7 +393,7 @@ export const makeUpdater = (seat: UpdaterSeat) => {
           : await run(Effect.result(seat.handOff));
       if (Result.isFailure(handedOff)) throw handedOff.failure;
     } catch (err) {
-      installing = false;
+      install = { kind: "none" };
       setState({
         kind: "error",
         message: errorMessageOf(err),
@@ -389,7 +408,7 @@ export const makeUpdater = (seat: UpdaterSeat) => {
     // peer's direct one, or the loopback this machine's window called
     // on), so the install returns first and quits a beat later. The
     // caller then sees success instead of a dropped-session error for an
-    // update that is installing fine. `installing` blocks a second run
+    // update that is installing fine. `install` blocks a second run
     // in the gap.
     setTimeout(seat.quit, QUIT_AFTER_ANSWER_MS);
     return "installing";
@@ -404,8 +423,8 @@ export const makeUpdater = (seat: UpdaterSeat) => {
   // out. An unattended request is refused up front on a busy host, while
   // the caller still waits on the answer.
   async function updateNow(unattended: boolean): Promise<void> {
-    if (installing) return;
-    if (held) throw new Error(heldWords);
+    refuseUnderHold();
+    if (isInstallingUpdate()) return;
     if ((await readInstallableStaged()) !== null) {
       await installUpdate(unattended);
       return;
@@ -415,9 +434,11 @@ export const makeUpdater = (seat: UpdaterSeat) => {
       const refusal = busyRemoteRefusal(await seat.busy(false), "restart");
       if (refusal !== null) throw new Error(refusal);
     }
-    installWhenStaged = unattended;
+    // A hold or an install may have begun while those were read.
+    refuseUnderHold();
+    if (isInstallingUpdate()) return;
+    install = { kind: "armed", unattended, midCheck: checkInFlight };
     if (checkInFlight) {
-      armedMidCheck = true;
       publish();
     } else {
       // Says `updating` before this answers, ahead of the check's own.
@@ -425,9 +446,6 @@ export const makeUpdater = (seat: UpdaterSeat) => {
       checkForUpdates();
     }
   }
-
-  // What an install asked for during a hold answers.
-  let heldWords = "";
 
   // Before a move or a reset of the data folder, which staging writes
   // under and an install restarts out of: the version an install under
@@ -440,16 +458,18 @@ export const makeUpdater = (seat: UpdaterSeat) => {
   async function hold(input: {
     readonly for: "move" | "reset";
   }): Promise<string | null> {
-    if (installing) return state.kind === "ready" ? state.version : "";
-    held = true;
+    if (isInstallingUpdate()) {
+      return state.kind === "ready" ? state.version : "";
+    }
     // An Update now armed for the check this ends goes with it, rather
     // than come back with a later check after a resume.
-    installWhenStaged = null;
-    armedMidCheck = false;
-    heldWords =
-      input.for === "move"
-        ? "The data folder is being moved. The update can install once the app has restarted."
-        : "The app is being reset. The update can install once it has restarted.";
+    install = {
+      kind: "held",
+      words:
+        input.for === "move"
+          ? "The data folder is being moved. The update can install once the app has restarted."
+          : "The app is being reset. The update can install once it has restarted.",
+    };
     if (endCheck !== null) await Effect.runPromise(endCheck);
     if (state.kind === "checking" || state.kind === "downloading") {
       state = { kind: "idle" };
@@ -461,7 +481,7 @@ export const makeUpdater = (seat: UpdaterSeat) => {
   // A move that failed before the folder moved: the app carries on, and
   // its updater with it.
   function resume(): void {
-    held = false;
+    if (install.kind === "held") install = { kind: "none" };
   }
 
   // The state as it stands, for a host that starts after it moved.
