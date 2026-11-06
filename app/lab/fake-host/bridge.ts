@@ -1188,7 +1188,8 @@ function hostHandlersFor(
       return { cancelled };
     },
     // The posed terminals. An attach replays a posed prompt, an open
-    // lists one more and a close drops it.
+    // lists one more, a move hands one to another worktree and a close
+    // drops it.
     "terminals:list": () => ({
       terminals: [...(fakeOpenTerminals[forest.deviceId] ?? [])],
     }),
@@ -1202,6 +1203,12 @@ function hostHandlersFor(
     "terminals:open": ({ projectId, worktreeId }) => ({
       terminalId: openFakeTerminal(projectId, worktreeId),
     }),
+    "terminals:move": ({ terminalId, worktreeId }) => {
+      const terminals = fakeOpenTerminals[forest.deviceId] ?? [];
+      const at = terminals.findIndex((t) => t.terminalId === terminalId);
+      const terminal = terminals[at];
+      if (terminal) terminals[at] = { ...terminal, worktreeId };
+    },
     "terminals:close": ({ terminalId }) => {
       fakeOpenTerminals[forest.deviceId] = (
         fakeOpenTerminals[forest.deviceId] ?? []

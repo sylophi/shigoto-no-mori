@@ -90,6 +90,23 @@
       }
     ]
   },
+  "MoveTerminalPayloadSchema": {
+    "accepts": [
+      {
+        "terminalId": "7c1e9a52",
+        "worktreeId": "1bca1fd3b17b"
+      }
+    ],
+    "rejects": [
+      {
+        "terminalId": "7c1e9a52"
+      },
+      {
+        "terminalId": "7c1e9a52",
+        "worktreeId": ""
+      }
+    ]
+  },
   "AttachTerminalPayloadSchema": {
     "accepts": [
       {

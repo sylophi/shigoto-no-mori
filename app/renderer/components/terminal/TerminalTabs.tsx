@@ -10,6 +10,7 @@ import { notifyError } from "@/lib/toast";
 import { scriptTabId, terminalTabLabel } from "@/store/terminalDrawer";
 import { slotLabel, type ScriptSlot } from "@/store/scriptSlot";
 import { Terminal } from "./Terminal";
+import { TerminalMove } from "./TerminalMove";
 import { TerminalTabsView } from "@shigomori/ui/views/terminal/TerminalTabsView.tsx";
 import { peerTerminalsHiddenNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 
@@ -46,7 +47,8 @@ export function TerminalTabs(props: TerminalTabsProps) {
 // opened beside them, as tabs over the picked one, the newest terminal
 // until another is picked. Only the picked one is attached and drawn.
 // With no tab at all, a terminal is opened as it mounts, and `onEmpty`
-// hears when the last tab goes.
+// hears when the last tab goes. Where `onMoved` can follow a terminal
+// to another worktree, the picked one can move there.
 function AttachedTerminalTabs({
   worktree,
   slots,
@@ -54,6 +56,7 @@ function AttachedTerminalTabs({
   picked,
   onPick: pick,
   onEmpty,
+  onMoved,
   ...placement
 }: {
   worktree: Worktree;
@@ -63,6 +66,7 @@ function AttachedTerminalTabs({
   picked: string | null;
   onPick: (tab: string) => void;
   onEmpty: () => void;
+  onMoved?: (worktreeId: string, terminalId: string) => void;
   // Where the tabs sit and the ways out of it (TerminalTabsView).
   side?: boolean;
   onDock?: () => void;
@@ -145,7 +149,16 @@ function AttachedTerminalTabs({
         <ScriptConsole worktree={worktree} slot={pickedSlot} />
       ) : (
         selectedId !== null && (
-          <Terminal key={selectedId} terminalId={selectedId} />
+          <>
+            {onMoved && (
+              <TerminalMove
+                worktree={worktree}
+                terminalId={selectedId}
+                onMoved={(worktreeId) => onMoved(worktreeId, selectedId)}
+              />
+            )}
+            <Terminal key={selectedId} terminalId={selectedId} />
+          </>
         )
       )}
     </TerminalTabsView>

@@ -35,6 +35,19 @@ export function worktreeTitle(
   return isOwnPullRequest(worktree, pr) ? pr.title : (worktree.title ?? null);
 }
 
+// What the sidebar calls a worktree: its title (worktreeTitle) by the
+// project's PR map, else the branch it is rebasing, else its branch.
+export function worktreeName(
+  worktree: TitledWorktree & Pick<Worktree, "detached" | "rebasing">,
+  prs: Record<string, PullRequest> | undefined,
+): string {
+  return (
+    worktreeTitle(worktree, mappedPullRequest(prs, worktree)) ??
+    worktree.rebasing ??
+    worktree.branch
+  );
+}
+
 // The worktree's PR in a project's map (keyed by head branch), none
 // for a detached head.
 export function mappedPullRequest(

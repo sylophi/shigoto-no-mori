@@ -3,6 +3,7 @@ import { defineContract, invoke, view, gatedBy } from "../contract.ts";
 import {
   AttachTerminalPayloadSchema,
   CloseTerminalPayloadSchema,
+  MoveTerminalPayloadSchema,
   OpenTerminalPayloadSchema,
   ResizeTerminalPayloadSchema,
   TerminalEventSchema,
@@ -28,6 +29,9 @@ export const terminalsContract = defineContract(
     gated,
   ),
   invoke("close", CloseTerminalPayloadSchema, VoidSchema, gated),
+  // Hands the terminal to another worktree of its project, its shell
+  // sent there with a cd unless a command holds it.
+  invoke("move", MoveTerminalPayloadSchema, VoidSchema, gated),
   view("attach", AttachTerminalPayloadSchema, TerminalEventSchema, gated),
   invoke("write", WriteTerminalPayloadSchema, VoidSchema, gated),
   // Sets the size for every attached client.

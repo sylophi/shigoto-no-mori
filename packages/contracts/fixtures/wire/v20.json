@@ -2682,6 +2682,12 @@
       ]
     }
   },
+  "terminals:move": {
+    "payload": {
+      "terminalId": "7c1e9a52",
+      "worktreeId": "1bca1fd3b17b"
+    }
+  },
   "terminals:open": {
     "payload": {
       "projectId": "-1",

@@ -3,6 +3,7 @@ import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest
 import {
   isOwnPullRequest,
   mappedPullRequest,
+  worktreeName,
   worktreeTitle,
 } from "@shigomori/ui/lib/worktreeTitle.ts";
 import type {
@@ -69,9 +70,8 @@ function useMappedPullRequest(worktree: Worktree) {
 // as the sidebar shows it, else the branch. The project map alone, so
 // a back button costs no lookup of its own.
 export function useWorktreeName(worktree: Worktree): string {
-  return (
-    worktreeTitle(worktree, useMappedPullRequest(worktree)) ??
-    worktree.rebasing ??
-    worktree.branch
+  return worktreeName(
+    worktree,
+    useProjectPullRequests(worktree.projectId).data,
   );
 }
