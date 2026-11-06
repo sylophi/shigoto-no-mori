@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from "react";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useKeymapAction } from "@/hooks/ui/useKeymap";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useHasLocalHost } from "@/lib/localHost";
 import { openTerminalsInNewWindow } from "@/lib/newWindow";
 import { useApi } from "@/lib/runtime/pageApi";
@@ -31,8 +32,9 @@ const TerminalTabs = lazy(() =>
 // drawer its pages share, while it is open. Closing the last tab closes
 // the drawer. The keymap's terminal (Ctrl+`) opens it and its terminal
 // takes focus as it attaches. Open, the keys focus it, or close it when
-// it has focus. Kept by the worktree's key: another worktree's drawer
-// is another mount.
+// it has focus. A terminal moved to another worktree is followed there.
+// Kept by the worktree's key: another worktree's drawer is another
+// mount.
 export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
   const api = useApi();
   const hasLocalHost = useHasLocalHost();
@@ -40,6 +42,7 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
   const { canCommand } = useCommandAccess();
   const side = useDrawerSide();
   const sizes = useDrawerSizes();
+  const nav = useWorktreeNav();
   const ref = {
     deviceId,
     projectId: worktree.projectId,
@@ -86,6 +89,14 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
             picked={drawer.picked}
             onPick={(tab) => pickDrawerTab(ref, tab)}
             onEmpty={close}
+            onMoved={(worktreeId, terminalId) =>
+              nav.toTerminalOn(
+                deviceId,
+                worktree.projectId,
+                worktreeId,
+                terminalId,
+              )
+            }
             side={side}
             onDock={() => setDrawerSide(!side)}
             onPopOut={

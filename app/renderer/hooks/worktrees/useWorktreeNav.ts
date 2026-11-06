@@ -220,10 +220,10 @@ export function useWorktreeNav() {
       });
     },
 
-    // A terminal, on a NAMED device (the Live page, a launch): its
-    // worktree's page, with the drawer open on its tab. Once the
-    // device's list has it, as a drawer opening on a worktree with none
-    // opens a shell of its own.
+    // A terminal, on a NAMED device (the Live page, a launch, a move):
+    // its worktree's page, with the drawer open on its tab. Once the
+    // device's list has it there, as a drawer opening on a worktree with
+    // none opens a shell of its own.
     toTerminalOn(
       on: string,
       projectId: string,
@@ -231,7 +231,11 @@ export function useWorktreeNav() {
       terminalId: string,
     ) {
       void whenViewShows(registry, terminalsAtom(on), ({ terminals }) =>
-        terminals.some((terminal) => terminal.terminalId === terminalId),
+        terminals.some(
+          (terminal) =>
+            terminal.terminalId === terminalId &&
+            terminal.worktreeId === worktreeId,
+        ),
       ).then(() => {
         openTerminalTab({ deviceId: on, projectId, worktreeId }, terminalId);
         goOn(on, "detail", { projectId, worktreeId });

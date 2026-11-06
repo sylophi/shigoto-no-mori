@@ -2,7 +2,8 @@
 // PTY (../scripts/ScriptRuns.ts), a resource in a scope of its own under the
 // layer's: closing it is closing that scope, whose release is the kill
 // chain. A terminal belongs to a worktree, which it starts in with the
-// environment the worktree's scripts get and closes with. Its main
+// environment the worktree's scripts get and closes with, until it is
+// moved to another of its project's. Its main
 // screen and folder are saved (SavedTerminals) a moment after its
 // output changes and again as it closes, so after a quit or a crash the
 // next start opens a fresh shell there under that screen.
@@ -25,6 +26,7 @@ import type {
   Terminal,
   TerminalEvent,
 } from "@shigomori/contracts/schemas";
+import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import * as SavedTerminals from "@shigomori/engine/SavedTerminals";
 import * as Terrier from "@shigomori/engine/Terrier";
 import { elapsedMillis } from "@shigomori/engine/elapsed";
@@ -250,8 +252,8 @@ type Shown = Followed & { readonly seq: number };
 interface Session {
   // Replaced as its busy changes.
   terminal: Terminal;
-  // The folder its shell started in.
-  readonly cwd: string;
+  // The folder its shell started in, or was last sent to.
+  cwd: string;
   readonly pty: PtyHandle;
   readonly history: History;
   readonly screen: Screen<Shown>;
@@ -290,6 +292,16 @@ export class Terminals extends Context.Service<
     readonly close: (
       terminalId: string,
     ) => Effect.Effect<void, UnknownTerminalError>;
+    // Hands the terminal to another worktree of its project. Its shell
+    // is sent to the worktree's folder unless a command holds it, and
+    // keeps the environment it started with.
+    readonly move: (
+      terminalId: string,
+      worktreeId: string,
+    ) => Effect.Effect<
+      void,
+      UnknownTerminalError | UnknownProjectError | UnknownWorktreeError
+    >;
     // The size and the history after `after` (the screen when that is
     // gone), then the output and the size as they change, then the
     // exit.
@@ -922,6 +934,33 @@ const make = <R, E>(options: {
         const session = yield* listedSession(terminalId);
         session.forget = true;
         yield* end(session);
+      }),
+      move: Effect.fn("Terminals.move")(function* (
+        terminalId: string,
+        worktreeId: string,
+      ) {
+        const session = yield* find(terminalId);
+        const { cwd } = yield* startOf({
+          projectId: session.terminal.projectId,
+          worktreeId,
+        });
+        const isHeld = yield* held([session]).pipe(
+          Effect.map((pids) => pids.has(session.pty.pid)),
+          Effect.orElseSucceed(() => true),
+        );
+        if (!isHeld) {
+          // Over whatever is half typed (^U clears the line), and kept
+          // out of a history that ignores a leading space.
+          yield* Effect.sync(() =>
+            session.pty.write(`\x15 cd ${shellQuote(cwd)}\r`),
+          ).pipe(Effect.ignore);
+          session.cwd = cwd;
+        }
+        session.terminal = { ...session.terminal, worktreeId };
+        yield* announce;
+        // Saved under its new worktree.
+        session.changedAt = yield* elapsedMillis;
+        session.changed.openUnsafe();
       }),
       attach: (terminalId, after) =>
         Stream.unwrap(

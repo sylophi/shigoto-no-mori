@@ -28,6 +28,10 @@ export const terminalsHandlers = {
     ),
   close: ({ terminalId }) =>
     Effect.flatMap(Terminals, (terminals) => terminals.close(terminalId)),
+  move: ({ terminalId, worktreeId }) =>
+    Effect.flatMap(Terminals, (terminals) =>
+      terminals.move(terminalId, worktreeId),
+    ),
   write: ({ terminalId, data }) =>
     Effect.flatMap(Terminals, (terminals) => terminals.write(terminalId, data)),
   resize: ({ terminalId, cols, rows }) =>

@@ -16,7 +16,8 @@ export type GridSize = typeof GridSizeSchema.Type;
 // host's copy of the screen that a client starting over is sent.
 export const TERMINAL_SCROLLBACK = 5_000;
 
-// A terminal belongs to the worktree it starts in, and closes with it.
+// A terminal belongs to the worktree it starts in, or was moved to, and
+// closes with it.
 const TerminalSchema = Schema.Struct({
   terminalId: Schema.NonEmptyString,
   ...WorktreeScopedPayloadSchema.fields,
@@ -39,6 +40,12 @@ export const OpenTerminalPayloadSchema = Schema.Struct({
 });
 
 export const CloseTerminalPayloadSchema = TerminalIdPayloadSchema;
+
+// Another worktree of the terminal's project to hand it to.
+export const MoveTerminalPayloadSchema = Schema.Struct({
+  ...TerminalIdPayloadSchema.fields,
+  worktreeId: Schema.NonEmptyString,
+});
 
 // A point in a terminal's output: its shell's incarnation (a restart
 // starts another) and a chunk's seq in it.
