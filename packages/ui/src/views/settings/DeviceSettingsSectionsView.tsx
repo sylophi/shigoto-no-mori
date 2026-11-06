@@ -136,9 +136,10 @@ const AUTO_SHELVE_PRESETS = [
 
 // The idle shelf's day count, a sub-option indented like the one under
 // auto-pull: a preset, or Custom with a field of its own. A count no
-// preset names reads as Custom. The field's draft holds what is typed
-// until it is a count, and the saved count shows again once the field
-// is left.
+// preset names reads as Custom, and typing in its field picks Custom,
+// even past a count a preset names on the way to another. The field's
+// draft holds what is typed until it is a count, and the saved count
+// shows again once the field is left.
 function AutoShelveDaysField({
   days,
   onChange,
@@ -171,6 +172,7 @@ function AutoShelveDaysField({
             onFocus={(event) => event.currentTarget.select()}
             onChange={(event) => {
               const next = digitsOnly(event.target.value);
+              setCustomPicked(true);
               setDraft(next);
               if (Number(next) > 0) onChange(Number(next));
             }}
