@@ -2,8 +2,8 @@
 // (projectId, worktreeId, slot), as an atom on the client's runtime
 // (scriptRunsAtom): one per device, each draining the scripts:event
 // pushes of its device (this machine's over its own link, a peer's out
-// of the hub hop), and events route to the right record via a
-// runId→key index built when a run starts. Worktree ids are path hashes
+// of the hub hop), and events route to the right record through each
+// run id's binding (Binding). Worktree ids are path hashes
 // that can collide across the owner's machines, so a run's key is only
 // unambiguous inside its device's runs.
 //
@@ -71,6 +71,25 @@ const LOST_GRACE_MS = 5_000;
 // before delegating to applyEvent). Narrowing the post-start union lets
 // applyEvent's switch stay exhaustive with assertNever as the safety net.
 type PostStartEvent = Exclude<ScriptEvent, { kind: "started" }>;
+
+// Where a host run id stands here. `pending`: events heard before it
+// is bound, as a spawned child's first bytes can beat `scripts.run`'s
+// answer ("started" events bind at once, so never wait here).
+// `attaching`: an attach or rejoin is out, its events waiting to be
+// drained after the backlog, and `lost` once the list dropped it
+// meanwhile, for the attach to end it as it lands. `bound`: its events
+// go to the slot's record, which holds it as running. `ignored`: let go
+// of while live, its events dropped until its exit.
+type Attaching = {
+  readonly kind: "attaching";
+  events: PostStartEvent[];
+  lost: boolean;
+};
+type Binding =
+  | { readonly kind: "pending"; readonly events: PostStartEvent[] }
+  | Attaching
+  | { readonly kind: "bound"; readonly key: ScriptKey }
+  | { readonly kind: "ignored" };
 
 type SlotKind =
   | "setup"
@@ -155,19 +174,7 @@ export class ScriptRuns {
   // on mount and follow it through outputSubs.
   private buffers = new Map<ScriptKey, OutputLog>();
   private outputSubs = new KeyedSubscribers<ScriptKey, OutputUpdate>();
-  private runIdToKey = new Map<string, ScriptKey>();
-  // Events that arrived before the `scripts.run` invoke resolved and let
-  // us bind the runId to a key. A spawned child can emit its first bytes
-  // before the IPC return reaches the renderer, so buffer here and flush
-  // in start() once we know the runId. "started" events are dispatched
-  // directly by handleEvent, so they never reach this buffer.
-  private pendingByRunId = new Map<string, PostStartEvent[]>();
-  // Runs an attach is in flight for, so a slot asked again while the
-  // first answer is on its way does not attach twice.
-  private attaching = new Set<string>();
-  // Runs attached to and then let go (attach), whose events the host
-  // still sends until they exit.
-  private ignored = new Set<string>();
+  private bindings = new Map<string, Binding>();
   // The runs the device's list named last (settle).
   private listed = new Set<string>();
   private registry: AtomRegistry.AtomRegistry;
@@ -208,12 +215,16 @@ export class ScriptRuns {
       status: "starting",
       interactive: true,
     });
+    // Nothing changes a starting record but a run taking the slot or its
+    // worktree's removal, so another record here means this one is gone.
+    const begun = this.current.states.get(input.key);
 
     let runId: string;
     try {
       const result = await input.runner();
       runId = result.runId;
     } catch (err) {
+      if (this.current.states.get(input.key) !== begun) throw err;
       const message = errorMessageOf(err);
       this.appendChunk(input.key, scriptErrorLine(message));
       this.setStateWithActivity(input.key, (s) => ({
@@ -223,6 +234,10 @@ export class ScriptRuns {
       }));
       this.ended(input.key);
       throw err;
+    }
+    if (this.current.states.get(input.key) !== begun) {
+      this.letGo(runId);
+      return;
     }
 
     this.setStateWithActivity(input.key, (s) => ({
@@ -240,33 +255,48 @@ export class ScriptRuns {
   // another window or device started, or this window before a reload):
   // its output so far, then its events as they come, so its console,
   // status and Stop work as for a run started here. Events the host
-  // sends before the answer lands wait in the pre-bind buffer and are
+  // sends before the answer lands wait in its binding and are
   // drained after the backlog, so nothing is missed or doubled.
   // Resolves false only when the host could not be asked (refused, or
   // the device away), for the caller to ask again.
   async attach(run: RunningScript): Promise<boolean> {
     const key = scriptKey(run.projectId, run.worktreeId, run.slot);
     const held = this.current.states.get(key);
-    if (held?.runId === run.runId || this.attaching.has(run.runId)) {
-      return true;
-    }
+    const was = this.bindings.get(run.runId);
+    if (held?.runId === run.runId || was?.kind === "attaching") return true;
     if (held?.status === "starting") return true;
-    this.attaching.add(run.runId);
+    const attaching: Attaching = {
+      kind: "attaching",
+      events: was?.kind === "pending" ? was.events : [],
+      lost: false,
+    };
+    this.bindings.set(run.runId, attaching);
     try {
       const joined = await this.runPromise(
         this.scripts.attach({ runId: run.runId }),
-      );
-      if (joined === null) return true;
+      ).catch(() => undefined);
+      if (joined === undefined) {
+        this.bindings.set(
+          run.runId,
+          was?.kind === "ignored"
+            ? was
+            : { kind: "pending", events: attaching.events },
+        );
+        return false;
+      }
+      if (joined === null) {
+        this.bindings.delete(run.runId);
+        return true;
+      }
       // This connection heard the run already (another window on it
       // attached, or this one started it before a reload), so what it
       // buffered is in the backlog too.
-      if (joined.streaming) this.pendingByRunId.delete(run.runId);
+      if (joined.streaming) attaching.events = [];
       const now = this.current.states.get(key);
       if (now?.status === "starting" || now?.status === "running") {
         // The slot was taken by a run started here meanwhile. The host
         // keeps sending this one, which nothing here will show.
-        this.ignored.add(run.runId);
-        this.pendingByRunId.delete(run.runId);
+        this.letGo(run.runId);
         return true;
       }
       this.begin(key, run.worktreeId, run.slot, {
@@ -281,10 +311,8 @@ export class ScriptRuns {
       if (joined.output !== "") this.appendChunk(key, joined.output);
       this.bindRunIdAndDrain(key, run.runId);
       return true;
-    } catch {
-      return false;
     } finally {
-      this.attaching.delete(run.runId);
+      if (attaching.lost) this.drop(run.runId);
     }
   }
 
@@ -302,28 +330,27 @@ export class ScriptRuns {
     }
   }
 
-  // The run's events wait in the pre-bind buffer while the attach is out,
-  // as an attach's do, and are drained after the backlog.
+  // The run's events wait while the attach is out, as an attach's do,
+  // and are drained after the backlog. A slot that let go of the run
+  // meanwhile, or a later rejoin, replaced the binding.
   private async rejoin(key: ScriptKey, runId: string): Promise<void> {
-    this.runIdToKey.delete(runId);
-    this.attaching.add(runId);
+    const attaching: Attaching = { kind: "attaching", events: [], lost: false };
+    this.bindings.set(runId, attaching);
     const joined = await this.runPromise(this.scripts.attach({ runId })).catch(
       () => null,
     );
-    this.attaching.delete(runId);
-    if (this.current.states.get(key)?.runId !== runId) {
-      this.pendingByRunId.delete(runId);
-      return;
+    if (this.bindings.get(runId) === attaching) {
+      if (joined !== null) {
+        // This connection heard the run already (another window on it
+        // attached first), so what it buffered is in the backlog too.
+        if (joined.streaming) attaching.events = [];
+        const { output } = joined;
+        this.buffers.set(key, { chunks: [output], bytes: output.length });
+        this.outputSubs.notify(key, { data: output, reset: true });
+      }
+      this.bindRunIdAndDrain(key, runId);
     }
-    if (joined !== null) {
-      // This connection heard the run already (another window on it
-      // attached first), so what it buffered is in the backlog too.
-      if (joined.streaming) this.pendingByRunId.delete(runId);
-      const { output } = joined;
-      this.buffers.set(key, { chunks: [output], bytes: output.length });
-      this.outputSubs.notify(key, { data: output, reset: true });
-    }
-    this.bindRunIdAndDrain(key, runId);
+    if (attaching.lost) this.drop(runId);
   }
 
   // Stops a run the host lists, whether these runs hold it (its
@@ -386,22 +413,40 @@ export class ScriptRuns {
   }
 
   private lost(runId: string): void {
-    setTimeout(() => {
-      // An attach still out for it may yet bind it.
-      if (this.attaching.has(runId)) {
-        this.lost(runId);
-        return;
-      }
-      const key = this.runIdToKey.get(runId);
-      if (!key) {
-        this.pendingByRunId.delete(runId);
-        return;
-      }
-      if (this.current.states.get(key)?.status !== "running") return;
-      // Its exit, should it still come, would wait for a binding forever.
-      this.ignored.add(runId);
-      this.applyEvent(key, { runId, kind: "exit", code: null });
-    }, LOST_GRACE_MS);
+    setTimeout(() => this.drop(runId), LOST_GRACE_MS);
+  }
+
+  // A run the host no longer has, once its grace is up.
+  private drop(runId: string): void {
+    const binding = this.bindings.get(runId);
+    if (binding === undefined) return;
+    if (binding.kind === "attaching") {
+      // The attach out for it may yet bind it, and ends it as it lands.
+      binding.lost = true;
+      return;
+    }
+    if (binding.kind !== "bound") {
+      this.bindings.delete(runId);
+      return;
+    }
+    this.applyEvent(binding.key, { runId, kind: "exit", code: null });
+    // Its exit, should it still come, would wait for a binding forever.
+    this.bindings.set(runId, { kind: "ignored" });
+  }
+
+  // A run no slot here holds any more, while it may still be live. Its
+  // binding is dropped if its exit came already.
+  private letGo(runId: string): void {
+    const binding = this.bindings.get(runId);
+    if (
+      binding !== undefined &&
+      "events" in binding &&
+      binding.events.some((event) => event.kind === "exit")
+    ) {
+      this.bindings.delete(runId);
+      return;
+    }
+    this.bindings.set(runId, { kind: "ignored" });
   }
 
   // Console keystrokes and viewport size for a live run. Both are
@@ -474,11 +519,11 @@ export class ScriptRuns {
     return touched;
   }
 
-  // Drops everything held for the slot, its run's id binding included.
+  // Drops everything held for the slot, letting go of a run still live.
   private forget(key: ScriptKey): void {
     const { states, meta } = this.current;
     const state = states.get(key);
-    if (state?.runId) this.runIdToKey.delete(state.runId);
+    if (state?.status === "running" && state.runId) this.letGo(state.runId);
     this.buffers.delete(key);
     this.publish({
       ...this.current,
@@ -563,15 +608,15 @@ export class ScriptRuns {
         this.appendChunk(key, event.data);
         return;
       case "error":
+        // Its exit follows, which ends the run.
         this.appendChunk(key, scriptErrorLine(event.data));
-        this.setStateWithActivity(key, (s) => ({ ...s, status: "errored" }));
         return;
       case "exit": {
         const m = this.current.meta.get(key);
         // A run the user stopped exits unclean by definition, and the
         // console they stopped it from already says so.
         const stopped = this.current.states.get(key)?.cancelling === true;
-        this.runIdToKey.delete(event.runId);
+        this.bindings.delete(event.runId);
         this.appendChunk(key, exitSentinel(event.code));
         this.setStateWithActivity(key, (s) => ({
           ...s,
@@ -615,7 +660,7 @@ export class ScriptRuns {
     });
   }
 
-  // A new run takes the slot: unbind the previous run's id, drop its
+  // A new run takes the slot: let go of the previous run, drop its
   // output, and start the snapshot over from EMPTY_STATE.
   private begin(
     key: ScriptKey,
@@ -625,7 +670,7 @@ export class ScriptRuns {
   ): void {
     const { states, meta } = this.current;
     const prev = states.get(key);
-    if (prev?.runId) this.runIdToKey.delete(prev.runId);
+    if (prev?.status === "running" && prev.runId) this.letGo(prev.runId);
     this.publish({
       ...this.current,
       meta: withEntry(meta, key, {
@@ -642,11 +687,10 @@ export class ScriptRuns {
   }
 
   private bindRunIdAndDrain(key: ScriptKey, runId: string): void {
-    this.runIdToKey.set(runId, key);
-    const pending = this.pendingByRunId.get(runId);
-    if (pending) {
-      this.pendingByRunId.delete(runId);
-      for (const queued of pending) this.applyEvent(key, queued);
+    const was = this.bindings.get(runId);
+    this.bindings.set(runId, { kind: "bound", key });
+    if (was !== undefined && "events" in was) {
+      for (const queued of was.events) this.applyEvent(key, queued);
     }
   }
 
@@ -666,19 +710,21 @@ export class ScriptRuns {
       this.bindStarted(event);
       return;
     }
-    const key = this.runIdToKey.get(event.runId);
-    if (key) {
-      this.applyEvent(key, event);
+    const binding = this.bindings.get(event.runId);
+    if (binding === undefined) {
+      this.bindings.set(event.runId, { kind: "pending", events: [event] });
       return;
     }
-    if (this.ignored.has(event.runId)) {
-      if (event.kind === "exit") this.ignored.delete(event.runId);
+    if (binding.kind === "bound") {
+      this.applyEvent(binding.key, event);
       return;
     }
-    const bucket = this.pendingByRunId.get(event.runId) ?? [];
-    if (bucket.length >= MAX_PENDING_CHUNKS) bucket.shift();
-    bucket.push(event);
-    this.pendingByRunId.set(event.runId, bucket);
+    if (binding.kind === "ignored") {
+      if (event.kind === "exit") this.bindings.delete(event.runId);
+      return;
+    }
+    if (binding.events.length >= MAX_PENDING_CHUNKS) binding.events.shift();
+    binding.events.push(event);
   }
 }
 
