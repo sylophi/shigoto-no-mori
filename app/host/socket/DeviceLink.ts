@@ -316,6 +316,29 @@ type Push = { readonly channel: string; readonly payload: unknown };
 const unserved = (tag: string) =>
   new RemoteCallError({ text: `No handler registered for channel "${tag}"` });
 
+// What a peer's socket opened with, once its handshake proved the
+// dialer: the ticket, the device it was minted for, and the key the
+// dialer proved, the roster's then.
+type Opened = {
+  readonly ticket: string;
+  readonly deviceId: string;
+  readonly publicKey: Uint8Array;
+};
+
+// Where a socket is in its life: accepted and yet to say hello, linked
+// once its hello was admitted, dead once kill() ran. Only a socket yet
+// to say hello is admitted, so a hello after its cut links nothing.
+type Phase =
+  | { readonly kind: "preAuth"; readonly opened: Opened | null }
+  | {
+      readonly kind: "linked";
+      readonly deviceId: string;
+      readonly connectionId: string;
+      // The loopback's: whether the hello carried the shell's token.
+      readonly shell: boolean;
+    }
+  | { readonly kind: "dead" };
+
 // One socket, from its accept to its close.
 type Connection = {
   readonly ws: WebSocket;
@@ -329,20 +352,8 @@ type Connection = {
   // The pushes for this peer alone (a move's progress).
   readonly pushes: PubSub.PubSub<Push>;
   readonly closed: AbortController;
-  // What this socket opened with, once its handshake proved the
-  // dialer: the ticket, the device it was minted for, and the key the
-  // dialer proved, the roster's then.
-  opened: {
-    readonly ticket: string;
-    readonly deviceId: string;
-    readonly publicKey: Uint8Array;
-  } | null;
-  // The loopback's: whether the hello carried the shell's token.
-  shell: boolean;
-  deviceId: string | null;
-  connectionId: string | null;
+  phase: Phase;
   lastInboundAt: number;
-  dead: boolean;
   kill(code: number, reason: string): void;
 };
 
@@ -398,7 +409,6 @@ export const make = (options: {
     let current: {
       readonly opts: WsServerStartOpts;
       readonly scope: Scope.Closeable;
-      readonly byDevice: Map<string, Map<string, Connection>>;
       // Every connection, those yet to say hello included.
       readonly connections: Map<number, Connection>;
     } | null = null;
@@ -428,8 +438,6 @@ export const make = (options: {
     // and every connection, all in `scope`.
     const listen = (opts: WsServerStartOpts, scope: Scope.Scope) =>
       Effect.gen(function* () {
-        // Each device's connections, by the id its dialer minted.
-        const byDevice = new Map<string, Map<string, Connection>>();
         const connections = new Map<number, Connection>();
         let nextClientId = 0;
         let preAuth = 0;
@@ -437,7 +445,7 @@ export const make = (options: {
         const server = yield* makeServerProtocol({
           client: (clientId) => {
             const connection = connections.get(clientId);
-            return connection === undefined || connection.dead
+            return connection === undefined || connection.phase.kind === "dead"
               ? undefined
               : {
                   parser: connection.parser,
@@ -488,6 +496,8 @@ export const make = (options: {
         ) =>
           Effect.gen(function* () {
             const connection = yield* connectionOf(clientId);
+            const phase = connection.phase;
+            if (phase.kind !== "preAuth") return yield* new LinkRefusedError();
             if (payload.protocolVersion !== PROTOCOL_VERSION) {
               yield* killSoon(connection, "protocol version mismatch");
               return yield* new ProtocolVersionMismatchError({
@@ -501,7 +511,7 @@ export const make = (options: {
             // since, or a socket that lost its ticket to another, links
             // nothing. The loopback's carries the token.
             const opens = auth.opens;
-            const opened = connection.opened;
+            const opened = phase.opened;
             const rosterKey =
               "token" in opens || opened === null
                 ? undefined
@@ -543,31 +553,32 @@ export const make = (options: {
               return yield* new LinkRefusedError();
             }
             failedAuth.delete(connection.ip);
-            if (connection.deviceId === null) preAuth -= 1;
+            preAuth -= 1;
             // The links this one replaces end now, so nothing they still
             // deliver runs: a desktop device's every other, a web
             // device's own stale one. On the loopback every caller is
             // its own, and none is a device the hub vouched for.
             if (!local) {
-              const held =
-                byDevice.get(payload.deviceId) ?? new Map<string, Connection>();
-              for (const [connectionId, other] of held) {
+              for (const other of connections.values()) {
                 if (
-                  payload.deviceKind === "desktop" ||
-                  connectionId === payload.connectionId
+                  other.phase.kind === "linked" &&
+                  other.phase.deviceId === payload.deviceId &&
+                  (payload.deviceKind === "desktop" ||
+                    other.phase.connectionId === payload.connectionId)
                 ) {
                   other.kill(CLOSE_GOING_AWAY, "superseded");
                 }
               }
-              held.set(payload.connectionId, connection);
-              byDevice.set(payload.deviceId, held);
               log.info(
                 `[link] ${payload.deviceId} linked over ${connection.arrivalKind} from ${connection.ip}`,
               );
             }
-            connection.shell = shell;
-            connection.deviceId = payload.deviceId;
-            connection.connectionId = payload.connectionId;
+            connection.phase = {
+              kind: "linked",
+              deviceId: payload.deviceId,
+              connectionId: payload.connectionId,
+              shell,
+            };
             return { deviceId: opts.deviceId, appVersion: opts.appVersion };
           });
 
@@ -678,15 +689,15 @@ export const make = (options: {
         const peerAuth = Layer.succeed(PeerAuth, (effect, { client, rpc }) =>
           Effect.suspend(() => {
             const connection = connections.get(client.id);
-            if (connection === undefined || connection.deviceId === null) {
+            if (
+              connection === undefined ||
+              connection.phase.kind !== "linked"
+            ) {
               return Effect.fail(new LinkUnauthenticatedError());
             }
-            const deviceId = connection.deviceId;
+            const { deviceId, shell } = connection.phase;
             // The shell's session is the shell's alone.
-            if (
-              SHELL_SESSION.has(channelOf(rpc as ContractCall)) &&
-              !connection.shell
-            ) {
+            if (SHELL_SESSION.has(channelOf(rpc as ContractCall)) && !shell) {
               return Effect.fail(new LinkUnauthenticatedError());
             }
             return effect.pipe(
@@ -819,7 +830,7 @@ export const make = (options: {
               const frames = yield* pull;
               connection.lastInboundAt = elapsedMillisUnsafe(clock);
               for (const frame of frames) {
-                if (connection.dead) return;
+                if (connection.phase.kind === "dead") return;
                 const messages = decodeFrame(connection.parser, frame);
                 // A socket is a stream: a parser that failed can't find
                 // the next frame, so every later one would fail while the
@@ -912,7 +923,6 @@ export const make = (options: {
           ws.on("error", (error) => {
             log.warn(`[link] connection error: ${messageOf(error)}`);
           });
-          preAuth += 1;
           const clientId = nextClientId++;
           const closed = new AbortController();
           const arrivalKind: DirectCandidateKind = tunnelBorne(
@@ -925,9 +935,9 @@ export const make = (options: {
           const localKey = "token" in opens ? null : opens.localKey();
           if (!("token" in opens) && localKey === null) {
             closeThenTerminate(ws, CLOSE_HELLO_FAILED, "signed out", 50);
-            preAuth -= 1;
             return;
           }
+          preAuth += 1;
           runFork(
             Effect.gen(function* () {
               const pushes = yield* PubSub.sliding<Push>(1024);
@@ -947,11 +957,15 @@ export const make = (options: {
                         opened: (ticket, publicKey) => {
                           const peer = opens.check(ticket, arrivalKind);
                           if (
+                            connection.phase.kind === "preAuth" &&
                             typeof peer === "object" &&
                             peer !== null &&
                             sameKey(peer.publicKey, publicKey)
                           ) {
-                            connection.opened = { ticket, ...peer };
+                            connection.phase = {
+                              kind: "preAuth",
+                              opened: { ticket, ...peer },
+                            };
                           }
                         },
                         // Only a ticket never issued or a key that did not
@@ -974,24 +988,12 @@ export const make = (options: {
                 pushes,
                 closed,
                 parser: server.parser(),
-                opened: null,
-                shell: false,
-                deviceId: null,
-                connectionId: null,
+                phase: { kind: "preAuth", opened: null },
                 lastInboundAt: elapsedMillisUnsafe(clock),
-                dead: false,
                 kill(code, reason) {
-                  if (connection.dead) return;
-                  connection.dead = true;
-                  if (connection.deviceId === null) preAuth -= 1;
-                  else {
-                    const held = byDevice.get(connection.deviceId);
-                    const id = connection.connectionId;
-                    if (id !== null && held?.get(id) === connection) {
-                      held.delete(id);
-                      if (held.size === 0) byDevice.delete(connection.deviceId);
-                    }
-                  }
+                  if (connection.phase.kind === "dead") return;
+                  if (connection.phase.kind === "preAuth") preAuth -= 1;
+                  connection.phase = { kind: "dead" };
                   connection.channels.closeAll();
                   connection.closed.abort();
                   closeThenTerminate(
@@ -1005,7 +1007,7 @@ export const make = (options: {
               connections.set(clientId, connection);
               // A hello arriving after this does not count.
               setTimeout(() => {
-                if (connection.deviceId === null) {
+                if (connection.phase.kind === "preAuth") {
                   connection.kill(CLOSE_HELLO_FAILED, "hello timeout");
                 }
               }, opts.helloTimeoutMs ?? HELLO_TIMEOUT_MS).unref();
@@ -1085,7 +1087,7 @@ export const make = (options: {
             ? address.port
             : opts.port;
         log.info(`[link] listening on ${opts.bindAddress}:${port}`);
-        return { port, byDevice, connections };
+        return { port, connections };
       });
 
     const stopNow = Effect.suspend(() => {
@@ -1146,7 +1148,6 @@ export const make = (options: {
         current = {
           opts,
           scope,
-          byDevice: started.value.byDevice,
           connections: started.value.connections,
         };
         status = {
@@ -1178,8 +1179,13 @@ export const make = (options: {
             // Linked or still to say hello: a socket whose handshake proved
             // a device the roster dropped goes too.
             for (const connection of current?.connections.values() ?? []) {
+              const phase = connection.phase;
               const deviceId =
-                connection.deviceId ?? connection.opened?.deviceId;
+                phase.kind === "linked"
+                  ? phase.deviceId
+                  : phase.kind === "preAuth"
+                    ? phase.opened?.deviceId
+                    : undefined;
               if (deviceId === undefined || live.has(deviceId)) continue;
               connection.kill(
                 CLOSE_GOING_AWAY,
