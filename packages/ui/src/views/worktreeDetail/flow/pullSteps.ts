@@ -189,6 +189,9 @@ export type CloneDestination = {
   cloneInto: SyncCloneInto;
   // The whole path, for display.
   dest: string;
+  // The folder is the one picked, or the default once the reads behind
+  // it have answered.
+  ready: boolean;
   // What is at it there, undefined until read.
   found: SyncCloneDestination | undefined;
   setParent: (chosen: string) => void;

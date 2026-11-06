@@ -85,9 +85,29 @@ export function ModalShell({
     (onEscape ?? onClose)();
   });
   const root = useThemeRoot();
+  // Where focus was when the shell opened (the control that opened it),
+  // read before anything inside takes it.
+  const [opener] = useState(() => root?.ownerDocument.activeElement ?? null);
   // Base UI's portal mounts a render after the shell, so its backdrop
   // arrives as state.
   const [backdrop, setBackdrop] = useState<HTMLDivElement | null>(null);
+  // Closing is an unmount, which hands focus back to nothing, so the
+  // shell hands it back to its opener, while its own nodes are still in
+  // place. Focus a caller moved elsewhere on the way out stays there.
+  useLayoutEffect(() => {
+    if (!backdrop) return;
+    return () => {
+      const active = backdrop.ownerDocument.activeElement;
+      if (
+        opener instanceof HTMLElement &&
+        (active === null ||
+          active === backdrop.ownerDocument.body ||
+          backdrop.contains(active))
+      ) {
+        opener.focus();
+      }
+    };
+  }, [backdrop, opener]);
   useEffect(() => {
     const doc = backdrop?.ownerDocument;
     if (!doc) return;

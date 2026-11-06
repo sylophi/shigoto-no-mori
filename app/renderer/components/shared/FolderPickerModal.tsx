@@ -1,10 +1,13 @@
 // The folder picker (FolderPickerView) in a modal, over the scope's
-// disk: browsing a peer's works the same as this one's.
+// disk: browsing a peer's works the same as this one's. A peer that
+// can't be asked right now can't list its folders, so there it takes
+// the path as typed.
 import { useState, type KeyboardEvent } from "react";
 import { FolderPickerView } from "@shigomori/ui/views/shared/FolderPickerView.tsx";
 import { isBrowseRow } from "@shigomori/ui/views/shared/BrowseListPartsView.tsx";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { useBrowseListing } from "@/hooks/fs/useBrowseListing";
+import { useDeviceReach } from "@/hooks/remote/useDevices";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useBinding } from "@/hooks/ui/useKeymap";
 import { notifyError } from "@/lib/toast";
@@ -43,9 +46,16 @@ export function FolderPickerModal({
   const [query, setQuery] = useState<string>(seed);
   // The native dialog is this machine's window manager: it can only
   // ever pick a path here.
-  const { remote } = useHostScope();
+  const { deviceId, remote } = useHostScope();
+  const reach = useDeviceReach(deviceId).kind;
+  const browsable = reach === "this" || reach === "live";
   const [highlighted, setHighlighted] = useState<string>("");
-  const browse = useBrowseListing({ query, setQuery, setHighlighted });
+  const browse = useBrowseListing({
+    query,
+    setQuery,
+    setHighlighted,
+    enabled: browsable,
+  });
   const { listingEnabled, listing, leafFilter, error } = browse;
 
   // The folder we'd confirm, off the listing's resolved path where
@@ -57,7 +67,7 @@ export function FolderPickerModal({
     listingEnabled && listing
       ? `${leafFilter ? ensureTrailingSep(listing.path) : listing.path}${leafFilter}`
       : normalizeForSubmit(query);
-  const canConfirm = isAnchoredPath(confirmTarget) && !error;
+  const canConfirm = isAnchoredPath(confirmTarget) && !(browsable && error);
   const canBrowseUp = canNavigateUp(query);
 
   const confirm = () => {
@@ -129,6 +139,7 @@ export function FolderPickerModal({
         highlighted={highlighted}
         setHighlighted={setHighlighted}
         browse={browse}
+        browsable={browsable}
         canBrowseUp={canBrowseUp}
         canConfirm={canConfirm}
         onConfirm={confirm}

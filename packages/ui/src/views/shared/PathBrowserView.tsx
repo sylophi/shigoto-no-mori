@@ -31,6 +31,7 @@ export function PathBrowserView({
   highlighted,
   onHighlight,
   browse,
+  browsable = true,
   canBrowseUp,
   primary,
   confirmKeys,
@@ -48,6 +49,9 @@ export function PathBrowserView({
   highlighted: string;
   onHighlight: (value: string) => void;
   browse: BrowseListing;
+  // Off where the folders can't be listed (an offline device's): the
+  // path is typed, with no list under it.
+  browsable?: boolean;
   canBrowseUp: boolean;
   primary: { label: ReactNode; disabled: boolean; onClick: () => void };
   // The keys that press the primary button past a highlighted row (the
@@ -106,34 +110,41 @@ export function PathBrowserView({
         </p>
       )}
 
-      <BrowseListView
-        entries={filtered}
-        pathOf={(entry) => `${browseDir}${entry.name}`}
-        highlighted={highlighted}
-        onUp={canBrowseUp ? browse.browseUp : undefined}
-        onOpen={(entry) => browse.browseTo(entry.name)}
-        renderIcon={(entry) =>
-          renderIcon?.(entry) ?? (
-            <Folder className="size-4 text-muted-foreground/80" />
-          )
-        }
-        renderTrailing={renderTrailing}
-        loading={isLoading && !listing}
-        error={error !== null}
-        noMatch={
-          leafFilter.length > 0
-            ? `No folders matching "${leafFilter}".`
-            : undefined
-        }
-        className="min-h-0 flex-1 p-2"
-      />
+      {browsable && (
+        <>
+          <BrowseListView
+            entries={filtered}
+            pathOf={(entry) => `${browseDir}${entry.name}`}
+            highlighted={highlighted}
+            onUp={canBrowseUp ? browse.browseUp : undefined}
+            onOpen={(entry) => browse.browseTo(entry.name)}
+            renderIcon={(entry) =>
+              renderIcon?.(entry) ?? (
+                <Folder className="size-4 text-muted-foreground/80" />
+              )
+            }
+            renderTrailing={renderTrailing}
+            loading={isLoading && !listing}
+            error={error !== null}
+            noMatch={
+              leafFilter.length > 0
+                ? `No folders matching "${leafFilter}".`
+                : undefined
+            }
+            className="min-h-0 flex-1 p-2"
+          />
 
-      <FooterRow className="justify-between">
-        <div className="flex items-center gap-3">
-          <BrowseKeyHintsView enterFolder={hasHighlighted} goUp={canBrowseUp} />
-        </div>
-        {footerEnd}
-      </FooterRow>
+          <FooterRow className="justify-between">
+            <div className="flex items-center gap-3">
+              <BrowseKeyHintsView
+                enterFolder={hasHighlighted}
+                goUp={canBrowseUp}
+              />
+            </div>
+            {footerEnd}
+          </FooterRow>
+        </>
+      )}
     </Command>
   );
 }

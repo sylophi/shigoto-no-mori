@@ -259,11 +259,7 @@ export function ProjectGroupActions({
             folders={folders}
           />
           {sortsWorktrees && <WorktreeSortSubmenu groupKey={groupKey} />}
-          <AddToDeviceSubmenu
-            name={name}
-            members={members}
-            onOpenChange={onOpenChange}
-          />
+          <AddToDeviceSubmenu members={members} onOpenChange={onOpenChange} />
           <DeviceScope deviceId={primary.deviceId}>
             <ProjectPageMenuItems project={primary.project} />
             {!spansDevices && (

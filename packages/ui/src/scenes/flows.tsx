@@ -326,6 +326,7 @@ export function MirrorReviewScene() {
                   projectName: SM.name,
                   cloneInto: { parentDir: "~/Code/", name: "shigoto-no-mori" },
                   dest: "~/Code/shigoto-no-mori",
+                  ready: true,
                   found: "free",
                   setParent: noop,
                 },
@@ -341,11 +342,13 @@ export function MirrorReviewScene() {
                       name: "shigoto-no-mori",
                     },
                     dest: "~/Code/shigoto-no-mori",
+                    ready: true,
                     found: "free",
                     setParent: noop,
                   }}
                   title={null}
                   worktree={BADGER}
+                  offline={false}
                   onChange={noop}
                   picker={null}
                 />

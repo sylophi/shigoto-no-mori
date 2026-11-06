@@ -134,8 +134,8 @@ export function PullReviewFooterView({
   // The collision the landing would refuse on, or null.
   refusal: string | null;
   unpicked: boolean;
-  // The gitignored rule resolves over the ignored list: no start
-  // before it lands, or the files step would bring everything.
+  // Something Start waits on to land (the gitignored rule's ignored
+  // list, a clone's default folder).
   waiting: boolean;
   // The wait's reason when it will not end on its own.
   blocked: string | null;
@@ -506,15 +506,18 @@ export function CloneLinesView({
   clone,
   title,
   worktree,
+  offline,
   onChange,
   picker,
 }: {
   clone: NonNullable<LandingTarget["clone"]>;
   title: string | null;
   worktree: Worktree;
-  // Opens the folder picker, drawn in `picker` while it is up. Absent
-  // for an offline destination, whose folders can't be browsed.
-  onChange: (() => void) | undefined;
+  // The destination is offline: what is at the folder is unknown until
+  // it is back.
+  offline: boolean;
+  // Opens the folder picker, drawn in `picker` while it is up.
+  onChange: () => void;
   picker: ReactNode;
 }) {
   return (
@@ -529,14 +532,12 @@ export function CloneLinesView({
             clone.found === "taken" && "text-amber-700 dark:text-amber-300",
           )}
         />
-        {onChange !== undefined && (
-          <Button variant="outline" size="xs" onClick={onChange}>
-            Change
-          </Button>
-        )}
+        <Button variant="outline" size="xs" onClick={onChange}>
+          Change
+        </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        {onChange === undefined ? (
+        {offline ? (
           <>
             Cloned there first, unless it holds a checkout of{" "}
             {clone.projectName} by then.
