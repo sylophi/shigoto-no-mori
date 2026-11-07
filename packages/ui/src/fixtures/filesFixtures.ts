@@ -1,7 +1,7 @@
 // A posed worktree's files: the folder tree the files page and the
 // mirror picker browse, what the viewer reads for its files, and the
 // blobs a posed diff's image names. Pure data, served by bridge.ts.
-import { COMMIT_ICON_SIDES } from "./patches.ts";
+import { COMMIT_ICON_SIDES, COMMIT_ROW_SIDES } from "./patches.ts";
 
 // What the files page's viewer reads for a FAKE_TREE file: something
 // the highlighter can dress by extension, the .env as the ignored file
@@ -12,10 +12,14 @@ export function fakeFile(path: string) {
   return { kind: "text" as const, contents, size: contents.length };
 }
 
-// The two sides of FAKE_DIFF's icon.png (pullRequestFixtures.ts), by
-// the blob ids its patch names (patches.ts). SVG drawn as an image,
-// which is all the diff's preview sees.
+// The two sides of FAKE_DIFF's icon.png (pullRequestFixtures.ts) and of
+// its WorktreeRow.tsx, by the blob ids its patch names (patches.ts). SVG
+// drawn as an image, which is all the diff's preview sees.
 export function fakeBlob(oid: string) {
+  const text = FAKE_TEXT_BLOBS[oid];
+  if (text !== undefined) {
+    return { kind: "text" as const, contents: text, size: text.length };
+  }
   const svg = FAKE_BLOBS[oid];
   if (svg === undefined) return { kind: "missing" as const };
   return {
@@ -25,6 +29,10 @@ export function fakeBlob(oid: string) {
     size: svg.length,
   };
 }
+
+const FAKE_TEXT_BLOBS: Record<string, string> = Object.fromEntries(
+  COMMIT_ROW_SIDES.map(({ oid, text }) => [oid, text]),
+);
 
 const FAKE_BLOBS: Record<string, string> = Object.fromEntries(
   COMMIT_ICON_SIDES.map(({ oid, svg }) => [oid, svg]),

@@ -3,7 +3,7 @@
 // row shows, and the two ways a rail's rows are built (from a patch on
 // a read-only diff, from git status on the changes page).
 import type { ChangeTypes, FileDiffMetadata } from "@pierre/diffs";
-import { changeKey } from "@shigomori/contracts/schemas";
+import { changeKey, isFullObjectId } from "@shigomori/contracts/schemas";
 import type { ChangedFile, ChangeKind } from "@shigomori/contracts/schemas";
 import { mediaTypeOf } from "@shigomori/contracts/mediaTypes";
 import type { ChangeMark, IndexEntry } from "./indexEntry.ts";
@@ -39,6 +39,14 @@ export function isBinaryChange(file: FileDiffMetadata): boolean {
 // be shown.
 export function isMediaBinary(file: FileDiffMetadata): boolean {
   return isBinaryChange(file) && mediaTypeOf(file.name) !== undefined;
+}
+
+// Whether a patch names its blobs in full, so their sides can be read.
+// `gh pr diff` names both of a file's only in short.
+export function namesBlobsInFull(file: FileDiffMetadata): boolean {
+  return [file.prevObjectId, file.newObjectId].every(
+    (oid) => oid === undefined || isFullObjectId(oid),
+  );
 }
 
 // FileDiffMetadata carries no aggregate counts, so sum the hunks the way

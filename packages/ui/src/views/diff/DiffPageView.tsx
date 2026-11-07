@@ -1,6 +1,7 @@
 import type { ReactNode, Ref } from "react";
 import {
   DEFAULT_VIRTUAL_FILE_METRICS,
+  type FileDiffContentsLoader,
   type FileDiffMetadata,
   type VirtualFileMetrics,
   type Virtualizer,
@@ -47,16 +48,21 @@ const DIFF_STYLE_OPTIONS = [
 
 const DIFF_THEME = {
   ...CODE_THEME,
-  // 'simple' is the shortest built-in separator (vs 'line-info' default
-  // which renders rounded corners and an expansion-control row).
-  hunkSeparators: "simple" as const,
+  // A line-tall bar over each hunk that counts the lines hidden there,
+  // and expands them a step at a time once the file's sides can be read.
+  // The one under the last hunk isn't drawn: until the sides load it
+  // can't count what follows. It keeps its place, which pierre's layout
+  // counts.
+  hunkSeparators: "line-info-basic" as const,
+  expansionLineCount: 20,
+  unsafeCSS: `${CODE_THEME.unsafeCSS} [data-separator="line-info-basic"] { height: ${CODE_LINE_HEIGHT}px; } [data-separator-last] { visibility: hidden; } [data-separator-content] { font-family: var(--font-sans); font-size: var(--text-2xs); }`,
 };
 
 // A binary file's header: git counts no lines in it, so pierre's "-0 +0"
 // goes.
 const BINARY_THEME = {
   ...DIFF_THEME,
-  unsafeCSS: `${CODE_THEME.unsafeCSS} [data-deletions-count], [data-additions-count] { display: none; }`,
+  unsafeCSS: `${DIFF_THEME.unsafeCSS} [data-deletions-count], [data-additions-count] { display: none; }`,
 };
 
 // The row sizes CODE_STYLE and DIFF_THEME lay out, for the virtualizer
@@ -67,6 +73,7 @@ const BINARY_THEME = {
 const DIFF_METRICS: VirtualFileMetrics = {
   ...DEFAULT_VIRTUAL_FILE_METRICS,
   lineHeight: CODE_LINE_HEIGHT,
+  hunkSeparatorHeight: CODE_LINE_HEIGHT,
   // What pierre's header comes to at CODE_STYLE's sizes. Measured, since
   // nothing in CODE_STYLE sets it directly. It holds in both designs and
   // with or without the fold button: the header keeps its own font.
@@ -80,14 +87,12 @@ const DIFF_METRICS: VirtualFileMetrics = {
 // sides.
 export const FILE_GAP = 8;
 
-// Pierre's "simple" hunk separator, and a media file's sides under its
-// header (MediaDiffView's pt-2 and h-72).
-const SEPARATOR_HEIGHT = 4;
+// A media file's sides under its header (MediaDiffView's pt-2 and h-72).
 const MEDIA_SIDES_HEIGHT = 8 + 288;
 
 // A file's height before it is drawn, for the window to place the files
 // it hasn't mounted (DiffPane): its header, and unless folded its hunks'
-// rows at DIFF_METRICS with a separator between hunks, or a media file's
+// rows at DIFF_METRICS with about a separator each, or a media file's
 // sides. A drawn file is measured, so this only has to be close: it
 // leaves out wrapped lines and the changes page's hunk bars (its one
 // file is measured as soon as it's drawn).
@@ -108,7 +113,7 @@ export function estimateFileHeight(
   return (
     header +
     lines * DIFF_METRICS.lineHeight +
-    (hunks.length - 1) * SEPARATOR_HEIGHT +
+    hunks.length * CODE_LINE_HEIGHT +
     DIFF_METRICS.spacing
   );
 }
@@ -362,6 +367,7 @@ export function DiffFileRowView({
   hunks,
   busy,
   media,
+  loadSides,
 }: {
   fileDiff: FileDiffMetadata;
   fileId: string;
@@ -382,6 +388,8 @@ export function DiffFileRowView({
   // An image, video or audio file's sides (MediaDiffView), which its
   // patch has no lines for. Any other binary file says it isn't shown.
   media?: ReactNode;
+  // Reads a changed file's two sides, for its hidden lines to expand.
+  loadSides?: FileDiffContentsLoader;
 }) {
   const binary = isBinaryChange(fileDiff);
   return (
@@ -399,6 +407,7 @@ export function DiffFileRowView({
           overflow: wrapLines ? "wrap" : "scroll",
           themeType,
           collapsed,
+          loadDiffFiles: loadSides,
         }}
         metrics={DIFF_METRICS}
         lineAnnotations={hunks && hunkAnnotations(fileDiff, hunks)}

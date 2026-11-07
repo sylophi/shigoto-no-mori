@@ -1,4 +1,5 @@
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { FileDiffContentsLoader } from "@pierre/diffs";
 import type { WorktreeFile } from "@shigomori/contracts/schemas";
 import { type HostScope, useHostScope } from "@/hooks/remote/useHostScope";
 import { gatedHostReadMeta } from "@/lib/queryClientOptions";
@@ -42,8 +43,29 @@ export function useWorktreeFile(
   });
 }
 
-// One side of an image, video or audio file in a diff, by the blob id
-// its patch names. A blob never changes, so it is kept while in use.
+// One side of a file in a diff, by the blob id its patch names. A blob
+// never changes, so it is kept while in use.
+function gitBlobQuery(
+  { api, keys }: Pick<HostScope, "api" | "keys">,
+  projectId: string,
+  worktreeId: string,
+  oid: string,
+  path: string,
+) {
+  return queryOptions<WorktreeFile>({
+    queryKey: keys.gitBlob(projectId, worktreeId, oid, path),
+    queryFn: ({ signal }) =>
+      api.run(api.worktrees.readBlob({ projectId, worktreeId, oid, path }), {
+        signal,
+      }),
+    staleTime: Infinity,
+    gcTime: 60_000,
+    // The side says so itself, and a diff can hold dozens of them.
+    meta: { silentError: true },
+  });
+}
+
+// One side of an image, video or audio file in a diff.
 export function useGitBlob(
   projectId: string,
   worktreeId: string,
@@ -51,19 +73,37 @@ export function useGitBlob(
   path: string,
   enabled: boolean,
 ) {
-  const { api, keys } = useHostScope();
-  return useQuery<WorktreeFile>({
-    queryKey: keys.gitBlob(projectId, worktreeId, oid, path),
-    queryFn: ({ signal }) =>
-      api.run(api.worktrees.readBlob({ projectId, worktreeId, oid, path }), {
-        signal,
-      }),
+  const scope = useHostScope();
+  return useQuery({
+    ...gitBlobQuery(scope, projectId, worktreeId, oid, path),
     enabled,
-    staleTime: Infinity,
-    gcTime: 60_000,
-    // The side says so itself, and a diff can hold dozens of them.
-    meta: { silentError: true },
   });
+}
+
+// A changed file's two sides, read when a diff's hidden lines are first
+// expanded. Only for a patch that names its blobs in full
+// (namesBlobsInFull).
+export function useDiffSides(
+  projectId: string,
+  worktreeId: string,
+): FileDiffContentsLoader {
+  const queryClient = useQueryClient();
+  const scope = useHostScope();
+  const side = async (oid: string | undefined, name: string) => {
+    if (oid === undefined) throw new Error(`No blob for ${name}`);
+    const file = await queryClient.fetchQuery(
+      gitBlobQuery(scope, projectId, worktreeId, oid, name),
+    );
+    if (file.kind !== "text") throw new Error(`No text for ${name}`);
+    return { name, contents: file.contents };
+  };
+  return async (fileDiff) => {
+    const [oldFile, newFile] = await Promise.all([
+      side(fileDiff.prevObjectId, fileDiff.prevName ?? fileDiff.name),
+      side(fileDiff.newObjectId, fileDiff.name),
+    ]);
+    return { oldFile, newFile };
+  };
 }
 
 // An image a Markdown file in a worktree names by a local path, as a
