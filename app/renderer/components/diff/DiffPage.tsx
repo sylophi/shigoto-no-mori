@@ -14,6 +14,7 @@ import PatchFilesWorker from "./patchFiles.worker.ts?worker";
 import { useLook } from "@/hooks/ui/useLook";
 import { useWorktreeName } from "@/hooks/worktrees/useWorktreeTitle";
 import { useOpenInEditor } from "@/hooks/launchers/useLaunchers";
+import { useDiffSides } from "@/hooks/worktrees/useWorktreeFile";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
 import type { Worktree } from "@shigomori/contracts/schemas";
@@ -29,6 +30,7 @@ import {
   changeEntries,
   fileKey,
   isMediaBinary,
+  namesBlobsInFull,
   patchEntries,
 } from "@shigomori/ui/lib/patchFiles.ts";
 import { DiffFileIndex } from "./DiffFileIndex";
@@ -196,6 +198,7 @@ export function DiffPage({
   // shadow root's `color-scheme`, which defaults to the OS preference.
   // Force it to follow the in-app theme instead.
   const { resolved } = useLook();
+  const loadSides = useDiffSides(worktree.projectId, worktree.id);
 
   // Which of the two views this is. The changes page hands over one
   // file's diff, the one its list picked, so the pane draws what it was
@@ -318,6 +321,7 @@ export function DiffPage({
         onToggle={singleFile ? undefined : setCollapsed}
         hunks={changes?.readOnly ? undefined : changes?.hunks}
         busy={changes?.busy ?? false}
+        loadSides={namesBlobsInFull(fileDiff) ? loadSides : undefined}
         media={
           isMediaBinary(fileDiff) && (
             <MediaDiff

@@ -1,7 +1,7 @@
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { useSeen } from "@/hooks/ui/useSeen";
-import { isFullObjectId } from "@shigomori/contracts/schemas";
 import { useGitBlob } from "@/hooks/worktrees/useWorktreeFile";
+import { namesBlobsInFull } from "@shigomori/ui/lib/patchFiles.ts";
 import {
   MediaDiffSideView,
   MediaDiffView,
@@ -26,12 +26,9 @@ export function MediaDiff({
   const { type, prevObjectId, newObjectId, name } = fileDiff;
   const before = type === "new" ? undefined : prevObjectId;
   const after = type === "deleted" ? undefined : newObjectId;
-  // GitHub's patch shortens both of a changed file's ids alike, so the
-  // file says it once rather than once a side.
-  const unnamed = [before, after].some(
-    (oid) => oid !== undefined && !isFullObjectId(oid),
-  );
-  if (unnamed) {
+  // A patch that shortens the ids shortens both, so the file says so
+  // once rather than once a side.
+  if (!namesBlobsInFull(fileDiff)) {
     return (
       <MediaDiffView
         unnamed={{ onRetry: retry?.retry, retrying: retry?.retrying ?? false }}

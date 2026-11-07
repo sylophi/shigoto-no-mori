@@ -102,6 +102,59 @@ export const COMMIT_ICON_SIDES = [
   },
 ];
 
+// WorktreeRow.tsx's two sides, by the blob ids the patch names, for its
+// hidden lines to expand.
+const WORKTREE_ROW = (button: string) =>
+  [
+    'import { cn } from "@/lib/utils";',
+    'import { useWorktreeRowState } from "./useWorktreeRowState";',
+    "",
+    "export const WORKTREE_ROW_BUTTON =",
+    `  "${button}";`,
+    "",
+    "export function WorktreeRowLabel({ row }: { row: { name: string } }) {",
+    "  const { active } = useWorktreeRowState(row.name);",
+    "  return (",
+    '    <span className={cn("truncate", active && "font-medium")}>',
+    "      {row.name}",
+    "    </span>",
+    "  );",
+    "}",
+    "",
+    "export function WorktreeRow({",
+    "  row,",
+    "  onSelect,",
+    "}: {",
+    "  row: { name: string; path: string };",
+    "  onSelect: (path: string) => void;",
+    "}) {",
+    "  return (",
+    "    <button",
+    '      type="button"',
+    "      className={WORKTREE_ROW_BUTTON}",
+    "      onClick={() => onSelect(row.path)}",
+    "    >",
+    "      <WorktreeRowLabel row={row} />",
+    "    </button>",
+    "  );",
+    "}",
+    "",
+  ].join("\n");
+
+const ROW_BUTTON =
+  "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs";
+
+export const COMMIT_ROW_SIDES = [
+  {
+    oid: "3ffa8f12471e16fb1d3243917c7b8e360dd41595",
+    text: WORKTREE_ROW(ROW_BUTTON),
+  },
+  {
+    oid: "b68454b99759bc965a9efae093b1849f8709063a",
+    text: WORKTREE_ROW(`${ROW_BUTTON} transition-colors`),
+  },
+];
+
 type ChangePatch = {
   patch: string;
   counts: { additions: number; deletions: number };
