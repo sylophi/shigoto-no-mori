@@ -431,6 +431,10 @@ export type UpdateInput = {
   readonly feedUrl?: string | undefined;
   readonly releasesUrl?: string | undefined;
   readonly progress?: ((progress: Progress) => Effect.Effect<void>) | undefined;
+  // Asks GitHub for the release list even while the kept copy is fresh:
+  // a device told of a release its last check predates would otherwise
+  // answer from the copy that lacks it.
+  readonly unkept?: boolean | undefined;
 };
 
 // The updater's documents, field for field: the stage results the app

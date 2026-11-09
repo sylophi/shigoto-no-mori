@@ -177,10 +177,11 @@ export const makeFeeds = ({
 
     // The release list, and whether the API confirmed it this run rather
     // than the kept copy answering. Within RELEASE_LIST_MAX_AGE the copy
-    // answers on its own. After that the request carries its ETag (a 304
-    // is free of the rate limit). While the API says the hourly budget is
-    // spent, the copy answers until the reset, stale by at most an hour,
-    // rather than an error in Settings.
+    // answers on its own, unless the run asks past it (`unkept`). After
+    // that the request carries its ETag (a 304 is free of the rate
+    // limit). While the API says the hourly budget is spent, the copy
+    // answers until the reset, stale by at most an hour, rather than an
+    // error in Settings.
     const fetchReleaseList = Effect.fn("Updater.fetchReleaseList")(function* (
       input: UpdateInput,
     ) {
@@ -193,6 +194,7 @@ export const makeFeeds = ({
       // further out than any limit is waited, is from before the clock
       // stepped back, and answers for nothing.
       const fresh =
+        input.unkept !== true &&
         cached !== undefined &&
         cached.fetchedAt <= now &&
         now < cached.fetchedAt + RELEASE_LIST_MAX_AGE;

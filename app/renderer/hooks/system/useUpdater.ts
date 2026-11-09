@@ -151,18 +151,18 @@ export function useOutdatedDevices(): KnownUpdates {
 
 // Update every device in `outdated` (useOutdatedDevices) not already on
 // its way, from one button: Settings' Update all and the update toast.
-// A device with its update staged restarts into it. One without is
-// told to fetch it and restart once it's staged (the host's
-// updater:update), which answers right away, so the button never waits
-// on a download. The peers go first and together: each answers before
-// it quits or arms (updater.ts), so a busy one's refusal comes back
-// here. This machine goes last, and only once every peer took its
-// update, since restarting this window would end the page that reports
-// a refusal and hold the retry. Its own install is attended, so a busy
-// machine still gets the usual dialog. `updating` holds from the press
-// until no device behind is left to ask: each one's state says it is
-// on its way (`updating`) before its answer lands, and it drops out of
-// `outdated` as it restarts.
+// Each is told to fetch the newest release and restart into it (the
+// host's updater:update), which answers right away and leaves the rest
+// to the device, so the button never waits on a download and a device
+// finishes whatever becomes of this window. The peers go first and
+// together: each answers before it starts (updater.ts), so a busy
+// one's refusal comes back here. This machine goes last, and only once
+// every peer took its update, since restarting this window would end
+// the page that reports a refusal and hold the retry. Its own install
+// is attended, so a busy machine still gets the usual dialog.
+// `updating` holds from the press until no device behind is left to
+// ask: each one's state says it is on its way (`updating`) before its
+// answer lands, and it drops out of `outdated` as it restarts.
 export function useUpdateAll(
   outdated: Readonly<Record<string, OutdatedDevice>>,
 ) {
@@ -172,21 +172,16 @@ export function useUpdateAll(
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state push is the single source of truth, and the updater state atom follows it
   const mutation = useMutation({
     mutationFn: async () => {
-      const chosen = targets.flatMap((target) => {
-        const device = outdated[target.deviceId];
-        return device === undefined || device.updating
-          ? []
-          : [{ target, device }];
-      });
-      const local = chosen.find(
-        ({ target }) => target.deviceId === localDeviceId,
+      const chosen = targets.filter(
+        (target) => outdated[target.deviceId]?.updating === false,
       );
+      const local = chosen.find((target) => target.deviceId === localDeviceId);
       const refused = (
         await Promise.all(
           chosen
-            .filter((entry) => entry !== local)
-            .map(({ target, device }) =>
-              updateDevice(target.api, device).then(
+            .filter((target) => target !== local)
+            .map((target) =>
+              restartIntoUpdate(target.api, "update").then(
                 () => [],
                 (error: unknown) => [
                   `${target.label}: ${errorMessageOf(error).replace(/([^.!?])$/, "$1.")}`,
@@ -203,8 +198,7 @@ export function useUpdateAll(
             : `${reasons} This device was not updated, so you can try again.`,
         );
       }
-      if (local !== undefined)
-        await updateDevice(local.target.api, local.device);
+      if (local !== undefined) await restartIntoUpdate(local.api, "update");
     },
     meta: { errorTitle: "Couldn't update every device" },
   });
@@ -212,10 +206,4 @@ export function useUpdateAll(
     update: () => mutation.mutate(),
     updating: mutation.isPending || allUpdating(outdated),
   };
-}
-
-// Restarts a device into its staged update, or arms it to once it has
-// fetched it.
-function updateDevice(api: HostApi, device: OutdatedDevice): Promise<void> {
-  return restartIntoUpdate(api, device.staged ? "install" : "update");
 }
