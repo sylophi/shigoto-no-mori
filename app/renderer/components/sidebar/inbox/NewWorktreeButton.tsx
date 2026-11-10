@@ -1,3 +1,4 @@
+import { KEYS } from "@shigomori/ui/lib/keys.ts";
 import { useRef, useState, type ReactNode } from "react";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
@@ -111,7 +112,9 @@ function SingleCreateButton({
     ? target.project.name
     : `${target.project.name} on ${creator.deviceLabel}`;
   return (
-    <SimpleTooltip tip={`New worktree in ${where} (hold ⇧ to pick a base)`}>
+    <SimpleTooltip
+      tip={`New worktree in ${where} (hold ${KEYS.shift} to pick a base)`}
+    >
       <NewWorktreeButtonView
         pending={isPending}
         disabled={isPending}

@@ -102,7 +102,6 @@ function filesPage(body: ReactNode, tree: boolean) {
         header={
           <FilesHeaderView
             worktreeName={HUM.name}
-            back={null}
             controls={
               tree
                 ? { onBrowse: null, hideIgnored: null, onRefresh: noop }

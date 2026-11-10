@@ -44,13 +44,15 @@ export function DeviceHeadingView({
   summary: string;
 }) {
   return (
-    <div className="flex items-center gap-2">
+    // The summary drops under the name where the two don't fit on one
+    // line, rather than squeezing the name out.
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
       <DeviceMarkView icon={icon} tone={tone} />
       <SimpleTooltip whenTruncated tip={name}>
         <h2 className="truncate text-sm font-medium">{name}</h2>
       </SimpleTooltip>
       <span className={cn("shrink-0 text-xs", TONE_TEXT[tone])}>{status}</span>
-      <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">
+      <span className="ml-auto min-w-0 text-xs text-muted-foreground tabular-nums">
         {summary}
       </span>
     </div>

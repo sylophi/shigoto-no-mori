@@ -22,6 +22,7 @@
 // Both halves are app-only, since the engine binds a real TCP listener
 // in this machine's host process and the web client's local registrar
 // rejects the portForward channels. The caller gates that.
+import { KEYS } from "../../lib/keys.ts";
 import { useState } from "react";
 import {
   Cable,
@@ -162,7 +163,7 @@ export function PortForwardSectionView({
             />
             <Button
               type="submit"
-              keys="↩"
+              keys={KEYS.enter}
               size="xs"
               variant="secondary"
               disabled={startPending || parsedPort === undefined}

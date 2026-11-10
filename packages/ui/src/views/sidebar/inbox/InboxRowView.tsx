@@ -2,8 +2,7 @@
 // (WorktreeEntryView) with the project and the time over it.
 import type { ComponentProps, ReactNode } from "react";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
-import { useNow } from "../../../hooks/useNow.ts";
-import { formatRelativeTime } from "../../../lib/relativeTime.ts";
+import { RelativeDate } from "../../../primitives/relative-date.tsx";
 import {
   worktreeLastActivityAt,
   type Project,
@@ -109,7 +108,6 @@ function TrailingSlot({
 }) {
   const mark = activityMark(look);
   const activityAt = worktreeLastActivityAt(worktree);
-  const now = useNow();
 
   return (
     <span className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -120,7 +118,7 @@ function TrailingSlot({
         <ActivityIconView kind={mark} />
       ) : (
         <span className="tabular">
-          {activityAt > 0 ? formatRelativeTime(activityAt, now) : "no activity"}
+          {activityAt > 0 ? <RelativeDate date={activityAt} /> : "no activity"}
         </span>
       )}
     </span>

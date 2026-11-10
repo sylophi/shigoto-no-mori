@@ -1,4 +1,5 @@
 // The merge dialog's content (MergeDialog puts it in a ModalShell).
+import { KEYS } from "../../../lib/keys.ts";
 import type { ReactNode } from "react";
 import { Check } from "lucide-react";
 import { Button } from "../../../primitives/button.tsx";
@@ -84,7 +85,7 @@ export function MergeDialogView({
       actions={
         <Button
           type="submit"
-          keys={messaged ? "↩" : undefined}
+          keys={messaged ? KEYS.enter : undefined}
           size="sm"
           disabled={!ready}
         >

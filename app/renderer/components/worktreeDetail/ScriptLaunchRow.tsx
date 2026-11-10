@@ -1,3 +1,4 @@
+import { isModClick } from "@shigomori/ui/lib/keys.ts";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useLocalGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
@@ -200,10 +201,10 @@ function ScriptLaunchButton({
     slot,
   );
 
-  // Cmd-click detours to the script's console instead of toggling the
-  // run. Cmd is the modifier the tooltip advertises.
+  // A click with Mod held detours to the script's console instead of
+  // toggling the run, as the tooltip says.
   const handleClick = (e: React.MouseEvent) => {
-    if (e.metaKey) {
+    if (isModClick(e)) {
       toScript(worktree.projectId, worktree.id, slot);
       return;
     }

@@ -488,7 +488,7 @@ function StepMark({ state, ended }: { state: StepState; ended: Ended }) {
     return (
       <span
         aria-hidden
-        className="flex size-4 shrink-0 items-center justify-center rounded-full border border-muted-foreground/40 text-muted-foreground"
+        className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted-foreground/20 text-muted-foreground"
       >
         <Minus className="size-2.5" />
       </span>

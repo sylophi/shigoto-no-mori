@@ -1,6 +1,7 @@
 // The Launch section's row of the worktree's scripts (ScriptLaunchRow
 // binds it): the scripts pinned to it, wrapping, or the top scripts
 // trimmed to the ones that fit on one line, measured off a hidden copy.
+import { KEYS } from "../../lib/keys.ts";
 import type { ReactNode, Ref } from "react";
 import { Play, Square } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
@@ -58,7 +59,7 @@ export function ScriptLaunchRowView({
 }
 
 // A script's pill on the row: running it, or stopping it while it
-// runs, and its output on a ⌘click.
+// runs, and its output on a click with Mod held.
 export function ScriptLaunchButtonView({
   name,
   command,
@@ -75,7 +76,9 @@ export function ScriptLaunchButtonView({
   onClick: (event: React.MouseEvent) => void;
 }) {
   return (
-    <SimpleTooltip tip={disabledReason ?? `${command}\n⌘click to view output`}>
+    <SimpleTooltip
+      tip={disabledReason ?? `${command}\n${KEYS.modClick} to view output`}
+    >
       <ScriptPillView
         name={name}
         busy={busy}

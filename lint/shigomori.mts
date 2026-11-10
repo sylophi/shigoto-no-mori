@@ -5,6 +5,7 @@ import effectFnServiceMethods from "./rules/effect-fn-service-methods.mts";
 import effectNamespaceImports from "./rules/effect-namespace-imports.mts";
 import noDoubleCast from "./rules/no-double-cast.mts";
 import noEnvInService from "./rules/no-env-in-service.mts";
+import noNativeChoice from "./rules/no-native-choice.mts";
 import noNativeTooltip from "./rules/no-native-tooltip.mts";
 import noNodeBuiltinsInService from "./rules/no-node-builtins-in-service.mts";
 import noProcessPlatform from "./rules/no-process-platform.mts";
@@ -21,6 +22,7 @@ export default {
     "effect-namespace-imports": effectNamespaceImports,
     "no-double-cast": noDoubleCast,
     "no-env-in-service": noEnvInService,
+    "no-native-choice": noNativeChoice,
     "no-native-tooltip": noNativeTooltip,
     "no-node-builtins-in-service": noNodeBuiltinsInService,
     "no-process-platform": noProcessPlatform,

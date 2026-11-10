@@ -1,5 +1,6 @@
 // The inbox's New worktree button and its list of projects to create
 // in (NewWorktreeButton binds them).
+import { KEYS } from "../../../lib/keys.ts";
 import { noMatch } from "@shigomori/contracts/words";
 import type {
   ComponentProps,
@@ -151,8 +152,8 @@ export function CreateMenuListView({
       </Command.List>
       <FooterRow className="px-3 py-2 text-2xs phone:hidden">
         {/* ⇧ is for a click too. */}
-        <KbdHint keys={["↩"]} label="Create" />
-        <KbdHint keys={["⇧"]} label="Pick a base" />
+        <KbdHint keys={[KEYS.enter]} label="Create" />
+        <KbdHint keys={[KEYS.shift]} label="Pick a base" />
       </FooterRow>
     </Command>
   );

@@ -1,3 +1,4 @@
+import { KEYS } from "../../lib/keys.ts";
 import { noMatch } from "@shigomori/contracts/words";
 import type { KeyboardEvent, ReactNode } from "react";
 import { Command, useCommandState } from "cmdk";
@@ -137,17 +138,17 @@ export function PaletteDialogView({
           label="Navigate"
         />
         <KbdHint
-          keys={["↩"]}
+          keys={[KEYS.enter]}
           label={picked ? "Run" : ENTER_LABELS[current ?? "worktree"]}
         />
         {picked ? (
-          <KbdHint keys={["⌫"]} label="Back" />
+          <KbdHint keys={[KEYS.backspace]} label="Back" />
         ) : (
           <>
             {current === "worktree" && (
               <KbdHint keys={[changesKeys]} label="Changes" />
             )}
-            <KbdHint keys={["⇥"]} label="Actions" />
+            <KbdHint keys={[KEYS.tab]} label="Actions" />
           </>
         )}
       </FooterRow>
@@ -201,7 +202,7 @@ export function PickedChipView({
   onBack: () => void;
 }) {
   return (
-    <SimpleTooltip tip="Back (⌫)">
+    <SimpleTooltip tip={`Back (${KEYS.backspace})`}>
       <button
         type="button"
         onClick={onBack}

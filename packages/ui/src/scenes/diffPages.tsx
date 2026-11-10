@@ -214,7 +214,6 @@ function pageHeader(
       title={title}
       subtitle={subtitle}
       subtitleEnd={extra?.subtitleEnd}
-      back={null}
       files={null}
       find={find}
       wrapLines={false}

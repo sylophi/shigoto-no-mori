@@ -80,7 +80,9 @@ Rules that keep both themes cheap to maintain:
   `primitives/tooltip.tsx`, never a `title` attribute: the browser's tooltip
   wears neither theme. `shigomori/no-native-tooltip` (oxlint) catches
   `title` on DOM elements, and the primitives leave `title` out of
-  their props. The tooltip is visual only, so an icon-only control
+  their props. The browser's own checkbox and radio wear neither
+  either: `shigomori/no-native-choice` sends them to `Checkbox`,
+  `Switch`, `OptionCard` or `SegmentedControl`. The tooltip is visual only, so an icon-only control
   still needs its `aria-label`.
 - **A tooltip is for text that's cut off or a control that's unclear**,
   nothing else: hints that pop up over what already reads fine get in
@@ -88,7 +90,7 @@ Rules that keep both themes cheap to maintain:
   (`whenTruncated`). Otherwise a hint says what the screen can't: why
   a control is disabled, what a bare mark stands for, a shortcut or a
   hidden gesture, the exact value behind a rounded one (the timestamp
-  behind "3d ago"). A bare icon that marks something gets one naming
+  behind "3d ago", which `RelativeDate` carries). A bare icon that marks something gets one naming
   it (the primary checkout's house, a device's glyph). A label or a
   familiar icon button (pencil, trash, pin, refresh) needs none, and
   neither does an option in a picker (device pills and tabs, the
@@ -97,7 +99,10 @@ Rules that keep both themes cheap to maintain:
 - **A shortcut's keys come from the keymap** (`lib/keymap.ts`, through
   the app's `useBinding`), drawn beside the verb they run wherever the
   verb shows (a palette verb, a button's `Kbd`, a hint, a tip), and
-  never spelled at a call site: a device can bind them elsewhere.
+  never spelled at a call site: a device can bind them elsewhere. A
+  key no one rebinds (a submit's Enter, the palette's Tab) comes from
+  `KEYS` (`lib/keys.ts`), which writes it as the platform's keyboards
+  print it. `shigomori/ui-words` refuses a key's glyph anywhere else.
 - **doubutsu.css may only select**: theme tokens, `data-slot` /
   `data-doubutsu-zone` / `data-doubutsu-page` attributes, upstream
   library attributes (Base UI `data-highlighted` etc.), and plain
@@ -110,7 +115,10 @@ Rules that keep both themes cheap to maintain:
   at, a pointer like focus (`data-slot="guide-ring"`). So rows that v1 rules off say what they are
   instead: a search strip carries `data-slot="search-row"` (it becomes
   an inset tray) and a popup's footer `data-slot="footer-row"` (a
-  muted band).
+  muted band). A mark or a control drawn from a border alone has
+  nothing left here, so it takes a fill, in the component (a skipped
+  step's disc) or in doubutsu.css (an unticked checkbox, an off
+  switch). A two-state control is checked in doubutsu in both states.
 - The full dependency list lives in the CONTRACT header of
   `packages/ui/src/styles/doubutsu.css`. A change to a hook it lists
   updates the CSS and the CONTRACT together.
@@ -217,7 +225,9 @@ Rules that keep that working:
   `size-4`, never `text-[11px]` or `h-[28px]`: a literal stays the same
   size on a phone. The steps under `text-xs` are `text-2xs` (11px),
   `text-3xs` (10px) and `text-4xs` (9px). Display art (the wallpaper
-  glyphs) is the exception.
+  glyphs) is the exception. An indent that lines up with a sized
+  neighbour is on the scale too (`pl-19`, not `pl-[4.75rem]`): the
+  phone grows the neighbour and leaves the literal behind.
 - **Tappable things are real controls**: a `<button>`, an `<a href>`,
   or an element with the matching `role`. The hit-area rule finds them
   by tag and role, so a `<div onClick>` gets no touch target. On a
@@ -225,8 +235,10 @@ Rules that keep that working:
 - **Small controls that pack tight get a real size, not a hit area.**
   An expanded hit area reaches over its neighbours. Rows that stack
   edge to edge and pills in a scrolling strip are sized in phone.css's
-  second layer (by role, or a `data-slot` on the row). A link in
-  running text opts out with `data-no-hit-area`.
+  second layer (by role, or a `data-slot` on the row). Icon buttons
+  side by side sit a thumb apart (`phone:gap-3`), or take a real size
+  where there is room for one (the sidebar's `PROJECT_ACTION_HOOKS`).
+  A link in running text opts out with `data-no-hit-area`.
 - **`phone:` is for layout, not size.** Hiding a column, restacking a
   row, showing a hover-only action, and the page gutters, which narrow
   on a phone while everything else grows (`PAGE_BODY` in

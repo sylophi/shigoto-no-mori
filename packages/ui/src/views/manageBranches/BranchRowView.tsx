@@ -75,8 +75,10 @@ export function BranchRowView({
         </button>
       )}
 
+      {/* A thumb apart on a phone: side by side, Delete's hit area
+          would cover half of Rename's. */}
       {!editing && (
-        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 phone:opacity-100">
+        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 phone:gap-3 phone:opacity-100">
           <IconButton
             onClick={() => onEditingChange(true)}
             aria-label={`Rename ${name}`}

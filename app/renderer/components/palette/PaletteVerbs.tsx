@@ -1,3 +1,4 @@
+import { KEYS } from "@shigomori/ui/lib/keys.ts";
 import {
   AppWindow,
   Copy,
@@ -129,7 +130,7 @@ function WorktreeVerbs({
       key: "detail",
       label: "Open worktree",
       icon: iconOf(Folder),
-      listKeys: "↩",
+      listKeys: KEYS.enter,
       run: () => actions.go(entry, "detail"),
     },
     {
@@ -371,7 +372,7 @@ function ProjectVerbs({
       key: "go",
       label: `Open ${lead.worktree.rebasing ?? lead.worktree.branch}`,
       icon: iconOf(Folder),
-      listKeys: "↩",
+      listKeys: KEYS.enter,
       run: () => actions.go(lead, "detail"),
     });
   }
@@ -389,7 +390,7 @@ function ProjectVerbs({
     key: "form",
     label: "New worktree from…",
     icon: iconOf(SquarePen),
-    listKeys: lead ? undefined : "↩",
+    listKeys: lead ? undefined : KEYS.enter,
     run: () => actions.openCreateForm(project.id, deviceId),
   });
   return <VerbGroupView heading={project.name} query={query} verbs={verbs} />;
@@ -413,7 +414,7 @@ function PageVerbs({
           key: "open",
           label: `Open ${page.label}`,
           icon: iconOf(page.icon),
-          listKeys: "↩",
+          listKeys: KEYS.enter,
           run: () => actions.openPage(page),
         },
       ]}
@@ -442,7 +443,7 @@ function CreateVerbs({
           key: `create:${project.id}`,
           label: `In ${project.name}`,
           icon: <ProjectIcon projectId={project.id} name={project.name} />,
-          listKeys: project === first ? "↩" : undefined,
+          listKeys: project === first ? KEYS.enter : undefined,
           run: () => actions.create(project.id, row.branch),
         })),
         {

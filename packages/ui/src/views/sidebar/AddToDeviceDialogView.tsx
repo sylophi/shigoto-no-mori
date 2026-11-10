@@ -1,6 +1,7 @@
 // The project menu's Add to device, once a device is picked: where the
 // clone lands there, and the way to put it somewhere else
 // (AddToDeviceDialog binds it).
+import { KEYS } from "../../lib/keys.ts";
 import type { ReactNode } from "react";
 import { Button } from "../../primitives/button.tsx";
 import { DialogFrame } from "../../primitives/dialog.tsx";
@@ -37,7 +38,7 @@ export function AddToDeviceDialogView({
         actions={
           <Button
             type="submit"
-            keys="↩"
+            keys={KEYS.enter}
             size="sm"
             // oxlint-disable-next-line jsx-a11y/no-autofocus -- ↩ adds, as the button's hint says
             autoFocus
