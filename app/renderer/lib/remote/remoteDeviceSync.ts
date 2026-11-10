@@ -16,7 +16,6 @@ import { hashKey, type QueryClient } from "@tanstack/react-query";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { hubContract, type HubStatus } from "@shigomori/contracts/modules/hub";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
-import { outdatedModules } from "@shigomori/contracts/link";
 import * as Effect from "effect/Effect";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -283,10 +282,7 @@ export function startRemoteDeviceSync({
       // hub blip on purpose, so it reads connected first, before the
       // socket phase is even consulted. With what of the peer this build
       // can't call, when the two run different releases.
-      status = {
-        phase: "connected",
-        ...outdatedModules(current.peerVersions[info.deviceId] ?? {}),
-      };
+      status = { phase: "connected", ...current.peerOutdated[info.deviceId] };
       followPeer(info.deviceId);
     } else if (current.socket.phase === "blocked") {
       // A blocked socket is a verdict on this device, not on the peers,

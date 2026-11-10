@@ -20,7 +20,6 @@ import {
 import {
   CommandRefusedError,
   LinkUnauthenticatedError,
-  ModuleOutdatedError,
   NotSharingError,
   type OutdatedSide,
   RemoteCallError,
@@ -30,11 +29,7 @@ import { guideDriveContract } from "./modules/guide.ts";
 import { loginContract } from "./modules/login.ts";
 import { sessionContract } from "./modules/session.ts";
 import { shellCallsContract } from "./modules/shellCalls.ts";
-import {
-  linkContract,
-  type ModuleVersions,
-  type Welcome,
-} from "./modules/link.ts";
+import { linkContract, type Welcome } from "./modules/link.ts";
 import type { PushKeys, PushProducerPayload } from "./types.ts";
 
 // Twice layerSchemaBinary's default: a 16 MiB media file crosses as
@@ -180,6 +175,7 @@ export const LoopbackGroup = handshakeOf(loopbackCalls).merge(
 );
 
 type Group = { readonly requests: ReadonlyMap<string, ContractCall> };
+type ModuleVersions = Welcome["versions"];
 
 // The version of each module a group carries: what a host's welcome
 // says, and what the dialing end holds it against.
@@ -192,47 +188,33 @@ export const versionsOf = (group: Group): ModuleVersions => {
   return versions;
 };
 
-const linkVersions = versionsOf(LinkGroup);
-
-// The end on the older build of a module the two hold at different
-// versions. A host that names none for it predates the module.
-const olderEnd = (mine: number, theirs = 0): OutdatedSide | undefined =>
-  mine === theirs ? undefined : theirs < mine ? "peer" : "this";
-
-// Why a call is not sent to a host: its welcome named another version
-// for the call's module.
-export const outdatedCall = (
-  call: ContractCall,
-  host: Pick<Welcome, "deviceId" | "versions">,
-): ModuleOutdatedError | undefined => {
-  const mine = versionOf(call);
-  if (mine === undefined) return undefined;
-  const module = moduleOf(call);
-  const outdated = olderEnd(mine, host.versions[module]);
-  return (
-    outdated &&
-    new ModuleOutdatedError({ module, outdated, deviceId: host.deviceId })
-  );
+// What a dialing end can't call on a host: the modules the two hold at
+// different versions, and the end on the older build.
+export type OutdatedModules = {
+  readonly outdated: OutdatedSide;
+  readonly modules: readonly string[];
 };
 
-// What of a peer this build can't call, by its welcome: the modules the
-// two hold at different versions, and the end on the older build.
-// Undefined when they agree on every module this build calls. Releases
-// are a line, so one module ahead on the peer says this end is the
-// older, whatever the peer lacks.
+// A dialing end's modules (versionsOf its group) against the host's
+// welcome. Undefined when they agree on every one. A module the host
+// names no version for differs too: a build older than the module has
+// none, and so has a newer one that dropped it. Releases are a line, so
+// one module ahead on the host says this end is the older.
 export const outdatedModules = (
+  mine: ModuleVersions,
   theirs: ModuleVersions,
-): { outdated: OutdatedSide; modules: string[] } | undefined => {
-  const differing = Object.entries(linkVersions).flatMap(([module, mine]) => {
-    const outdated = olderEnd(mine, theirs[module]);
-    return outdated === undefined ? [] : [{ module, outdated }];
-  });
-  if (differing.length === 0) return undefined;
+): OutdatedModules | undefined => {
+  const modules = Object.keys(mine).filter(
+    (module) => mine[module] !== theirs[module],
+  );
+  if (modules.length === 0) return undefined;
   return {
-    outdated: differing.some(({ outdated }) => outdated === "this")
+    outdated: modules.some(
+      (module) => (theirs[module] ?? 0) > (mine[module] ?? 0),
+    )
       ? "this"
       : "peer",
-    modules: differing.map(({ module }) => module),
+    modules,
   };
 };
 

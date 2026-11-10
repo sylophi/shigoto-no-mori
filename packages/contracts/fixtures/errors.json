@@ -50,8 +50,8 @@
       {
         "_tag": "ModuleOutdatedError",
         "module": "terminals",
-        "outdated": "peer",
-        "deviceId": "dev-1"
+        "older": "dev-1",
+        "newer": "dev-2"
       },
       {
         "_tag": "HubRateLimitedError"

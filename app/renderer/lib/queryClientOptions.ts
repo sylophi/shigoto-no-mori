@@ -166,9 +166,9 @@ export function createAppQueryClient(
           notifyError(
             mutation.meta?.errorTitle ?? "Something went wrong",
             outdatedCallNote(
-              deviceLabelOf(err.deviceId) ?? UNNAMED_DEVICE,
-              err.outdated,
-            ),
+              deviceLabelOf(err.older),
+              deviceLabelOf(err.newer),
+            ) ?? err,
           );
           return;
         }

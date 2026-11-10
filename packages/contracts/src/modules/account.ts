@@ -1,3 +1,4 @@
+import { CORE_VERSION } from "../protocol.ts";
 import * as Schema from "effect/Schema";
 import { push, defineContract, invoke } from "../contract.ts";
 import { DeviceIdSchema, DeviceInfoSchema } from "../hubProtocol.ts";
@@ -32,7 +33,7 @@ export type AccountStatus = typeof AccountStatusSchema.Type;
 
 export const accountContract = defineContract(
   "account",
-  { scope: "client", version: 1 },
+  { scope: "client", version: CORE_VERSION },
   // Every call is a file read and a keychain decrypt: ask on account
   // events, not on a poll.
   invoke("status", VoidSchema, AccountStatusSchema),

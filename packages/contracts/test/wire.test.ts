@@ -84,7 +84,7 @@ for (const module of modules) {
 
 const read = (name: string) =>
   JSON.parse(readFileSync(join(dir, name), "utf8")) as Record<string, Sample>;
-const present = readdirSync(dir);
+const present = readdirSync(dir).filter((name) => name.endsWith(".json"));
 // A version with no samples file whose module has one under another
 // version: a bump whose file was not moved yet.
 const moduleOfFile = (name: string) => name.slice(0, name.indexOf("."));

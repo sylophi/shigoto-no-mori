@@ -11,14 +11,14 @@
 import { normalizeRemoteUrl } from "@shigomori/contracts/predicates/remoteUrl";
 import {
   errorMessageOf,
+  ModuleOutdatedError,
   NotSharingError,
   type OutdatedSide,
   RemoteCallError,
   UnknownProjectError,
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
-import { LinkGroup, outdatedCall, versionsOf } from "@shigomori/contracts/link";
-import type { ModuleVersions } from "@shigomori/contracts/modules/link";
+import type { OutdatedModules } from "@shigomori/contracts/link";
 import type * as Types from "effect/Types";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
@@ -1899,31 +1899,22 @@ const notSharing = new Set<string>();
 // release of the app, each with the modules it holds at another
 // version, or `core` for one this device can't link with at all.
 // ?outdatedSide=this poses this device as the one on the older build.
-const outdatedPeers = new Map<string, ReadonlySet<string>>();
+const outdatedPeers = new Map<string, readonly string[]>();
 const coreOutdatedPeers = new Set<string>();
 let outdatedSide: OutdatedSide = "peer";
-const LINK_VERSIONS = versionsOf(LinkGroup);
 
-// The versions a peer's welcome names: this build's, the posed modules
-// a version behind or ahead.
-function posedVersions(deviceId: string): ModuleVersions {
-  const moved = outdatedSide === "peer" ? -1 : 1;
-  return Object.fromEntries(
-    Object.entries(LINK_VERSIONS).map(([module, version]) => [
-      module,
-      outdatedPeers.get(deviceId)?.has(module) === true
-        ? version + moved
-        : version,
-    ]),
-  );
-}
-
-// The link's refusal of a call to a peer (engine's versionedClient).
-function outdatedRefusal(deviceId: string, channel: string) {
-  const call = LinkGroup.requests.get(channel);
-  return call === undefined
-    ? undefined
-    : outdatedCall(call, { deviceId, versions: posedVersions(deviceId) });
+// The link's refusal of a call into a module posed outdated on a peer
+// (shared/remote/deviceLink.ts).
+function outdatedRefusal(
+  deviceId: string,
+  channel: string,
+): ModuleOutdatedError | undefined {
+  const module = channel.slice(0, channel.indexOf(":"));
+  if (outdatedPeers.get(deviceId)?.includes(module) !== true) return undefined;
+  const page = WEB_SHELL ? WEB_DEVICE_ID : LOCAL_DEVICE_ID;
+  const [older, newer] =
+    outdatedSide === "peer" ? [deviceId, page] : [page, deviceId];
+  return new ModuleOutdatedError({ module, older, newer });
 }
 const FAKE_UPDATE_VERSION = "3.1.0";
 
@@ -1953,7 +1944,7 @@ function initPresence(): void {
       // No session lands between two cores.
       directSessions.delete(id);
     } else {
-      outdatedPeers.set(id, new Set((modules ?? "").split(".")));
+      outdatedPeers.set(id, (modules ?? "").split("."));
     }
   }
   // ?hubBlocked=update-required: this device's hub socket blocked for
@@ -2129,11 +2120,14 @@ function hubSnapshot(): HubStatus {
   const peerAppVersions: Record<string, string> = {};
   const peerAcceptsCommands: Record<string, boolean> = {};
   const peerSharesData: Record<string, boolean> = {};
-  const peerVersions: Record<string, ModuleVersions> = {};
+  const peerOutdated: Record<string, OutdatedModules> = {};
   const peerCoreOutdated: Record<string, OutdatedSide> = {};
   for (const id of coreOutdatedPeers) peerCoreOutdated[id] = outdatedSide;
   for (const id of directSessions) {
-    peerVersions[id] = posedVersions(id);
+    const modules = outdatedPeers.get(id);
+    if (modules !== undefined) {
+      peerOutdated[id] = { outdated: outdatedSide, modules };
+    }
     peerAppVersions[id] = updatedDevices.has(id)
       ? FAKE_UPDATE_VERSION
       : FAKE_APP_VERSION;
@@ -2146,7 +2140,7 @@ function hubSnapshot(): HubStatus {
     peerAppVersions,
     peerAcceptsCommands,
     peerSharesData,
-    peerVersions,
+    peerOutdated,
     peerCoreOutdated,
     tunnel: "up",
   };

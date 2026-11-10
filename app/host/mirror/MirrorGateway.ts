@@ -34,6 +34,7 @@ import * as Stream from "effect/Stream";
 import { createServer, type Socket } from "node:net";
 import {
   isNoDirectConnectionError,
+  isModuleOutdatedError,
   isPeerRefusal,
 } from "@shigomori/contracts/errors";
 import { messageOf } from "@shigomori/engine/errorDocument";
@@ -282,7 +283,11 @@ const make = Effect.gen(function* () {
         // about every 15 s for as long as it lasts, or a move's
         // files step failing, which the move reports itself: no
         // news.
-        if (!isPeerRefusal(error) && !isNoDirectConnectionError(error)) {
+        if (
+          !isPeerRefusal(error) &&
+          !isModuleOutdatedError(error) &&
+          !isNoDirectConnectionError(error)
+        ) {
           log.warn(
             `[mirror] gateway: opening ${preface.deviceId}/${preface.worktreeId} failed: ${messageOf(error)}`,
           );

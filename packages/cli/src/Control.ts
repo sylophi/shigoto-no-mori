@@ -12,7 +12,6 @@ import {
   CommandRefusedError,
   errorMessageOf,
   isHubRateLimitedError,
-  isModuleOutdatedError,
   isProtocolVersionMismatchError,
   LinkRefusedError,
   RemoteCallError,
@@ -23,12 +22,16 @@ import {
   type ContractModule,
   isInvoke,
   keyOf,
+  moduleOf,
+  versionOf,
 } from "@shigomori/contracts/contract";
 import {
   CLOSE_TRY_AGAIN,
   LOOPBACK_FILE,
   LoopbackFile,
   LoopbackGroup,
+  outdatedModules,
+  versionsOf,
 } from "@shigomori/contracts/link";
 import type { Welcome } from "@shigomori/contracts/modules/link";
 import {
@@ -52,7 +55,6 @@ import {
   flatClient,
   newConnectionId,
   quietProtocol,
-  versionedClient,
 } from "@shigomori/engine/rpcClient";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -273,13 +275,12 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
           : turnedAway(),
       ),
     )) as Welcome;
-    // From here a call into a module the app holds at another version
-    // is refused unsent (refusal, below).
-    const served = versionedClient(client, LoopbackGroup, welcome);
     return {
-      client: served,
+      client,
       call: (tag: string, payload: unknown) =>
-        served(tag, payload) as Effect.Effect<unknown, unknown>,
+        client(tag, payload) as Effect.Effect<unknown, unknown>,
+      // The modules this binary and the app hold at different versions.
+      outdated: outdatedModules(versionsOf(LoopbackGroup), welcome.versions),
     };
   });
   type Link = Effect.Success<ReturnType<typeof connect>>;
@@ -331,11 +332,6 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
       });
     }
     if (error instanceof LinkRefusedError) return notRunning;
-    // The app's own build against this binary's. Another device's
-    // against the app's reads as the error says it.
-    if (isModuleOutdatedError(error) && error.deviceId === ownId) {
-      return skewed(channel, error.outdated === "peer");
-    }
     if (error instanceof CommandRefusedError) {
       return new ControlRefused({
         channel,
@@ -386,6 +382,13 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
         yield* Effect.logDebug(
           `control: connected to the app (v${file.appVersion}, pid ${file.pid})`,
         );
+        const rpc = LoopbackGroup.requests.get(channel);
+        if (
+          rpc !== undefined &&
+          link.outdated?.modules.includes(moduleOf(rpc)) === true
+        ) {
+          return yield* skewed(channel, link.outdated.outdated === "peer");
+        }
         // A transfer takes as long as it takes, so the call is on no
         // clock.
         return yield* ask(link);
@@ -430,6 +433,11 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
     const calls: Record<string, unknown> = {};
     for (const one of callsOf(module)) {
       const channel = channelOf(one);
+      // Fails closed on a call the app of another release would take
+      // unchecked.
+      if (versionOf(one) === undefined) {
+        throw new Error(`${channel} names no version for another build`);
+      }
       calls[keyOf(one)] = isInvoke(one)
         ? invoke(channel)
         : progressing(channel);

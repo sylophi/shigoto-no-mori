@@ -6,19 +6,23 @@ import { peerReadOnlyNote } from "../../lib/commandAccessCopy.ts";
 import { cn } from "../../lib/utils.ts";
 
 // This window can't reach the peer: on but not connected yet (a tunnel
-// still routing, another network), or simply off.
+// still routing, another network), on a version of the app this one
+// can't link with (`outdated`, outdatedCopy.ts), or simply off.
 export function PeerOfflineNoteView({
   label,
   dialing,
+  outdated,
 }: {
   label: string;
   dialing: boolean;
+  outdated: string | null;
 }) {
   return (
     <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 select-text dark:text-amber-300">
-      {dialing
-        ? `${label} is on, but this window hasn't connected to it yet. Its settings load once the connection is up.`
-        : `${label} is offline. Its settings live on that device and load when it reconnects.`}
+      {outdated ??
+        (dialing
+          ? `${label} is on, but this window hasn't connected to it yet. Its settings load once the connection is up.`
+          : `${label} is offline. Its settings live on that device and load when it reconnects.`)}
     </p>
   );
 }

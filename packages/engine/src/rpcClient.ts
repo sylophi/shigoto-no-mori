@@ -11,10 +11,8 @@ import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
-import * as Stream from "effect/Stream";
-import { type ContractCall, isInvoke } from "@shigomori/contracts/contract";
-import { LINK_MAX_FRAME_BYTES, outdatedCall } from "@shigomori/contracts/link";
-import type { Welcome } from "@shigomori/contracts/modules/link";
+import type * as Stream from "effect/Stream";
+import { LINK_MAX_FRAME_BYTES } from "@shigomori/contracts/link";
 
 // A group's calls as its flat client knows them: a tag and a payload,
 // and an Effect or a Stream back.
@@ -69,25 +67,6 @@ export const flatClient = (
   RpcClient.make(group as never, { flatten: true }).pipe(
     Effect.provideService(RpcClient.Protocol, protocol),
   ) as unknown as Effect.Effect<FlatClient, never, Scope.Scope>;
-
-// A client that sends a host only what its build reads: a call into a
-// module its welcome named at another version fails here, unsent, with
-// the refusal (contracts' link.ts, outdatedCall). A push of such a
-// module is never asked for either, since a push is a call.
-export const versionedClient =
-  (
-    client: FlatClient,
-    group: { readonly requests: ReadonlyMap<string, ContractCall> },
-    host: Pick<Welcome, "deviceId" | "versions">,
-  ): FlatClient =>
-  (tag, payload, options) => {
-    const call = group.requests.get(tag);
-    const refusal = call === undefined ? undefined : outdatedCall(call, host);
-    if (call === undefined || refusal === undefined) {
-      return client(tag, payload, options);
-    }
-    return isInvoke(call) ? Effect.fail(refusal) : Stream.fail(refusal);
-  };
 
 // A connection's id, which the far end tells it apart by: 16 random
 // bytes as hex.

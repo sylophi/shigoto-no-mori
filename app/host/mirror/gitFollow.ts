@@ -32,6 +32,7 @@ import {
   isEntityGoneError,
   isGitOperationInProgressError,
   isNoDirectConnectionError,
+  isModuleOutdatedError,
   isPeerRefusal,
 } from "@shigomori/contracts/errors";
 import { messageOf } from "@shigomori/engine/errorDocument";
@@ -405,7 +406,11 @@ const reconcileOf = (
           // may flip back) or out of reach is no failure of git's: the
           // follow is off until the peer takes calls again, which looks
           // again (onPeerAdmitted).
-          if (isPeerRefusal(failure) || isNoDirectConnectionError(failure)) {
+          if (
+            isPeerRefusal(failure) ||
+            isModuleOutdatedError(failure) ||
+            isNoDirectConnectionError(failure)
+          ) {
             setStatus(record, { status: "off", detail: "" });
             return;
           }

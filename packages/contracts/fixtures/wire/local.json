@@ -189,9 +189,10 @@
       "peerSharesData": {
         "": false
       },
-      "peerVersions": {
+      "peerOutdated": {
         "dev-1": {
-          "terminals": 1
+          "outdated": "peer",
+          "modules": ["terminals"]
         }
       },
       "peerCoreOutdated": {
@@ -213,9 +214,10 @@
       "peerSharesData": {
         "\t": true
       },
-      "peerVersions": {
+      "peerOutdated": {
         "dev-1": {
-          "terminals": 1
+          "outdated": "peer",
+          "modules": ["terminals"]
         }
       },
       "peerCoreOutdated": {

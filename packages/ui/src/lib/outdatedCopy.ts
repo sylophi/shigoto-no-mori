@@ -8,16 +8,14 @@ import type { RemoteDeviceStatus } from "./deviceStatus.ts";
 // doesn't do. Modules that read as one thing share a name.
 const MODULE_NAMES: Record<string, string> = {
   updater: "updates",
-  account: "device switches",
-  sharing: "device switches",
   worktreeData: "worktrees",
   git: "Git status",
   githubCli: "pull requests",
   fs: "folder browsing",
   shigomori: "project settings",
   packageScripts: "package scripts",
-  mirror: "mirror and move",
-  sync: "mirror and move",
+  mirror: "mirrors",
+  sync: "worktree moves",
   forward: "port forwarding",
   portPool: "port pool",
   globalConfig: "settings",
@@ -64,13 +62,17 @@ export function outdatedNote(
     : `This device runs an older version of Shigoto no Mori than ${label}. Until it updates, it can't use ${label}'s ${what}.`;
 }
 
-// One action a peer on another release of the app can't take (a
-// ModuleOutdatedError), for its toast.
+// One action two devices on different releases of the app can't take
+// between them (a ModuleOutdatedError), for its toast: each by its
+// name, undefined for the one that is this device. The refusal can be
+// one a peer passed on about a third device, so both may have names.
+// Undefined when neither does, and the error's own words stand.
 export function outdatedCallNote(
-  label: string,
-  outdated: OutdatedSide,
-): string {
-  return outdated === "peer"
-    ? `${label} runs an older version of Shigoto no Mori. Update it to do this.`
-    : `This device runs an older version of Shigoto no Mori than ${label}. Update this device to do this.`;
+  older: string | undefined,
+  newer: string | undefined,
+): string | undefined {
+  if (older === undefined && newer === undefined) return undefined;
+  return older === undefined
+    ? `This device runs an older version of Shigoto no Mori than ${newer}. Update this device to do this.`
+    : `${older} runs an older version of Shigoto no Mori${newer === undefined ? "" : ` than ${newer}`}. Update it to do this.`;
 }

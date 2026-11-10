@@ -199,26 +199,21 @@ export const isProtocolVersionMismatchError = Schema.is(
   ProtocolVersionMismatchError,
 );
 
-// Which of two devices runs the older build of the app: the far end, or
-// this one.
+// Which of two devices runs the older build of the app, as one of them
+// reads it: the far end, or this one.
 export const OutdatedSideSchema = Schema.Literals(["peer", "this"]);
 export type OutdatedSide = typeof OutdatedSideSchema.Type;
 
-// A call into a module the two builds hold at different versions
-// (link.ts, outdatedCall): the dialing end refuses it before anything
-// is sent. `deviceId` is the far end's.
+// A call into a module two devices hold at different versions
+// (link.ts, outdatedModules): the dialing end refuses it before
+// anything is sent. Each device by its id, since the refusal is passed
+// on as it is to a device that is neither.
 export class ModuleOutdatedError extends Schema.TaggedError<ModuleOutdatedError>()(
   "ModuleOutdatedError",
-  {
-    module: Schema.String,
-    outdated: OutdatedSideSchema,
-    deviceId: Schema.String,
-  },
+  { module: Schema.String, older: Schema.String, newer: Schema.String },
 ) {
   override get message(): string {
-    return this.outdated === "peer"
-      ? "The other device runs an older version of Shigoto no Mori. Update it to do this."
-      : "This device runs an older version of Shigoto no Mori than the other one. Update it to do this.";
+    return "The two devices run different versions of Shigoto no Mori. Update the older one to do this.";
   }
 }
 

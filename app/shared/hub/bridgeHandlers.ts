@@ -13,8 +13,7 @@
 // last failure. The web bridge's dialer takes wss candidates only
 // (mixed content).
 import type { hubContract, HubStatus } from "@shigomori/contracts/modules/hub";
-import type { LinkChannels } from "@shigomori/contracts/link";
-import type { ModuleVersions } from "@shigomori/contracts/modules/link";
+import type { LinkChannels, OutdatedModules } from "@shigomori/contracts/link";
 import type { EffectHandlers, ViewHandlers } from "@shigomori/contracts/types";
 import type { PeerConnection } from "@shared/hub/directDial";
 import * as Deferred from "effect/Deferred";
@@ -35,7 +34,7 @@ import { RemoteDisconnectedError } from "@shared/remote/rpcTransport";
 
 type DirectPeerFacts = Pick<
   HubStatus,
-  "peerAppVersions" | "peerAcceptsCommands" | "peerSharesData" | "peerVersions"
+  "peerAppVersions" | "peerAcceptsCommands" | "peerSharesData" | "peerOutdated"
 >;
 type PeerFact = "acceptsCommands" | "sharesData";
 
@@ -227,7 +226,7 @@ function hubHandlers(
     connection: Deferred.Deferred<PeerConnection, unknown>;
     fiber: Fiber.Fiber<void> | null;
     version: string | null;
-    versions: ModuleVersions;
+    outdated: OutdatedModules | undefined;
     acceptsCommands: boolean;
     sharesData: boolean;
     probe: () => void;
@@ -272,7 +271,7 @@ function hubHandlers(
       connection: Deferred.makeUnsafe<PeerConnection, unknown>(),
       fiber: null,
       version: null,
-      versions: {},
+      outdated: undefined,
       acceptsCommands: false,
       sharesData: false,
       probe: () => {},
@@ -282,7 +281,7 @@ function hubHandlers(
       Effect.gen(function* () {
         const connection = yield* deps.connectDirect(deviceId);
         entry.version = connection.remoteAppVersion;
-        entry.versions = connection.remoteVersions;
+        entry.outdated = connection.outdated;
         entry.acceptsCommands = connection.acceptsCommands;
         entry.sharesData = connection.sharesData;
         entry.probe = connection.probe;
@@ -381,11 +380,13 @@ function hubHandlers(
       const peerAppVersions: Record<string, string> = {};
       const peerAcceptsCommands: Record<string, boolean> = {};
       const peerSharesData: Record<string, boolean> = {};
-      const peerVersions: Record<string, ModuleVersions> = {};
+      const peerOutdated: Record<string, OutdatedModules> = {};
       for (const [deviceId, entry] of peers) {
         if (entry.version === null) continue;
         peerAppVersions[deviceId] = entry.version;
-        peerVersions[deviceId] = entry.versions;
+        if (entry.outdated !== undefined) {
+          peerOutdated[deviceId] = entry.outdated;
+        }
         peerAcceptsCommands[deviceId] = entry.acceptsCommands;
         peerSharesData[deviceId] = entry.sharesData;
       }
@@ -393,7 +394,7 @@ function hubHandlers(
         peerAppVersions,
         peerAcceptsCommands,
         peerSharesData,
-        peerVersions,
+        peerOutdated,
       };
     },
 

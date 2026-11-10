@@ -5,7 +5,10 @@
 // Two builds link only on the same core, and the hub's floor is it.
 // Every other module another build calls names a version of its own
 // (defineContract), and a call into one the two builds hold at
-// different versions is refused alone (link.ts, outdatedCall).
+// different versions is refused alone (link.ts, outdatedModules). The
+// two switches a link keeps current (account's command access,
+// sharing) are at the core's version: a session reads what its peer
+// allows from their pushes, whatever else the two disagree on.
 export const CORE_VERSION = 21;
 
 // A mirror runs on sync's calls (its follower takes the bundles sync
