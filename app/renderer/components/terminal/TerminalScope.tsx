@@ -17,10 +17,8 @@ export function TerminalScope({ children }: { children: ReactNode }) {
   const { applied, resolved } = useLook();
   const darkened =
     resolved === "light" && clientSetting(config ?? {}, "darkTerminals");
-  const palette =
-    darkened && applied.doubutsu
-      ? `ink-${applied.light}`
-      : activeTheme(applied, resolved);
+  const theme = activeTheme(applied, resolved);
+  const palette = darkened && theme ? `ink-${theme}` : theme;
   return (
     <div
       data-theme-scope
