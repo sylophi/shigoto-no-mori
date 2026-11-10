@@ -34,14 +34,19 @@ const HelloSchema = strict(
   }),
 );
 
+// The version of each module a host serves on a link, by name
+// (../link.ts, versionsOf).
+export const ModuleVersionsSchema = Schema.Record(Schema.String, Schema.Int);
+export type ModuleVersions = typeof ModuleVersionsSchema.Type;
+
 // Plain, so a later build's welcome can say more. The hello is what a
 // build on another core reads before it refuses, and keeps its shape.
 const WelcomeSchema = Schema.Struct({
   deviceId: DeviceIdSchema,
   appVersion: AppVersionSchema,
-  // The version of each module the host serves on this link, by name.
-  versions: Schema.Record(Schema.String, Schema.Int),
+  versions: ModuleVersionsSchema,
 });
+export type Welcome = typeof WelcomeSchema.Type;
 
 // Minted by the opener before the call that attaches the far end.
 const ChannelSchema = strict(Schema.Struct({ channelId: HexId32Schema }));

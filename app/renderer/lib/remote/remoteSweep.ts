@@ -6,7 +6,10 @@
 // looked), then renewed within the lease the host hands back, for as
 // long as this window stays focused. It follows the device sync
 // (remoteDeviceSync.ts) from session to session.
-import { isPeerRefusal } from "@shigomori/contracts/errors";
+import {
+  isModuleOutdatedError,
+  isPeerRefusal,
+} from "@shigomori/contracts/errors";
 import { documentFocused, onWindowFocus } from "@/lib/focus";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import type { RendererApi } from "@/lib/runtime/pageApi";
@@ -61,7 +64,12 @@ function makeSweepRenewals(deps: Deps, attendedAtStart: boolean) {
       },
       (error: unknown) => {
         if (latest.get(deviceId) !== id) return;
-        if (!attended || !deps.connected(deviceId) || isPeerRefusal(error)) {
+        if (
+          !attended ||
+          !deps.connected(deviceId) ||
+          isPeerRefusal(error) ||
+          isModuleOutdatedError(error)
+        ) {
           return;
         }
         later(renewal);

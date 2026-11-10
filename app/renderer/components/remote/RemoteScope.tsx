@@ -25,8 +25,8 @@ import { UpdateOlder } from "./UpdateOlder";
 import { NotSharingView } from "@shigomori/ui/views/remote/NotSharingView.tsx";
 import {
   OpenDevicesButtonView,
-  OutdatedBannerView,
   RemoteScopeFrameView,
+  ScopeBannerView,
   UnreachableBannerView,
   UnreachableDeviceView,
 } from "@shigomori/ui/views/remote/RemoteScopeView.tsx";
@@ -55,10 +55,9 @@ function RemoteScopeGate({
             />
           ) : (
             "outdated" in reach.device.status && (
-              <OutdatedBannerView
-                label={outdatedNote(reach.device.label, reach.device.status)}
-                action={<UpdateOlder device={reach.device} />}
-              />
+              <ScopeBannerView action={<UpdateOlder device={reach.device} />}>
+                {outdatedNote(reach.device.label, reach.device.status)}
+              </ScopeBannerView>
             )
           )
         }

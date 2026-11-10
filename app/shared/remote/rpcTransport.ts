@@ -10,7 +10,6 @@ import {
   isPush,
   isInvoke,
 } from "@shigomori/contracts/contract";
-import { type ModuleVersions, outdatedCall } from "@shigomori/contracts/link";
 import {
   isContractError,
   isRemoteCallError,
@@ -147,23 +146,14 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
   readonly onPush?: (channel: string, payload: unknown) => void;
   // The far end is this machine's own app, which its drops name.
   readonly local?: boolean;
-  // The far end's welcome, when it is a build of its own: a call into
-  // a module it holds at another version is refused here, unsent, and
-  // such a module's pushes are never asked for.
-  readonly host?: {
-    readonly deviceId: string;
-    readonly versions: ModuleVersions;
-  };
 }): Effect.fn.Return<Link, never, Scope.Scope> {
-  const { client, group, host } = options;
+  const { client, group } = options;
   const local = options.local === true;
   const dropped = droppedOn(local);
   const fanOut = pushFanOut();
   const gated = fifoGate(LINK_CALLS_IN_FLIGHT);
-  const outdated = (call: ContractCall) =>
-    host === undefined ? undefined : outdatedCall(call, host);
   for (const call of group.requests.values()) {
-    if (!isPush(call) || outdated(call) !== undefined) continue;
+    if (!isPush(call)) continue;
     const channel = channelOf(call);
     yield* Stream.runForEach(
       client(channel, undefined) as Stream.Stream<unknown, unknown>,
@@ -182,8 +172,6 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
           new Error(`No handler registered for channel "${channel}"`),
         );
       }
-      const refusal = outdated(rpc);
-      if (refusal !== undefined) return Effect.fail(refusal);
       return Effect.suspend(() =>
         (
           client(
@@ -209,8 +197,6 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
           new Error(`No view registered for channel "${channel}"`),
         );
       }
-      const refusal = outdated(rpc);
-      if (refusal !== undefined) return Stream.fail(refusal);
       return Stream.suspend(() =>
         (
           client(

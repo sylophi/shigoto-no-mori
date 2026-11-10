@@ -1,8 +1,6 @@
 // The update of whichever of two devices runs the older build of the
-// app (UpdateDeviceButtonView), beside a note that says so
-// (outdatedCopy.ts), where this window can ask for it: this machine's
-// own, or a peer's while this build can call its updater and it takes
-// this device's commands. Nothing otherwise: the note says where to
+// app, beside the note that says so (outdatedCopy.ts), where this
+// window can ask for it. Nothing otherwise: the note says where to
 // update.
 import { useUpdateDevice } from "@/hooks/system/useUpdater";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";

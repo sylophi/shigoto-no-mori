@@ -52,7 +52,8 @@ const modules = (await Promise.all(
   readdirSync(modulesDir).map((name) => import(join(modulesDir, name))),
 )) as Record<string, unknown>[];
 const calls = new Map<string, [Part, ContractSchema][]>();
-// Each samples file's channels.
+// The samples file each call's are in, and each file's channels.
+const fileOfChannel = new Map<string, string>();
 const files = new Map<string, string[]>();
 // The whole of each call as the device link carries it, for the binary
 // layout check below.
@@ -64,7 +65,9 @@ for (const module of modules) {
       const channel = channelOf(call);
       assert.ok(!calls.has(channel), `${channel} is defined twice`);
       rpcs.push(call);
-      files.set(fileOf(call), [...(files.get(fileOf(call)) ?? []), channel]);
+      const file = fileOf(call);
+      fileOfChannel.set(channel, file);
+      files.set(file, [...(files.get(file) ?? []), channel]);
       const parts: [Part, ContractSchema][] = isPush(call)
         ? [["payload", payloadOf(call)]]
         : [
@@ -99,9 +102,7 @@ let samples = new Map(
   present.map((name): [string, Record<string, Sample>] => [name, read(name)]),
 );
 const sampleOf = (channel: string) =>
-  [...files].flatMap(([name, channels]) =>
-    channels.includes(channel) ? [samples.get(name)?.[channel]] : [],
-  )[0];
+  samples.get(fileOfChannel.get(channel) ?? "")?.[channel];
 
 // `pnpm -F @shigomori/contracts wire-fixtures`: a sample derived from
 // the schema for each part that has none, small when the schema's
@@ -135,16 +136,16 @@ if (process.env["UPDATE_WIRE_FIXTURES"] === "1" && unmoved.length === 0) {
   const written = await Promise.all(
     [...files].map(
       async ([name, channels]): Promise<[string, Record<string, Sample>]> => {
-        const kept = samples.get(name) ?? {};
         const entries = await Promise.all(
           channels
             .toSorted((a, b) => a.localeCompare(b))
             .map(async (channel): Promise<[string, Sample]> => {
+              const kept = samples.get(name)?.[channel] ?? {};
               const sample: Sample = {};
               await Promise.all(
                 (calls.get(channel) ?? []).map(async ([part, schema]) => {
-                  if (kept[channel] !== undefined && part in kept[channel]) {
-                    sample[part] = kept[channel][part];
+                  if (part in kept) {
+                    sample[part] = kept[part];
                     return;
                   }
                   await derive(schema, `${channel}.${part}`).then(

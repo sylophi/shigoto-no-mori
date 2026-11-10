@@ -22,6 +22,7 @@ import {
   LinkUnauthenticatedError,
   ModuleOutdatedError,
   NotSharingError,
+  type OutdatedSide,
   RemoteCallError,
 } from "./errors.ts";
 import { controlContract } from "./modules/control.ts";
@@ -29,7 +30,11 @@ import { guideDriveContract } from "./modules/guide.ts";
 import { loginContract } from "./modules/login.ts";
 import { sessionContract } from "./modules/session.ts";
 import { shellCallsContract } from "./modules/shellCalls.ts";
-import { linkContract } from "./modules/link.ts";
+import {
+  linkContract,
+  type ModuleVersions,
+  type Welcome,
+} from "./modules/link.ts";
 import type { PushKeys, PushProducerPayload } from "./types.ts";
 
 // Twice layerSchemaBinary's default: a 16 MiB media file crosses as
@@ -174,12 +179,10 @@ export const LoopbackGroup = handshakeOf(loopbackCalls).merge(
   restOf(loopbackCalls).middleware(CommandGate).middleware(PeerAuth),
 );
 
-// The version of each module a group carries, by name: what a host's
-// welcome says, and what the dialing end holds it against.
-export type ModuleVersions = Readonly<Record<string, number>>;
-
 type Group = { readonly requests: ReadonlyMap<string, ContractCall> };
 
+// The version of each module a group carries: what a host's welcome
+// says, and what the dialing end holds it against.
 export const versionsOf = (group: Group): ModuleVersions => {
   const versions: Record<string, number> = {};
   for (const call of group.requests.values()) {
@@ -191,45 +194,45 @@ export const versionsOf = (group: Group): ModuleVersions => {
 
 const linkVersions = versionsOf(LinkGroup);
 
+// The end on the older build of a module the two hold at different
+// versions. A host that names none for it predates the module.
+const olderEnd = (mine: number, theirs = 0): OutdatedSide | undefined =>
+  mine === theirs ? undefined : theirs < mine ? "peer" : "this";
+
 // Why a call is not sent to a host: its welcome named another version
-// for the call's module, or none, as a build older than the module
-// does.
+// for the call's module.
 export const outdatedCall = (
   call: ContractCall,
-  host: { readonly deviceId: string; readonly versions: ModuleVersions },
+  host: Pick<Welcome, "deviceId" | "versions">,
 ): ModuleOutdatedError | undefined => {
   const mine = versionOf(call);
   if (mine === undefined) return undefined;
   const module = moduleOf(call);
-  const theirs = host.versions[module] ?? 0;
-  return mine === theirs
-    ? undefined
-    : new ModuleOutdatedError({
-        module,
-        outdated: theirs < mine ? "peer" : "this",
-        deviceId: host.deviceId,
-      });
+  const outdated = olderEnd(mine, host.versions[module]);
+  return (
+    outdated &&
+    new ModuleOutdatedError({ module, outdated, deviceId: host.deviceId })
+  );
 };
-
-// The end on the older build.
-export type OutdatedSide = ModuleOutdatedError["outdated"];
 
 // What of a peer this build can't call, by its welcome: the modules the
 // two hold at different versions, and the end on the older build.
 // Undefined when they agree on every module this build calls. Releases
-// are a line, so one end is the older in every module that differs.
+// are a line, so one module ahead on the peer says this end is the
+// older, whatever the peer lacks.
 export const outdatedModules = (
   theirs: ModuleVersions,
-): { side: OutdatedSide; modules: string[] } | undefined => {
-  const modules = Object.entries(linkVersions).filter(
-    ([module, mine]) => (theirs[module] ?? 0) !== mine,
-  );
-  if (modules.length === 0) return undefined;
+): { outdated: OutdatedSide; modules: string[] } | undefined => {
+  const differing = Object.entries(linkVersions).flatMap(([module, mine]) => {
+    const outdated = olderEnd(mine, theirs[module]);
+    return outdated === undefined ? [] : [{ module, outdated }];
+  });
+  if (differing.length === 0) return undefined;
   return {
-    side: modules.some(([module, mine]) => (theirs[module] ?? 0) < mine)
-      ? "peer"
-      : "this",
-    modules: modules.map(([module]) => module),
+    outdated: differing.some(({ outdated }) => outdated === "this")
+      ? "this"
+      : "peer",
+    modules: differing.map(({ module }) => module),
   };
 };
 

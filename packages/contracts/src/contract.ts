@@ -217,16 +217,19 @@ export const defineContract = <
   const keys = rpcs.map((rpc) => rpc["_tag"]);
   const twice = keys.find((key, i) => keys.indexOf(key) !== i);
   if (twice !== undefined) throw new Error(`${name}:${twice} is defined twice`);
-  const options = typeof scope === "object" ? scope : { scope };
-  const scopeName = options.scope;
-  const { version } = options;
+  const {
+    scope: scopeName,
+    remote,
+    version,
+  } = typeof scope === "object"
+    ? scope
+    : { scope, remote: undefined, version: undefined };
   const group = RpcGroup.make(...rpcs)
     .prefix(`${name}:`)
     .annotate(ModuleName, name)
     .annotate(Scope, scopeName)
     .annotateRpcs(Scope, scopeName);
-  const placed =
-    options.remote === false ? group.annotateRpcs(Remote, false) : group;
+  const placed = remote === false ? group.annotateRpcs(Remote, false) : group;
   const module =
     version === undefined ? placed : placed.annotateRpcs(Version, version);
   if (scopeName === "host") {

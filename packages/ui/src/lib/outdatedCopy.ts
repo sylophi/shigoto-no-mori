@@ -1,30 +1,23 @@
 // What a device on another release of the app can't do with this one,
 // said to a person (contracts' README.md, "Wire samples").
-import type { OutdatedSide } from "@shigomori/contracts/link";
+import type { OutdatedSide } from "@shigomori/contracts/errors";
 import { listed } from "@shigomori/contracts/words";
 import type { RemoteDeviceStatus } from "./deviceStatus.ts";
 
-// A module as a person reads it, mid-sentence. Modules that read as one
-// thing share a name. One this table doesn't know goes by its own.
+// A module as a person reads it, mid-sentence, where its own name
+// doesn't do. Modules that read as one thing share a name.
 const MODULE_NAMES: Record<string, string> = {
   updater: "updates",
   account: "device switches",
   sharing: "device switches",
-  projects: "projects",
-  worktrees: "worktrees",
   worktreeData: "worktrees",
-  branches: "branches",
   git: "Git status",
   githubCli: "pull requests",
   fs: "folder browsing",
   shigomori: "project settings",
-  launchers: "launchers",
-  terminals: "terminals",
-  scripts: "scripts",
   packageScripts: "package scripts",
   mirror: "mirror and move",
   sync: "mirror and move",
-  ports: "ports",
   forward: "port forwarding",
   portPool: "port pool",
   globalConfig: "settings",

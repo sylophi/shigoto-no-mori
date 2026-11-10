@@ -11,18 +11,14 @@
 import { normalizeRemoteUrl } from "@shigomori/contracts/predicates/remoteUrl";
 import {
   errorMessageOf,
-  ModuleOutdatedError,
   NotSharingError,
+  type OutdatedSide,
   RemoteCallError,
   UnknownProjectError,
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
-import {
-  LinkGroup,
-  type ModuleVersions,
-  type OutdatedSide,
-  versionsOf,
-} from "@shigomori/contracts/link";
+import { LinkGroup, outdatedCall, versionsOf } from "@shigomori/contracts/link";
+import type { ModuleVersions } from "@shigomori/contracts/modules/link";
 import type * as Types from "effect/Types";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
@@ -515,6 +511,7 @@ function hostHandlersFor(
       updatedDevices.add(deviceId);
       // It restarted into this device's release.
       outdatedPeers.delete(deviceId);
+      coreOutdatedPeers.delete(deviceId);
       window.fakeHost?.setPeer(deviceId, presence);
       emit("updater:state", updaterState());
     }, 5_000);
@@ -1903,19 +1900,30 @@ const notSharing = new Set<string>();
 // version, or `core` for one this device can't link with at all.
 // ?outdatedSide=this poses this device as the one on the older build.
 const outdatedPeers = new Map<string, ReadonlySet<string>>();
+const coreOutdatedPeers = new Set<string>();
 let outdatedSide: OutdatedSide = "peer";
-const CORE = "core";
 const LINK_VERSIONS = versionsOf(LinkGroup);
 
-// The link's refusal of a call into a module posed outdated on a peer.
-function outdatedRefusal(
-  deviceId: string,
-  channel: string,
-): ModuleOutdatedError | undefined {
-  const module = channel.slice(0, channel.indexOf(":"));
-  return outdatedPeers.get(deviceId)?.has(module) === true
-    ? new ModuleOutdatedError({ module, outdated: outdatedSide, deviceId })
-    : undefined;
+// The versions a peer's welcome names: this build's, the posed modules
+// a version behind or ahead.
+function posedVersions(deviceId: string): ModuleVersions {
+  const moved = outdatedSide === "peer" ? -1 : 1;
+  return Object.fromEntries(
+    Object.entries(LINK_VERSIONS).map(([module, version]) => [
+      module,
+      outdatedPeers.get(deviceId)?.has(module) === true
+        ? version + moved
+        : version,
+    ]),
+  );
+}
+
+// The link's refusal of a call to a peer (engine's versionedClient).
+function outdatedRefusal(deviceId: string, channel: string) {
+  const call = LinkGroup.requests.get(channel);
+  return call === undefined
+    ? undefined
+    : outdatedCall(call, { deviceId, versions: posedVersions(deviceId) });
 }
 const FAKE_UPDATE_VERSION = "3.1.0";
 
@@ -1940,9 +1948,13 @@ function initPresence(): void {
     const [key, modules] = entry.split(":");
     const id = PEER_KEYS[key?.trim() ?? ""];
     if (id === undefined) continue;
-    outdatedPeers.set(id, new Set((modules ?? "").split(".")));
-    // No session lands between two cores.
-    if (outdatedPeers.get(id)?.has(CORE) === true) directSessions.delete(id);
+    if (modules === "core") {
+      coreOutdatedPeers.add(id);
+      // No session lands between two cores.
+      directSessions.delete(id);
+    } else {
+      outdatedPeers.set(id, new Set((modules ?? "").split(".")));
+    }
   }
   // ?hubBlocked=update-required: this device's hub socket blocked for
   // that reason, with the words the hub or the supervisor gives it.
@@ -2119,17 +2131,9 @@ function hubSnapshot(): HubStatus {
   const peerSharesData: Record<string, boolean> = {};
   const peerVersions: Record<string, ModuleVersions> = {};
   const peerCoreOutdated: Record<string, OutdatedSide> = {};
-  for (const [id, modules] of outdatedPeers) {
-    if (modules.has(CORE)) peerCoreOutdated[id] = outdatedSide;
-  }
+  for (const id of coreOutdatedPeers) peerCoreOutdated[id] = outdatedSide;
   for (const id of directSessions) {
-    const moved = outdatedSide === "peer" ? -1 : 1;
-    peerVersions[id] = Object.fromEntries(
-      Object.entries(LINK_VERSIONS).map(([module, version]) => [
-        module,
-        outdatedPeers.get(id)?.has(module) === true ? version + moved : version,
-      ]),
-    );
+    peerVersions[id] = posedVersions(id);
     peerAppVersions[id] = updatedDevices.has(id)
       ? FAKE_UPDATE_VERSION
       : FAKE_APP_VERSION;

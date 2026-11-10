@@ -8,7 +8,6 @@
 // tickets are single use, so redials live one layer up in the direct
 // keeper (shared/hub/directKeeper.ts), which is the single owner of
 // retry.
-import type { DeviceKind } from "@shigomori/contracts/modules/link";
 import {
   errorMessageOf,
   isProtocolVersionMismatchError,
@@ -25,13 +24,19 @@ import * as RpcClient from "effect/rpc/RpcClient";
 import * as Socket from "effect/socket/Socket";
 import type * as Scope from "effect/Scope";
 import type { Link } from "@shared/ipc/transport";
-import type { LinkChannels, ModuleVersions } from "@shigomori/contracts/link";
+import type { LinkChannels } from "@shigomori/contracts/link";
+import type {
+  DeviceKind,
+  ModuleVersions,
+  Welcome,
+} from "@shigomori/contracts/modules/link";
 import { createChannelMux } from "./channels";
 import { watchLiveness } from "@shigomori/engine/liveness";
 import {
   flatClient,
   newConnectionId,
   quietProtocol,
+  versionedClient,
 } from "@shigomori/engine/rpcClient";
 import { rpcLink } from "./rpcTransport";
 import { PING_INTERVAL_MS, PING_TIMEOUT_MS, PROBE_TIMEOUT_MS } from "./link";
@@ -289,16 +294,15 @@ export const dialDevice = (
             ? connectError("the peer refused the connect ticket", true, error)
             : connectError(`the hello failed: ${errorMessageOf(error)}`),
       ),
-    )) as { deviceId: string; appVersion: string; versions: ModuleVersions };
+    )) as Welcome;
 
     // The loopback's dial, to this machine's own host.
     const loopback = options.seal === undefined;
     const link = yield* rpcLink({
-      client,
+      client: versionedClient(client, group, welcome),
       group,
       onPush: options.onPush,
       local: loopback,
-      host: welcome,
     });
 
     // A round trip behind the subscriptions, so the link counts as open

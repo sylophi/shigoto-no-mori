@@ -32,6 +32,7 @@ import { RemoteConnectError } from "@shared/remote/deviceLink";
 import {
   errorMessageOf,
   isProtocolVersionMismatchError,
+  type OutdatedSide,
 } from "@shigomori/contracts/errors";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
@@ -46,11 +47,9 @@ type DirectKeeperDeps = {
   onCoreOutdatedChange(): void;
 };
 
-type CoreOutdated = HubStatus["peerCoreOutdated"][string];
-
 // The end on the older core, when the peer refused this device's hello
 // for running another one.
-const coreOutdatedOf = (error: unknown): CoreOutdated | null =>
+const coreOutdatedOf = (error: unknown): OutdatedSide | null =>
   error instanceof RemoteConnectError &&
   isProtocolVersionMismatchError(error.refusal)
     ? error.refusal.hostVersion < error.refusal.clientVersion
@@ -85,7 +84,7 @@ type PeerState = {
   // drop reported however early ends the session's wait.
   dropped: Deferred.Deferred<void> | null;
   lastFailure: string | null;
-  coreOutdated: CoreOutdated | null;
+  coreOutdated: OutdatedSide | null;
   // Failed dials since the last session (or since the peer came online).
   failures: number;
   // Cuts its wait on the shared ladder short.
@@ -123,7 +122,7 @@ export const make = (
     // a failed dial counts as 0, and only a drop after a stable run
     // resets the ladder, so a connect-then-die flapper keeps climbing
     // instead of hammering at the bottom rung.
-    const noteCore = (state: PeerState, verdict: CoreOutdated | null) => {
+    const noteCore = (state: PeerState, verdict: OutdatedSide | null) => {
       if (state.coreOutdated === verdict) return;
       state.coreOutdated = verdict;
       deps.onCoreOutdatedChange();
@@ -231,7 +230,7 @@ export const make = (
       },
 
       coreOutdated() {
-        const verdicts: Record<string, CoreOutdated> = {};
+        const verdicts: Record<string, OutdatedSide> = {};
         for (const [deviceId, state] of states) {
           if (state.coreOutdated !== null) {
             verdicts[deviceId] = state.coreOutdated;

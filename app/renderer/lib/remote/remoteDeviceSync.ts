@@ -283,17 +283,10 @@ export function startRemoteDeviceSync({
       // hub blip on purpose, so it reads connected first, before the
       // socket phase is even consulted. With what of the peer this build
       // can't call, when the two run different releases.
-      const outdated = outdatedModules(
-        current.peerVersions[info.deviceId] ?? {},
-      );
-      status =
-        outdated === undefined
-          ? { phase: "connected" }
-          : {
-              phase: "connected",
-              outdated: outdated.side,
-              modules: outdated.modules,
-            };
+      status = {
+        phase: "connected",
+        ...outdatedModules(current.peerVersions[info.deviceId] ?? {}),
+      };
       followPeer(info.deviceId);
     } else if (current.socket.phase === "blocked") {
       // A blocked socket is a verdict on this device, not on the peers,

@@ -52,26 +52,17 @@ export function UnreachableBannerView({
   action: ReactNode;
 }) {
   return (
-    <ScopeBanner action={action}>
+    <ScopeBannerView action={action}>
       {label} Showing the last state it sent.
-    </ScopeBanner>
+    </ScopeBannerView>
   );
 }
 
-// Over the pages of a peer on another release of the app, which stay
-// live: what of it can't be used from here (outdatedCopy.ts), and the
-// update that ends it, when this device can ask for one.
-export function OutdatedBannerView({
-  label,
-  action,
-}: {
-  label: string;
-  action: ReactNode;
-}) {
-  return <ScopeBanner action={action}>{label}</ScopeBanner>;
-}
-
-function ScopeBanner({
+// A line over a peer's pages with what to do about it. Over pages that
+// stay live, it says what of a peer on another release of the app
+// can't be used from here (outdatedCopy.ts), with the update that ends
+// it when this device can ask for one.
+export function ScopeBannerView({
   action,
   children,
 }: {
@@ -86,10 +77,9 @@ function ScopeBanner({
   );
 }
 
-// Updates the older of the two devices from a banner that names it. A
-// peer's restarts another machine, so it asks for the second click
-// Update all does (`armed`). This machine's own install is attended.
-// It holds while the device is on its way into the update.
+// Updates the older of two devices from a note that names it, armed
+// first where the press asks twice. It holds while the device is on its
+// way into the update.
 export function UpdateDeviceButtonView({
   armed,
   updating,

@@ -199,15 +199,19 @@ export const isProtocolVersionMismatchError = Schema.is(
   ProtocolVersionMismatchError,
 );
 
+// Which of two devices runs the older build of the app: the far end, or
+// this one.
+export const OutdatedSideSchema = Schema.Literals(["peer", "this"]);
+export type OutdatedSide = typeof OutdatedSideSchema.Type;
+
 // A call into a module the two builds hold at different versions
 // (link.ts, outdatedCall): the dialing end refuses it before anything
-// is sent. `outdated` is the end on the older build, and `deviceId`
-// the far end's.
+// is sent. `deviceId` is the far end's.
 export class ModuleOutdatedError extends Schema.TaggedError<ModuleOutdatedError>()(
   "ModuleOutdatedError",
   {
     module: Schema.String,
-    outdated: Schema.Literals(["peer", "this"]),
+    outdated: OutdatedSideSchema,
     deviceId: Schema.String,
   },
 ) {

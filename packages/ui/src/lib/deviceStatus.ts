@@ -1,7 +1,7 @@
 // A device's phase as a tone and a label, the same on every surface.
 import type { StatusTone } from "../primitives/status-dot.tsx";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
-import type { OutdatedSide } from "@shigomori/contracts/link";
+import type { OutdatedSide } from "@shigomori/contracts/errors";
 
 // The hub socket's phases plus the renderer's: "online" is rostered
 // with no direct session yet, so not connected (a roster fact claims no

@@ -13,7 +13,8 @@
 // last failure. The web bridge's dialer takes wss candidates only
 // (mixed content).
 import type { hubContract, HubStatus } from "@shigomori/contracts/modules/hub";
-import type { LinkChannels, ModuleVersions } from "@shigomori/contracts/link";
+import type { LinkChannels } from "@shigomori/contracts/link";
+import type { ModuleVersions } from "@shigomori/contracts/modules/link";
 import type { EffectHandlers, ViewHandlers } from "@shigomori/contracts/types";
 import type { PeerConnection } from "@shared/hub/directDial";
 import * as Deferred from "effect/Deferred";
