@@ -1,0 +1,24 @@
+{
+  "shigomori:patch": {
+    "payload": {
+      "projectId": "F",
+      "patch": {
+        "scripts.setup": "pnpm install",
+        "scripts.teardown": null,
+        "showPrimaryInInbox": true
+      }
+    }
+  },
+  "shigomori:read": {
+    "payload": {
+      "projectId": " "
+    },
+    "success": null
+  },
+  "shigomori:syncSettings": {
+    "payload": {
+      "projectId": "\n",
+      "on": true
+    }
+  }
+}

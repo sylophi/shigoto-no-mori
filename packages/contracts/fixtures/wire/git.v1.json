@@ -1,0 +1,37 @@
+{
+  "git:externalChange": {},
+  "git:fetchActive": {
+    "payload": {
+      "projectId": "B",
+      "active": false
+    }
+  },
+  "git:fetchProject": {
+    "payload": {
+      "projectId": "-1"
+    }
+  },
+  "git:projectChanged": {
+    "payload": {
+      "projectId": "jW"
+    }
+  },
+  "git:refreshProject": {
+    "payload": {
+      "projectId": "\udc00"
+    }
+  },
+  "git:refsRefreshed": {
+    "payload": {
+      "projectId": "\n"
+    }
+  },
+  "git:sweep": {
+    "payload": {
+      "renewal": true
+    },
+    "success": {
+      "leaseMs": -5e-323
+    }
+  }
+}

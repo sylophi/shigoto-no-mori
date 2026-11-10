@@ -210,7 +210,7 @@ const ControlMirrorTargetSchema = Schema.Struct({
 
 export const controlContract = defineContract(
   "control",
-  { scope: "host", remote: false },
+  { scope: "host", remote: false, version: 1 },
   invoke(
     "devices",
     strict(

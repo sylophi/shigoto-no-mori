@@ -30,7 +30,7 @@ function useThisDevice(): Device {
     deviceId: page.deviceId,
     label: local.name,
     icon: local.icon,
-    status: { phase: answering ? "connected" : "stopped" },
+    status: answering ? { phase: "connected" } : { phase: "stopped" },
     appVersion: page.appVersion,
     acceptsCommands: true,
     isThisDevice: true,

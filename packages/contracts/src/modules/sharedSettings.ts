@@ -20,7 +20,7 @@ import {
 // (web/ipc/localRegistrar.ts) so the renderer treats every copy alike.
 export const sharedSettingsContract = defineContract(
   "sharedSettings",
-  "host",
+  { scope: "host", version: 1 },
   // Served to any account peer: a copy is only useful if the others
   // can read it, and it holds nothing a project list does not already
   // say.

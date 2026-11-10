@@ -2,6 +2,7 @@
 // remoteDeviceSync rebuilds wholesale from the device list and the
 // hub's status, and the shape every reader sees them in, this machine
 // among them (hooks/remote/useDevices.ts).
+import * as Equal from "effect/Equal";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import type { CommandAccess } from "@shigomori/ui/lib/commandAccessCopy.ts";
@@ -131,17 +132,6 @@ export const remoteDevicesAtom = Atom.keepAlive(
   Atom.make<readonly RemoteDevice[]>([]),
 );
 
-// Shallow: every arm of the union is a flat object of primitives, so a
-// new field is compared with no switch to update.
-function sameStatus(a: RemoteDeviceStatus, b: RemoteDeviceStatus): boolean {
-  const right = new Map<string, unknown>(Object.entries(b));
-  const left = Object.entries(a);
-  return (
-    left.length === right.size &&
-    left.every(([key, value]) => right.get(key) === value)
-  );
-}
-
 function sameDevice(a: RemoteDevice, b: RemoteDevice): boolean {
   return (
     a.deviceId === b.deviceId &&
@@ -149,7 +139,9 @@ function sameDevice(a: RemoteDevice, b: RemoteDevice): boolean {
     a.icon === b.icon &&
     a.appVersion === b.appVersion &&
     a.acceptsCommands === b.acceptsCommands &&
-    sameStatus(a.status, b.status)
+    // By value, so a new field of a status is compared with nothing to
+    // update here.
+    Equal.equals(a.status, b.status)
   );
 }
 

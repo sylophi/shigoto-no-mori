@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { OutdatedSideSchema } from "../errors.ts";
 import { DeviceIdSchema } from "../hubProtocol.ts";
 import { push, defineContract, invoke, view } from "../contract.ts";
 import { VoidSchema } from "../schemas/index.ts";
@@ -58,6 +59,19 @@ const HubStatusSchema = Schema.Struct({
   // enforces it.
   peerAcceptsCommands: Schema.Record(Schema.String, Schema.Boolean),
   peerSharesData: Schema.Record(Schema.String, Schema.Boolean),
+  // The peers on another release of the app. One with a session has
+  // the modules its link refuses this device's calls into (link.ts,
+  // outdatedModules), and one on another core (protocol.ts), which no
+  // session lands with, is in peerCoreOutdated. Each with the end on
+  // the older build.
+  peerOutdated: Schema.Record(
+    Schema.String,
+    Schema.Struct({
+      outdated: OutdatedSideSchema,
+      modules: Schema.Array(Schema.String),
+    }),
+  ),
+  peerCoreOutdated: Schema.Record(Schema.String, OutdatedSideSchema),
   // Absent on the web client, which runs no cloudflared.
   tunnel: Schema.optional(TunnelStateSchema),
 });

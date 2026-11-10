@@ -1,6 +1,7 @@
 // The React side of the host views (atoms.ts): a view's state in the
 // shape a container reads a query in, and a wait for a view to show
 // what a mutation just made, before a caller moves into it.
+import { isModuleOutdatedError } from "@shigomori/contracts/errors";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import type * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -37,9 +38,12 @@ export function useViewErrorToast(
   // every render.
   const message = state.error?.message ?? null;
   const toast = useEffectEvent(() => notifyError(title, state.error));
+  // A peer on another release refuses the views of what changed, which
+  // its status and the banner over its pages say.
+  const quiet = isModuleOutdatedError(state.error);
   useEffect(() => {
-    if (message !== null) toast();
-  }, [message]);
+    if (message !== null && !quiet) toast();
+  }, [message, quiet]);
 }
 
 // The view's first value, or undefined if none comes within `withinMs`

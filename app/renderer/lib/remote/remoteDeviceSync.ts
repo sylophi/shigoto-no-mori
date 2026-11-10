@@ -269,6 +269,7 @@ export function startRemoteDeviceSync({
     online: ReadonlySet<string>,
   ): RemoteDevice => {
     const version = current.peerAppVersions[info.deviceId];
+    const coreOutdated = current.peerCoreOutdated[info.deviceId];
     let status: RemoteDeviceStatus;
     if (
       version !== undefined &&
@@ -279,8 +280,9 @@ export function startRemoteDeviceSync({
     } else if (version !== undefined) {
       // A live direct session is the whole data plane, and it outlives a
       // hub blip on purpose, so it reads connected first, before the
-      // socket phase is even consulted.
-      status = { phase: "connected" };
+      // socket phase is even consulted. With what of the peer this build
+      // can't call, when the two run different releases.
+      status = { phase: "connected", ...current.peerOutdated[info.deviceId] };
       followPeer(info.deviceId);
     } else if (current.socket.phase === "blocked") {
       // A blocked socket is a verdict on this device, not on the peers,
@@ -291,6 +293,10 @@ export function startRemoteDeviceSync({
       status = current.socket;
     } else if (!online.has(info.deviceId)) {
       status = { phase: "stopped" };
+    } else if (coreOutdated !== undefined) {
+      // Rostered, and its listener refuses this build's hello: no
+      // session lands until one of the two updates.
+      status = { phase: "outdated", outdated: coreOutdated };
     } else {
       // In the roster but no direct session yet: the direct plane's
       // keeper is dialing or backing off toward one. A view can stand

@@ -9,7 +9,7 @@ import { UpdaterStateSchema, VoidSchema } from "../schemas/index.ts";
 // grant like every other mutation. The state rides its own broadcast.
 export const updaterContract = defineContract(
   "updater",
-  "host",
+  { scope: "host", version: 1 },
   invoke("get", VoidSchema, UpdaterStateSchema, ungated),
   invoke("check", VoidSchema, VoidSchema, gatedBy("changeApp")),
   invoke("install", VoidSchema, VoidSchema, gatedBy("changeApp")),

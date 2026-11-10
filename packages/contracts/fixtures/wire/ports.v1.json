@@ -1,0 +1,42 @@
+{
+  "ports:list": {
+    "payload": {
+      "projectId": "{",
+      "worktreeId": "9+"
+    },
+    "success": {
+      "ports": [
+        {
+          "port": 65524,
+          "source": "pool",
+          "listening": true
+        },
+        {
+          "port": 2,
+          "source": "custom",
+          "listening": false
+        }
+      ]
+    }
+  },
+  "ports:watch": {
+    "payload": {
+      "projectId": "\ud800",
+      "worktreeId": ")"
+    },
+    "success": {
+      "ports": [
+        {
+          "port": 57437,
+          "source": "custom",
+          "listening": false
+        },
+        {
+          "port": 16026,
+          "source": "pool",
+          "listening": true
+        }
+      ]
+    }
+  }
+}

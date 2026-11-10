@@ -7,7 +7,7 @@ import {
 
 export const globalConfigContract = defineContract(
   "globalConfig",
-  "host",
+  { scope: "host", version: 1 },
   // The stored document, loose so keys it doesn't model (an imported
   // 2.x document's client keys, a newer build's) pass through.
   // It carries no secret, so every wire serves it ungated.

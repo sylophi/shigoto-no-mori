@@ -1,0 +1,15 @@
+{
+  "guideDrive:drive": {
+    "payload": {
+      "session": "TA)gV[Dp0S}J78tB",
+      "action": {
+        "_tag": "navigate",
+        "route": "/"
+      }
+    },
+    "success": {
+      "route": "y",
+      "png": "bG"
+    }
+  }
+}

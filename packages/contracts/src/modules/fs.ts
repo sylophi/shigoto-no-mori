@@ -10,7 +10,7 @@ import { DirectoryListingSchema, PathPayloadSchema } from "../schemas/index.ts";
 // as for a mutation.
 export const fsContract = defineContract(
   "fs",
-  "host",
+  { scope: "host", version: 1 },
   invoke(
     "listDirectory",
     PathPayloadSchema,

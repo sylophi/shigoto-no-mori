@@ -1,0 +1,53 @@
+{
+  "login:finish": {
+    "payload": {
+      "userCode": "\u0000",
+      "verificationUri": "Y,",
+      "deviceCode": "sq",
+      "interval": -1,
+      "expiresIn": 4
+    },
+    "success": {
+      "signedIn": false,
+      "deviceName": "nM",
+      "deviceIcon": "pine"
+    }
+  },
+  "login:removeDevice": {
+    "payload": "u2",
+    "success": "03"
+  },
+  "login:rename": {
+    "payload": "\u0000",
+    "success": {
+      "signedIn": false,
+      "deviceName": "X>",
+      "deviceIcon": "flame"
+    }
+  },
+  "login:setIcon": {
+    "payload": "zap",
+    "success": {
+      "signedIn": false,
+      "deviceName": "3w",
+      "deviceIcon": "tablet"
+    }
+  },
+  "login:signOut": {},
+  "login:start": {
+    "success": {
+      "userCode": "Y,",
+      "verificationUri": "\ud800",
+      "deviceCode": "\udc00",
+      "interval": 1,
+      "expiresIn": 2
+    }
+  },
+  "login:status": {
+    "success": {
+      "signedIn": true,
+      "deviceName": "\u0000",
+      "deviceIcon": "flower"
+    }
+  }
+}

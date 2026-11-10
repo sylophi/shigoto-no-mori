@@ -10,7 +10,7 @@ import {
 
 export const shigomoriContract = defineContract(
   "shigomori",
-  "host",
+  { scope: "host", version: 1 },
   invoke(
     "read",
     ProjectScopedPayloadSchema,

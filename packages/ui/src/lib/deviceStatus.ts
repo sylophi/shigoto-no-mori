@@ -1,15 +1,21 @@
 // A device's phase as a tone and a label, the same on every surface.
 import type { StatusTone } from "../primitives/status-dot.tsx";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
+import type { OutdatedSide } from "@shigomori/contracts/errors";
 
-// The hub socket's phases plus two of the renderer's: "online" is
-// rostered with no direct session yet, so not connected (a roster fact
-// claims no data wire), and "notSharing" is a session whose peer's
-// sharing switch is off, so it serves nothing and nothing asks it.
+// The hub socket's phases plus the renderer's: "online" is rostered
+// with no direct session yet, so not connected (a roster fact claims no
+// data wire), and "notSharing" is a session whose peer's sharing switch
+// is off, so it serves nothing and nothing asks it. A peer on another
+// release of the app is connected with the `modules` this build can't
+// call there, or "outdated" with no session at all when the two can't
+// link, each with the end on the older build (outdatedCopy.ts).
 export type RemoteDeviceStatus =
   | HubStatus["socket"]
   | { phase: "online" }
-  | { phase: "notSharing" };
+  | { phase: "notSharing" }
+  | { phase: "connected"; outdated: OutdatedSide; modules: readonly string[] }
+  | { phase: "outdated"; outdated: OutdatedSide };
 
 export type DeviceStatusView = {
   tone: StatusTone;
@@ -20,6 +26,10 @@ export type DeviceStatusView = {
   reachable: boolean;
 };
 
+// One of the two devices has to update before all of the peer works
+// from here.
+const UPDATE_NEEDED = { tone: "amber", label: "Update needed" } as const;
+
 // The presentation half: phase to tone and label. `reachable` is derived
 // once below, never per arm, so a new phase cannot ship a pair that
 // disagrees with its label.
@@ -29,7 +39,11 @@ function presentationOf(status: RemoteDeviceStatus): {
 } {
   switch (status.phase) {
     case "connected":
-      return { tone: "emerald", label: "Connected" };
+      return "outdated" in status
+        ? UPDATE_NEEDED
+        : { tone: "emerald", label: "Connected" };
+    case "outdated":
+      return UPDATE_NEEDED;
     // Rostered, no direct session yet: the keeper dials on presence and
     // redials forever, so it reads as the dial it is. A peer whose
     // tunnel is starting can sit here until it routes. Amber, like

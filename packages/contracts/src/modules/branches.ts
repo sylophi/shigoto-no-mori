@@ -8,7 +8,7 @@ import {
 
 export const branchesContract = defineContract(
   "branches",
-  "host",
+  { scope: "host", version: 1 },
   invoke("create", CreateBranchPayloadSchema, VoidSchema, trackedCodeChange),
   invoke("rename", RenameAnyBranchPayloadSchema, VoidSchema, trackedCodeChange),
   invoke("delete", DeleteBranchPayloadSchema, VoidSchema, trackedCodeChange),

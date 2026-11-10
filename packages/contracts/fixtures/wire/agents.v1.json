@@ -1,0 +1,27 @@
+{
+  "agents:setHooks": {
+    "payload": {
+      "harness": "Ks",
+      "install": false
+    },
+    "success": [
+      {
+        "id": "0",
+        "label": "",
+        "detected": true,
+        "path": "-1",
+        "hooks": "outdated"
+      },
+      {
+        "id": "jh",
+        "label": "v[",
+        "detected": false,
+        "path": "y",
+        "hooks": "missing"
+      }
+    ]
+  },
+  "agents:status": {
+    "success": []
+  }
+}

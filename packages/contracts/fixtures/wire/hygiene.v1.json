@@ -1,0 +1,21 @@
+{
+  "hygiene:diskUsage": {
+    "payload": {
+      "projectId": "H",
+      "worktreeId": "\udc00"
+    },
+    "success": {
+      "worktreeId": "mz",
+      "bytes": 0,
+      "reclaimableBytes": 0,
+      "lastActivityAt": 0,
+      "partial": false
+    }
+  },
+  "hygiene:list": {
+    "payload": {
+      "projectId": "5"
+    },
+    "success": []
+  }
+}

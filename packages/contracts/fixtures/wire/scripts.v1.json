@@ -1,0 +1,69 @@
+{
+  "scripts:attach": {
+    "payload": {
+      "runId": " "
+    },
+    "success": null
+  },
+  "scripts:cancel": {
+    "payload": {
+      "runId": ">"
+    },
+    "success": {
+      "cancelled": true
+    }
+  },
+  "scripts:changed": {},
+  "scripts:event": {
+    "payload": {
+      "runId": "0",
+      "kind": "exit",
+      "code": null
+    }
+  },
+  "scripts:list": {
+    "success": {
+      "runs": []
+    }
+  },
+  "scripts:orphanReport": {
+    "success": {
+      "stopped": 0
+    }
+  },
+  "scripts:resize": {
+    "payload": {
+      "runId": "\udc00",
+      "cols": 4,
+      "rows": 5
+    }
+  },
+  "scripts:run": {
+    "payload": {
+      "projectId": "\u0000",
+      "worktreeId": "L",
+      "script": "setup"
+    },
+    "success": {
+      "runId": "\ud800"
+    }
+  },
+  "scripts:stoppedForRemovedWorktree": {
+    "payload": {
+      "worktreeId": " ",
+      "worktreeName": "\n",
+      "scriptCount": 2
+    }
+  },
+  "scripts:watch": {
+    "success": {
+      "runs": []
+    }
+  },
+  "scripts:write": {
+    "payload": {
+      "runId": "\t",
+      "data": "A!"
+    }
+  }
+}

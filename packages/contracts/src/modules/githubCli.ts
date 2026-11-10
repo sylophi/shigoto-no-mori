@@ -43,7 +43,7 @@ import {
 
 export const githubCliContract = defineContract(
   "githubCli",
-  "host",
+  { scope: "host", version: 1 },
   invoke("readiness", VoidSchema, GithubCliReadinessSchema, ungated),
   invoke("owners", VoidSchema, GithubOwnerListSchema, ungated),
   invoke("repos", VoidSchema, GithubRepoListSchema, ungated),

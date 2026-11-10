@@ -8,13 +8,13 @@
 // tickets are single use, so redials live one layer up in the direct
 // keeper (shared/hub/directKeeper.ts), which is the single owner of
 // retry.
-import type { DeviceKind } from "@shigomori/contracts/modules/link";
 import {
   errorMessageOf,
   isProtocolVersionMismatchError,
   LinkRefusedError,
+  ModuleOutdatedError,
 } from "@shigomori/contracts/errors";
-import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
+import { CORE_VERSION } from "@shigomori/contracts/protocol";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
@@ -22,20 +22,29 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as FiberSet from "effect/FiberSet";
 import * as RpcClient from "effect/rpc/RpcClient";
+import * as Stream from "effect/Stream";
 import * as Socket from "effect/socket/Socket";
 import type * as Scope from "effect/Scope";
 import type { Link } from "@shared/ipc/transport";
-import type { LinkChannels } from "@shigomori/contracts/link";
+import {
+  type LinkChannels,
+  LinkGroup,
+  type OutdatedModules,
+  outdatedModules,
+  versionsOf,
+} from "@shigomori/contracts/link";
+import { isInvoke, moduleOf } from "@shigomori/contracts/contract";
+import type { DeviceKind, Welcome } from "@shigomori/contracts/modules/link";
 import { createChannelMux } from "./channels";
 import { watchLiveness } from "@shigomori/engine/liveness";
 import {
+  type FlatClient,
   flatClient,
   newConnectionId,
   quietProtocol,
 } from "@shigomori/engine/rpcClient";
 import { rpcLink } from "./rpcTransport";
 import { PING_INTERVAL_MS, PING_TIMEOUT_MS, PROBE_TIMEOUT_MS } from "./link";
-import { LinkGroup } from "@shigomori/contracts/link";
 import type { KeyPair } from "@shared/crypto/noise";
 import { CLOSE_HANDSHAKE_FAILED, sealDialer } from "./sealedSocket";
 
@@ -118,6 +127,9 @@ export type DialedDevice = {
   // the loopback, whose host the shell's watchdog judges.
   probe(): void;
   readonly remoteAppVersion: string;
+  // What of the far end this link refuses, when the two are builds of
+  // different releases.
+  readonly outdated: OutdatedModules | undefined;
   // Settles when the link drops on its own.
   readonly dropped: Effect.Effect<void>;
 };
@@ -276,7 +288,7 @@ export const dialDevice = (
       deviceKind: options.deviceKind ?? "desktop",
       connectionId: options.connectionId ?? newConnectionId(),
       appVersion: options.appVersion,
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: CORE_VERSION,
       ...(options.seal === undefined ? { token: options.ticket } : {}),
     }).pipe(
       Effect.mapError((error) =>
@@ -286,12 +298,19 @@ export const dialDevice = (
             ? connectError("the peer refused the connect ticket", true, error)
             : connectError(`the hello failed: ${errorMessageOf(error)}`),
       ),
-    )) as { appVersion: string };
+    )) as Welcome;
 
     // The loopback's dial, to this machine's own host.
     const loopback = options.seal === undefined;
+    const outdated = outdatedModules(versionsOf(group), welcome.versions);
     const link = yield* rpcLink({
-      client,
+      client:
+        outdated === undefined
+          ? client
+          : refusing(client, group, outdated, {
+              this: options.localDeviceId,
+              peer: welcome.deviceId,
+            }),
       group,
       onPush: options.onPush,
       local: loopback,
@@ -330,6 +349,7 @@ export const dialDevice = (
       channels,
       probe: liveness.probe,
       remoteAppVersion: welcome.appVersion,
+      outdated,
       dropped: Deferred.await(dropped),
     };
   }).pipe(
@@ -344,6 +364,33 @@ export const dialDevice = (
     }),
   );
 };
+
+// A client that sends the host nothing of the modules the two builds
+// hold at different versions: a call into one fails here, unsent, and a
+// push of one is never asked for, since a push is a call.
+function refusing(
+  client: FlatClient,
+  group: typeof LinkGroup,
+  outdated: OutdatedModules,
+  ends: { readonly this: string; readonly peer: string },
+): FlatClient {
+  const [older, newer] =
+    outdated.outdated === "peer"
+      ? [ends.peer, ends.this]
+      : [ends.this, ends.peer];
+  return (tag, payload, options) => {
+    const call = group.requests.get(tag);
+    if (call === undefined || !outdated.modules.includes(moduleOf(call))) {
+      return client(tag, payload, options);
+    }
+    const refusal = new ModuleOutdatedError({
+      module: moduleOf(call),
+      older,
+      newer,
+    });
+    return isInvoke(call) ? Effect.fail(refusal) : Stream.fail(refusal);
+  };
+}
 
 // A socket as Effect reads it, with a cut that closes it for Effect at
 // once, as its pinger's verdict did: the link's calls fail as a drop,

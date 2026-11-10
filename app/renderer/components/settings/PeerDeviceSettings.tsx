@@ -6,6 +6,7 @@ import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { DeviceScope } from "@/hooks/remote/useHostScope";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
+import { outdatedNote } from "@shigomori/ui/lib/outdatedCopy.ts";
 import type { Device } from "@/lib/remote/devices";
 import { deviceSections } from "./deviceSections";
 import { HostPanels, onEveryHostTab } from "./SettingsPanel";
@@ -69,6 +70,11 @@ function OfflineNote({ device }: { device: Device }) {
       // Rostered but no session yet ("online" is the one phase that
       // says the machine itself is up).
       dialing={device.status.phase === "online"}
+      outdated={
+        device.status.phase === "outdated"
+          ? outdatedNote(device.label, device.status)
+          : null
+      }
     />
   );
 }

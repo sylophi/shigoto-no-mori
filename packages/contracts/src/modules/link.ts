@@ -1,3 +1,4 @@
+import { CORE_VERSION } from "../protocol.ts";
 import * as Schema from "effect/Schema";
 import { defineContract, invoke, ungated } from "../contract.ts";
 import { DeviceIdSchema } from "../hubProtocol.ts";
@@ -25,6 +26,7 @@ const HelloSchema = strict(
     // own stale link and no other.
     connectionId: HexId32Schema,
     appVersion: AppVersionSchema,
+    // The core's (protocol.ts).
     protocolVersion: Schema.Int,
     // The loopback's token. A device link has none: its ticket opened the
     // socket.
@@ -32,12 +34,16 @@ const HelloSchema = strict(
   }),
 );
 
-const WelcomeSchema = strict(
-  Schema.Struct({
-    deviceId: DeviceIdSchema,
-    appVersion: AppVersionSchema,
-  }),
-);
+// Plain, so a later build's welcome can say more. The hello is what a
+// build on another core reads before it refuses, and keeps its shape.
+const WelcomeSchema = Schema.Struct({
+  deviceId: DeviceIdSchema,
+  appVersion: AppVersionSchema,
+  // The version of each module the host serves on this link, by name
+  // (../link.ts, versionsOf).
+  versions: Schema.Record(Schema.String, Schema.Int),
+});
+export type Welcome = typeof WelcomeSchema.Type;
 
 // Minted by the opener before the call that attaches the far end.
 const ChannelSchema = strict(Schema.Struct({ channelId: HexId32Schema }));
@@ -78,7 +84,7 @@ const ReadBytesSchema = Schema.Uint8Array.check(
 
 export const linkContract = defineContract(
   "link",
-  "host",
+  { scope: "host", version: CORE_VERSION },
   invoke("hello", HelloSchema, WelcomeSchema, ungated),
   // For a link that may have died unseen.
   invoke("ping", VoidSchema, VoidSchema, ungated),

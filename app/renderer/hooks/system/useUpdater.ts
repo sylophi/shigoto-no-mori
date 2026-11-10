@@ -2,7 +2,8 @@ import { updaterContract } from "@shigomori/contracts/modules/updater";
 import { useMutation } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { commandAccessOf } from "@/lib/remote/devices";
+import { isUpdating } from "@shigomori/contracts/schemas";
+import { apiOf, commandAccessOf } from "@/lib/remote/devices";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { usePeers } from "@/hooks/remote/useDevices";
 import { useHasLocalHost } from "@/lib/localHost";
@@ -118,6 +119,25 @@ function useUpdateTargets(): UpdateTarget[] {
         : [],
     ),
   ];
+}
+
+// One device's update, from a place that names the device (the banner
+// over an outdated peer's pages): it is told to fetch the newest
+// release and restart into it, as Update all tells it, and `updating`
+// holds until it has. Only for a device whose updater this build can
+// call.
+export function useUpdateDevice(deviceId: string) {
+  const page = useApi();
+  const state = useView(updaterStateAtom(deviceId)).data;
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state push is the single source of truth, and the updater state atom follows it
+  const mutation = useMutation({
+    mutationFn: () => restartIntoUpdate(apiOf(page, deviceId), "update"),
+    meta: { errorTitle: "Couldn't update the device" },
+  });
+  return {
+    update: () => mutation.mutate(),
+    updating: mutation.isPending || isUpdating(state),
+  };
 }
 
 // The updates this window could install right now, as deviceId to the

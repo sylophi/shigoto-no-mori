@@ -163,6 +163,7 @@ export const make = (
         // and sharing. peerAppVersions' keys are the direct-session set
         // (the renderer derives connectedness from them).
         ...handlers.directPeers(),
+        peerCoreOutdated: keeper.coreOutdated(),
         // This device's tunnel state, never its hostname or token.
         // Absent without a host half (the web bridge runs no
         // cloudflared).
@@ -201,6 +202,7 @@ export const make = (
 
     const keeper: DirectKeeper.DirectKeeper = yield* DirectKeeper.make({
       dial: (deviceId) => handlers.dialPeer(deviceId),
+      onCoreOutdatedChange: notifyStatusChanged,
     });
 
     return {

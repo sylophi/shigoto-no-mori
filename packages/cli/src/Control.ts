@@ -22,18 +22,23 @@ import {
   type ContractModule,
   isInvoke,
   keyOf,
+  moduleOf,
+  versionOf,
 } from "@shigomori/contracts/contract";
 import {
   CLOSE_TRY_AGAIN,
   LOOPBACK_FILE,
   LoopbackFile,
   LoopbackGroup,
+  outdatedModules,
+  versionsOf,
 } from "@shigomori/contracts/link";
+import type { Welcome } from "@shigomori/contracts/modules/link";
 import {
   CONTROL_ERROR_CODES,
   isControlErrorCode,
 } from "@shigomori/contracts/modules/control";
-import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
+import { CORE_VERSION } from "@shigomori/contracts/protocol";
 import type {
   EffectClient,
   ViewInput,
@@ -247,8 +252,6 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
       LoopbackGroup,
       yield* quietProtocol(socket),
     );
-    const call = (tag: string, payload: unknown) =>
-      client(tag, payload) as Effect.Effect<unknown, unknown>;
     // A refusal before the welcome: a listener at its cap says so, and
     // anything else is a loopback.json this listener didn't write.
     const turnedAway = () =>
@@ -256,35 +259,46 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
         ? new AppBusy({ binary: paths.binaryName })
         : notRunning;
 
-    yield* call("link:hello", {
+    const hello = client("link:hello", {
       deviceId,
       // The loopback holds every caller apart, whatever it says.
       deviceKind: "desktop",
       connectionId: newConnectionId(),
       appVersion: paths.binaryName,
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: CORE_VERSION,
       token: file.token,
-    }).pipe(
-      // The older of the two is an app an update replaced and that
-      // never restarted, or another copy of this binary first on PATH.
+    }) as Effect.Effect<unknown, unknown>;
+    const welcome = (yield* hello.pipe(
       Effect.mapError((error) =>
         isProtocolVersionMismatchError(error)
-          ? new ControlRefused({
-              channel: "link:hello",
-              said:
-                error.hostVersion < error.clientVersion
-                  ? byPlatform({
-                      darwin: `The app running here is older than this ${paths.binaryName}. Restart it to update (quit it and open it again), and try again.`,
-                      linux: `The host running here is older than this ${paths.binaryName}. Restart it to update (\`${paths.binaryName} service restart\`), and try again.`,
-                    })
-                  : `This ${paths.binaryName} is older than the ${byPlatform({ darwin: "app", linux: "host" })} running here. Run \`${paths.binaryName} doctor\` to see the ${paths.binaryName} binaries on PATH.`,
-            })
+          ? skewed("link:hello", error.hostVersion < error.clientVersion)
           : turnedAway(),
       ),
-    );
-    return { client, call };
+    )) as Welcome;
+    return {
+      client,
+      call: (tag: string, payload: unknown) =>
+        client(tag, payload) as Effect.Effect<unknown, unknown>,
+      // The modules this binary and the app hold at different versions.
+      outdated: outdatedModules(versionsOf(LoopbackGroup), welcome.versions),
+    };
   });
   type Link = Effect.Success<ReturnType<typeof connect>>;
+
+  // The app and this binary are builds of different releases, on
+  // different cores or with the call's module at different versions.
+  // The older of the two is an app an update replaced and that never
+  // restarted, or another copy of this binary first on PATH.
+  const skewed = (channel: string, appOlder: boolean) =>
+    new ControlRefused({
+      channel,
+      said: appOlder
+        ? byPlatform({
+            darwin: `The app running here is older than this ${paths.binaryName}. Restart it to update (quit it and open it again), and try again.`,
+            linux: `The host running here is older than this ${paths.binaryName}. Restart it to update (\`${paths.binaryName} service restart\`), and try again.`,
+          })
+        : `This ${paths.binaryName} is older than the ${byPlatform({ darwin: "app", linux: "host" })} running here. Run \`${paths.binaryName} doctor\` to see the ${paths.binaryName} binaries on PATH.`,
+    });
 
   // A call's failure as the verbs read it. A refusal of commands is a
   // peer's (the loopback's callers pass no gate), and names the device
@@ -368,6 +382,13 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
         yield* Effect.logDebug(
           `control: connected to the app (v${file.appVersion}, pid ${file.pid})`,
         );
+        const rpc = LoopbackGroup.requests.get(channel);
+        if (
+          rpc !== undefined &&
+          link.outdated?.modules.includes(moduleOf(rpc)) === true
+        ) {
+          return yield* skewed(channel, link.outdated.outdated === "peer");
+        }
         // A transfer takes as long as it takes, so the call is on no
         // clock.
         return yield* ask(link);
@@ -412,6 +433,11 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
     const calls: Record<string, unknown> = {};
     for (const one of callsOf(module)) {
       const channel = channelOf(one);
+      // Fails closed on a call the app of another release would take
+      // unchecked.
+      if (versionOf(one) === undefined) {
+        throw new Error(`${channel} names no version for another build`);
+      }
       calls[keyOf(one)] = isInvoke(one)
         ? invoke(channel)
         : progressing(channel);

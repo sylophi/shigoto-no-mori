@@ -22,6 +22,6 @@ const ForwardOpenPayloadSchema = strict(
 
 export const forwardContract = defineContract(
   "forward",
-  "host",
+  { scope: "host", version: 1 },
   invoke("open", ForwardOpenPayloadSchema, VoidSchema, gatedBy("reachServers")),
 );

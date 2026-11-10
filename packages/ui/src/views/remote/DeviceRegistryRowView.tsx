@@ -77,6 +77,7 @@ export function DeviceRegistryRowView({
   onRename,
   onRemove,
   onCancelRemove,
+  outdated,
   iconPicker,
   nameField,
   hosts,
@@ -114,6 +115,10 @@ export function DeviceRegistryRowView({
   // Asked twice: the first arms the banner, the second removes.
   onRemove: () => void;
   onCancelRemove: () => void;
+  // On a peer's row, what stands between it and this device while the
+  // two run different releases of the app (outdatedCopy.ts), and the
+  // update that ends it, when this device can ask for one.
+  outdated: { note: string; update: ReactNode } | null;
   // The mark that opens the icon picker, and the name or its editor.
   iconPicker: ReactNode;
   nameField: ReactNode;
@@ -219,6 +224,15 @@ export function DeviceRegistryRowView({
       </div>
 
       {note !== null && <p className="text-xs text-muted-foreground">{note}</p>}
+
+      {outdated !== null && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <p className={cn("min-w-0 flex-1 basis-64 text-xs", TONE_TEXT.amber)}>
+            {outdated.note}
+          </p>
+          {outdated.update}
+        </div>
+      )}
 
       {traits.hostsProjects && hosts}
 

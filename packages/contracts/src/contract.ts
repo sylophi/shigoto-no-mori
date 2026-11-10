@@ -52,6 +52,11 @@ const Grant = Context.Service<"sm/contracts/Grant", GrantId>(
   "sm/contracts/Grant",
 );
 
+// The module's version (protocol.ts), on each of its calls.
+const Version = Context.Service<"sm/contracts/Version", number>(
+  "sm/contracts/Version",
+);
+
 // What a quit waits on the call for while it runs (the host's
 // `changing`): the git work a person starts. One that ends in moments,
 // or that nobody pressed, has none: a page's refresh as it opens
@@ -190,14 +195,21 @@ function classificationGap(
 }
 
 // `remote: false` keeps every call of a host module off the device link
-// (the loopback's own modules).
+// (the loopback's own modules). `version` is for a module a build of
+// another release calls, a peer's or the terminal `sm`'s (versionOf).
 export const defineContract = <
   const Name extends string,
   const S extends ContractScope,
   const Rpcs extends ReadonlyArray<Rpc.Any>,
 >(
   name: Name,
-  scope: S | { readonly scope: S; readonly remote: false },
+  scope:
+    | S
+    | {
+        readonly scope: S;
+        readonly remote?: false;
+        readonly version?: number;
+      },
   ...rpcs: Rpcs
 ): Contract<Name, S, Rpc.Prefixed<Rpcs[number], `${Name}:`>> => {
   // The group keys by tag, so a second call under one name would
@@ -205,19 +217,39 @@ export const defineContract = <
   const keys = rpcs.map((rpc) => rpc["_tag"]);
   const twice = keys.find((key, i) => keys.indexOf(key) !== i);
   if (twice !== undefined) throw new Error(`${name}:${twice} is defined twice`);
-  const local = typeof scope === "object";
-  const scopeName = local ? scope.scope : scope;
+  const {
+    scope: scopeName,
+    remote,
+    version,
+  } = typeof scope === "object"
+    ? scope
+    : { scope, remote: undefined, version: undefined };
   const group = RpcGroup.make(...rpcs)
     .prefix(`${name}:`)
     .annotate(ModuleName, name)
     .annotate(Scope, scopeName)
     .annotateRpcs(Scope, scopeName);
-  const module = local ? group.annotateRpcs(Remote, false) : group;
+  const placed = remote === false ? group.annotateRpcs(Remote, false) : group;
+  const module =
+    version === undefined ? placed : placed.annotateRpcs(Version, version);
   if (scopeName === "host") {
     for (const [channel, rpc] of module.requests) {
       const gap = classificationGap(channel, rpc as Rpc.AnyWithProps);
       if (gap !== null) throw new Error(gap);
     }
+  }
+  // Fails closed on a module a peer reaches that never versioned
+  // itself: the device link carries every remote call and every host
+  // push (link.ts).
+  if (
+    version === undefined &&
+    callsOf(module).some(
+      (call) =>
+        annotation(call, Remote) === true ||
+        (scopeName === "host" && isPush(call)),
+    )
+  ) {
+    throw new Error(`${name} reaches another device but names no version`);
   }
   return module;
 };
@@ -306,6 +338,21 @@ export function keyOf(call: ContractCall): string {
 
 export function channelOf(call: ContractCall): string {
   return call["_tag"];
+}
+
+export function moduleOf(call: ContractCall): string {
+  const channel = channelOf(call);
+  return channel.slice(0, channel.indexOf(":"));
+}
+
+// Undefined for a call only one build's own processes exchange: a
+// module with no version, and in a versioned client module every call
+// but the remote ones, which a window and its own shell exchange.
+export function versionOf(call: ContractCall): number | undefined {
+  return annotation(call, Scope) === "client" &&
+    annotation(call, Remote) !== true
+    ? undefined
+    : annotation(call, Version);
 }
 
 // Read off the AST's tag, not by identity: the renderer's bundle can

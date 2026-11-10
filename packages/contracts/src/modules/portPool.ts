@@ -4,7 +4,7 @@ import { VoidSchema, WorktreeScopedPayloadSchema } from "../schemas/index.ts";
 
 export const portPoolContract = defineContract(
   "portPool",
-  "host",
+  { scope: "host", version: 1 },
   invoke("isActive", WorktreeScopedPayloadSchema, Schema.Boolean, ungated),
   invoke("isInstalled", VoidSchema, Schema.Boolean, ungated),
 );

@@ -9,7 +9,7 @@ import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
 import * as HttpApiMiddleware from "effect/http-api/HttpApiMiddleware";
 import * as HttpApiSchema from "effect/http-api/HttpApiSchema";
 import * as HttpApiSecurity from "effect/http-api/HttpApiSecurity";
-import { PROTOCOL_VERSION } from "./protocol.ts";
+import { CORE_VERSION } from "./protocol.ts";
 import { HexId32Schema } from "./schemas/hexId.ts";
 import {
   DeviceIdSchema,
@@ -133,7 +133,7 @@ export class HubUpgradeRequiredError extends Schema.TaggedError<HubUpgradeRequir
 
 // v2 builds send no version at all. The connect route needs no check of
 // its own: its ticket comes from a mint, which the floor guards.
-export const HUB_PROTOCOL_FLOOR = PROTOCOL_VERSION;
+export const HUB_PROTOCOL_FLOOR = CORE_VERSION;
 
 export const PROTOCOL_HEADER = "sm-protocol";
 

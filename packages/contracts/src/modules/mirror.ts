@@ -1,3 +1,4 @@
+import { MIRROR_VERSION } from "../protocol.ts";
 import { pluralize } from "../words.ts";
 import * as Schema from "effect/Schema";
 import {
@@ -603,7 +604,7 @@ const MirrorHistoryResultSchema = strict(
 
 export const mirrorContract = defineContract(
   "mirror",
-  "host",
+  { scope: "host", version: MIRROR_VERSION },
   invoke("list", VoidSchema, MirrorListResultSchema, ungated),
   view("watch", VoidSchema, MirrorListResultSchema, ungated),
   invoke(

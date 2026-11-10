@@ -30,7 +30,7 @@ The lab's scripts read it through `reliability/pageApi.mts`.
 | `api.account.setAcceptsCommands(bool)` | Flips this device's command-access switch. |
 | `api.sharing.set(bool)` | Flips this device's sharing switch. |
 | `api.account.signOut()` | Revokes this device and clears the credential. Clerk is untouched. |
-| `api.hub.status()` | Socket phase, `onlineDeviceIds`, `tunnel`, and per direct session `peerAppVersions`, `peerAcceptsCommands` and `peerSharesData`. |
+| `api.hub.status()` | Socket phase, `onlineDeviceIds`, `tunnel`, and per direct session `peerAppVersions`, `peerAcceptsCommands`, `peerSharesData` and, for a peer on another release, `peerOutdated` (the modules this device can't call there), and `peerCoreOutdated` for the peers too far apart to link with. |
 | `api.hub.invokePeer({deviceId, channel, input})` | Any host call on a peer, e.g. `worktrees:list`. |
 | `api.peerApi(deviceId)` | A peer's api over the same hop: its host modules, pushes and views, and no client modules. |
 | `api.sync.pullWorktree({...})` | Brings a peer's worktree here. The result's `worktree` is the copy. |

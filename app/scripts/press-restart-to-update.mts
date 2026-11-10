@@ -4,8 +4,8 @@
 // loopback.json holds) and makes the same call the button's mutation
 // makes, `updater:install`. A signed build takes no debugger, so this
 // is how a script presses the button of a signed one
-// (scripts/smoke-app.mts). Its hello carries this checkout's
-// PROTOCOL_VERSION, which an app at another protocol refuses. Prints
+// (scripts/smoke-app.mts). Its hello carries this checkout's core
+// version, which an app on another core refuses. Prints
 // the call's outcome as one JSON line: {"answer": ...} or
 // {"failed": "<message>"}.
 //
@@ -18,7 +18,7 @@ import {
   LoopbackFile,
   LoopbackGroup,
 } from "@shigomori/contracts/link";
-import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
+import { CORE_VERSION } from "@shigomori/contracts/protocol";
 import {
   flatClient,
   newConnectionId,
@@ -48,7 +48,7 @@ const press = Effect.gen(function* () {
     deviceKind: "desktop",
     connectionId: newConnectionId(),
     appVersion: "press-restart-to-update",
-    protocolVersion: PROTOCOL_VERSION,
+    protocolVersion: CORE_VERSION,
     token,
   });
   return yield* call("updater:install", undefined);

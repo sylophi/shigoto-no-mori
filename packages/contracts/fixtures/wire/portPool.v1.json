@@ -1,0 +1,12 @@
+{
+  "portPool:isActive": {
+    "payload": {
+      "projectId": "Wo",
+      "worktreeId": "\udc00"
+    },
+    "success": true
+  },
+  "portPool:isInstalled": {
+    "success": false
+  }
+}

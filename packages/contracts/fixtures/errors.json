@@ -48,6 +48,12 @@
         "_tag": "NotSharingError"
       },
       {
+        "_tag": "ModuleOutdatedError",
+        "module": "terminals",
+        "older": "dev-1",
+        "newer": "dev-2"
+      },
+      {
         "_tag": "HubRateLimitedError"
       },
       {

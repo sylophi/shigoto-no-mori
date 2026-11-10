@@ -8,16 +8,20 @@ import {
   annotation,
   callsOf,
   channelOf,
+  type ContractCall,
   type ContractModule,
   isPush,
+  moduleOf,
   Remote,
   nameOf,
   scopeOf,
+  versionOf,
 } from "./contract.ts";
 import {
   CommandRefusedError,
   LinkUnauthenticatedError,
   NotSharingError,
+  type OutdatedSide,
   RemoteCallError,
 } from "./errors.ts";
 import { controlContract } from "./modules/control.ts";
@@ -25,7 +29,7 @@ import { guideDriveContract } from "./modules/guide.ts";
 import { loginContract } from "./modules/login.ts";
 import { sessionContract } from "./modules/session.ts";
 import { shellCallsContract } from "./modules/shellCalls.ts";
-import { linkContract } from "./modules/link.ts";
+import { linkContract, type Welcome } from "./modules/link.ts";
 import type { PushKeys, PushProducerPayload } from "./types.ts";
 
 // Twice layerSchemaBinary's default: a 16 MiB media file crosses as
@@ -169,5 +173,49 @@ const loopbackCalls = [
 export const LoopbackGroup = handshakeOf(loopbackCalls).merge(
   restOf(loopbackCalls).middleware(CommandGate).middleware(PeerAuth),
 );
+
+type Group = { readonly requests: ReadonlyMap<string, ContractCall> };
+type ModuleVersions = Welcome["versions"];
+
+// The version of each module a group carries: what a host's welcome
+// says, and what the dialing end holds it against.
+export const versionsOf = (group: Group): ModuleVersions => {
+  const versions: Record<string, number> = {};
+  for (const call of group.requests.values()) {
+    const version = versionOf(call);
+    if (version !== undefined) versions[moduleOf(call)] = version;
+  }
+  return versions;
+};
+
+// What a dialing end can't call on a host: the modules the two hold at
+// different versions, and the end on the older build.
+export type OutdatedModules = {
+  readonly outdated: OutdatedSide;
+  readonly modules: readonly string[];
+};
+
+// A dialing end's modules (versionsOf its group) against the host's
+// welcome. Undefined when they agree on every one. A module the host
+// names no version for differs too: a build older than the module has
+// none, and so has a newer one that dropped it. Releases are a line, so
+// one module ahead on the host says this end is the older.
+export const outdatedModules = (
+  mine: ModuleVersions,
+  theirs: ModuleVersions,
+): OutdatedModules | undefined => {
+  const modules = Object.keys(mine).filter(
+    (module) => mine[module] !== theirs[module],
+  );
+  if (modules.length === 0) return undefined;
+  return {
+    outdated: modules.some(
+      (module) => (theirs[module] ?? 0) > (mine[module] ?? 0),
+    )
+      ? "this"
+      : "peer",
+    modules,
+  };
+};
 
 export const ShellCallsGroup = RpcGroup.make(...callsOf(shellCallsContract));

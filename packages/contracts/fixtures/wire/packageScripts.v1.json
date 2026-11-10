@@ -1,0 +1,80 @@
+{
+  "packageScripts:getOrder": {
+    "payload": {
+      "projectId": " "
+    },
+    "success": ["\ud800", "\ud800"]
+  },
+  "packageScripts:getSort": {
+    "payload": {
+      "projectId": " -",
+      "knowsManual": true
+    },
+    "success": "manual"
+  },
+  "packageScripts:list": {
+    "payload": {
+      "projectId": "😀",
+      "worktreeId": "n)"
+    },
+    "success": {
+      "scripts": {
+        "dev": "vite",
+        "just build": "cargo build --release",
+        "make release": "./scripts/release.sh"
+      },
+      "packageManager": "pnpm",
+      "groups": [
+        {
+          "file": "package.json",
+          "labels": {
+            "dev": "dev"
+          }
+        },
+        {
+          "file": "justfile",
+          "labels": {
+            "just build": "build"
+          }
+        },
+        {
+          "file": "Makefile",
+          "labels": {
+            "make release": "release"
+          }
+        }
+      ],
+      "usage": {},
+      "launchRow": ["dev"]
+    }
+  },
+  "packageScripts:run": {
+    "payload": {
+      "projectId": "\udc00",
+      "worktreeId": "\udc00",
+      "scriptName": " "
+    },
+    "success": {
+      "runId": ""
+    }
+  },
+  "packageScripts:setLaunchRow": {
+    "payload": {
+      "projectId": "T",
+      "scriptName": " ",
+      "onRow": false
+    }
+  },
+  "packageScripts:setOrder": {
+    "payload": {
+      "projectId": "%",
+      "arranged": []
+    }
+  },
+  "packageScripts:setSort": {
+    "payload": {
+      "projectId": "-1",
+      "mode": "frequent"
+    }
+  }
+}

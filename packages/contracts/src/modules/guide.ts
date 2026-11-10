@@ -147,7 +147,7 @@ export const guideContract = defineContract(
 // carries them.
 export const guideDriveContract = defineContract(
   "guideDrive",
-  { scope: "host", remote: false },
+  { scope: "host", remote: false, version: 1 },
   invoke("drive", GuideDrivePayloadSchema, GuideReplySchema),
 );
 

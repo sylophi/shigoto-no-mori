@@ -424,8 +424,8 @@ export function SettingsPartsScene() {
           />
         </ScenePart>
         <ScenePart label="A peer's General section" gap={3}>
-          <PeerOfflineNoteView label="Mini" dialing={false} />
-          <PeerOfflineNoteView label={macbook.label} dialing />
+          <PeerOfflineNoteView label="Mini" dialing={false} outdated={null} />
+          <PeerOfflineNoteView label={macbook.label} dialing outdated={null} />
           <PeerSettingsLoadingView />
           <PeerVersionLineView appVersion="" />
           <PeerReadErrorView

@@ -21,7 +21,7 @@ import {
 
 export const scriptsContract = defineContract(
   "scripts",
-  "host",
+  { scope: "host", version: 1 },
   invoke(
     "run",
     RunScriptPayloadSchema,

@@ -1,3 +1,4 @@
+import { CORE_VERSION } from "../protocol.ts";
 import * as Schema from "effect/Schema";
 import { push, defineContract, invoke, view } from "../contract.ts";
 import { VoidSchema } from "../schemas/index.ts";
@@ -9,7 +10,7 @@ import { VoidSchema } from "../schemas/index.ts";
 // link.ts), so they see a device with nothing on it.
 export const sharingContract = defineContract(
   "sharing",
-  "host",
+  { scope: "host", version: CORE_VERSION },
   // This device's own: no peer reads or flips it.
   invoke("read", VoidSchema, Schema.Boolean, { remote: false, gated: false }),
   view("watch", VoidSchema, Schema.Boolean, { remote: false, gated: false }),

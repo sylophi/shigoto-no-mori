@@ -19,11 +19,14 @@ import { useHasLocalHost } from "@/lib/localHost";
 import { useApi } from "@/lib/runtime/pageApi";
 import { type DeviceReach, useDeviceReach } from "@/hooks/remote/useDevices";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
+import { outdatedNote } from "@shigomori/ui/lib/outdatedCopy.ts";
 import type { Device } from "@/lib/remote/devices";
+import { UpdateOlder } from "./UpdateOlder";
 import { NotSharingView } from "@shigomori/ui/views/remote/NotSharingView.tsx";
 import {
   OpenDevicesButtonView,
   RemoteScopeFrameView,
+  ScopeBannerView,
   UnreachableBannerView,
   UnreachableDeviceView,
 } from "@shigomori/ui/views/remote/RemoteScopeView.tsx";
@@ -45,11 +48,17 @@ function RemoteScopeGate({
     <DeviceScope deviceId={deviceId} absent={<AbsentDevice reach={reach} />}>
       <RemoteScopeFrameView
         banner={
-          reach.kind !== "live" && (
+          reach.kind !== "live" ? (
             <UnreachableBannerView
               label={unreachableLabel(reach.device)}
-              action={<OpenDevicesButton />}
+              action={<AbsentAction device={reach.device} />}
             />
+          ) : (
+            "outdated" in reach.device.status && (
+              <ScopeBannerView action={<UpdateOlder device={reach.device} />}>
+                {outdatedNote(reach.device.label, reach.device.status)}
+              </ScopeBannerView>
+            )
           )
         }
       >
@@ -78,8 +87,18 @@ function AbsentDevice({ reach }: { reach: DeviceReach }) {
   return (
     <UnreachableDeviceView
       label={unreachableLabel(reach.device)}
-      action={<OpenDevicesButton />}
+      action={<AbsentAction device={reach.device} />}
     />
+  );
+}
+
+// What a device that can't be asked offers: the update, where that is
+// what stands between the two, and the account page otherwise.
+function AbsentAction({ device }: { device: Device | undefined }) {
+  return device !== undefined && "outdated" in device.status ? (
+    <UpdateOlder device={device} />
+  ) : (
+    <OpenDevicesButton />
   );
 }
 
@@ -93,6 +112,8 @@ function unreachableLabel(device: Device | undefined, signedIn = true): string {
   }
   if (device.status.phase === "blocked")
     return `Can't connect: ${device.status.message}.`;
+  if (device.status.phase === "outdated")
+    return outdatedNote(device.label, device.status);
   // The honest phase label ("Off", "Reconnecting", …), not a blanket
   // "Connecting" that lies for a stopped device.
   return `${device.label} is ${deviceStatusView(device.status).label.toLowerCase()}.`;

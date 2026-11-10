@@ -1,0 +1,182 @@
+{
+  "control:access": {
+    "success": {
+      "share": true,
+      "control": true,
+      "keepReachable": true
+    }
+  },
+  "control:bring": {
+    "payload": {
+      "projectId": "7`",
+      "worktree": "]%"
+    },
+    "success": {
+      "_tag": "progress",
+      "progress": {
+        "sourceWorktreeId": "cf040bbdece9",
+        "step": "capture"
+      }
+    }
+  },
+  "control:clone": {
+    "payload": {
+      "_tag": "from",
+      "project": "?"
+    },
+    "success": {
+      "_tag": "progress",
+      "progress": {
+        "sourceWorktreeId": "77f763e93ec4",
+        "step": "transfer"
+      }
+    }
+  },
+  "control:devices": {
+    "payload": {},
+    "success": {
+      "thisDevice": {
+        "deviceId": "",
+        "name": ""
+      },
+      "devices": [
+        {
+          "deviceId": "😀",
+          "name": "\udc00",
+          "platform": "0",
+          "block": "refused",
+          "refusal": "it runs an older protocol"
+        },
+        {
+          "deviceId": "\ud800",
+          "name": "",
+          "platform": "\n"
+        }
+      ]
+    }
+  },
+  "control:mirrorDeleteDone": {
+    "payload": {
+      "projectId": "[M",
+      "worktreeId": "f73ef204853b",
+      "gone": true
+    }
+  },
+  "control:mirrorDeleteStoppedShort": {
+    "payload": {
+      "projectId": "Y",
+      "worktreeId": "2b924683f9a7"
+    }
+  },
+  "control:mirrors": {
+    "success": {
+      "daemon": "\ud800",
+      "daemonFailure": "",
+      "mirrors": []
+    }
+  },
+  "control:mirrorStop": {
+    "payload": {
+      "projectId": "\u0000",
+      "worktreeId": "739c9ecad82c"
+    },
+    "success": {
+      "mirror": {
+        "session": "\udc00",
+        "device": {
+          "deviceId": "0",
+          "name": ""
+        },
+        "localProjectId": "",
+        "localWorktreeId": "\t",
+        "localRoot": "\u0000",
+        "remoteRoot": "f8",
+        "copySide": "remote",
+        "paused": false,
+        "status": "",
+        "statusText": "",
+        "conflicts": 4
+      }
+    }
+  },
+  "control:peerWorktrees": {
+    "payload": {
+      "projectId": "\u0000"
+    },
+    "success": {
+      "worktrees": [],
+      "unreachable": ["#s"]
+    }
+  },
+  "control:send": {
+    "payload": {
+      "projectId": "ER",
+      "worktreeId": "498977159bcf"
+    },
+    "success": {
+      "_tag": "result",
+      "result": {
+        "worktree": {
+          "id": "",
+          "projectId": "😀",
+          "name": " ",
+          "branch": "ya",
+          "path": "",
+          "ahead": 3,
+          "behind": 2,
+          "hasUpstream": true,
+          "hasRemote": false,
+          "divergedClean": false,
+          "behindPrimary": 1,
+          "unpushedCount": 2,
+          "mergedIntoPrimary": false,
+          "changedCount": 0,
+          "recentCommits": [
+            {
+              "hash": "8284",
+              "subject": "",
+              "author": "",
+              "date": "",
+              "additions": 1,
+              "deletions": 0
+            },
+            {
+              "hash": "2d10",
+              "subject": "",
+              "author": "iN",
+              "date": "",
+              "additions": 0,
+              "deletions": 1
+            }
+          ],
+          "isPrimary": false,
+          "isExternal": false,
+          "detached": true,
+          "shelved": false,
+          "autoPull": true
+        },
+        "captured": true,
+        "dirtyApplied": false,
+        "device": {
+          "deviceId": "l",
+          "name": "5j"
+        },
+        "copySide": "local"
+      }
+    }
+  },
+  "control:setAccess": {
+    "payload": {},
+    "success": {
+      "share": false,
+      "control": true,
+      "keepReachable": false
+    }
+  },
+  "control:stopMirrorForDelete": {
+    "payload": {
+      "projectId": " ",
+      "worktreeId": "2071d510b47a"
+    }
+  }
+}

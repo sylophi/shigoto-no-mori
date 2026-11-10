@@ -54,12 +54,12 @@ export APPLE_SIGNING_IDENTITY="<the Developer ID Application identity>"
    node scripts/smoke-app.mts "<the candidate .app>" --update-installed "<the installed .app>" "<its data folder>"
    ```
 
-   Run it from the tip, unless `PROTOCOL_VERSION`
-   (`../packages/contracts/src/protocol.ts`) differs between the tip
-   and the installed version. Then run it from a checkout at
-   `v<installed>`, its dependencies installed, on the same candidate:
-   the smoke's press carries its checkout's protocol, and the installed
-   app refuses any but its own.
+   Run it from the tip, unless `CORE_VERSION`
+   (`../packages/contracts/src/protocol.ts`) or the `updater` module's
+   version differs between the tip and the installed version. Then run
+   it from a checkout at `v<installed>`, its dependencies installed, on
+   the same candidate: the smoke's press carries its checkout's core,
+   and the installed app refuses any but its own.
 
 4. Once it passes, the app it opened again runs on a normal launch's
    environment, launchd's, with nothing of the smoke's:

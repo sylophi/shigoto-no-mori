@@ -1,0 +1,62 @@
+{
+  "terminals:attach": {
+    "payload": {
+      "terminalId": "^",
+      "after": {
+        "incarnation": "9f86d081884c7d659a2feaa0c55ad015",
+        "seq": 7
+      }
+    },
+    "success": {
+      "kind": "output",
+      "data": ",",
+      "seq": 2
+    }
+  },
+  "terminals:close": {
+    "payload": {
+      "terminalId": "7"
+    }
+  },
+  "terminals:list": {
+    "success": {
+      "terminals": [
+        {
+          "terminalId": "0",
+          "projectId": "Wv",
+          "worktreeId": "D",
+          "openedAt": -5.2161211745009093e-73,
+          "busy": false
+        }
+      ]
+    }
+  },
+  "terminals:move": {
+    "payload": {
+      "terminalId": "7c1e9a52",
+      "worktreeId": "1bca1fd3b17b"
+    }
+  },
+  "terminals:open": {
+    "payload": {
+      "projectId": "-1",
+      "worktreeId": "\n"
+    },
+    "success": {
+      "terminalId": "p:"
+    }
+  },
+  "terminals:resize": {
+    "payload": {
+      "terminalId": "6",
+      "cols": 583,
+      "rows": 7
+    }
+  },
+  "terminals:write": {
+    "payload": {
+      "terminalId": "$",
+      "data": "0"
+    }
+  }
+}
