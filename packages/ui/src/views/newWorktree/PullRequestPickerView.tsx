@@ -171,7 +171,7 @@ function PullRequestRow({
         nativeButton
         // oxlint-disable-next-line jsx-a11y/control-has-associated-label -- Radio.Root renders the row's content into it
         render={<button type="button" />}
-        className="flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors not-data-checked:enabled:hover:bg-accent/50 disabled:cursor-not-allowed disabled:opacity-50 data-checked:bg-accent data-checked:text-accent-foreground"
+        className="flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors not-data-checked:enabled:hover:bg-accent/60 disabled:cursor-not-allowed disabled:opacity-50 data-checked:bg-accent data-checked:text-accent-foreground"
       >
         <Icon
           className={cn(

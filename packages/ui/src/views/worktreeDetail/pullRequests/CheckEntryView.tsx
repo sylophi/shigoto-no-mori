@@ -47,7 +47,7 @@ export function CheckEntryView({ check }: { check: PullRequestCheck }) {
     <button
       type="button"
       onClick={() => openUrl(url, "Couldn't open check")}
-      className="group/check flex w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left text-xs transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+      className="group/check flex w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left text-xs transition-colors hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-ring"
     >
       {Body}
     </button>

@@ -51,7 +51,7 @@ export function ProjectDevicePageView({
               <button
                 type="button"
                 onClick={parent.onOpen}
-                className="-mx-1 rounded px-1 transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-muted/50"
+                className="-mx-1 rounded px-1 transition-colors hover:bg-accent hover:text-foreground"
               >
                 {parent.label}
               </button>

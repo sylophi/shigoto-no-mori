@@ -133,7 +133,7 @@ export function CommitRowView({
       <div
         className={cn(
           "rounded-md",
-          selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
+          selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
         )}
       >
         {row}
@@ -149,7 +149,7 @@ export function CommitRowView({
               "group/commit relative rounded-md",
               selected
                 ? "bg-accent text-accent-foreground"
-                : "hover:bg-accent/50 has-data-popup-open:bg-accent/50",
+                : "hover:bg-accent/60 has-data-popup-open:bg-accent/60",
             )}
           />
         }

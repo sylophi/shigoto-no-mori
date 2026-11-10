@@ -220,7 +220,7 @@ export function FileTreeRowsView({
             "flex w-full shrink-0 items-center gap-1.5 rounded-md py-1 pr-2 text-left",
             selected
               ? "bg-accent text-accent-foreground"
-              : "hover:bg-accent/50 hover:text-foreground",
+              : "hover:bg-accent/60 hover:text-foreground",
             path === menuPath && !selected && "bg-accent/50",
             entry.ignored && !selected && "opacity-55",
           )}

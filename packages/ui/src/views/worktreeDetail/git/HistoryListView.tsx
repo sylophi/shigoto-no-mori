@@ -153,7 +153,7 @@ export function BranchChangesRowView({
       onClick={onOpen}
       className={cn(
         "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-ring",
-        selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
+        selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
       )}
     >
       <Layers

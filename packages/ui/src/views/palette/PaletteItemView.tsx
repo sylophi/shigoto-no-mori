@@ -19,7 +19,7 @@ export const usePaneHasKeys = () => use(PaneKeys);
 // button, so a click still works but ↑↓ never wander into it.
 const RESTING_ITEM_CLASS = cn(
   ITEM_CLASS,
-  "w-full text-left hover:bg-accent/60 disabled:opacity-50 data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground",
+  "w-full text-left not-data-[selected=true]:hover:bg-accent/60 disabled:opacity-50 data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground",
 );
 
 // One row in either pane: a cmdk item in the pane holding the keys, a

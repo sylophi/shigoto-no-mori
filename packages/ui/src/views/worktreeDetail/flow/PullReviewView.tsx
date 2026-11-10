@@ -576,7 +576,7 @@ function DevicePickView({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="inline-flex shrink-0 items-center gap-0.5 rounded-md px-1 font-medium whitespace-nowrap outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="inline-flex shrink-0 items-center gap-0.5 rounded-md px-1 font-medium whitespace-nowrap outline-none hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
         aria-label="Destination device"
       >
         {picked ? name : "Pick a device"}

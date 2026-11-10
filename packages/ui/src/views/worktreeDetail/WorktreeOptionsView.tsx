@@ -117,7 +117,7 @@ export function OptionActionView({
   return (
     <PopoverClose
       onClick={onClick}
-      className="-m-1 flex flex-col items-start rounded-md p-1 text-left hover:bg-muted dark:hover:bg-muted/50"
+      className="-m-1 flex flex-col items-start rounded-md p-1 text-left hover:bg-accent"
     >
       <span className="text-xs">
         <OptionLabel icon={icon} name={label} />

@@ -229,7 +229,7 @@ function FileScriptsView({
         type="button"
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
-        className="group -mx-1 flex w-full min-w-0 items-center gap-1.5 rounded-md px-1 text-left text-xs transition-colors hover:bg-muted dark:hover:bg-muted/50"
+        className="group -mx-1 flex w-full min-w-0 items-center gap-1.5 rounded-md px-1 text-left text-xs transition-colors hover:bg-accent/60"
       >
         <ChevronRight
           aria-hidden

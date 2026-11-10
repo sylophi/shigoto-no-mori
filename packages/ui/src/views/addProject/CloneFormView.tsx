@@ -92,7 +92,7 @@ export function CloneFormView({
               <Command.Item
                 key={row}
                 value={row}
-                className={cn(ITEM_CLASS, "hover:bg-accent/50")}
+                className={cn(ITEM_CLASS, "hover:bg-accent/60")}
               >
                 {typedRow && index === 0 ? (
                   <GitBranch className="size-4 shrink-0 text-muted-foreground/80" />
