@@ -83,7 +83,8 @@ export const makeMarks = Effect.sync(() => {
   // Why a run can't start in this worktree now, or null when it can. A
   // run must not land in a worktree mid-delete: the delete stops its
   // scripts once, so one started after would keep a dev server running
-  // in a folder being removed.
+  // in a folder being removed. Nor mid-create, where it would run
+  // before the setup it needs has finished.
   const refusal = (worktreeId: string, projectId: string): string | null =>
     quitting
       ? "App is shutting down; refusing to start a new script."
@@ -93,7 +94,9 @@ export const makeMarks = Effect.sync(() => {
           ? "This worktree is being moved."
           : projectRemovals.has(projectId)
             ? "This project is being removed."
-            : null;
+            : creates.has(worktreeId)
+              ? "This worktree is still being set up."
+              : null;
 
   return {
     assertMutable,

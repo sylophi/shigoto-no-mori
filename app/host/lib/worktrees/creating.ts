@@ -136,10 +136,11 @@ export const makeCreating = (removing: {
       const made = yield* Deferred.make<Worktree, CreateFailure>();
       let created: Worktree | null = null;
       const booked = yield* scripts.lifecycleRuns(notify.notifyScript);
-      // The create mark (which refuses a delete or move) opens and closes
-      // with the phases the page disables its delete button on, so the
-      // two agree. A run that dies mid-lifecycle never sends its "idle",
-      // so the end closes an open phase itself.
+      // The create mark (which refuses a delete, a move or a script run)
+      // opens and closes with the phases the page disables its delete
+      // and run buttons on, so the two agree. A run that dies
+      // mid-lifecycle never sends its "idle", so the end closes an open
+      // phase itself.
       let phaseOpen = false;
       const setPhase = (id: string, phase: WorktreeLifecyclePhase["phase"]) => {
         if (phase === "idle") {

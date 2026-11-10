@@ -27,11 +27,8 @@ export function ScriptConsole({
   worktree: Worktree;
   slot: ScriptSlot;
 }) {
-  const { key, state, busy, canRun, start, stop, clear } = useScriptRunner(
-    worktree,
-    slot,
-    { follow: true },
-  );
+  const { key, state, busy, canRun, disabledReason, start, stop, clear } =
+    useScriptRunner(worktree, slot, { follow: true });
   const scriptRuns = useScriptRuns();
   const deviceLabel = useScopedDeviceLabel();
   const { openUrl } = useOutside();
@@ -59,6 +56,7 @@ export function ScriptConsole({
       state={state}
       busy={busy}
       readOnlyNote={canRun ? null : peerOutputHiddenNote(deviceLabel)}
+      runDisabledReason={disabledReason}
       onRun={() => void start()}
       onStop={() => void stop()}
       onClear={!busy && state.hasOutput ? clear : null}

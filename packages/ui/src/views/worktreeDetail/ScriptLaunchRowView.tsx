@@ -64,14 +64,15 @@ export function ScriptLaunchButtonView({
   name,
   command,
   busy,
-  disabled,
+  cancelling,
   disabledReason,
   onClick,
 }: {
   name: string;
   command: string;
   busy: boolean;
-  disabled: boolean;
+  cancelling: boolean;
+  // Set while the pill is dead.
   disabledReason: string | undefined;
   onClick: (event: React.MouseEvent) => void;
 }) {
@@ -82,7 +83,7 @@ export function ScriptLaunchButtonView({
       <ScriptPillView
         name={name}
         busy={busy}
-        disabled={disabled}
+        disabled={cancelling || disabledReason !== undefined}
         onClick={onClick}
         aria-label={busy ? `Stop ${name}` : `Run ${name}`}
       />

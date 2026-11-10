@@ -13,6 +13,7 @@ import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type {
   CreatePhase,
   WorktreeCarryOverComplete,
+  Worktree,
   WorktreeRemoval,
 } from "@shigomori/contracts/schemas";
 import { pluralize } from "@shigomori/contracts/words";
@@ -25,6 +26,7 @@ import {
   forgetDeletedWorktree,
   isOwnDeletePending,
 } from "@/hooks/worktrees/useWorktreeMutations";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { queryKeysFor, worktreeQueriesOn } from "@/lib/queryKeys";
 import type { Api } from "@/lib/runtime/Api";
 import {
@@ -270,6 +272,14 @@ export function useWorktreeCreatePhase(
         ? undefined
         : lifecycleOf(result).phases.get(worktreeId)) ?? null,
   );
+}
+
+// Whether the worktree's create run is still working in it, as far as
+// this window can tell: the create phases stream to this machine alone,
+// so a peer's page can't see them and relies on its host's refusals.
+export function useWorktreeSettingUp(worktree: Pick<Worktree, "id">): boolean {
+  const { remote } = useHostScope();
+  return useWorktreeCreatePhase(remote ? null : worktree.id) !== null;
 }
 
 // Whether the device is in the middle of removing the worktree, as

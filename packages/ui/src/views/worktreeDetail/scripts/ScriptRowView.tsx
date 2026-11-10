@@ -10,7 +10,6 @@ export function ScriptRowView({
   command,
   state,
   busy,
-  canRun,
   disabledReason,
   onRun,
   onStop,
@@ -21,7 +20,7 @@ export function ScriptRowView({
   // The script's last run, and whether one is under way.
   state: ScriptRunState;
   busy: boolean;
-  canRun: boolean;
+  // Set while the run/stop toggle is dead.
   disabledReason: string | undefined;
   onRun: () => void;
   onStop: () => void;
@@ -42,7 +41,7 @@ export function ScriptRowView({
           type="button"
           onClick={busy ? onStop : onRun}
           {...usersAlone("run")}
-          disabled={state.cancelling || !canRun}
+          disabled={state.cancelling || disabledReason !== undefined}
           aria-label={actionLabel}
           className={cn(
             "flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",

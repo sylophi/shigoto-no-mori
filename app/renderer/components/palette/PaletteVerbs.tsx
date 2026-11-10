@@ -337,16 +337,13 @@ function ScriptVerb({
   actions: PaletteActions;
 }) {
   const slot: ScriptSlot = { kind: "package", name };
-  const { busy, canRun, disabledReason, start } = useScriptRunner(
-    entry.worktree,
-    slot,
-  );
+  const { busy, disabledReason, start } = useScriptRunner(entry.worktree, slot);
   return (
     <ScriptVerbView
       name={name}
       command={command}
       busy={busy}
-      disabled={!busy && !canRun}
+      disabled={!busy && disabledReason !== undefined}
       tip={disabledReason ?? command}
       onSelect={() => {
         if (!busy) start();

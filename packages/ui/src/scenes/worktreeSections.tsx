@@ -177,7 +177,6 @@ function scriptRow(name: string, state = IDLE_RUN, command = `pnpm ${name}`) {
       command={command}
       state={state}
       busy={state.status === "running"}
-      canRun
       disabledReason={undefined}
       onRun={noop}
       onStop={noop}

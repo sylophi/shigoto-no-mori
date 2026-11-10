@@ -4,6 +4,7 @@ import type { ScriptRunState } from "@shigomori/ui/lib/scriptRun.ts";
 import { useDeviceRunningScripts } from "@/hooks/live/useLiveActivity";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { useWorktreeSettingUp } from "@/hooks/worktrees/useWorktreeLifecycle";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { notifyError } from "@/lib/toast";
 import { scriptKey, type ScriptKey, type ScriptSlot } from "@/store/scriptSlot";
@@ -21,10 +22,11 @@ export interface ScriptRunner {
   // reload), read as running from the host's list.
   state: ScriptRunState;
   busy: boolean;
-  // Whether a run can be dispatched from here. A run is a command, so
+  // Whether runs can be dispatched from here. A run is a command, so
   // on a peer it waits for that device's grant. Locally always true.
-  // `disabledReason` is the tip the UI shows on the dead affordance.
   canRun: boolean;
+  // Why the run/stop toggle is dead, the tip the UI shows on it: no
+  // grant, or a start while the worktree is still being set up.
   disabledReason: string | undefined;
   start: () => Promise<void>;
   // Resolves whether the host stopped the run.
@@ -99,9 +101,15 @@ export function useScriptRunner(
       }
     : held;
   const busy = state.status === "starting" || state.status === "running";
+  const settingUp = useWorktreeSettingUp(worktree);
+  const disabledReason = !canRun
+    ? peerReadOnlyNote(deviceLabel)
+    : settingUp && !busy
+      ? "Can't run scripts while the worktree is being set up"
+      : undefined;
 
   const start = () => {
-    if (!canRun) return Promise.resolve();
+    if (disabledReason !== undefined) return Promise.resolve();
     return store
       .run({
         key,
@@ -152,7 +160,7 @@ export function useScriptRunner(
     state,
     busy,
     canRun,
-    disabledReason: canRun ? undefined : peerReadOnlyNote(deviceLabel),
+    disabledReason,
     start,
     stop,
     clear,

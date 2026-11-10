@@ -63,6 +63,7 @@ export function TerminalPartsScene() {
               }}
               busy
               readOnlyNote={null}
+              runDisabledReason={undefined}
               onRun={() => {}}
               onStop={() => {}}
               onClear={null}
