@@ -78,6 +78,7 @@ export function ClosedPullRequestBoxView({
   const deleteButton = (
     <ConfirmDestructiveButton
       armed={armed}
+      armedLabel="Confirm delete?"
       {...(reach === "stack"
         ? {
             pending: stackPending,
@@ -116,6 +117,7 @@ export function ClosedPullRequestBoxView({
               disabled={stackPending}
               pendingLabel="Deleting…"
               idleLabel="Delete worktree"
+              armedLabel="Confirm delete?"
               onClick={onDelete}
               disabledReason={deleteBlockedReason}
             />

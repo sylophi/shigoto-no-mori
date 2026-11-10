@@ -12,7 +12,7 @@ import {
 } from "./tidyModel.ts";
 import { TidyEntryTitleView } from "./TidyEntryTitleView.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { plural, pluralize } from "@shigomori/contracts/words";
+import { listed, plural, pluralize } from "@shigomori/contracts/words";
 
 interface TidyConfirmProps {
   summary: TidySummary;
@@ -76,7 +76,7 @@ export function TidyConfirmView({
         {deleteBranches
           ? ", and the local branch is deleted too, unless it is the project's default branch"
           : ""}
-        . This cannot be undone.
+        . This can't be undone.
       </p>
 
       <ul className="mt-4 min-h-24 space-y-2 overflow-y-auto">
@@ -122,9 +122,11 @@ export function TidyConfirmView({
           <p className="mt-2 leading-relaxed">
             {risky.length} of these {plural(risky.length, "is", "are")} not safe
             to remove:{" "}
-            {risky
-              .map((entry) => `${entry.project.name}/${entry.worktree.name}`)
-              .join(", ")}
+            {listed(
+              risky.map(
+                (entry) => `${entry.project.name}/${entry.worktree.name}`,
+              ),
+            )}
             . Their changes exist nowhere else.
           </p>
           <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md select-none">

@@ -57,10 +57,10 @@ export function CarryOverRowView({
           </span>
         </SimpleTooltip>
         {missing && (
-          <SimpleTooltip tip="Source doesn't exist in the main checkout or any worktree. New worktrees will skip this entry.">
-            <ToneTag className="bg-destructive/10 text-destructive">
+          <SimpleTooltip tip="Source doesn't exist in the primary checkout or any worktree. New worktrees will skip this entry.">
+            <ToneTag tone="rose">
               <AlertTriangle className="size-3" />
-              missing
+              Missing
             </ToneTag>
           </SimpleTooltip>
         )}
@@ -73,7 +73,7 @@ export function CarryOverRowView({
         )}
         {covered && (
           <SimpleTooltip tip=".worktreeinclude now covers this path. This entry will be removed the next time a worktree is created.">
-            <ToneTag tone="amber">covered</ToneTag>
+            <ToneTag tone="amber">Covered</ToneTag>
           </SimpleTooltip>
         )}
       </span>

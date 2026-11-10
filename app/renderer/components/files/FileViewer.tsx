@@ -96,7 +96,7 @@ export function FileViewer({
         isPending
           ? null
           : isError
-            ? "Couldn't read file."
+            ? "Couldn't read the file."
             : text === null && data.kind !== "media"
               ? placeholderFor(data)
               : null

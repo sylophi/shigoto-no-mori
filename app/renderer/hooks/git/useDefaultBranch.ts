@@ -10,6 +10,6 @@ export function useDefaultBranch(projectId: string | null) {
         ? ({ signal }) =>
             api.run(api.projects.defaultBranch({ projectId }), { signal })
         : skipToken,
-    meta: { errorTitle: "Couldn't resolve default branch" },
+    meta: { errorTitle: "Couldn't resolve the default branch" },
   });
 }

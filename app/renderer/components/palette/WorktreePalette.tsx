@@ -1,3 +1,4 @@
+import { noMatch } from "@shigomori/contracts/words";
 import {
   useEffect,
   useEffectEvent,
@@ -509,7 +510,7 @@ function PaletteDialog({
             : listItems(rows)
         }
         emptyList={
-          entries.length === 0 ? "No worktrees yet." : "No worktrees match."
+          entries.length === 0 ? "No worktrees yet." : noMatch("worktrees")
         }
         verbs={
           paneRow && (

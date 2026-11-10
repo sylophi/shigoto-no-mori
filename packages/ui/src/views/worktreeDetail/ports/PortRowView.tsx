@@ -20,7 +20,7 @@ import { PortFormView } from "./PortFormView.tsx";
 
 const SOURCE_LABEL: Record<WorktreePort["source"], string> = {
   pool: "port-pool",
-  custom: "custom",
+  custom: "Custom",
 };
 
 export function PortRowView({

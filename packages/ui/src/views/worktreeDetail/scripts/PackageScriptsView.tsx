@@ -1,3 +1,4 @@
+import { noMatch } from "@shigomori/contracts/words";
 import { useState, type ReactNode } from "react";
 import {
   DndContext,
@@ -159,7 +160,9 @@ export function PackageScriptsView({
       {/* A group the search empties stays mounted (FileScriptsView renders
           nothing), so a fold outlives the search. */}
       {filtered.every(({ entries }) => entries.length === 0) && (
-        <p className="p-1 text-xs text-muted-foreground/70">No matches.</p>
+        <p className="p-1 text-xs text-muted-foreground/70">
+          {noMatch("scripts")}
+        </p>
       )}
       {filtered.map(({ group, entries }) => (
         <FileScriptsView

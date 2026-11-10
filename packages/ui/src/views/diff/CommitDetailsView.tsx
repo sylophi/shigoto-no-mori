@@ -89,7 +89,7 @@ export function CommitDetailsView({
         {canAmend && (
           <Button variant="outline" size="xs" onClick={onAmend}>
             <PencilLine />
-            Amend
+            Amend…
           </Button>
         )}
         {/* HEAD's message is amended with the rest of it. */}
@@ -101,7 +101,7 @@ export function CommitDetailsView({
             onClick={onReword}
           >
             <TextCursorInput />
-            Reword
+            Reword…
           </Button>
         )}
         {canSquash && (

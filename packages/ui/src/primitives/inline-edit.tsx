@@ -29,8 +29,8 @@ const SIZES = {
 // A value edited in place. Enter saves, Esc cancels, and clicking away
 // saves too. A blank or unchanged draft closes instead of saving, and
 // the caller closes a save once it lands. `icons` sits beside the text
-// it replaces with ✓ and ✕. `text` wears Save and Cancel and spells Esc
-// out, for a field with no obvious edges.
+// it replaces with ✓ and ✕. `text` wears Save and Cancel, for a field
+// with no obvious edges.
 export function InlineEdit({
   value,
   label,
@@ -122,23 +122,19 @@ export function InlineEdit({
         ref={editor}
         className="flex min-w-0 flex-wrap items-center gap-1.5"
       >
-        {/* The hint is what wraps when room runs out. */}
-        <span className="flex min-w-0 items-center gap-1.5">
-          {field}
-          <Button
-            variant="outline"
-            size="xs"
-            disabled={!canSave}
-            onClick={save}
-            keys="↩"
-          >
-            {pending ? "Saving…" : "Save"}
-          </Button>
-          <Button variant="ghost" size="xs" onClick={onCancel}>
-            Cancel
-          </Button>
-        </span>
-        <span className="text-3xs text-muted-foreground">Esc to cancel</span>
+        {field}
+        <Button
+          variant="outline"
+          size="xs"
+          disabled={!canSave}
+          onClick={save}
+          keys="↩"
+        >
+          {pending ? "Saving…" : "Save"}
+        </Button>
+        <Button variant="ghost" size="xs" onClick={onCancel}>
+          Cancel
+        </Button>
         {error && <span className="basis-full">{error}</span>}
       </span>
     );

@@ -448,7 +448,7 @@ export function MirrorIgnoresApplyView({
         {pending ? "Re-opening…" : "Apply"}
       </Button>
       <Button size="sm" variant="ghost" disabled={pending} onClick={onRevert}>
-        Revert
+        Discard
       </Button>
       <span className="text-xs text-muted-foreground">
         {settled

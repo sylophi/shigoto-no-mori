@@ -104,7 +104,7 @@ export function ScriptVerbView({
           busy && "text-emerald-500",
         )}
       >
-        {busy ? "running" : command}
+        {busy ? "Running" : command}
       </span>
     </PaletteItemView>
   );

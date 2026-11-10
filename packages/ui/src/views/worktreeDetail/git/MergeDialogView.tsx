@@ -116,6 +116,7 @@ export function MergeDialogView({
         />
         {messaged && (
           <Input
+            className="px-3 py-2 text-sm"
             aria-label="Commit message"
             placeholder="Commit message"
             value={squashMessage}

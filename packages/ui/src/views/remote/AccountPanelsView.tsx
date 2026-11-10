@@ -22,7 +22,7 @@ export function SignedOutPanelView({
   return (
     <StatePanel
       icon={MonitorSmartphone}
-      title="Your other machines go here."
+      title="Your other devices go here."
       action={signIn}
     >
       <p className="max-w-sm text-xs">
@@ -85,7 +85,7 @@ export function NotConfiguredPanelView({
         The account service settings{" "}
         <code className="font-mono">{ACCOUNT_ENV.hubUrl}</code> and{" "}
         <code className="font-mono">{ACCOUNT_ENV.publishableKey}</code> are
-        missing, so sign-in is unavailable and other devices cannot appear here.
+        missing, so sign-in is unavailable and other devices can't appear here.
       </p>
       {isDev && (
         <p className="max-w-sm text-xs">

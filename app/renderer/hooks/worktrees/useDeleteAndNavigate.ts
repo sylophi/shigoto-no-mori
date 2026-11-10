@@ -107,7 +107,7 @@ export function useDeleteAndNavigate(
           // for a worktree still being set up (a peer's page doesn't
           // see the create phase to disable the button).
           const settingUp = isWorktreeSettingUpError(error);
-          if (settingUp) notifyError("Couldn't delete worktree", error);
+          if (settingUp) notifyError("Couldn't delete the worktree", error);
           setStall(
             settingUp || isCommandRefusedError(error)
               ? null

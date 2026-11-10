@@ -10,6 +10,7 @@ import noNodeBuiltinsInService from "./rules/no-node-builtins-in-service.mts";
 import noProcessPlatform from "./rules/no-process-platform.mts";
 import noRuntimeInService from "./rules/no-runtime-in-service.mts";
 import noWallClock from "./rules/no-wall-clock.mts";
+import uiWords from "./rules/ui-words.mts";
 import type { Rule } from "./types.mts";
 
 export default {
@@ -25,5 +26,6 @@ export default {
     "no-process-platform": noProcessPlatform,
     "no-runtime-in-service": noRuntimeInService,
     "no-wall-clock": noWallClock,
+    "ui-words": uiWords,
   },
 } satisfies { meta: { name: string }; rules: Record<string, Rule> };

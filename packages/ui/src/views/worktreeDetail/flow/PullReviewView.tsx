@@ -551,7 +551,7 @@ export function CloneLinesView({
           <>Something other than a checkout of {clone.projectName} is there.</>
         ) : (
           <>
-            No checkout of {clone.projectName} there yet, so it&rsquo;s cloned
+            No checkout of {clone.projectName} there yet, so it&apos;s cloned
             first.
           </>
         )}

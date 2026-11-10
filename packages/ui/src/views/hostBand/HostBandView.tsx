@@ -2,6 +2,7 @@
 // starting it again), and for a moment after, saying why the shell did.
 import { LoaderCircle, RotateCcw } from "lucide-react";
 import type { HostRestartReasonSchema } from "@shigomori/contracts/modules/window";
+import { pluralize } from "@shigomori/contracts/words";
 import { TONE_FILL, TONE_MARK } from "../../primitives/status-dot.tsx";
 import { cn, dragRegion } from "../../lib/utils.ts";
 
@@ -13,7 +14,7 @@ export type HostBandState =
 
 function restartWords(reason: HostRestartReason): string {
   if (reason.kind === "silent") {
-    return `The app's background process stopped responding for ${reason.seconds} seconds and was restarted.`;
+    return `The app's background process stopped responding for ${pluralize(reason.seconds, "second")} and was restarted.`;
   }
   return reason.code === null
     ? "The app's background process quit unexpectedly and was restarted."

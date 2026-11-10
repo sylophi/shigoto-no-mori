@@ -44,9 +44,9 @@ import { withMember } from "@shigomori/ui/lib/toggleSet.ts";
 // word the same phases as steps of their own run (flow/PullProgress.tsx
 // rows, pullSteps.ts headlines).
 export const CREATE_PHASE_LABEL = {
-  carryOver: "Carrying over files...",
-  setup: "Setting up...",
-  portPoolProvision: "Provisioning ports...",
+  carryOver: "Carrying over files…",
+  setup: "Setting up…",
+  portPoolProvision: "Provisioning ports…",
 } satisfies Record<CreatePhase, string>;
 
 type Lifecycle = {
@@ -160,7 +160,7 @@ function tellCarryOver(
           (s) =>
             `${s.path} from ${s.source}${
               s.copiedInstead
-                ? " (copied: symlinks only target the main checkout)"
+                ? " (copied: symlinks only target the primary checkout)"
                 : ""
             }`,
         ),
@@ -170,7 +170,7 @@ function tellCarryOver(
   }
   if (failures.length === 0) return;
   toast.warning(
-    `Carried over ${applied} of ${applied + failures.length} entries`,
+    `Carried over ${applied} of ${pluralize(applied + failures.length, "entry", "entries")}`,
     {
       description: clippedLines(
         failures.map(

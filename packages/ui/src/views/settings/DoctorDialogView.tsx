@@ -178,6 +178,9 @@ export function DoctorDialogView({
             : undefined
         }
       >
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          Close
+        </Button>
         <Button
           variant="ghost"
           size="sm"
@@ -200,9 +203,6 @@ export function DoctorDialogView({
             onClick={onRepair}
           />
         )}
-        <Button variant="ghost" size="sm" onClick={onClose}>
-          Close
-        </Button>
       </DialogFooter>
     </>
   );

@@ -111,8 +111,8 @@ export function ConfigureFormView({
               </label>
               {branchPicker}
               <p className="text-xs text-muted-foreground">
-                Pre-fills "Branched from" when starting a new worktree. Falls
-                back to <span className="font-mono">main</span> /{" "}
+                Pre-fills Source when starting a new worktree. Falls back to{" "}
+                <span className="font-mono">main</span> /{" "}
                 <span className="font-mono">master</span> /{" "}
                 <span className="font-mono">dev</span> (in that order, then the
                 first local branch) when the branch you set here doesn't exist.

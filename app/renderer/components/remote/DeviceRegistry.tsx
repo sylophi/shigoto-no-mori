@@ -208,7 +208,7 @@ function describeListError(error: unknown): string {
   if (isHubUnreachableError(error)) {
     return (
       "Couldn't reach the device hub. Either you are offline, or this " +
-      "build's hub URL does not point at a reachable Worker."
+      "build's hub URL doesn't point at a reachable Worker."
     );
   }
   return `Couldn't load the device list: ${errorMessageOf(error)}`;

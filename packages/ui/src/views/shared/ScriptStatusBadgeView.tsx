@@ -65,7 +65,7 @@ export function ScriptStatusBadgeView({
       return (
         <SimpleTooltip tip={timeTip}>
           <span className="tabular shrink-0 text-xs text-muted-foreground select-text">
-            {state.exitCode === null ? "stopped" : "done"}
+            {state.exitCode === null ? "Stopped" : "Done"}
             {time}
           </span>
         </SimpleTooltip>
@@ -74,7 +74,7 @@ export function ScriptStatusBadgeView({
     return (
       <SimpleTooltip tip={timeTip}>
         <span className="tabular shrink-0 text-xs text-destructive select-text">
-          failed with exit {state.exitCode}
+          Failed with exit {state.exitCode}
           {time}
         </span>
       </SimpleTooltip>
@@ -83,7 +83,7 @@ export function ScriptStatusBadgeView({
   if (state.status === "errored") {
     return (
       <span className="shrink-0 text-xs text-destructive select-text">
-        errored
+        Errored
       </span>
     );
   }

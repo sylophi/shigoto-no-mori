@@ -1,3 +1,4 @@
+import { noMatch } from "@shigomori/contracts/words";
 import { useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
 import { ChevronsUpDown } from "lucide-react";
@@ -160,7 +161,7 @@ export function BranchComboboxView({
         className="w-(--anchor-width) min-w-56"
       >
         {sorted.length === 0 && !showCustom && (
-          <ComboboxEmpty>No matching branches.</ComboboxEmpty>
+          <ComboboxEmpty>{noMatch("branches")}</ComboboxEmpty>
         )}
         {sorted.map((entry) => (
           <ComboboxItem key={`${entry.kind}:${entry.name}`} value={entry.name}>

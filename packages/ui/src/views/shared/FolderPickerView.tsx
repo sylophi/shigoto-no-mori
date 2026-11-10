@@ -70,7 +70,7 @@ export function FolderPickerView({
         onOpenFinder && (
           <ChipButton onClick={onOpenFinder}>
             <FileManagerIcon />
-            Open in Finder
+            Reveal in Finder
           </ChipButton>
         )
       }

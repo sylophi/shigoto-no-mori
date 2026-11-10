@@ -39,7 +39,7 @@ export function SectionIntro({
         <SectionHeading className="mb-1">{title}</SectionHeading>
         <p className="text-xs text-muted-foreground">{children}</p>
       </div>
-      {action && <div className="-mr-2 shrink-0">{action}</div>}
+      {action && <div className="-mr-2 shrink-0 phone:mr-0">{action}</div>}
     </div>
   );
 }

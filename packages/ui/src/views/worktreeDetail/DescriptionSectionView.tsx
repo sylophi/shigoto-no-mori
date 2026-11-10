@@ -127,12 +127,7 @@ export function DescriptionEditorView({
         className="w-full resize-y px-3 py-2 font-mono text-sm"
       />
       <div className="flex justify-end gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onCancel}
-          disabled={saving}
-        >
+        <Button variant="ghost" size="sm" onClick={onCancel} disabled={saving}>
           Cancel
         </Button>
         <Button

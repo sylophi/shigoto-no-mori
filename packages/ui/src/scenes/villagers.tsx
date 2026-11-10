@@ -34,6 +34,7 @@ import {
   MoveCaptionView,
   NameplateView,
   VillagerDialogueView,
+  villagerInk,
 } from "../views/villagers/VillagerDialogueView.tsx";
 import {
   FaceStampView,
@@ -241,7 +242,9 @@ export function VillagersPartsScene() {
               <TypedWordsView words="Good morning! Here's today's news." />
             </p>
           </DialogueFrameView>
-          <NameplateView>Raymond</NameplateView>
+          <div className="flex" style={villagerInk("#c27a3e")}>
+            <NameplateView className="px-3 text-sm">Raymond</NameplateView>
+          </div>
           <MoveCaptionView news={news(RAYMOND, null)} ink="#c27a3e" />
         </ScenePart>
         <ScenePart label="A legend writes" gap={3}>

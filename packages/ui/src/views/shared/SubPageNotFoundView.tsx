@@ -1,5 +1,7 @@
 import { BackButton } from "../../primitives/back-button.tsx";
 import { Button } from "../../primitives/button.tsx";
+import { cn } from "../../lib/utils.ts";
+import { PAGE_HEADER_PADDING } from "./PageHeaderView.tsx";
 
 export function SubPageNotFoundView({
   onBack,
@@ -12,7 +14,7 @@ export function SubPageNotFoundView({
 }) {
   return (
     <div className="flex h-full flex-col">
-      <header className="border-b border-border px-6 pt-7 pb-4">
+      <header className={cn("border-b border-border", PAGE_HEADER_PADDING)}>
         <BackButton onClick={onBack} label="Back" />
       </header>
       <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">

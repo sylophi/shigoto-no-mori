@@ -195,7 +195,7 @@ export function useUpdateAll(
         throw new Error(
           local === undefined
             ? reasons
-            : `${reasons} This device was not updated, so you can try again.`,
+            : `${reasons} This device wasn't updated, so you can try again.`,
         );
       }
       if (local !== undefined) await restartIntoUpdate(local.api, "update");

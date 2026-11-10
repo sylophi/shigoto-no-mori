@@ -151,7 +151,7 @@ export function BranchDeleteDialogView({
         Delete the local branch{" "}
         <span className="font-mono text-foreground">{name}</span>?{" "}
         {needsForce
-          ? "Force deleting cannot be undone."
+          ? "Force deleting can't be undone."
           : "You'll be asked again if it has commits that aren't " +
             "merged elsewhere."}
       </p>

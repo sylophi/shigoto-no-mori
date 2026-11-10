@@ -200,7 +200,7 @@ export function PathPickerView<E extends PickerEntry>({
         )}
         loading={isPending}
         error={Boolean(error)}
-        noMatch={trimmed ? `No entries matching "${trimmed}".` : undefined}
+        noMatch={trimmed ? `No entries matching “${trimmed}”.` : undefined}
         emptyLabel={atRoot ? emptyRootLabel : undefined}
         className="min-h-[12rem] p-1"
       />

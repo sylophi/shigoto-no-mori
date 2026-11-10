@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { EyeOff, Files, RotateCw } from "lucide-react";
+import { EyeOff, Files, RefreshCw } from "lucide-react";
 import { PAGE_HEADER_PADDING } from "../shared/PageHeaderView.tsx";
 import { BackButton } from "../../primitives/back-button.tsx";
 import { CenteredMessage } from "../../primitives/centered-message.tsx";
@@ -83,13 +83,9 @@ export function FilesHeaderView({
               </ChipButton>
             )}
             {controls.hideIgnored}
-            <ChipButton
-              onClick={controls.onRefresh}
-              aria-label="Refresh files"
-              className="py-1.5"
-            >
-              <RotateCw aria-hidden className="size-3.5" />
-            </ChipButton>
+            <IconButton onClick={controls.onRefresh} aria-label="Refresh files">
+              <RefreshCw aria-hidden className="size-3.5" />
+            </IconButton>
           </div>
         )}
       </div>

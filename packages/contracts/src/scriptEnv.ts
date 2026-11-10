@@ -115,7 +115,7 @@ export const SCRIPT_ENV_DOCS: ReadonlyArray<ScriptEnvDoc> = [
   },
   {
     name: SCRIPT_ENV_KEYS.PROJECT_PATH,
-    desc: "Absolute path of the main checkout.",
+    desc: "Absolute path of the primary checkout.",
   },
   {
     name: SCRIPT_ENV_KEYS.PROJECT_NAME,
@@ -123,7 +123,7 @@ export const SCRIPT_ENV_DOCS: ReadonlyArray<ScriptEnvDoc> = [
   },
   {
     name: SCRIPT_ENV_KEYS.PROJECT_BRANCH,
-    desc: "Branch checked out in the main checkout.",
+    desc: "Branch checked out in the primary checkout.",
   },
   {
     name: SCRIPT_ENV_KEYS.DEFAULT_BRANCH,

@@ -135,8 +135,8 @@ export function LaunchToolsPanelView({
       {missingTools.length > 0 && (
         <section className="space-y-4">
           <SectionIntro title="Supported tools">
-            Shigomori knows how to open worktrees in these too. Install any of
-            them and they&apos;ll show up under detected.
+            Shigoto no Mori knows how to open worktrees in these too. Install
+            any of them and they&apos;ll show up under detected.
           </SectionIntro>
           <div className="flex flex-wrap items-center gap-1.5">
             {missingTools.map((d) => (

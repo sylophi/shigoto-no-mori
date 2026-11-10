@@ -50,7 +50,7 @@ export function UnreachableBannerView({
   action: ReactNode;
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-3 border-b border-amber-500/30 bg-amber-500/10 px-6 py-2 text-xs text-amber-700 dark:text-amber-300">
+    <div className="flex shrink-0 items-center gap-3 border-b border-amber-500/30 bg-amber-500/10 px-6 py-2 text-xs text-amber-700 dark:text-amber-300 phone:px-4">
       <span className="min-w-0 flex-1 select-text">
         {label} Showing the last state it sent.
       </span>

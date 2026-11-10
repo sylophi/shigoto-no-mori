@@ -18,7 +18,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../../primitives/dropdown-menu.tsx";
-import { SIDEBAR_ICON_BUTTON } from "./sidebarChrome.ts";
+import { PROJECT_ACTION_HOOKS, SIDEBAR_ICON_BUTTON } from "./sidebarChrome.ts";
 
 type SortOption<T> = { value: T; label: string };
 
@@ -202,6 +202,7 @@ function ListMenuView({
             type="button"
             aria-label={label}
             className={SIDEBAR_ICON_BUTTON}
+            {...PROJECT_ACTION_HOOKS}
           >
             <ArrowUpDown className="size-3.5" />
           </button>

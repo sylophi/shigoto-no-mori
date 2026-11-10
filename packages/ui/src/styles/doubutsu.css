@@ -29,9 +29,8 @@
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar",
  *    data-doubutsu-page="settings|tidy|devices|forest|visitors"
- *    picking the canvas wallpaper, the `doubutsu-only` / `v1-only`
- *    classes (per-theme markup shipped side by side), and the pickers'
- *    li[data-row-idx].
+ *    picking the canvas wallpaper, and the `doubutsu-only` / `v1-only`
+ *    classes (per-theme markup shipped side by side).
  *
  * 4. Upstream library attributes (re-verify on upgrades): Base UI's
  *    data-highlighted / data-disabled / data-popup-open /
@@ -1106,7 +1105,6 @@
       button,
       [role="button"],
       a[href],
-      li[data-row-idx].cursor-pointer,
       :is([data-slot="switch"], [data-slot="checkbox"]):not(label *),
       [data-slot="diff-index-row"],
       [data-slot="sidebar-project-row"],
@@ -1143,9 +1141,17 @@
    the two ride together (both are hooks in the CONTRACT). The tick
    keeps its own stripes: it is a control you aim at, not the row's own
    click target. */
-.doubutsu [data-slot="diff-index-jump"]:is(:hover, :active) {
-  background-image: none;
-  animation: none;
+.doubutsu [data-slot="diff-index-jump"] {
+  &:active {
+    background-image: none;
+    animation: none;
+  }
+  @media (hover: hover) {
+    &:hover {
+      background-image: none;
+      animation: none;
+    }
+  }
 }
 
 /* A project on the sidebar's list is one pill as well, picked by the
@@ -1153,9 +1159,17 @@
    button sits it out (both are hooks in the CONTRACT). The `+` and `…`
    beside it keep their own stripes, like the diff row's tick and
    discard. */
-.doubutsu [data-slot="sidebar-project-pick"]:is(:hover, :active) {
-  background-image: none;
-  animation: none;
+.doubutsu [data-slot="sidebar-project-pick"] {
+  &:active {
+    background-image: none;
+    animation: none;
+  }
+  @media (hover: hover) {
+    &:hover {
+      background-image: none;
+      animation: none;
+    }
+  }
 }
 
 /* A terminal tab is one pill as well, picked by the tab inside it,

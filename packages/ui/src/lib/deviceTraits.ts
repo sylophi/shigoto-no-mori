@@ -35,7 +35,7 @@ export function deviceTraits(platform: string): DeviceTraits {
       // A browser has no OS worth naming beside its own name ("Chrome
       // on macOS" already says it), so it reads as the web client.
       spec: (appVersion) =>
-        appVersion === "" ? "Web client" : `Web client ${appVersion}`,
+        appVersion === "" ? "Web client" : `Web client v${appVersion}`,
     };
   }
   const os = platformLabel(platform);

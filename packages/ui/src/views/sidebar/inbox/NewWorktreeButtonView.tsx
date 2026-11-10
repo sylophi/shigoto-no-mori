@@ -1,5 +1,6 @@
 // The inbox's New worktree button and its list of projects to create
 // in (NewWorktreeButton binds them).
+import { noMatch } from "@shigomori/contracts/words";
 import type {
   ComponentProps,
   KeyboardEvent,
@@ -145,7 +146,7 @@ export function CreateMenuListView({
           </Command.Group>
         ))}
         <Command.Empty className={EMPTY_CLASS}>
-          No projects match.
+          {noMatch("projects")}
         </Command.Empty>
       </Command.List>
       <FooterRow className="px-3 py-2 text-2xs phone:hidden">

@@ -62,9 +62,9 @@ export function DangerZoneView({
             Nuke everything
           </div>
           <p className="text-xs text-muted-foreground">
-            Force-removes every worktree shigomori created, removes its command
-            line tool and hooks, takes this device off your account, and deletes
-            everything under{" "}
+            Force-removes every worktree Shigoto no Mori created, removes its
+            command line tool and hooks, takes this device off your account, and
+            deletes everything under{" "}
             {root === null ? (
               "the app's data folder"
             ) : (

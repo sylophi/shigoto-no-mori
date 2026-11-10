@@ -32,7 +32,7 @@ export function CustomLauncherInputView({
         placeholder="Command"
         aria-label="Launcher command"
         {...usersAlone("run")}
-        className="min-w-0 px-2.5 py-1.5 font-mono text-xs"
+        className="min-w-0 px-2.5 py-1.5 font-mono text-sm"
       />
       <IconButton
         onClick={onRemove}

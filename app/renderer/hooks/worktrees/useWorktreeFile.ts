@@ -39,7 +39,7 @@ export function useWorktreeFile(
     ...worktreeFileQuery(scope, projectId, worktreeId, path),
     // The pane says so itself, and a peer without the grant refusing
     // is a state, not an error.
-    meta: gatedHostReadMeta(scope.remote, "Couldn't read file"),
+    meta: gatedHostReadMeta(scope.remote, "Couldn't read the file"),
   });
 }
 

@@ -183,7 +183,7 @@ export function WorktreeMenuManageView({
           <DropdownMenuArmedLabel
             armed={remove.armed}
             label="Delete worktree"
-            armedLabel="Click again to delete"
+            armedLabel="Confirm delete?"
           />
         </DropdownMenuItem>
       )}

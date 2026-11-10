@@ -11,7 +11,11 @@ export function CodeSignInDialog() {
   const code = useExternalStore(codeSignIn);
   if (code === null) return null;
   return (
-    <ModalShell label="Sign in with a code" onClose={close}>
+    <ModalShell
+      label="Sign in with a code"
+      onClose={close}
+      popoverClassName="max-w-md"
+    >
       <CodeSignInDialogView
         code={code.userCode}
         url={code.verificationUriComplete ?? code.verificationUri}

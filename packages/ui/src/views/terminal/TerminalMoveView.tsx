@@ -1,5 +1,6 @@
 // The picked terminal's move to another worktree: a button in the tab
 // row that opens a search of the worktrees it can go to.
+import { noMatch } from "@shigomori/contracts/words";
 import { useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
 import { FolderInput } from "lucide-react";
@@ -69,7 +70,7 @@ export function TerminalMoveView({
           </ComboboxItem>
         ))}
         {shown.length === 0 && (
-          <ComboboxEmpty>No worktree matches</ComboboxEmpty>
+          <ComboboxEmpty>{noMatch("worktrees")}</ComboboxEmpty>
         )}
       </ComboboxPopup>
     </Combobox.Root>
