@@ -122,7 +122,7 @@ export function TerminalTabsView({
                     "group flex h-6 shrink-0 items-center rounded-full pr-0.5 text-xs transition-colors",
                     selected
                       ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
                   )}
                 >
                   <Tabs.Tab

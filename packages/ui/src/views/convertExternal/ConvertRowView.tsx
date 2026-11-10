@@ -37,7 +37,7 @@ export function ConvertRowView({
       className={cn(
         "group flex items-start gap-3 px-3 py-3 text-sm",
         disabled && "opacity-70",
-        interactive && "cursor-pointer transition-colors hover:bg-accent/30",
+        interactive && "cursor-pointer transition-colors hover:bg-accent/60",
       )}
     >
       <Checkbox

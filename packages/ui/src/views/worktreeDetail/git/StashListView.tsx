@@ -90,7 +90,7 @@ export function StashListView({
                   "flex w-full items-start gap-2 rounded-md px-1.5 py-1.5 text-left focus-visible:outline-2 focus-visible:outline-ring",
                   picked
                     ? "bg-accent text-accent-foreground"
-                    : "hover:bg-accent/50",
+                    : "hover:bg-accent/60",
                 )}
               >
                 <Archive

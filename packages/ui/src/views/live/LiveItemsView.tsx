@@ -53,10 +53,6 @@ function UptimeView({ since }: { since: number }) {
   );
 }
 
-// A ghost button on an item's muted fill. v1's dark ghost hover is that
-// same fill, so the hover lifts it the way the outline button does.
-const ON_FILL = "dark:hover:bg-input/50";
-
 // A device inline: its glyph and its name.
 export function DeviceNameView({
   icon,
@@ -155,12 +151,7 @@ export function ScriptItemView({
       actions={
         readOnlyNote === null && (
           <>
-            <Button
-              size="sm"
-              variant="ghost"
-              className={ON_FILL}
-              onClick={onOutput}
-            >
+            <Button size="sm" variant="ghost" onClick={onOutput}>
               <SquareTerminal />
               Output
             </Button>
@@ -168,7 +159,6 @@ export function ScriptItemView({
               <Button
                 size="sm"
                 variant="ghost"
-                className={ON_FILL}
                 disabled={busy}
                 onClick={restart.onClick}
               >
@@ -221,12 +211,7 @@ export function TerminalItemView({
       status={<UptimeView since={since} />}
       actions={
         <>
-          <Button
-            size="sm"
-            variant="ghost"
-            className={ON_FILL}
-            onClick={onOpen}
-          >
+          <Button size="sm" variant="ghost" onClick={onOpen}>
             <PanelBottomOpen />
             Open
           </Button>
@@ -314,7 +299,6 @@ export function MirrorSessionItemView({
           <Button
             size="sm"
             variant="ghost"
-            className={ON_FILL}
             disabled={onManage === undefined}
             onClick={onManage}
           >
@@ -376,22 +360,12 @@ export function ForwardItemView({
         }
         actions={
           <>
-            <Button
-              size="sm"
-              variant="ghost"
-              className={ON_FILL}
-              onClick={onOpen}
-            >
+            <Button size="sm" variant="ghost" onClick={onOpen}>
               <ExternalLinkIcon />
               Open
             </Button>
             {onChangePort && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className={ON_FILL}
-                onClick={onChangePort}
-              >
+              <Button size="sm" variant="ghost" onClick={onChangePort}>
                 <Settings2 />
                 Change port
               </Button>

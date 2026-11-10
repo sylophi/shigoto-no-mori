@@ -32,7 +32,7 @@ export function ScriptEnvPopoverView() {
           {SCRIPT_ENV_DOCS.map((row) => (
             <li
               key={row.name}
-              className="group/copy flex items-start gap-1 rounded-md px-1.5 py-1 hover:bg-accent/50"
+              className="group/copy flex items-start gap-1 rounded-md px-1.5 py-1 hover:bg-accent/60"
             >
               <div className="min-w-0 flex-1">
                 <div className="font-mono text-xs text-foreground/80">

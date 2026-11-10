@@ -120,8 +120,10 @@ export function WorktreeEntryView({
         // data-popup-open is Base UI's mark on a trigger whose menu is
         // up (the inbox row's): keep the row lit so it's clear whose
         // menu this is.
-        "hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-ring data-popup-open:bg-accent/60",
-        isSelected && "bg-accent text-accent-foreground",
+        "focus-visible:outline-2 focus-visible:outline-ring",
+        isSelected
+          ? "bg-accent text-accent-foreground"
+          : "hover:bg-accent/60 data-popup-open:bg-accent/60",
         // One fade, the strongest that applies: a delete in flight, then
         // an unreachable device's last known state, then a row filed
         // away: agent working, shelved or behind a hidden prefix. Merged

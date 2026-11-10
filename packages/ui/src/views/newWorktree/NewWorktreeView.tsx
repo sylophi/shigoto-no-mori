@@ -248,7 +248,7 @@ export function NewWorktreeFormView({
             <label
               className={cn(
                 "-mx-1 flex cursor-pointer items-center gap-2 rounded-md px-1 text-xs text-muted-foreground select-none",
-                !busy && "hover:bg-muted dark:hover:bg-muted/50",
+                !busy && "hover:bg-accent",
               )}
             >
               <Checkbox

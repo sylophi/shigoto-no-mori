@@ -63,7 +63,7 @@ export function ThemePickerView<Id extends LightTheme | DarkTheme>({
             data-slot="theme-swatch"
             className={cn(
               "group flex w-20 flex-col items-center gap-1.5 rounded-lg p-1.5 transition-colors",
-              selected ? "bg-accent" : "hover:bg-accent/50",
+              selected ? "bg-accent" : "hover:bg-accent/60",
             )}
           >
             <ThemeSwatch appearance={appearance} id={shown} />

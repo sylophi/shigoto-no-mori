@@ -603,7 +603,7 @@ function IndexRow({
         "flex w-full items-center gap-1.5 rounded-md px-2 transition-colors",
         active
           ? "bg-accent text-accent-foreground"
-          : "hover:bg-accent/50 hover:text-foreground",
+          : "hover:bg-accent/60 hover:text-foreground",
         menuOpen && !active && "bg-accent/50",
         collapsed && "opacity-55",
       )}

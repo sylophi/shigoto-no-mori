@@ -76,6 +76,14 @@ Rules that keep both themes cheap to maintain:
   row's hover, `size="xs"` in a diff's headers). Don't re-inline their
   class strings, and count a noun or join a list through contracts'
   `words.ts` (`pluralize`, `plural` for the word alone, `listed`).
+- **Hover has one fill.** A control with no fill at rest (a ghost
+  button, an icon button, a link with a box of its own) hovers with
+  `hover:bg-accent`. A row in a list hovers with `hover:bg-accent/60`,
+  and a picked row keeps its `bg-accent` under the pointer: the hover
+  class goes on the unpicked branch. `muted` is for a surface that
+  already has a fill. The two are one grey in v1 and two colours in
+  doubutsu, so a `hover:bg-muted` on a bare control only shows as wrong
+  there.
 - **Hover hints are the app's tooltip**, `SimpleTooltip` from
   `primitives/tooltip.tsx`, never a `title` attribute: the browser's tooltip
   wears neither theme. `shigomori/no-native-tooltip` (oxlint) catches

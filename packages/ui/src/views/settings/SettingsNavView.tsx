@@ -179,10 +179,10 @@ function NavRow({
       aria-controls={controls}
       onClick={onSelect}
       className={cn(
-        "flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent/60",
+        "flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
         active
           ? "bg-accent font-medium text-accent-foreground"
-          : "text-muted-foreground hover:text-foreground",
+          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
       )}
     >
       <SectionLabelView section={section} />

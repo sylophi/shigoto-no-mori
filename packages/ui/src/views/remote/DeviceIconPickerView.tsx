@@ -53,7 +53,7 @@ export function DeviceIconPickerView({
       <DropdownMenuTrigger
         aria-label={`${label} icon: ${DEVICE_ICON_LABELS[icon]}. Change`}
         disabled={disabled}
-        className="group relative -m-1 shrink-0 rounded-xl p-1 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60 dark:hover:bg-muted/50"
+        className="group relative -m-1 shrink-0 rounded-xl p-1 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60"
       >
         <DeviceMarkView icon={icon} tone={tone} size="lg" />
         {/* A small cue that the mark opens something, kept off the

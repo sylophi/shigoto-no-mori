@@ -109,7 +109,7 @@ export function RemoteBranchesView({ names }: { names: readonly string[] }) {
           type="button"
           onClick={() => setExpanded(!expanded)}
           aria-expanded={expanded}
-          className="group -mx-1 flex items-center gap-1.5 rounded-md px-1 text-left uppercase hover:bg-muted dark:hover:bg-muted/50"
+          className="group -mx-1 flex items-center gap-1.5 rounded-md px-1 text-left uppercase hover:bg-accent"
         >
           <span className="group-hover:text-foreground">
             Remote-tracking branches
