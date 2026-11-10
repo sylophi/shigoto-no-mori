@@ -18,7 +18,7 @@ import * as Atom from "effect/reactivity/Atom";
 import { reorderProjects } from "@shared/reorder";
 import { worktreeQueriesOn } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { type Abortable, abortable, withAbort } from "@/lib/cancellable";
+import { useAbortableMutation } from "@/lib/cancellable";
 import { noteProjects } from "@/lib/viewFeed";
 import {
   clientAtoms,
@@ -106,14 +106,12 @@ export function useAddProject() {
 export function useCloneProject() {
   const { api } = useHostScope();
   const whenListed = useWhenListed();
-  const mutation = useMutation<Project, Error, Abortable<CloneProjectPayload>>({
+  return useAbortableMutation<Project, CloneProjectPayload>({
     // Settles once listed, as useAddProject does.
-    mutationFn: abortable((input: CloneProjectPayload, signal) =>
+    mutationFn: (input, signal) =>
       api.run(api.projects.clone(input), { signal }).then(whenListed),
-    ),
     meta: { errorTitle: "Couldn't clone the repository" },
   });
-  return withAbort(mutation);
 }
 
 // Starts a new repository on the scoped device and registers it.

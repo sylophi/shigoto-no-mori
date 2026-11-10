@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ATTACHMENT_CHUNK_BYTES,
   type CreatePullRequestPayload,
@@ -6,7 +6,7 @@ import {
   type Worktree,
 } from "@shigomori/contracts/schemas";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
-import { type Abortable, abortable, withAbort } from "@/lib/cancellable";
+import { useAbortableMutation } from "@/lib/cancellable";
 import { toast } from "@/lib/toast";
 import { dropPullRequestDraft } from "@/store/pullRequestDrafts";
 import { invalidatePullRequestsForProject } from "../projects/useProjectPullRequests";
@@ -135,18 +135,13 @@ export function useCreatePullRequest() {
   const { api, keys, deviceId } = useHostScope();
   // `cancel` stops it: the host ends its push or gh, and a PR gh
   // already made stays.
-  const mutation = useMutation<
+  return useAbortableMutation<
     CreatePullRequestResult,
-    Error,
-    Abortable<CreatePullRequestPayload & { branch: string }>
+    CreatePullRequestPayload & { branch: string }
   >({
     // The branch keys the form it was written in.
-    mutationFn: abortable(
-      (
-        { branch: _, ...input }: CreatePullRequestPayload & { branch: string },
-        signal,
-      ) => api.run(api.githubCli.createPullRequest(input), { signal }),
-    ),
+    mutationFn: ({ branch: _, ...input }, signal) =>
+      api.run(api.githubCli.createPullRequest(input), { signal }),
     onSuccess: ({ warning }, { projectId, worktreeId, branch }) => {
       invalidatePullRequestsForProject(qc, keys, projectId);
       dropPullRequestDraft({ deviceId, projectId, worktreeId }, branch);
@@ -158,5 +153,4 @@ export function useCreatePullRequest() {
     },
     meta: { silentError: true },
   });
-  return withAbort(mutation);
 }

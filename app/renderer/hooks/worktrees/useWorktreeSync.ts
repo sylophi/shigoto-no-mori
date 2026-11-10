@@ -1,11 +1,7 @@
-import {
-  isCancelledError,
-  useMutation,
-  useMutationState,
-} from "@tanstack/react-query";
+import { isCancelledError, useMutationState } from "@tanstack/react-query";
 import type { MergeBranchResult, Worktree } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { type Abortable, abortable, withAbort } from "@/lib/cancellable";
+import { type Abortable, useAbortableMutation } from "@/lib/cancellable";
 import { notifyError } from "@/lib/toast";
 import { isSyncConflictsError } from "@shigomori/contracts/errors";
 import { useWorkingTreeWriteBack } from "./useWorktreeChanges";
@@ -78,11 +74,10 @@ function useSyncMutation(
 ) {
   const { api, deviceId } = useHostScope();
   const writeBack = useWorkingTreeWriteBack();
-  const mutation = useMutation<Worktree, Error, Abortable<SyncWorktreeInput>>({
+  return useAbortableMutation<Worktree, SyncWorktreeInput>({
     mutationKey: syncKey(deviceId, move),
-    mutationFn: abortable((input: SyncWorktreeInput, signal) =>
+    mutationFn: (input, signal) =>
       api.run(api.worktrees[move](input), { signal }),
-    ),
     // Pull, overwrite and sync rewrite the working tree, so an open
     // changes page has to re-read its patch and its checkbox states. PR
     // queries refresh via the refs-changed broadcast that the push
@@ -91,7 +86,6 @@ function useSyncMutation(
     onError,
     meta: onError ? { silentError: true } : { errorTitle },
   });
-  return withAbort(mutation);
 }
 
 export const usePushForceWorktree = () =>
@@ -111,19 +105,13 @@ export const useSyncWithPrimaryWorktree = () =>
 function useMergeKeepingConflicts(move: MergeMove, errorTitle: string) {
   const { api, deviceId } = useHostScope();
   const writeBack = useWorkingTreeWriteBack();
-  const mutation = useMutation<
-    MergeBranchResult,
-    Error,
-    Abortable<SyncWorktreeInput>
-  >({
+  return useAbortableMutation<MergeBranchResult, SyncWorktreeInput>({
     mutationKey: syncKey(deviceId, move),
-    mutationFn: abortable((input: SyncWorktreeInput, signal) =>
+    mutationFn: (input, signal) =>
       api.run(api.worktrees[move](input), { signal }),
-    ),
     onSuccess: (data, vars) => writeBack(vars, data.worktree),
     meta: { errorTitle },
   });
-  return withAbort(mutation);
 }
 
 export const useMergeUpstreamWorktree = () =>

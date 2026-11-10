@@ -1,32 +1,35 @@
 import {
   CancelledError,
   type MutateOptions,
-  type UseMutationResult,
+  type UseMutationOptions,
+  useMutation,
 } from "@tanstack/react-query";
 
 // A mutation's input with what stops its run.
 export type Abortable<V> = V & { abort: AbortController };
-
-// A mutationFn handed its run's signal, failing as React Query's cancel
-// (which no toast reports) once stopped. A run that finished first
-// lands as it would.
-export const abortable =
-  <V, A>(run: (input: V, signal: AbortSignal) => Promise<A>) =>
-  ({ abort, ...input }: Abortable<V>): Promise<A> =>
-    run(input as V, abort.signal).catch((error: unknown) => {
-      throw abort.signal.aborted ? new CancelledError() : error;
-    });
 
 const start = <V extends object>(input: V): Abortable<V> => ({
   ...input,
   abort: new AbortController(),
 });
 
-// The mutation, each run given its own AbortController, and `cancel`
-// stopping the latest.
-export function withAbort<A, V extends object>(
-  mutation: UseMutationResult<A, Error, Abortable<V>>,
-) {
+// useMutation whose runs can be stopped: `mutationFn` is handed its
+// run's signal, and `cancel` stops the latest run, which then fails as
+// React Query's cancel (no toast reports it). A run that finished first
+// lands as it would.
+export function useAbortableMutation<A, V extends object>({
+  mutationFn: run,
+  ...rest
+}: Omit<UseMutationOptions<A, Error, Abortable<V>>, "mutationFn"> & {
+  mutationFn: (input: V, signal: AbortSignal) => Promise<A>;
+}) {
+  const mutation = useMutation<A, Error, Abortable<V>>({
+    ...rest,
+    mutationFn: ({ abort, ...input }) =>
+      run(input as V, abort.signal).catch((error: unknown) => {
+        throw abort.signal.aborted ? new CancelledError() : error;
+      }),
+  });
   return {
     ...mutation,
     mutate: (input: V, options?: MutateOptions<A, Error, Abortable<V>>) =>

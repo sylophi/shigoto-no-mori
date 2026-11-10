@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PublishRepoPayload } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { type Abortable, abortable, withAbort } from "@/lib/cancellable";
+import { useAbortableMutation } from "@/lib/cancellable";
 
 // The accounts a new repository can go under, signed-in user first.
 // Asked only once publishing is on the table. Quiet when it fails: the
@@ -24,11 +24,11 @@ export function useGithubOwners(enabled: boolean) {
 export function usePublishRepo() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
-  const mutation = useMutation<void, Error, Abortable<PublishRepoPayload>>({
-    mutationFn: abortable((input: PublishRepoPayload, signal) =>
+  return useAbortableMutation<void, PublishRepoPayload>({
+    mutationFn: (input, signal) =>
       api.run(api.githubCli.publish(input), { signal }),
-    ),
-    onSuccess: (_data, { projectId }) =>
+    // A cancelled publish too, which can have made the repo.
+    onSettled: (_data, _error, { projectId }) =>
       Promise.all(
         [
           keys.pullRequestsForProject(projectId),
@@ -39,5 +39,4 @@ export function usePublishRepo() {
     // The caller says what failed: the project exists either way.
     meta: { silentError: true },
   });
-  return withAbort(mutation);
 }

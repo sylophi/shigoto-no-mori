@@ -43,7 +43,12 @@ export function SyncActionButtonView({
     <SimpleTooltip tip={cancels ? "Cancel" : tip}>
       <button
         type="button"
-        onClick={cancels ? onCancel : onClick}
+        // The second click of a double-click doesn't stop what the
+        // first started.
+        onClick={(event) => {
+          if (!cancels) onClick();
+          else if (event.detail < 2) onCancel();
+        }}
         disabled={!cancels && (disabled || pending)}
         aria-label={cancels ? `Cancel: ${label}` : undefined}
         className={cn(
