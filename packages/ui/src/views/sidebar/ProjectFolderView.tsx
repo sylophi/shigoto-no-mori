@@ -149,7 +149,7 @@ export function FolderNameDialogView({
       }
     >
       <Input
-        className="mt-4 w-full"
+        className="mt-4 w-full px-3 py-2 text-sm"
         aria-label="Name"
         placeholder="Name"
         value={name}

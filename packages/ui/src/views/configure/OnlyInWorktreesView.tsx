@@ -1,3 +1,4 @@
+import { listed } from "@shigomori/contracts/words";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
 
@@ -23,11 +24,11 @@ export function OnlyInWorktreesView({
   className,
 }: OnlyInWorktreesProps) {
   if (inPrimary || worktrees.length === 0) return null;
-  const names = worktrees.join(", ");
+  const names = listed(worktrees);
   return (
     <FoundNote
       note={`in ${names}`}
-      tip={`Not in the main checkout. Found in: ${names}`}
+      tip={`Not in the primary checkout. Found in: ${names}`}
       className={className}
     />
   );
@@ -42,15 +43,15 @@ export function FoundOnDevicesView({
   holders: RepoEntryHolder[];
   className?: string;
 }) {
-  const names = holders
-    .map(({ device, inPrimary, worktrees }) =>
+  const names = listed(
+    holders.map(({ device, inPrimary, worktrees }) =>
       inPrimary ? device : `${device} (${worktrees.join(", ")})`,
-    )
-    .join(", ");
+    ),
+  );
   return (
     <FoundNote
       note={`on ${names}`}
-      tip={`Not in every device's main checkout. Found on: ${names}`}
+      tip={`Not in every device's primary checkout. Found on: ${names}`}
       className={className}
     />
   );

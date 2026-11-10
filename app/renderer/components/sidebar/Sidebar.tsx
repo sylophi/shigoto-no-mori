@@ -433,7 +433,7 @@ function emptyForestMessage({
   if (noProjects && empty) {
     return hasLocalHost
       ? "No projects yet."
-      : "No reachable devices with projects yet. Open the Devices page to see this account's machines.";
+      : "No reachable devices with projects yet. Open the Devices page to see this account's devices.";
   }
   return failed ? null : viewMessage;
 }

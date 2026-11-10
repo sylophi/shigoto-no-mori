@@ -89,7 +89,7 @@ interface RenameAnyBranchInput {
 export function useRenameAnyBranch() {
   return useBranchMutation<RenameAnyBranchInput>(
     (api, input) => api.branches.rename(input),
-    { errorTitle: "Couldn't rename branch" },
+    { errorTitle: "Couldn't rename the branch" },
   );
 }
 

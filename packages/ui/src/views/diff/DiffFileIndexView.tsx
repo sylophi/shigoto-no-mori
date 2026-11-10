@@ -32,7 +32,7 @@ import { IconButton } from "../../primitives/icon-button.tsx";
 import { ModalShell } from "../../primitives/modal-shell.tsx";
 import { DialogFrame } from "../../primitives/dialog.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { pluralize } from "@shigomori/contracts/words";
+import { noMatch, pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../lib/utils.ts";
 import { warmOnRest } from "../../lib/pointerIntent.ts";
 import { getBrowseLeafSegment } from "@shigomori/contracts/projectPaths";
@@ -172,7 +172,7 @@ export function DiffFileIndexView({
   const emptyNote =
     entries.length > 0 ? (
       <p className="px-2 py-3 text-xs text-muted-foreground">
-        No files match that filter.
+        {noMatch("files")}
       </p>
     ) : changes ? null : (
       <p className="px-2 py-3 text-xs text-muted-foreground">
@@ -471,7 +471,7 @@ function ChangesMenuItems({
         onClick={() => onPick("all")}
       >
         <Undo2 />
-        Discard all changes
+        Discard all changes…
       </DropdownMenuItem>
       <DropdownMenuItem
         variant="destructive"
@@ -479,7 +479,7 @@ function ChangesMenuItems({
         onClick={() => onPick("unticked")}
       >
         <Undo2 />
-        Discard unticked files
+        Discard unticked files…
       </DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem disabled={changes.busy} onClick={changes.onStash}>

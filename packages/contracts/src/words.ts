@@ -26,6 +26,11 @@ export function listed(parts: readonly string[]): string {
   return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1) ?? ""}`;
 }
 
+// A search that finds nothing, in a list of these: "No branches match."
+export function noMatch(nounPlural: string): string {
+  return `No ${nounPlural} match.`;
+}
+
 // A sentence's first word as it starts one: "the other device" leads
 // "The other device is offline".
 export function capitalized(words: string): string {

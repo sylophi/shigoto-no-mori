@@ -1,3 +1,4 @@
+import { noMatch } from "@shigomori/contracts/words";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { ChevronRight, Plus, Search } from "lucide-react";
@@ -85,7 +86,7 @@ export function LocalBranchListView({
         />
       </div>
       {filtered.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No matches.</p>
+        <p className="text-sm text-muted-foreground">{noMatch("branches")}</p>
       ) : (
         <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
           {filtered.map((name) => rows.get(name))}

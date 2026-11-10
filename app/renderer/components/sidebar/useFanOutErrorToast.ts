@@ -4,12 +4,12 @@
 // error can never vanish from the web tree without a trace.
 import { useEffect } from "react";
 import { toast } from "@/lib/toast";
-import { pluralize } from "@shigomori/contracts/words";
+import { listed, pluralize } from "@shigomori/contracts/words";
 
 // A peer whose projects could not be read, after the retries: listed,
 // and never reached.
 export function useUnreachedDevicesToast(devices: readonly string[]): void {
-  const names = [...new Set(devices)].join(", ");
+  const names = listed([...new Set(devices)]);
   useEffect(() => {
     const id = "devices-fanout-error";
     if (names === "") {

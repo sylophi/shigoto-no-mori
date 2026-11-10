@@ -56,7 +56,7 @@ function ComboboxPopup({
             <Combobox.Input
               placeholder={placeholder}
               className={cn(
-                "flex-1 bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground",
+                "min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground",
                 mono && "font-mono placeholder:font-sans",
               )}
             />

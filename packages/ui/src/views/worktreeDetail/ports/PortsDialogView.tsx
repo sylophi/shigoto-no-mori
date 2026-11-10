@@ -46,10 +46,10 @@ export function PortsDialogView({
       </DialogHeader>
       <DialogBody>{list}</DialogBody>
       <DialogFooter>
-        {actions}
         <Button variant="ghost" size="sm" onClick={onClose}>
           Close
         </Button>
+        {actions}
       </DialogFooter>
     </>
   );

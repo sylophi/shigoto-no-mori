@@ -1,3 +1,4 @@
+import { noMatch } from "@shigomori/contracts/words";
 import { useEffect, useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
 import { Check, ChevronsUpDown } from "lucide-react";
@@ -76,7 +77,7 @@ export function BranchSwitcherView({
         className="w-72"
       >
         {sorted.length === 0 && (
-          <ComboboxEmpty>No matching branches.</ComboboxEmpty>
+          <ComboboxEmpty>{noMatch("branches")}</ComboboxEmpty>
         )}
         {sorted.map((entry) => (
           <ComboboxItem key={`${entry.kind}:${entry.name}`} value={entry.name}>

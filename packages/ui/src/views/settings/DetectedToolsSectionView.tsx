@@ -31,8 +31,8 @@ export function DetectedToolsSectionView({
       </SectionIntro>
       {tools.length === 0 ? (
         <p className="text-xs text-muted-foreground/70">
-          Nothing detected yet. Install a supported tool below and Shigomori
-          will pick it up on next launch.
+          Nothing detected yet. Install a supported tool below and Shigoto no
+          Mori will pick it up on next launch.
         </p>
       ) : (
         <>

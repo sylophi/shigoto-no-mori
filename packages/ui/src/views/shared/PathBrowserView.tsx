@@ -128,7 +128,7 @@ export function PathBrowserView({
             error={error !== null}
             noMatch={
               leafFilter.length > 0
-                ? `No folders matching "${leafFilter}".`
+                ? `No folders matching “${leafFilter}”.`
                 : undefined
             }
             className="min-h-0 flex-1 p-2"

@@ -121,7 +121,9 @@ Rules that keep both themes cheap to maintain:
   title it draws. What it draws comes from `primitives/dialog.tsx`: a
   short confirm or form is a `DialogFrame`, whose Cancel takes the
   focus when the action is destructive, and a bigger dialog stacks
-  `DialogHeader`, `DialogBody` and `DialogFooter`. A one-row pick is
+  `DialogHeader`, `DialogBody` and `DialogFooter`. A footer leads with
+  its way out (Cancel or Close, a ghost button) and ends on its main
+  action. A one-row pick is
   Base UI's too: `Tabs` for what switches the body under it (a page's
   device tabs, the terminal tabs), `RadioGroup` for a setting (the
   segmented control, the sidebar's device filter). They carry the roles
@@ -135,6 +137,30 @@ Rules that keep both themes cheap to maintain:
   field has focus, except the script console's terminal, where they
   still win (there Ctrl+D would be EOF and end the running program).
   Settings → Appearance does the same with a save option.
+
+## Words: one spelling of a thing
+
+What the app says is drawn as often as any component, and two
+spellings of one thing read as two things.
+
+- **A thing has one name.** The app is Shigoto no Mori and its command
+  `sm`. An account's members are devices: "this machine" is only the
+  computer the window runs on, said against "your other devices". A
+  project's own checkout is its primary checkout.
+- **An act keeps its verb** on every surface it shows: the button, the
+  menu item, the confirm, the pending label, the toast.
+- **Sentence case** on everything: buttons, tags, headings, status
+  words. A name that is lowercase stays so (`port-pool`).
+- **`…` is one character.** It ends a pending label ("Deleting…") and a
+  verb that asks for more before it acts (a dialog, a page to fill in),
+  wherever that verb shows.
+- **Contractions**: "couldn't", "can't". A failure's title is
+  "Couldn't <verb> the <thing>".
+- **A search that finds nothing** says `noMatch` (contracts'
+  `words.ts`): "No branches match." One that quotes what was typed
+  writes its own line.
+- `shigomori/ui-words` (oxlint) holds the spellings a pattern can
+  catch. A new one that drifts goes in its table.
 
 ## Views and containers: data in, markup out
 

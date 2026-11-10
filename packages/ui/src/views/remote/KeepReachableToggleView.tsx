@@ -24,7 +24,7 @@ export function KeepReachableToggleView({
       onCheckedChange={onChange}
       disabled={pending}
       label="Keep this device reachable"
-      description="Starts Shigoto no Mori when you log in and relaunches it after a recoverable crash, so this machine stays available to your account."
+      description="Starts Shigoto no Mori when you log in and relaunches it after a recoverable crash, so this device stays available to your account."
     />
   );
 }

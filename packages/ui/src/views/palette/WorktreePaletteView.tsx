@@ -1,3 +1,4 @@
+import { noMatch } from "@shigomori/contracts/words";
 import type { KeyboardEvent, ReactNode } from "react";
 import { Command, useCommandState } from "cmdk";
 import { ArrowDown, ArrowUp } from "lucide-react";
@@ -124,7 +125,7 @@ export function PaletteDialogView({
           <PaneKeysProvider value={picked}>{verbs}</PaneKeysProvider>
           {picked && (
             <Command.Empty className={EMPTY_CLASS}>
-              No actions match.
+              {noMatch("actions")}
             </Command.Empty>
           )}
         </div>

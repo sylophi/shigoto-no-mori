@@ -24,7 +24,7 @@ export function shigomoriConfigQueryOptions(
       );
     },
     enabled: projectId !== null && api !== undefined && deviceId !== "",
-    meta: { errorTitle: "Couldn't load project config" },
+    meta: { errorTitle: "Couldn't load the project's config" },
   });
 }
 

@@ -61,7 +61,7 @@ export function useCreateWorktree() {
     onSuccess: (result) => {
       spliceWorktreeRow(registry, deviceId, result.worktree);
     },
-    meta: { errorTitle: "Couldn't create worktree" },
+    meta: { errorTitle: "Couldn't create the worktree" },
   });
 }
 

@@ -54,7 +54,7 @@ export function AddToDeviceDialogView({
           />
           {clone.found === "same-repo" && (
             <p className="text-xs text-muted-foreground">
-              A checkout of {clone.projectName} is already there, so it&rsquo;s
+              A checkout of {clone.projectName} is already there, so it&apos;s
               added as it is.
             </p>
           )}

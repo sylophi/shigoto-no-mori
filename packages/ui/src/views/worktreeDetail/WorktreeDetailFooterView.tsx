@@ -202,7 +202,7 @@ function NeedsForceRow({
         onClick={actions.onForceDelete}
       >
         <Trash2 />
-        {busy ? "Deleting..." : "Force delete"}
+        {busy ? "Deleting…" : "Force delete"}
       </Button>
     </>
   );
@@ -224,7 +224,7 @@ function CleanupRunningRow({
       className="ml-auto shrink-0"
     >
       <Trash2 />
-      {cancelling ? "Stopping..." : "Stop cleanup"}
+      {cancelling ? "Stopping…" : "Stop cleanup"}
     </Button>
   );
 }

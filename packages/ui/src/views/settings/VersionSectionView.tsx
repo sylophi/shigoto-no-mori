@@ -26,7 +26,7 @@ export function BuildVersionLineView({
 }) {
   return (
     <>
-      {version} <span className="text-muted-foreground">({commit})</span>
+      v{version} <span className="text-muted-foreground">({commit})</span>
     </>
   );
 }

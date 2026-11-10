@@ -49,9 +49,9 @@ export function CarryOverSectionView({
     <section className="space-y-3">
       <SectionIntro title="Carry over">
         Files and folders to copy or symlink into every new worktree, taken from
-        the main checkout or, failing that, another worktree that has them
-        (symlinks only ever point at the main checkout). Useful for things git
-        ignores, like <span className="font-mono">.env</span>,{" "}
+        the primary checkout or, failing that, another worktree that has them
+        (symlinks only ever point at the primary checkout). Useful for things
+        git ignores, like <span className="font-mono">.env</span>,{" "}
         <span className="font-mono">node_modules</span>, or editor state.
       </SectionIntro>
 

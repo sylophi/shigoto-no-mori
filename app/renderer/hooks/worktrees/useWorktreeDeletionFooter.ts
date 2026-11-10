@@ -122,13 +122,11 @@ function limboLabel(
 ): string {
   if (live(releaseState)) {
     return releaseState.cancelling
-      ? "Stopping port-pool release..."
-      : "Releasing ports...";
+      ? "Stopping port-pool release…"
+      : "Releasing ports…";
   }
   if (live(teardownState)) {
-    return teardownState.cancelling
-      ? "Stopping teardown..."
-      : "Tearing down...";
+    return teardownState.cancelling ? "Stopping teardown…" : "Tearing down…";
   }
-  return "Removing worktree...";
+  return "Removing worktree…";
 }

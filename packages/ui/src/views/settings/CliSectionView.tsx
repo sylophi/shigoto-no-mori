@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Download, Trash2 } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
 import { SectionIntro } from "../../primitives/section-heading.tsx";
+import { StatusDot } from "../../primitives/status-dot.tsx";
 import { tildify } from "@shigomori/contracts/projectPaths";
 import type {
   CliStatus,
@@ -50,10 +51,7 @@ export function CliSectionView({
 
       {state === "installed" && (
         <div className="flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center gap-1.5 text-sm">
-            <span className="size-1.5 rounded-full bg-emerald-500" />
-            Installed
-          </span>
+          <StatusDot tone="emerald" label="Installed" />
           <span className="font-mono text-sm text-muted-foreground select-text">
             {tildify(status.linkPath, home)}
           </span>
@@ -71,10 +69,10 @@ export function CliSectionView({
 
       {state === "stale" && (
         <div className="flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center gap-1.5 text-sm">
-            <span className="size-1.5 rounded-full bg-amber-500" />
-            Installed, but pointing at another copy of the app
-          </span>
+          <StatusDot
+            tone="amber"
+            label="Installed, but pointing at another copy of the app"
+          />
           <Button
             variant="outline"
             size="sm"
@@ -185,10 +183,7 @@ export function ShellIntegrationView({
         </p>
       ) : login?.state === "installed" ? (
         <div className="flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center gap-1.5 text-sm">
-            <span className="size-1.5 rounded-full bg-emerald-500" />
-            Enabled for {login.shell}
-          </span>
+          <StatusDot tone="emerald" label={`Enabled for ${login.shell}`} />
           <span className="font-mono text-sm text-muted-foreground select-text">
             {tildify(login.path, home)}
           </span>

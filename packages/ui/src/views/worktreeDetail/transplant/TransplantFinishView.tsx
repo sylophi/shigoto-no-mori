@@ -220,14 +220,14 @@ export function TransplantFinishView({
             </div>
             {stranded && (
               <p className="text-xs text-muted-foreground">
-                The uncommitted changes could not be applied {here}. They are
-                still on {sourceDeviceLabel}, and the capture is parked {here}{" "}
-                for <span className="font-mono">sm dirty apply</span>.
+                The uncommitted changes couldn&apos;t be applied {here}. They
+                are still on {sourceDeviceLabel}, and the capture is parked{" "}
+                {here} for <span className="font-mono">sm dirty apply</span>.
               </p>
             )}
             {result.files !== undefined && !filesCrossed && (
               <p className="text-xs text-muted-foreground">
-                The ignored files could not be brought over
+                The ignored files couldn&apos;t be brought over
                 {result.files.error ? `: ${result.files.error}` : ""}. They are
                 still on {sourceDeviceLabel}.
               </p>

@@ -1,3 +1,4 @@
+import { noMatch } from "@shigomori/contracts/words";
 import { useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
 import { Check, Plus, X } from "lucide-react";
@@ -93,7 +94,7 @@ export function MultiPickerView({
                 ? "Loading…"
                 : options.length === 0
                   ? empty
-                  : "No matches."}
+                  : noMatch(label.toLowerCase())}
             </ComboboxEmpty>
           )}
           {ranked.map((option) => (

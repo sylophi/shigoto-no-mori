@@ -2,6 +2,7 @@
 // "port", a project and a page it names and the worktree it could make,
 // with the highlighted row's verbs beside them, the verbs holding the
 // keys once ⇥ picks the row, and a pasted URL nothing matches.
+import { noMatch } from "@shigomori/contracts/words";
 import type { ReactNode } from "react";
 import { Copy, FileDiff, Folder, GitPullRequest, Settings } from "lucide-react";
 import type { PaletteProject } from "../views/palette/paletteEntries.ts";
@@ -264,7 +265,7 @@ function palette(shown: "found" | "picked" | "none") {
             onQueryChange={noop}
             onInputKeyDown={noop}
             list={!none && list(picked ? (FIRST?.key ?? null) : null)}
-            emptyList="No worktrees match."
+            emptyList={noMatch("worktrees")}
             verbs={!none && verbs()}
             current={none ? undefined : FIRST?.kind}
             changesKeys={defaultBinding("paletteChanges").label}

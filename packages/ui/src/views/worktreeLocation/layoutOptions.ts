@@ -14,7 +14,7 @@ export const LAYOUT_OPTIONS: LayoutOption[] = [
   {
     value: "managed-root",
     label: "Managed",
-    description: "Worktrees live in Shigomori's data folder.",
+    description: "Worktrees live in Shigoto no Mori's data folder.",
     recommended: true,
   },
   {

@@ -59,7 +59,7 @@ export function SettingsPageView({
       {chips}
       <div className="flex min-h-0 flex-1 flex-col">{children}</div>
       {saveError !== null && (
-        <div className="px-6 pb-3">
+        <div className="px-6 pb-3 phone:px-4">
           <ErrorBanner message={saveError} title="Couldn't save settings" />
         </div>
       )}

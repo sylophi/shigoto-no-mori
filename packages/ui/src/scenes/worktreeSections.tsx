@@ -1,6 +1,7 @@
 // The worktree page's sections over the fixtures (git, ports, scripts),
 // for the page's scene, and the Git page's parts and the sections'
 // other states in a scene of their own.
+import { noMatch } from "@shigomori/contracts/words";
 import { defaultBinding } from "../lib/keymap.ts";
 import { GitBranch } from "lucide-react";
 import { StaticMenu } from "../primitives/dropdown-menu.tsx";
@@ -410,7 +411,7 @@ export function WorktreeSectionsPartsScene({
                       />
                       <EarlierToggleView open onToggle={noop} />
                       <ShowMoreView pending={false} onLoad={noop} />
-                      <NoteView>No commit messages match.</NoteView>
+                      <NoteView>{noMatch("commit messages")}</NoteView>
                     </>
                   }
                 />

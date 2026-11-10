@@ -17,7 +17,9 @@ export function PortsSectionView({
           rows don't shift when one appears. */}
       <div className="flex h-4 items-center justify-between gap-2">
         <SectionHeading>Ports</SectionHeading>
-        <div className="-mr-2 flex items-center gap-1">{actions}</div>
+        <div className="-mr-2 flex items-center gap-1 phone:mr-0">
+          {actions}
+        </div>
       </div>
       {list}
     </section>

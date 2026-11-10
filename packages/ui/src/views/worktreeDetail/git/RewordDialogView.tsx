@@ -77,6 +77,7 @@ export function RewordDialogView({
     >
       <div className="mt-4 flex flex-col gap-2">
         <Input
+          className="px-3 py-2 text-sm"
           aria-label="Summary"
           placeholder="Summary (required)"
           value={summary}
@@ -86,6 +87,7 @@ export function RewordDialogView({
           autoFocus
         />
         <Textarea
+          className="px-3 py-2 text-sm"
           aria-label="Description"
           placeholder="Description"
           rows={5}

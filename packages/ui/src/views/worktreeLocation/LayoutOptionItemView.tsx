@@ -53,7 +53,7 @@ export function LayoutOptionItemView({
   const description =
     option.value === "managed-root" &&
     managedDriveBase(projectPath, device) !== undefined
-      ? "Worktrees live in Shigomori's folder on the project's drive."
+      ? "Worktrees live in Shigoto no Mori's folder on the project's drive."
       : option.description;
   return (
     <label
@@ -75,7 +75,7 @@ export function LayoutOptionItemView({
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">
           <span className="font-medium">{option.label}</span>
-          {option.recommended && <RowTag>recommended</RowTag>}
+          {option.recommended && <RowTag>Recommended</RowTag>}
         </div>
         {description && (
           <p className="text-xs leading-relaxed text-muted-foreground">

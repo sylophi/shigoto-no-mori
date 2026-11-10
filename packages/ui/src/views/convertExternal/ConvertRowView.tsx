@@ -65,7 +65,7 @@ export function ConvertRowView({
             <SimpleTooltip tip="Couldn't read its changes, so any will be wiped">
               <ToneTag tone="amber">
                 <FileQuestionMark aria-hidden className="size-3" />
-                couldn&apos;t read changes
+                Couldn&apos;t read changes
               </ToneTag>
             </SimpleTooltip>
           ) : (

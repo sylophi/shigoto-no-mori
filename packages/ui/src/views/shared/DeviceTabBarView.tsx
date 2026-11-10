@@ -208,7 +208,7 @@ export function DeviceTabNoteView({ note }: { note: string }) {
 // Over a body kept from an offline peer's last answers.
 export function StaleDeviceNoteView({ note }: { note: string }) {
   return (
-    <p className="border-b border-amber-500/30 bg-amber-500/10 px-6 py-2 text-xs text-amber-700 dark:text-amber-300">
+    <p className="border-b border-amber-500/30 bg-amber-500/10 px-6 py-2 text-xs text-amber-700 dark:text-amber-300 phone:px-4">
       {note} Showing the last state it sent.
     </p>
   );

@@ -51,7 +51,7 @@ export function DangerZone() {
         }
         setLeft(all);
       } catch (err) {
-        notifyError("Couldn't nuke shigomori data", err);
+        notifyError("Couldn't nuke Shigoto no Mori's data", err);
       }
       // The catch above swallows every failure, so this runs on all paths
       // (a `finally` clause would bail React Compiler out of this component).

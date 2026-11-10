@@ -111,7 +111,7 @@ export function usePullChoice(
     // over and would leave nothing out.
     blocked:
       needsList && ignored.isError
-        ? "The ignored files there could not be listed, so the gitignored rule cannot apply. Pick another rule."
+        ? "The ignored files there couldn't be listed, so the gitignored rule can't apply. Pick another rule."
         : null,
     choice,
   };

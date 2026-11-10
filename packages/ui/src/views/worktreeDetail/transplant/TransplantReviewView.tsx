@@ -60,7 +60,8 @@ export function ChangedFilesView({
   if (isError) {
     return (
       <p className={CARD_NOTE}>
-        The diff could not be read right now. The changes travel all the same.
+        The diff couldn&apos;t be read right now. The changes travel all the
+        same.
       </p>
     );
   }

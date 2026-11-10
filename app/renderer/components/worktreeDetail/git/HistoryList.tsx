@@ -12,7 +12,7 @@ import {
   type CommitRewrite,
   NO_REWRITE,
 } from "@shigomori/ui/lib/commitRewrite.ts";
-import { pluralize } from "@shigomori/contracts/words";
+import { noMatch, pluralize } from "@shigomori/contracts/words";
 import {
   deriveRemoteSyncState,
   type BranchHistory,
@@ -447,7 +447,7 @@ function SearchResults({
   const commits = data ? data.pages.flat() : [];
   if (isLoading) return <NoteView>Searching…</NoteView>;
   if (commits.length === 0)
-    return <NoteView>No commit messages match.</NoteView>;
+    return <NoteView>{noMatch("commit messages")}</NoteView>;
   return (
     <PastCommits
       worktree={worktree}
