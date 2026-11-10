@@ -69,7 +69,7 @@ export function DangerZoneView({
             Nuke everything
           </div>
           <p className="text-xs text-muted-foreground">
-            Force-removes every worktree Shigoto no Mori created, removes its
+            Force-deletes every worktree Shigoto no Mori created, removes its
             command line tool and hooks, takes this device off your account, and
             deletes everything under{" "}
             {root === null ? (
@@ -107,8 +107,8 @@ function describeNukeProgress(progress: NukeProgress | null): string {
       return "Stopping running scripts…";
     case "worktrees":
       return progress.total > 0
-        ? `Removing worktrees (${progress.done}/${progress.total})…`
-        : "Removing worktrees…";
+        ? `Deleting worktrees (${progress.done}/${progress.total})…`
+        : "Deleting worktrees…";
     case "hooks":
       return "Removing the command line tool…";
   }

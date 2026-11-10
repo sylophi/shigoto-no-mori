@@ -156,9 +156,9 @@ export function TidyRowView({
         <RowStatusBadge
           status={status}
           labels={{
-            running: "Removing",
-            done: "Removed",
-            error: "Removal failed",
+            running: "Deleting",
+            done: "Deleted",
+            error: "Delete failed",
           }}
         />
       </div>

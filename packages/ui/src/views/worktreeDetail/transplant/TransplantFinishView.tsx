@@ -65,7 +65,7 @@ const CHOICES: {
     key: "teardown",
     title: "Tear it down",
     body: (source, ignored) =>
-      `Runs teardown and removes it from ${source} for good${
+      `Runs teardown and deletes it from ${source} for good${
         ignored === null
           ? ", along with any ignored files that stayed there"
           : ignored > 0

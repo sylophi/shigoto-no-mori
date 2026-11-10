@@ -57,9 +57,7 @@ export function FilesHeaderView({
     >
       <div className="flex items-start justify-between gap-6">
         <div className="min-w-0 flex-1 space-y-1">
-          <h1 className="truncate text-xl font-medium tracking-tight phone:text-lg">
-            Files
-          </h1>
+          <h1 className="truncate text-lg font-medium tracking-tight">Files</h1>
           <SimpleTooltip whenTruncated tip={worktreeName}>
             <p className="truncate font-mono text-xs text-muted-foreground select-text">
               {worktreeName}

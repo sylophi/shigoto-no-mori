@@ -167,7 +167,7 @@ export function MarkdownFileView({
       remoteImage={remoteImage}
       localImage={localImage}
       breaks={false}
-      className="mx-auto max-w-3xl px-6 py-4"
+      className="px-6 py-4"
     />
   );
 }

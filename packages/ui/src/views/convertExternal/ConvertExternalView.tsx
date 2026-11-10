@@ -1,3 +1,4 @@
+import { FramedList } from "../../primitives/framed-list.tsx";
 import { Button } from "../../primitives/button.tsx";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import type { RowStatus } from "../../primitives/row-status.tsx";
@@ -78,7 +79,7 @@ export function ConvertExternalView({
               </span>
             </div>
 
-            <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
+            <FramedList>
               {externals.map((wt) => (
                 <ConvertRowView
                   key={wt.id}
@@ -91,7 +92,7 @@ export function ConvertExternalView({
                   onToggle={() => onToggle(wt.id)}
                 />
               ))}
-            </div>
+            </FramedList>
 
             <div className="flex items-center justify-end gap-2">
               <Button

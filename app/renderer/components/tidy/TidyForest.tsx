@@ -1,3 +1,4 @@
+import { FramedList } from "@shigomori/ui/primitives/framed-list.tsx";
 import { type ReactNode, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -42,7 +43,6 @@ import { TidyConfirm } from "./TidyConfirm";
 import {
   TidyBodyView,
   TidyGroupView,
-  TidyListView,
   TidyPageView,
 } from "@shigomori/ui/views/tidy/TidyForestView.tsx";
 import { TidyGroupHeadingView } from "@shigomori/ui/views/tidy/TidyGroupHeadingView.tsx";
@@ -125,7 +125,7 @@ function TidyBody() {
   // Primary checkouts are left out everywhere on this page, not just
   // from the list: they can never be removed, so counting the biggest
   // directory each project owns towards a headline total sitting next to
-  // a Remove button would promise back disk that tidying can't return.
+  // a Delete button would promise back disk that tidying can't return.
   // Filtered once here, so the stats, the disk walks and the rows all
   // describe the same set.
   const worktreesByProject = new Map<string, readonly Worktree[]>(
@@ -193,7 +193,7 @@ function TidyBody() {
         // Deletion resolves either way: `ok: false` means a teardown
         // script or a port release failed and the worktree is still on
         // disk. Raising it here is what marks the row failed instead of
-        // "Removed", and keeps its bytes out of the freed total.
+        // "Deleted", and keeps its bytes out of the freed total.
         if (!result.ok) {
           throw new Error(cleanupFailedNote(result.cleanupError));
         }
@@ -213,7 +213,7 @@ function TidyBody() {
   };
 
   const list = (rows: TidyEntry[], showProject: boolean) => (
-    <TidyListView>
+    <FramedList>
       {rows.map((entry) => (
         <TidyRow
           key={entry.worktree.id}
@@ -225,7 +225,7 @@ function TidyBody() {
           showProject={showProject}
         />
       ))}
-    </TidyListView>
+    </FramedList>
   );
 
   return (

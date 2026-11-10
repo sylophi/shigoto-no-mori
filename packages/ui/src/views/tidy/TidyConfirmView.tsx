@@ -50,7 +50,7 @@ export function TidyConfirmView({
     <DialogFrame
       title={
         <>
-          Remove {pluralize(count, "worktree")}
+          Delete {pluralize(count, "worktree")}
           {/* Named up front: a selection reaching into several repos is a
                 bigger act than tidying the one you were looking at. */}
           {projectCount > 1 && ` across ${projectCount} projects`}?
@@ -65,7 +65,7 @@ export function TidyConfirmView({
           disabled={!covered}
           onClick={() => onConfirm(acknowledged)}
         >
-          Remove {pluralize(count, "worktree")}
+          Delete {pluralize(count, "worktree")}
         </Button>
       }
     >
@@ -121,7 +121,7 @@ export function TidyConfirmView({
           </p>
           <p className="mt-2 leading-relaxed">
             {risky.length} of these {plural(risky.length, "is", "are")} not safe
-            to remove:{" "}
+            to delete:{" "}
             {listed(
               risky.map(
                 (entry) => `${entry.project.name}/${entry.worktree.name}`,

@@ -188,7 +188,7 @@ export function DiffHeaderView({
           {/* A phone's header row is shared with the chips, so the
               title wraps there instead of losing its tail. */}
           <SimpleTooltip whenTruncated tip={title}>
-            <h1 className="truncate text-xl font-medium tracking-tight select-text phone:text-lg phone:whitespace-normal">
+            <h1 className="truncate text-lg font-medium tracking-tight select-text phone:whitespace-normal">
               {title}
             </h1>
           </SimpleTooltip>

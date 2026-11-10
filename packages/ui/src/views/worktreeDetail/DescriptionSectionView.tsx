@@ -62,7 +62,7 @@ export function DescriptionSectionView({
   );
   return (
     <section className="group/description space-y-3">
-      <div className="relative max-w-3xl">
+      <div className="relative">
         <div
           ref={bodyRef}
           className={cn(
@@ -75,13 +75,11 @@ export function DescriptionSectionView({
         {pencilBeside && pencil}
       </div>
       {(showToggle || (pencil && !pencilBeside)) && (
-        <div className="max-w-3xl">
-          <div className="-mx-2 flex items-center gap-1">
-            {showToggle && (
-              <ShowMoreButton expanded={expanded} onToggle={onToggle} />
-            )}
-            {!pencilBeside && pencil}
-          </div>
+        <div className="-mx-2 flex items-center gap-1">
+          {showToggle && (
+            <ShowMoreButton expanded={expanded} onToggle={onToggle} />
+          )}
+          {!pencilBeside && pencil}
         </div>
       )}
     </section>
@@ -106,7 +104,7 @@ export function DescriptionEditorView({
   saveKeys: Binding;
 }) {
   return (
-    <section className="max-w-3xl space-y-2">
+    <section className="space-y-2">
       <Textarea
         // oxlint-disable-next-line jsx-a11y/no-autofocus -- intentional: editing
         autoFocus

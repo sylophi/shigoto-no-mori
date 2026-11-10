@@ -2,6 +2,7 @@
 // page and its shared settings, its branches, its worktree location and
 // the conversion of its external worktrees, the Tidy page across the
 // forest, and the home page's tiles.
+import { FramedList } from "../primitives/framed-list.tsx";
 import { EditorFooterView } from "../views/shared/EditorFooterView.tsx";
 import { BranchComboboxView } from "../views/shared/BranchComboboxView.tsx";
 import { DeviceTabBarView } from "../views/shared/DeviceTabBarView.tsx";
@@ -43,7 +44,6 @@ import { TidyConfirmView } from "../views/tidy/TidyConfirmView.tsx";
 import {
   TidyBodyView,
   TidyGroupView,
-  TidyListView,
   TidyPageView,
 } from "../views/tidy/TidyForestView.tsx";
 import { TidyGroupHeadingView } from "../views/tidy/TidyGroupHeadingView.tsx";
@@ -511,7 +511,7 @@ export function TidyScene() {
                 />
               }
             >
-              <TidyListView>
+              <FramedList>
                 {group.entries.map((entry) => (
                   <TidyRowView
                     key={entry.worktree.id}
@@ -532,7 +532,7 @@ export function TidyScene() {
                     icon={icon(entry.project.name)}
                   />
                 ))}
-              </TidyListView>
+              </FramedList>
             </TidyGroupView>
           ))}
           confirm={null}
