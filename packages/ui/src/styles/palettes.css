@@ -417,7 +417,7 @@
   --light-ink: var(--foreground);
   --light-accent: var(--primary);
 }
-[data-theme-scope].doubutsu.dark[data-palette="ink"] {
+[data-theme-scope].doubutsu.dark[data-palette^="ink-"] {
   --background: oklch(from var(--light-ink) 0.215 calc(c * 0.3) h);
   --foreground: oklch(from var(--light-ink) 0.95 calc(c * 0.25) h);
   --card: oklch(from var(--light-ink) 0.275 calc(c * 0.3) h);

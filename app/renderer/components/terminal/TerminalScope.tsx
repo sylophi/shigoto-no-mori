@@ -9,14 +9,18 @@ import { useLook } from "@/hooks/ui/useLook";
 // (DESIGN.md, "Theming"): the window's look, and while terminals stay
 // dark in a light window, the light palette's own dark ("ink",
 // palettes.css) rather than the dark pick. Always a root, so a
-// terminal watching it re-themes in place when either changes.
+// terminal watching it re-themes in place when either changes: the
+// ink names its light palette for that, since its colors follow the
+// window's root rather than this one's attributes.
 export function TerminalScope({ children }: { children: ReactNode }) {
   const { data: config } = useClientConfig();
   const { applied, resolved } = useLook();
   const darkened =
     resolved === "light" && clientSetting(config ?? {}, "darkTerminals");
   const palette =
-    darkened && applied.doubutsu ? "ink" : activeTheme(applied, resolved);
+    darkened && applied.doubutsu
+      ? `ink-${applied.light}`
+      : activeTheme(applied, resolved);
   return (
     <div
       data-theme-scope
