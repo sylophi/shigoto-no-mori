@@ -13,9 +13,9 @@ export const updaterContract = defineContract(
   invoke("get", VoidSchema, UpdaterStateSchema, ungated),
   invoke("check", VoidSchema, VoidSchema, gatedBy("changeApp")),
   invoke("install", VoidSchema, VoidSchema, gatedBy("changeApp")),
-  // Install the staged update, or fetch one first and install it once
-  // it is staged (Update all, for a device that hasn't found the
-  // release yet). Answers once the install started or was armed.
+  // Fetch the newest release and install it (Update all, for a device
+  // that may not have found the release yet). Answers once that is
+  // under way, and the device keeps at it from there.
   invoke("update", VoidSchema, VoidSchema, gatedBy("changeApp")),
   push("state", UpdaterStateSchema, { remote: true }),
 );

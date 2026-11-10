@@ -48,6 +48,7 @@ import * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
 // What the updater asks of the shell it runs in.
@@ -99,6 +100,13 @@ const MAX_BACKOFF_TICKS = 6;
 // pin checkInFlight forever and silently disable checks for the app's
 // lifetime.
 const STAGE_TIMEOUT_MS = 30 * 60 * 1000;
+// An update asked for (updateNow) is tried this often, this far apart,
+// before it is given up: the release's build for this machine can reach
+// GitHub minutes after another device found the release, a check can
+// fail, and a host busy when its download ends may not be a minute on.
+// In tries, so a sleep spends none of them.
+const PURSUIT_SPACING_MS = 30 * 1000;
+const PURSUIT_TRIES = 10;
 
 function readyStateFrom(manifest: {
   version: string;
@@ -114,10 +122,6 @@ function readyStateFrom(manifest: {
 }
 
 // Where an install stands, beside what the checks found:
-// - armed: updateNow asked for one before anything was staged, and the
-//   next check to finish installs what it staged (unattended or not).
-//   `midCheck` when the arm landed while a check was already running,
-//   which may have asked before the release was out.
 // - installing: handed off, and the process quits once it has started.
 // - held: a move or a reset of the data folder is under way (hold), so
 //   no check or install starts until the restart that follows, or a
@@ -125,17 +129,14 @@ function readyStateFrom(manifest: {
 //   an install asked for meanwhile.
 type Install =
   | { readonly kind: "none" }
-  | {
-      readonly kind: "armed";
-      readonly unattended: boolean;
-      readonly midCheck: boolean;
-    }
   | { readonly kind: "installing" }
   | { readonly kind: "held"; readonly words: string };
 
 export const makeUpdater = (seat: UpdaterSeat) => {
   let state: UpdaterState = { kind: "idle" };
   let install: Install = { kind: "none" };
+  // An update asked for (updateNow) is being fetched and installed.
+  let pursuing = false;
   let started = false;
   let checkInFlight = false;
   let failedChecks = 0;
@@ -163,16 +164,20 @@ export const makeUpdater = (seat: UpdaterSeat) => {
   }
 
   // The state as the windows, the peers and `sm update` see it: marked
-  // `updating` while an install is under way or armed (updateNow), so
-  // every button that would start one waits on it instead.
+  // `updating` while an install is under way or asked for (updateNow),
+  // so every button that would start one waits on it instead. One asked
+  // for reads as checking between its tries, where the last found
+  // nothing or failed.
   function shownState(): UpdaterState {
-    const updating = install.kind === "installing" || install.kind === "armed";
-    return updating &&
-      (state.kind === "checking" ||
-        state.kind === "downloading" ||
-        state.kind === "ready")
-      ? { ...state, updating }
-      : state;
+    if (install.kind !== "installing" && !pursuing) return state;
+    if (
+      state.kind === "checking" ||
+      state.kind === "downloading" ||
+      state.kind === "ready"
+    ) {
+      return { ...state, updating: true };
+    }
+    return pursuing ? { kind: "checking", updating: true } : state;
   }
 
   function publish(): void {
@@ -218,9 +223,8 @@ export const makeUpdater = (seat: UpdaterSeat) => {
     };
   }
 
-  // A check, started from outside the updater's layer (the host's call,
-  // updateNow, a staged arm): on the layer's own runtime, nothing while
-  // it is down.
+  // A check, started from outside the updater's layer (the host's
+  // call): on the layer's own runtime, nothing while it is down.
   let fork:
     | ((effect: Effect.Effect<void, never, UpdaterServices>) => void)
     | null = null;
@@ -230,8 +234,12 @@ export const makeUpdater = (seat: UpdaterSeat) => {
   function checkForUpdates(): void {
     fork?.(checkInTurn);
   }
-  // Ends the check under way, on the layer's handle (hold).
-  let endCheck: Effect.Effect<void> | null = null;
+  // What the layer runs its checks and the update asked for on, null
+  // while it is down.
+  let handles: {
+    readonly checks: FiberHandle.FiberHandle<void, never>;
+    readonly pursuit: FiberHandle.FiberHandle<void, never>;
+  } | null = null;
   let checkInTurn: Effect.Effect<void, never, UpdaterServices> = Effect.void;
 
   // One check at a time. The engine holds a cross-process staging lock,
@@ -253,6 +261,7 @@ export const makeUpdater = (seat: UpdaterSeat) => {
       updater.stage({
         running: runningApp(),
         ...updateEndpoints(),
+        unkept: pursuing,
         // "verifying" arrives too, and the renderer's machine collapses
         // everything between "found one" and "staged" into downloading,
         // which names the release from the first event.
@@ -310,27 +319,11 @@ export const makeUpdater = (seat: UpdaterSeat) => {
         if (onDisk !== null) next = readyStateFrom(onDisk);
       }
       setState(next);
-      failedChecks = failed ? failedChecks + 1 : 0;
+      // The tries of an update asked for fail at their own pace, which
+      // is no reason to hold the periodic check back further.
+      if (!failed) failedChecks = 0;
+      else if (!pursuing) failedChecks += 1;
       ticksToCheck = failed ? Math.min(failedChecks + 1, MAX_BACKOFF_TICKS) : 1;
-      // updateNow's arm (see there). One that landed mid-check gets one
-      // check of its own before a miss drops it.
-      if (install.kind !== "armed") return;
-      if (install.midCheck && state.kind !== "ready") {
-        install = { ...install, midCheck: false };
-        checkInFlight = false;
-        yield* Effect.suspend(() => runCheck);
-        return;
-      }
-      const { unattended } = install;
-      install = { kind: "none" };
-      if (state.kind === "ready") {
-        // Nobody waits on this call to hear a busy host's refusal, and the
-        // update stays staged behind the usual restart button. The state
-        // says `updating` until the install starts or is refused.
-        installUpdate(unattended)
-          .catch(() => undefined)
-          .finally(publish);
-      }
     },
   ).pipe(
     Effect.ensuring(
@@ -414,37 +407,74 @@ export const makeUpdater = (seat: UpdaterSeat) => {
     return "installing";
   }
 
-  // Update this device, whether or not its update is here yet: Update
-  // all and the update toast ask every device behind the newest release
-  // they know of, and a device whose last check predates that release
-  // has nothing staged. Such a device is armed, and the check that stages
-  // the update installs it (runCheck). A check already running is
-  // followed by one more, since it may have asked before the release was
-  // out. An unattended request is refused up front on a busy host, while
-  // the caller still waits on the answer.
+  // The update asked for, tried until there is nothing more to try: the
+  // install started, or the person here declined it. A try is a check
+  // past the kept release list, then the install of what is staged. A
+  // check already running may have asked before the release was out, so
+  // it is waited out and followed by one of this's own. A later try
+  // checks again only while nothing is staged: what a busy host refused
+  // is still there to install. Nobody waits on this to hear that
+  // refusal or a failed check, so the next try answers them. Given up,
+  // the update stays behind the usual restart button once it is staged.
+  const pursue = (unattended: boolean) =>
+    Effect.suspend(() => {
+      let checked = false;
+      return Effect.gen(function* () {
+        if (!checked || (yield* installableStaged) === null) {
+          checked = true;
+          if (handles !== null) yield* FiberHandle.awaitEmpty(handles.checks);
+          yield* checkInTurn;
+        }
+        return yield* Effect.promise(() =>
+          installUpdate(unattended).then(
+            (outcome) => outcome !== "nothing-staged",
+            () => false,
+          ),
+        );
+      }).pipe(
+        Effect.repeat({
+          until: (done) => done,
+          schedule: Schedule.spaced(PURSUIT_SPACING_MS).pipe(
+            Schedule.upTo({ times: PURSUIT_TRIES - 1 }),
+          ),
+        }),
+      );
+    }).pipe(
+      Effect.tap((done) =>
+        Effect.sync(() => {
+          if (!done) log.warn("[updater] gave up on the update asked for");
+        }),
+      ),
+      Effect.ensuring(
+        Effect.sync(() => {
+          pursuing = false;
+          publish();
+        }),
+      ),
+      Effect.asVoid,
+    );
+
+  // Update this device to the newest release, whether or not it has
+  // found it yet: Update all and the update toast ask every device
+  // behind the newest release they know of. It answers once the update
+  // is asked for, so the caller never waits on a download, and the
+  // device then keeps at it on its own (pursue), the caller gone or not.
+  // An unattended request is refused up front on a busy host, while the
+  // caller still waits on the answer.
   async function updateNow(unattended: boolean): Promise<void> {
     refuseUnderHold();
-    if (isInstallingUpdate()) return;
-    if ((await readInstallableStaged()) !== null) {
-      await installUpdate(unattended);
-      return;
-    }
+    if (isInstallingUpdate() || pursuing) return;
     if (!started) throw new Error("This build doesn't update itself.");
     if (unattended) {
       const refusal = busyRemoteRefusal(await seat.busy(false), "restart");
       if (refusal !== null) throw new Error(refusal);
     }
-    // A hold or an install may have begun while those were read.
+    // A hold, an install or another ask may have begun meanwhile.
     refuseUnderHold();
-    if (isInstallingUpdate()) return;
-    install = { kind: "armed", unattended, midCheck: checkInFlight };
-    if (checkInFlight) {
-      publish();
-    } else {
-      // Says `updating` before this answers, ahead of the check's own.
-      setState({ kind: "checking" });
-      checkForUpdates();
-    }
+    if (isInstallingUpdate() || pursuing || handles === null) return;
+    pursuing = true;
+    publish();
+    fork?.(Effect.asVoid(FiberHandle.run(handles.pursuit, pursue(unattended))));
   }
 
   // Before a move or a reset of the data folder, which staging writes
@@ -461,8 +491,6 @@ export const makeUpdater = (seat: UpdaterSeat) => {
     if (isInstallingUpdate()) {
       return state.kind === "ready" ? state.version : "";
     }
-    // An Update now armed for the check this ends goes with it, rather
-    // than come back with a later check after a resume.
     install = {
       kind: "held",
       words:
@@ -470,7 +498,17 @@ export const makeUpdater = (seat: UpdaterSeat) => {
           ? "The data folder is being moved. The update can install once the app has restarted."
           : "The app is being reset. The update can install once it has restarted.",
     };
-    if (endCheck !== null) await Effect.runPromise(endCheck);
+    // An update asked for goes with the check this ends, rather than
+    // come back with a later check after a resume. Held first, so its
+    // install can't start while it is ended.
+    if (handles !== null) {
+      await Effect.runPromise(
+        Effect.andThen(
+          FiberHandle.clear(handles.pursuit),
+          FiberHandle.clear(handles.checks),
+        ),
+      );
+    }
     if (state.kind === "checking" || state.kind === "downloading") {
       state = { kind: "idle" };
     }
@@ -513,19 +551,19 @@ export const makeUpdater = (seat: UpdaterSeat) => {
       run = runPromise;
       // Every check on one handle: one at a time, and a hold ends the one
       // under way.
-      const checks = yield* FiberHandle.make<void>();
+      const checks = yield* FiberHandle.make<void, never>();
       // Awaited, not joined: a check asked while one runs is skipped, the
       // handle answering it with a fiber already interrupted, which a join
       // would pass on to the asker (the periodic loop, ended for good).
       checkInTurn = FiberHandle.run(checks, runCheck, {
         onlyIfMissing: true,
       }).pipe(Effect.flatMap(Fiber.await), Effect.asVoid);
-      endCheck = FiberHandle.clear(checks);
+      handles = { checks, pursuit: yield* FiberHandle.make<void, never>() };
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
           fork = null;
           run = null;
-          endCheck = null;
+          handles = null;
           checkInTurn = Effect.void;
         }),
       );

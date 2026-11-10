@@ -13,13 +13,11 @@ import { isOwnAppDrop } from "@shared/remote/rpcTransport";
 // one, for the update toast and Settings (hooks/system/useUpdater.ts),
 // kept free of React and the bridge so they can be proven on their own.
 
-// A device behind the newest release this window knows of: `staged`
-// when its update is a restart away, else it restarts once it has
-// fetched it (downloading, or not found yet since its last check
-// predates the release). `updating` once it is on its way into it
-// (restarting, or armed to once it's staged).
+// A device behind the newest release this window knows of, its update
+// staged, downloading, or not found yet since its last check predates
+// the release. `updating` once it is on its way into it (restarting,
+// or fetching it to).
 export interface OutdatedDevice {
-  staged: boolean;
   updating: boolean;
 }
 
@@ -77,10 +75,7 @@ export function findOutdated(devices: readonly DeviceUpdater[]): KnownUpdates {
         (!isPrereleaseVersion(latest) || isPrereleaseVersion(running)) &&
         compareAppVersions(running, latest) === -1);
     if (!behind) continue;
-    outdated[deviceId] = {
-      staged: state?.kind === "ready",
-      updating: isUpdating(state),
-    };
+    outdated[deviceId] = { updating: isUpdating(state) };
     if (
       releaseVersionOf(running) !== "" &&
       (oldest === null || compareAppVersions(running, oldest) === -1)
