@@ -6,6 +6,7 @@ import {
   ScrollText,
   Sparkles,
 } from "lucide-react";
+import { releaseVersionOf } from "@shigomori/contracts/releaseVersions";
 import type { UpdaterState } from "@shigomori/contracts/schemas";
 import { Button } from "../../primitives/button.tsx";
 import { ConfirmDestructiveButton } from "../../primitives/confirm-destructive-button.tsx";
@@ -16,7 +17,7 @@ import { UpdaterStatusLineView } from "./UpdaterStatusLineView.tsx";
 
 // This build's version and commit, the way every version line here
 // spells it: the local General section on the desktop, the client
-// line on a hostless shell.
+// line on a hostless shell. A dev or untagged build reads as itself.
 export function BuildVersionLineView({
   version,
   commit,
@@ -26,7 +27,8 @@ export function BuildVersionLineView({
 }) {
   return (
     <>
-      v{version} <span className="text-muted-foreground">({commit})</span>
+      {releaseVersionOf(version) === "" ? version : `v${version}`}{" "}
+      <span className="text-muted-foreground">({commit})</span>
     </>
   );
 }

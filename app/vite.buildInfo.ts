@@ -50,7 +50,9 @@ export function buildInfoDefine(mode: string): Record<string, string> {
   const tag = vercelSha
     ? remoteTag(vercelSha)
     : gitOutput("describe --tags --exact-match HEAD");
-  const version = mode === "production" ? (tag ?? "unknown") : "dev";
+  // Bare, as app.getVersion() and the peers report it: the views add the v.
+  const version =
+    mode === "production" ? (tag?.replace(/^v/, "") ?? "unknown") : "dev";
   return {
     __APP_VERSION__: JSON.stringify(version),
     __APP_COMMIT__: JSON.stringify(commit),
