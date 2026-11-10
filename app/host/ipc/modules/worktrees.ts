@@ -296,15 +296,15 @@ export const worktreesHandlers = {
     ),
 
   // The open pull request's title or description while one holds them,
-  // else the worktree's own (`sm describe`). A gh that fails says so in
-  // the words `sm` prints. An edit made to the open PR's title moves the
-  // project's PR map.
+  // else the worktree's own. A gh that fails says so in the words `sm`
+  // prints. An edit made to the open PR's title moves the project's PR
+  // map.
   describe: ({ projectId, worktreeId, title, description }) =>
     Effect.gen(function* () {
       const located = yield* findProjectAndWorktree(projectId, worktreeId);
       const worktrees = yield* EngineWorktrees.Worktrees;
       const { pullRequest } = yield* Engine.asCall(
-        worktrees.describe(located, {
+        worktrees.describeOrEditPullRequest(located, {
           ...(title === undefined ? {} : { title }),
           ...(description === undefined ? {} : { description }),
         }),

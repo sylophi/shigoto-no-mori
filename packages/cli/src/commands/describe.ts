@@ -1,9 +1,10 @@
 // sm [worktrees] describe [<worktree>] [-t <title>] [-d <text> |
 // --description-file <path|->]: a worktree's title and description,
 // set or shown. While the branch has an open pull request, its title
-// and body take their place and describe edits the PR's. A merged or
-// closed one still names the worktree in the app, and describe writes
-// the worktree's own again.
+// and body take their place and describe refuses to set them, since an
+// agent's status note would replace the PR's body. A merged or closed
+// one still names the worktree in the app, and describe writes the
+// worktree's own again.
 import { errnoText } from "@shigomori/engine/platformErrors";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import { trimGoSpace } from "@shigomori/engine/Worktrees";
@@ -124,24 +125,15 @@ export const describe = Command.make(
           ? { description: description.value }
           : {}),
       });
-      if (
-        result.pullRequest === null &&
-        result.pullRequestUnavailable !== undefined
-      ) {
+      if (result.pullRequestUnavailable !== undefined) {
         yield* unavailable(result.pullRequestUnavailable);
       }
       // The row only for the document: its probes are the slow part.
       yield* json
-        ? emit({
-            ok: true,
-            worktree: yield* worktrees.row(located),
-            pullRequest: result.pullRequest,
-          })
+        ? emit({ ok: true, worktree: yield* worktrees.row(located) })
         : out(
             styles(stdoutColor).green(
-              result.pullRequest === null
-                ? `described ${located.worktree.name}: ${result.described.title === "" ? "(no title)" : result.described.title}`
-                : `edited PR #${result.pullRequest.number}: ${result.pullRequest.title}`,
+              `described ${located.worktree.name}: ${result.described.title === "" ? "(no title)" : result.described.title}`,
             ),
           );
     }),

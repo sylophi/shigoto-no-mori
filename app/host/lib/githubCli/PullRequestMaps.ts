@@ -47,7 +47,7 @@ export class PullRequestMaps extends Context.Service<
       project: ProjectRef,
       branch: string,
     ) => Effect.Effect<PullRequestDetail | null, BranchReadError>;
-    // A title `sm describe` just set on the branch's PR.
+    // A title the worktree's page just set on the branch's PR.
     readonly retitled: (
       project: ProjectRef,
       branch: string,

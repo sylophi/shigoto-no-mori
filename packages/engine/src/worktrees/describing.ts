@@ -1,14 +1,15 @@
 // Worktrees' marks and descriptions: shelved and auto-pull, and the
 // title and description the app and agents set. While the branch has an
 // open pull request, its title and body are the worktree's, and
-// describe edits the PR's instead (gh pr edit). A merged or closed one
-// (an old PR on a reused branch name, too) still names the worktree in
-// the app, but no longer holds its description, and describe writes the
-// worktree's own again. A lookup that can't be made (no gh, no GitHub
-// remote, gh not signed in) writes the worktree's own, since the app
-// can't find the PR then either and shows the local text. One that fails
-// otherwise (gh timing out, GitHub erroring) changes nothing: an open PR
-// it missed would hide the write.
+// describe refuses, since the text would replace the PR's body, while
+// describeOrEditPullRequest edits the PR (gh pr edit). A merged or
+// closed one (an old PR on a reused branch name, too) still names the
+// worktree in the app, but no longer holds its description, and both
+// write the worktree's own again. A lookup that can't be made (no gh,
+// no GitHub remote, gh not signed in) writes the worktree's own, since
+// the app can't find the PR then either and shows the local text. One
+// that fails otherwise (gh timing out, GitHub erroring) changes nothing:
+// an open PR it missed would hide the write.
 import * as Effect from "effect/Effect";
 import * as GitHub from "../GitHub.ts";
 import * as Paths from "../Paths.ts";
@@ -21,6 +22,7 @@ import {
   MAX_DESCRIPTION,
   MAX_TITLE,
   MarkRefused,
+  PullRequestHoldsDescription,
   PullRequestNeedsTitle,
   PullRequestUnchecked,
   UNKNOWN_BRANCH,
@@ -134,7 +136,9 @@ export const makeDescribing = ({
       };
     });
 
-    const describe = Effect.fn("Worktrees.describe")(function* (
+    // The change, checked, and the open pull request that holds the
+    // description, if any.
+    const prepareDescribe = Effect.fn(function* (
       located: Located,
       change: { readonly title?: string; readonly description?: string },
     ) {
@@ -172,31 +176,68 @@ export const makeDescribing = ({
           reason: pr.unavailable ?? "gh failed",
         });
       }
-      if (pr.found !== null) {
-        return {
-          described: null,
-          pullRequest: yield* editPullRequest(located, pr.found, {
-            ...(title === undefined ? {} : { title }),
-            ...(text === undefined ? {} : { description: text }),
-          }),
-        };
-      }
-      const described = yield* data.describe(
-        located.project.id,
-        located.worktree.id,
-        {
+      return {
+        checked: {
           ...(title === undefined ? {} : { title }),
           ...(text === undefined ? {} : { description: text }),
         },
+        pr,
+      };
+    });
+
+    const writeOwn = Effect.fn(function* (
+      located: Located,
+      checked: { readonly title?: string; readonly description?: string },
+      unavailable: string | undefined,
+    ) {
+      const described = yield* data.describe(
+        located.project.id,
+        located.worktree.id,
+        checked,
       );
       return {
         described,
         pullRequest: null,
-        ...(pr.unavailable === undefined
+        ...(unavailable === undefined
           ? {}
-          : { pullRequestUnavailable: pr.unavailable }),
+          : { pullRequestUnavailable: unavailable }),
       };
     });
 
-    return { setShelved, setAutoPull, description, describe };
+    const describe = Effect.fn("Worktrees.describe")(function* (
+      located: Located,
+      change: { readonly title?: string; readonly description?: string },
+    ) {
+      const { checked, pr } = yield* prepareDescribe(located, change);
+      if (pr.found !== null) {
+        return yield* new PullRequestHoldsDescription({
+          number: pr.found.number,
+        });
+      }
+      return yield* writeOwn(located, checked, pr.unavailable);
+    });
+
+    const describeOrEditPullRequest = Effect.fn(
+      "Worktrees.describeOrEditPullRequest",
+    )(function* (
+      located: Located,
+      change: { readonly title?: string; readonly description?: string },
+    ) {
+      const { checked, pr } = yield* prepareDescribe(located, change);
+      if (pr.found !== null) {
+        return {
+          described: null,
+          pullRequest: yield* editPullRequest(located, pr.found, checked),
+        };
+      }
+      return yield* writeOwn(located, checked, pr.unavailable);
+    });
+
+    return {
+      setShelved,
+      setAutoPull,
+      description,
+      describe,
+      describeOrEditPullRequest,
+    };
   });
