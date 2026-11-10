@@ -98,6 +98,7 @@ export function CreatePullRequestDialogView({
   ) => void;
   onRemoveAttachment: (attachment: Attachment) => void;
   onCreate: (draft: boolean) => void;
+  // Closes the dialog, or stops the create while one runs.
   onCancel: () => void;
   // The header's close, which waits while a create runs.
   onClose: () => void;
@@ -222,13 +223,7 @@ export function CreatePullRequestDialogView({
       <DialogFooter
         note={unpushed > 0 && `Pushes ${pluralize(unpushed, "commit")} first`}
       >
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onCancel}
-          disabled={busy}
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           Cancel
         </Button>
         <SplitButton

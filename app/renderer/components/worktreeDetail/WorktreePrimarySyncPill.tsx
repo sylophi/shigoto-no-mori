@@ -34,7 +34,7 @@ export function WorktreePrimarySyncPill({
 }) {
   const sync = useSyncWithPrimaryWorktree();
   const merge = useMergePrimaryWorktree();
-  const running = useRunningSyncs(worktree);
+  const { running, cancel } = useRunningSyncs(worktree);
   const nav = useWorktreeNav();
   const { canCommand } = useCommandAccess();
   if (!canCommand) return null;
@@ -57,6 +57,7 @@ export function WorktreePrimarySyncPill({
       pending={
         running.includes("syncWithPrimary") || running.includes("mergePrimary")
       }
+      onCancel={cancel}
       onClick={() =>
         sync.mutate(scope, {
           onError: (err) => {

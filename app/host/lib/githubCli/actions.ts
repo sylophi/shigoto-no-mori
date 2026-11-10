@@ -386,8 +386,14 @@ export const publishRepo = Effect.fn("GithubActions.publish")(function* (opts: {
     // The push moves the whole history, so it gets far longer than a
     // read does.
     { cwd, fallback: "Couldn't publish to GitHub", timeout: 300_000 },
+  ).pipe(
+    // A read since the create cached the repo as not on GitHub. A
+    // cancelled publish can have made it too.
+    Effect.ensuring(
+      Effect.gen(function* () {
+        yield* (yield* GithubCli).evictRepo(cwd);
+        yield* (yield* PullRequestMaps.PullRequestMaps).moved(opts.project);
+      }),
+    ),
   );
-  // A read since the create cached the repo as not on GitHub.
-  yield* (yield* GithubCli).evictRepo(cwd);
-  yield* (yield* PullRequestMaps.PullRequestMaps).moved(opts.project);
 });

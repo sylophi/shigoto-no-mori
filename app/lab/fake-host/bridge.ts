@@ -460,16 +460,21 @@ function hostHandlersFor(
     ];
     return terminalId;
   };
-  const syncAfter = async (
-    worktreeId: string,
-    move: (worktree: FakeWorktree) => void,
-  ): Promise<Worktree> => {
-    await sleep(700);
-    const worktree = findWorktree(worktreeId);
-    if (!worktree) throw new UnknownWorktreeError({ worktreeId });
-    move(worktree);
-    return worktree;
-  };
+  // A sync's handler. Cancelled in its beat, it leaves the worktree as
+  // it was.
+  const syncAfter =
+    (move: (worktree: FakeWorktree) => void) =>
+    async (
+      { worktreeId }: { worktreeId: string },
+      signal?: AbortSignal,
+    ): Promise<Worktree> => {
+      await sleep(700);
+      signal?.throwIfAborted();
+      const worktree = findWorktree(worktreeId);
+      if (!worktree) throw new UnknownWorktreeError({ worktreeId });
+      move(worktree);
+      return worktree;
+    };
   const branchesOf = () => [
     "main",
     ...allWorktrees()
@@ -872,21 +877,19 @@ function hostHandlersFor(
       changes.discard(worktreeId, paths),
     // The sync verbs move the counts the way the real ones would, after
     // a beat so their pending state shows.
-    "worktrees:push": ({ worktreeId }) => syncAfter(worktreeId, pushed),
-    "worktrees:publish": ({ worktreeId }) =>
-      syncAfter(worktreeId, (w) => {
-        w.hasUpstream = true;
-        pushed(w);
-      }),
-    "worktrees:pull": ({ worktreeId }) =>
-      syncAfter(worktreeId, (w) => {
-        w.behind = 0;
-      }),
+    "worktrees:push": syncAfter(pushed),
+    "worktrees:publish": syncAfter((w) => {
+      w.hasUpstream = true;
+      pushed(w);
+    }),
+    "worktrees:pull": syncAfter((w) => {
+      w.behind = 0;
+    }),
     // Taking both sides and either side winning all leave the branch
     // even with its upstream.
-    "worktrees:pullAndPush": ({ worktreeId }) => syncAfter(worktreeId, evened),
-    "worktrees:pushForce": ({ worktreeId }) => syncAfter(worktreeId, evened),
-    "worktrees:overwrite": ({ worktreeId }) => syncAfter(worktreeId, evened),
+    "worktrees:pullAndPush": syncAfter(evened),
+    "worktrees:pushForce": syncAfter(evened),
+    "worktrees:overwrite": syncAfter(evened),
     "worktrees:commitDiff": () => fakePatch,
     "worktrees:branchDiff": () => fakePatch,
     // The Git timeline's reads: the row's own commits, from a fork on
@@ -1101,17 +1104,14 @@ function hostHandlersFor(
     // Pushes the branch the way a publish does, then opens the PR, which
     // the PR lookups answer with from then on. Who it names and what it
     // attaches go nowhere.
-    "githubCli:createPullRequest": async ({
-      worktreeId,
-      base,
-      title,
-      body,
-      draft,
-    }) => {
-      const worktree = await syncAfter(worktreeId, (w) => {
+    "githubCli:createPullRequest": async (
+      { worktreeId, base, title, body, draft },
+      signal?: AbortSignal,
+    ) => {
+      const worktree = await syncAfter((w) => {
         w.hasUpstream = true;
         pushed(w);
-      });
+      })({ worktreeId }, signal);
       return fakeCreatePullRequest({
         branch: worktree.branch,
         base,

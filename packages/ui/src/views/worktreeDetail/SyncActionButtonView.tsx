@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
@@ -23,6 +23,8 @@ interface SyncActionButtonProps {
   pending: boolean;
   disabled?: boolean;
   onClick: () => void;
+  // While it runs, a click stops it.
+  onCancel?: () => void;
 }
 
 export function SyncActionButtonView({
@@ -33,17 +35,20 @@ export function SyncActionButtonView({
   pending,
   disabled,
   onClick,
+  onCancel,
 }: SyncActionButtonProps) {
+  const cancels = pending && onCancel !== undefined;
   const DisplayIcon = pending ? Loader2 : Icon;
   return (
-    <SimpleTooltip tip={tip}>
+    <SimpleTooltip tip={cancels ? "Cancel" : tip}>
       <button
         type="button"
-        onClick={onClick}
-        disabled={disabled || pending}
+        onClick={cancels ? onCancel : onClick}
+        disabled={!cancels && (disabled || pending)}
+        aria-label={cancels ? `Cancel: ${label}` : undefined}
         className={cn(
           SYNC_PILL_SHAPE,
-          "transition-colors focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-50",
+          "group/sync transition-colors focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-50",
           TONE_MARK[tone],
           "hover:bg-current/10 focus-visible:outline-current",
         )}
@@ -52,7 +57,18 @@ export function SyncActionButtonView({
         {DisplayIcon && (
           <DisplayIcon
             aria-hidden
-            className={cn("size-3.5", pending && "animate-spin")}
+            className={cn(
+              "size-3.5",
+              pending && "animate-spin",
+              cancels &&
+                "group-hover/sync:hidden group-focus-visible/sync:hidden",
+            )}
+          />
+        )}
+        {cancels && (
+          <X
+            aria-hidden
+            className="hidden size-3.5 group-hover/sync:block group-focus-visible/sync:block"
           />
         )}
       </button>

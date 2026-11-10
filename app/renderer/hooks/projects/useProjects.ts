@@ -18,6 +18,7 @@ import * as Atom from "effect/reactivity/Atom";
 import { reorderProjects } from "@shared/reorder";
 import { worktreeQueriesOn } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { type Abortable, abortable, withAbort } from "@/lib/cancellable";
 import { noteProjects } from "@/lib/viewFeed";
 import {
   clientAtoms,
@@ -99,28 +100,20 @@ export function useAddProject() {
 }
 
 // Clones a remote onto the scoped device and registers the checkout.
-// The clone runs there, under that device's git credentials. `signal`
-// cancels it: the call's interruption stops git on that device, which
-// leaves no folder behind, and the clone answers null, which is no
-// failure to report. One already over lands as it would.
+// The clone runs there, under that device's git credentials. `cancel`
+// stops it: the call's interruption stops git on that device, which
+// leaves no folder behind.
 export function useCloneProject() {
   const { api } = useHostScope();
   const whenListed = useWhenListed();
-  return useMutation<
-    Project | null,
-    Error,
-    { input: CloneProjectPayload; signal: AbortSignal }
-  >({
+  const mutation = useMutation<Project, Error, Abortable<CloneProjectPayload>>({
     // Settles once listed, as useAddProject does.
-    mutationFn: ({ input, signal }) =>
-      api
-        .run(api.projects.clone(input), { signal })
-        .then(whenListed, (error: unknown) => {
-          if (signal.aborted) return null;
-          throw error;
-        }),
+    mutationFn: abortable((input: CloneProjectPayload, signal) =>
+      api.run(api.projects.clone(input), { signal }).then(whenListed),
+    ),
     meta: { errorTitle: "Couldn't clone the repository" },
   });
+  return withAbort(mutation);
 }
 
 // Starts a new repository on the scoped device and registers it.

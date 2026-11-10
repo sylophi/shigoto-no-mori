@@ -28,6 +28,10 @@ export const makeRemote = ({
 }) =>
   Effect.gen(function* () {
     const { run } = running;
+    // A sync is cancelled by interrupting it, which ends the git under
+    // way. The network steps can end anywhere, but a merge, a rebase or
+    // a reset ended partway leaves the working tree half changed, so
+    // those run uninterruptible and the cancel lands after them.
     const { listRemotes } = worktreeVerbs;
     // Overlapping callers share the one in flight, and nothing is kept
     // after it.
@@ -53,7 +57,9 @@ export const makeRemote = ({
       worktree: string,
     ) {
       yield* run(worktree, ["fetch"]);
-      yield* run(worktree, ["merge", "--ff-only", "@{u}"]);
+      yield* Effect.uninterruptible(
+        run(worktree, ["merge", "--ff-only", "@{u}"]),
+      );
     });
 
     const fastForwardToUpstream = Effect.fn("Git.fastForwardToUpstream")(
@@ -127,7 +133,9 @@ export const makeRemote = ({
       function* (worktree: string) {
         yield* operation.refuseMidOperation(worktree);
         yield* run(worktree, ["fetch"]);
-        yield* rebaseOrMerge(worktree, yield* upstreamRef(worktree));
+        yield* Effect.uninterruptible(
+          rebaseOrMerge(worktree, yield* upstreamRef(worktree)),
+        );
         yield* run(worktree, ["push"]);
       },
     );
@@ -143,7 +151,9 @@ export const makeRemote = ({
     }) {
       yield* operation.refuseMidOperation(input.worktree);
       yield* fetchAll(input.repo);
-      yield* rebaseOrMerge(input.worktree, input.primaryRef);
+      yield* Effect.uninterruptible(
+        rebaseOrMerge(input.worktree, input.primaryRef),
+      );
     });
 
     // The ways on from a sync that conflicts, from the upstream or from
@@ -155,9 +165,8 @@ export const makeRemote = ({
       "Git.mergeUpstreamKeepingConflicts",
     )(function* (worktree: string) {
       yield* run(worktree, ["fetch"]);
-      return yield* merging.mergeKeepingConflicts(
-        worktree,
-        yield* upstreamRef(worktree),
+      return yield* Effect.uninterruptible(
+        merging.mergeKeepingConflicts(worktree, yield* upstreamRef(worktree)),
       );
     });
 
@@ -169,9 +178,8 @@ export const makeRemote = ({
       readonly primaryRef: string;
     }) {
       yield* fetchAll(input.repo);
-      return yield* merging.mergeKeepingConflicts(
-        input.worktree,
-        input.primaryRef,
+      return yield* Effect.uninterruptible(
+        merging.mergeKeepingConflicts(input.worktree, input.primaryRef),
       );
     });
 
@@ -212,7 +220,9 @@ export const makeRemote = ({
           "--symbolic-full-name",
           "@{u}",
         ])).trim();
-        yield* gitIndex.resetHard({ worktree, ref: upstream });
+        yield* Effect.uninterruptible(
+          gitIndex.resetHard({ worktree, ref: upstream }),
+        );
       },
     );
 

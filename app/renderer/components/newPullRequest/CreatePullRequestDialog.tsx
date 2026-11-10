@@ -1,5 +1,6 @@
 import { attachmentRefusal } from "@shigomori/contracts/attachments";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
+import { isCancelledError } from "@tanstack/react-query";
 import { CreatePullRequestDialogView } from "@shigomori/ui/views/newPullRequest/CreatePullRequestDialogView.tsx";
 import {
   attachmentMarkdown,
@@ -293,7 +294,9 @@ export function CreatePullRequestDialog({
         compare={compare.data}
         seedError={seedError?.message}
         compareError={compare.error?.message}
-        createError={create.error?.message}
+        createError={
+          isCancelledError(create.error) ? undefined : create.error?.message
+        }
         options={options}
         optionsPending={optionsPending}
         unpushed={unpushed}
@@ -317,7 +320,7 @@ export function CreatePullRequestDialog({
           removeAttachment(api, attachment.id);
         }}
         onCreate={submit}
-        onCancel={onClose}
+        onCancel={busy ? create.cancel : onClose}
         onClose={dismiss}
       />
     </ModalShell>
