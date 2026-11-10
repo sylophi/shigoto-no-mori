@@ -311,6 +311,18 @@ function SettingsPage({
           villageNews={form.villageNews}
           onVillageNewsChange={setField("villageNews")}
         />
+        <LayoutSectionView
+          onReset={() => {
+            resetLayout();
+            if (hasLocalHost) void api.run(api.window.resetLayout());
+          }}
+          {...(hasLocalHost && {
+            widenForSideTerminals: {
+              checked: form.widenForSideTerminals,
+              onCheckedChange: setField("widenForSideTerminals"),
+            },
+          })}
+        />
         <SidebarSection
           form={form}
           setForm={setForm}
@@ -321,16 +333,9 @@ function SettingsPage({
         )}
         <WorktreePrefixesSection list="hidden" />
         <WorktreePrefixesSection list="grouped" />
-        <LayoutSectionView
-          onReset={() => {
-            resetLayout();
-            if (hasLocalHost) void api.run(api.window.resetLayout());
-          }}
-        />
         {/* The desktop states its build in this device's General
                 section. A hostless client has no such section, and its
-                build is still worth a line, so it goes with the other
-                setting that is about this window. */}
+                build is still worth a line. */}
         {!hasLocalHost && <ClientVersionSection />}
       </SettingsPanelView>
 

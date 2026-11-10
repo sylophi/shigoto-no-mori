@@ -540,5 +540,10 @@
     "payload": {
       "route": "/{"
     }
+  },
+  "window:widen": {
+    "payload": {
+      "width": 4
+    }
   }
 }

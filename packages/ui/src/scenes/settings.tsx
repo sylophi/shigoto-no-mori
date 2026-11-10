@@ -348,6 +348,10 @@ export function SettingsAppearanceScene() {
               />
             }
           />
+          <LayoutSectionView
+            onReset={noop}
+            widenForSideTerminals={{ checked: false, onCheckedChange: noop }}
+          />
           <SidebarSectionView
             form={FORM}
             setForm={setForm}
@@ -367,7 +371,6 @@ export function SettingsAppearanceScene() {
             settled
             commit={() => true}
           />
-          <LayoutSectionView onReset={noop} />
         </>,
       )}
     </SceneWindowFrame>

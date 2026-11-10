@@ -90,6 +90,12 @@ type Held = {
   // nothing.
   bounds: Rectangle;
   minimized: boolean;
+  // How much wider than the user made it the window should be, for the
+  // terminals at its side, how much wider it is, and how far left that
+  // moved it (widenWindow).
+  wanted: number;
+  widened: number;
+  shifted: number;
   // A deep link it has not taken yet (renderer/hooks/ui/useDeepLinks.ts).
   deepLink: string | null;
   // Its renderer kept crashing and recovery gave up: a live handle on a
@@ -131,10 +137,20 @@ function find(windowId: number): Held | undefined {
   return held.find((entry) => entry.id === windowId);
 }
 
+// Where the user left it: the terminals that widened it don't come
+// back with a new page.
+function ownBounds(entry: Held): Rectangle {
+  return {
+    ...entry.bounds,
+    x: entry.bounds.x + entry.shifted,
+    width: entry.bounds.width - entry.widened,
+  };
+}
+
 function recordOf(entry: Held): Remembered {
   return {
     route: entry.route,
-    bounds: entry.bounds,
+    bounds: ownBounds(entry),
     minimized: entry.minimized,
   };
 }
@@ -254,6 +270,9 @@ function create(
     route,
     bounds: window.getNormalBounds(),
     minimized: false,
+    wanted: 0,
+    widened: 0,
+    shifted: 0,
     deepLink: null,
     dead: false,
   };
@@ -268,6 +287,8 @@ function create(
   webContents.on("will-navigate", (event, url) => {
     if (url !== webContents.getURL()) event.preventDefault();
   });
+  // A reloaded page shows no terminals yet.
+  webContents.on("did-navigate", () => widenWindow(entry.id, 0));
 
   // Both modes load over the renderer scheme rather than file:// or the
   // vite http origin. Clerk requires it (see main/electron/clerk.ts).
@@ -306,6 +327,9 @@ function create(
   window.on("move", place);
   window.on("minimize", place);
   window.on("restore", place);
+  // What it couldn't take while it filled the screen.
+  window.on("leave-full-screen", () => fitWidth(entry));
+  window.on("unmaximize", () => fitWidth(entry));
   window.on("closed", () => {
     const at = held.indexOf(entry);
     if (at !== -1) held.splice(at, 1);
@@ -326,7 +350,7 @@ function create(
       // macOS's alone: Electron has no hidden app elsewhere.
       const hidden = currentPlatform() === "darwin" && app.isHidden();
       create(entry.route, {
-        bounds: entry.bounds,
+        bounds: ownBounds(entry),
         ...(hidden || minimized
           ? { restart: { visibility: { hidden }, minimized } }
           : {}),
@@ -370,7 +394,8 @@ export function noteMigrating(on: boolean): void {
 // A new window on `route`, cascaded off the window focused last, at
 // its size or a terminals window's.
 export function openWindow(route: string): void {
-  const from = frontmost()?.window.getNormalBounds();
+  const last = frontmost();
+  const from = last && ownBounds(last);
   const size = isTerminalsWindow(route) ? terminalsSize : null;
   create(
     route,
@@ -462,7 +487,7 @@ export function reopenIfNone(): void {
 function replaceDead(route: string): void {
   const dead = [...held];
   const last = dead.at(-1);
-  create(route, last === undefined ? {} : { bounds: last.bounds });
+  create(route, last === undefined ? {} : { bounds: ownBounds(last) });
   for (const entry of dead) {
     if (!entry.window.isDestroyed()) entry.window.destroy();
   }
@@ -548,6 +573,42 @@ export function onWindowClosed(
 ): () => void {
   closedListeners.add(listener);
   return () => closedListeners.delete(listener);
+}
+
+// Keeps the window `width` wider than the user made it.
+export function widenWindow(windowId: number | undefined, width: number): void {
+  const entry = windowId === undefined ? undefined : find(windowId);
+  if (entry === undefined) return;
+  entry.wanted = width;
+  fitWidth(entry);
+}
+
+// Widens the window as wanted, on its screen, moving it left where the
+// right has no room, and back as it narrows. A full-screen or maximized
+// window has no room to give: it waits until it leaves that state.
+function fitWidth(entry: Held): void {
+  const { window } = entry;
+  if (entry.wanted === entry.widened || window.isDestroyed()) return;
+  if (window.isFullScreen() || window.isMaximized()) return;
+  const bounds = window.getBounds();
+  const { workArea } = screen.getDisplayMatching(bounds);
+  const [minWidth = 0] = window.getMinimumSize();
+  const next = Math.max(
+    minWidth,
+    Math.min(bounds.width + entry.wanted - entry.widened, workArea.width),
+  );
+  const grown = next - bounds.width;
+  const x =
+    grown > 0
+      ? Math.max(
+          workArea.x,
+          Math.min(bounds.x, workArea.x + workArea.width - next),
+        )
+      : bounds.x + Math.min(entry.shifted, -grown);
+  // Narrowed all the way, what its minimum size kept is the user's now.
+  entry.widened = entry.wanted === 0 ? 0 : entry.widened + grown;
+  entry.shifted = entry.wanted === 0 ? 0 : entry.shifted + bounds.x - x;
+  if (grown !== 0) window.setBounds({ ...bounds, x, width: next });
 }
 
 export function noteShowing(windowId: number | undefined, route: string): void {

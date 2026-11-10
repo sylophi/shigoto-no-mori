@@ -52,6 +52,17 @@ export const windowContract = defineContract(
   invoke("open", RoutePayloadSchema, VoidSchema),
   // Forgets the sizes the shell keeps: the terminals window's.
   invoke("resetLayout", VoidSchema, VoidSchema),
+  // How much wider than the user made it the window is kept, for the
+  // terminals at its side (0 when none show), within its screen.
+  invoke(
+    "widen",
+    strict(
+      Schema.Struct({
+        width: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      }),
+    ),
+    VoidSchema,
+  ),
   // Reopened on at the next start.
   invoke("showing", RoutePayloadSchema, VoidSchema),
   // The shell wakes its host, as on a resume from sleep.
