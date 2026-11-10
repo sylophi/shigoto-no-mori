@@ -1,11 +1,18 @@
-import { lazy, Suspense, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffectEvent,
+  useLayoutEffect,
+  useState,
+} from "react";
+import { useClientFlag } from "@/hooks/config/useSidebarMarks";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useKeymapAction } from "@/hooks/ui/useKeymap";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useHasLocalHost } from "@/lib/localHost";
 import { openTerminalsInNewWindow } from "@/lib/newWindow";
-import { useApi } from "@/lib/runtime/pageApi";
+import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 import { paramToSlot } from "@/store/scriptSlot";
 import {
   closeScriptTab,
@@ -21,6 +28,20 @@ import type { Worktree } from "@shigomori/contracts/schemas";
 import { TerminalScope } from "./TerminalScope";
 import { TerminalDrawerView } from "@shigomori/ui/views/terminal/TerminalDrawerView.tsx";
 
+// How much wider the window is kept for the drawer at its side, sent
+// once per commit, so a page change between two worktrees with it open
+// leaves the window be.
+let widening: number | null = null;
+function widenWindow(api: RendererApi, width: number): void {
+  if (widening === null) {
+    queueMicrotask(() => {
+      void api.run(api.window.widen({ width: widening ?? 0 }));
+      widening = null;
+    });
+  }
+  widening = width;
+}
+
 // xterm comes with the first terminal opened, not with the page.
 const TerminalTabs = lazy(() =>
   import("./TerminalTabs").then((module) => ({
@@ -34,7 +55,8 @@ const TerminalTabs = lazy(() =>
 // takes focus as it attaches. Open, the keys focus it, or close it when
 // it has focus. A terminal moved to another worktree is followed there.
 // Kept by the worktree's key: another worktree's drawer is another
-// mount.
+// mount. With the setting on, the window widens by the drawer's width
+// while it shows at the side.
 export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
   const api = useApi();
   const hasLocalHost = useHasLocalHost();
@@ -49,6 +71,27 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
     worktreeId: worktree.id,
   };
   const drawer = useDrawer(ref);
+  const widens =
+    useClientFlag("widenForSideTerminals") &&
+    hasLocalHost &&
+    side &&
+    drawer.open;
+  const widen = useEffectEvent(() => {
+    let width = sizes.width;
+    if (width === null) {
+      width =
+        document.querySelector<HTMLElement>('[data-slot="terminal-drawer"]')
+          ?.offsetWidth ?? 0;
+      // Its share of the page would grow with the window.
+      setDrawerSize(true, width);
+    }
+    widenWindow(api, width);
+  });
+  useLayoutEffect(() => {
+    if (!widens) return;
+    widen();
+    return () => widenWindow(api, 0);
+  }, [widens, api]);
   useKeymapAction(
     "terminal",
     () => {

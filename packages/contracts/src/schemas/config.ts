@@ -440,6 +440,9 @@ export const ClientConfigSchema = Schema.Struct({
   pauseAnimationsOnBattery: Schema.optional(Schema.Boolean),
   // Terminals stay dark whatever the window's appearance.
   darkTerminals: Schema.optional(Schema.Boolean),
+  // Desktop only: the window grows by the width of terminals docked at
+  // its side while they show.
+  widenForSideTerminals: Schema.optional(Schema.Boolean),
   // The login item and the relaunch after a crash.
   keepReachable: Schema.optional(Schema.Boolean),
   // Local port by `${deviceId}:${remotePort}`, a forward's identity. Only
@@ -499,6 +502,7 @@ const CLIENT_CONFIG_DEFAULTS = {
   inlineWorktrees: false,
   pauseAnimationsOnBattery: true,
   darkTerminals: false,
+  widenForSideTerminals: false,
   keepReachable: true,
   groupProjectsByOwner: true,
 } satisfies {

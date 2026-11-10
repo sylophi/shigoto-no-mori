@@ -22,6 +22,10 @@ function toClientConfig(state: ClientFormState): ClientConfig {
       state.pauseAnimationsOnBattery,
     ),
     darkTerminals: storedClientSetting("darkTerminals", state.darkTerminals),
+    widenForSideTerminals: storedClientSetting(
+      "widenForSideTerminals",
+      state.widenForSideTerminals,
+    ),
     villageLife: storedClientSetting("villageLife", state.villageLife),
     villageNews: storedClientSetting("villageNews", state.villageNews),
     markTerrierProjects: storedClientSetting(

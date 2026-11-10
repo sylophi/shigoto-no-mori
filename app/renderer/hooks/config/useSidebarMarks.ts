@@ -23,12 +23,15 @@ import { useLocalGlobalConfig } from "./useGlobalConfig";
 // - inlineWorktrees: whether the list of projects shows every project's
 //   worktrees under it (buildSidebarRows' inline). Off unless switched
 //   on.
+// - widenForSideTerminals: whether terminals docked at the side widen
+//   the window (TerminalDrawer). Off unless switched on.
 type ClientFlag =
   | "markTerrierProjects"
   | "showDeviceBadges"
   | "allowAgentWorking"
   | "markAgentsWaiting"
-  | "inlineWorktrees";
+  | "inlineWorktrees"
+  | "widenForSideTerminals";
 
 export function useClientFlag(key: ClientFlag): boolean {
   const { data } = useClientConfig();
