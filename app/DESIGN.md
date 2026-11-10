@@ -42,10 +42,11 @@ the device tiles and every other positive status wear the palette's hue.
 A rule in doubutsu.css reaches every color through a token, never a
 literal, so a palette can move it. Settings paints its swatches with the
 same blocks (each swatch is a theme root of its own), so a new palette is
-one CSS block plus a catalog entry. Palettes that differ in a detail
-(latte's greens) are variants: ids of their own behind one
-swatch, left out of the picker and reached only by Ctrl+Alt+Shift+L
-(packages/ui/src/lib/themes.ts).
+one CSS block plus a catalog entry, and a light one also gets the
+terminal block (`terminal-<id>`) its always-dark terminals wear.
+Palettes that differ in a detail (latte's greens) are variants: ids of
+their own behind one swatch, left out of the picker and reached only by
+Ctrl+Alt+Shift+L (packages/ui/src/lib/themes.ts).
 
 Rules that keep both themes cheap to maintain:
 

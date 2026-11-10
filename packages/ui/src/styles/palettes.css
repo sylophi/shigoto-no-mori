@@ -30,7 +30,8 @@
  * -modal-muted as well. A palette with variants declares that set once
  * for all of them, and each variant's own block after it moves only
  * what sets it apart.
- * The names are the catalog's (lib/themes.ts).
+ * The names are the catalog's (lib/themes.ts). The terminal blocks at
+ * the end are the exception: not picks, and declaring less.
  */
 
 /* --- Snow ---
@@ -404,35 +405,120 @@
   --doubutsu-modal-muted: oklch(0.42 0.014 72);
 }
 
-/* --- Ink ---
-   Not a pick: the dark of whichever light palette the window wears
-   (TerminalScope). Charcoal's lightness steps in the hue of the
-   window's ink, and the window's accent lifted the way charcoal lifts
-   the leaf. The window's root hands both down, since a dark root's own
-   tokens are the ones being set here. The rest stays charcoal's: a
-   terminal draws no rail, and its popups mount on the window's root. */
-[data-theme-scope]:not(.dark) {
-  --light-ink: var(--foreground);
-  --light-accent: var(--primary);
+/* --- Terminals ---
+   Not picks: the dark a terminal wears while terminals stay dark in a
+   light window (TerminalScope), one per light palette, so the drawer
+   reads as that palette's own panel rather than another palette's
+   night. Each declares only what a terminal and its tab strip read
+   (the emerald steps only off the green, as above): the rest is
+   charcoal's, and its popups mount on the window's root. */
+
+/* Snow: slate, the cool of its text, and the mint of its rail. */
+[data-theme-scope].doubutsu.dark[data-palette="terminal-snow"] {
+  --foreground: oklch(0.95 0.006 250);
+  --card: oklch(0.285 0.018 250);
+  --primary: oklch(0.78 0.14 155);
+  --primary-foreground: oklch(0.2 0.02 250);
+  --muted: oklch(0.32 0.02 250);
+  --muted-foreground: oklch(0.76 0.02 250);
+  --ring: oklch(0.78 0.14 155);
+  --doubutsu-button-outline: oklch(0.4 0.024 250);
+  --doubutsu-accent: oklch(0.42 0.08 158);
+  --doubutsu-accent-foreground: oklch(0.97 0.006 250);
 }
-[data-theme-scope].doubutsu.dark[data-palette^="ink-"] {
-  --background: oklch(from var(--light-ink) 0.215 calc(c * 0.3) h);
-  --foreground: oklch(from var(--light-ink) 0.95 calc(c * 0.25) h);
-  --card: oklch(from var(--light-ink) 0.275 calc(c * 0.3) h);
-  --card-foreground: var(--foreground);
-  --primary: oklch(from var(--light-accent) 0.76 c h);
-  --primary-foreground: oklch(from var(--light-ink) 0.2 calc(c * 0.4) h);
-  --secondary: oklch(from var(--light-ink) 0.345 calc(c * 0.4) h);
-  --secondary-foreground: var(--foreground);
-  --muted: oklch(from var(--light-ink) 0.305 calc(c * 0.3) h);
-  --muted-foreground: oklch(from var(--light-ink) 0.745 calc(c * 0.5) h);
-  --input: oklch(from var(--light-ink) 0.325 calc(c * 0.3) h);
-  --ring: var(--primary);
-  --color-emerald-400: oklch(from var(--light-accent) 0.78 c h);
-  --color-emerald-500: oklch(from var(--light-accent) 0.74 c h);
-  --doubutsu-button-outline: oklch(from var(--light-ink) 0.385 calc(c * 0.4) h);
-  --doubutsu-accent: oklch(from var(--light-accent) 0.4 calc(c * 0.5) h);
-  --doubutsu-accent-foreground: oklch(
-    from var(--light-ink) 0.97 calc(c * 0.25) h
-  );
+
+/* Meadow: a pine green with the canvas's mint in it. */
+[data-theme-scope].doubutsu.dark[data-palette="terminal-meadow"] {
+  --foreground: oklch(0.96 0.018 155);
+  --card: oklch(0.29 0.04 168);
+  --primary: oklch(0.8 0.14 155);
+  --primary-foreground: oklch(0.2 0.03 168);
+  --muted: oklch(0.325 0.042 168);
+  --muted-foreground: oklch(0.79 0.04 160);
+  --ring: oklch(0.8 0.14 155);
+  --doubutsu-button-outline: oklch(0.41 0.05 165);
+  --doubutsu-accent: oklch(0.45 0.09 158);
+  --doubutsu-accent-foreground: oklch(0.97 0.018 155);
+}
+
+/* Cream: a blackboard, the mint rail's green gone deep and grey, with
+   chalk in the paper's warm white. */
+[data-theme-scope].doubutsu.dark[data-palette="terminal-cream"] {
+  --foreground: oklch(0.95 0.018 88);
+  --card: oklch(0.295 0.026 165);
+  --primary: oklch(0.78 0.15 152);
+  --primary-foreground: oklch(0.2 0.02 165);
+  --muted: oklch(0.33 0.028 165);
+  --muted-foreground: oklch(0.78 0.03 120);
+  --ring: oklch(0.78 0.15 152);
+  --doubutsu-button-outline: oklch(0.415 0.036 162);
+  --doubutsu-accent: oklch(0.44 0.08 155);
+  --doubutsu-accent-foreground: oklch(0.97 0.018 88);
+}
+
+/* Latte: espresso, with milk for the text and the matcha lit. Its
+   variants move only their greens. */
+[data-theme-scope].doubutsu.dark:is(
+    [data-palette="terminal-latte"],
+    [data-palette="terminal-latte-sage"],
+    [data-palette="terminal-latte-mocha"]
+  ) {
+  --foreground: oklch(0.95 0.02 75);
+  --card: oklch(0.295 0.019 58);
+  --primary: oklch(0.78 0.12 132);
+  --primary-foreground: oklch(0.2 0.015 58);
+  --muted: oklch(0.33 0.021 58);
+  --muted-foreground: oklch(0.77 0.035 68);
+  --ring: oklch(0.78 0.12 132);
+  --color-emerald-400: oklch(0.8 0.12 132);
+  --color-emerald-500: oklch(0.76 0.12 132);
+  --doubutsu-button-outline: oklch(0.41 0.028 58);
+  --doubutsu-accent: oklch(0.43 0.07 130);
+  --doubutsu-accent-foreground: oklch(0.97 0.02 75);
+}
+[data-theme-scope].doubutsu.dark[data-palette="terminal-latte-sage"] {
+  --primary: oklch(0.78 0.1 152);
+  --ring: oklch(0.78 0.1 152);
+  --color-emerald-400: oklch(0.8 0.1 152);
+  --color-emerald-500: oklch(0.76 0.1 152);
+  --doubutsu-accent: oklch(0.43 0.06 150);
+}
+[data-theme-scope].doubutsu.dark[data-palette="terminal-latte-mocha"] {
+  --primary: oklch(0.76 0.08 150);
+  --ring: oklch(0.76 0.08 150);
+  --color-emerald-400: oklch(0.78 0.08 150);
+  --color-emerald-500: oklch(0.74 0.08 150);
+  --doubutsu-accent: oklch(0.43 0.05 60);
+}
+
+/* Sky: the night after its morning, a deep blue with its blue lit. */
+[data-theme-scope].doubutsu.dark[data-palette="terminal-sky"] {
+  --foreground: oklch(0.96 0.012 230);
+  --card: oklch(0.29 0.045 255);
+  --primary: oklch(0.78 0.11 238);
+  --primary-foreground: oklch(0.2 0.04 255);
+  --muted: oklch(0.325 0.046 255);
+  --muted-foreground: oklch(0.79 0.04 240);
+  --ring: oklch(0.78 0.11 238);
+  --color-emerald-400: oklch(0.8 0.11 238);
+  --color-emerald-500: oklch(0.76 0.12 240);
+  --doubutsu-button-outline: oklch(0.41 0.055 252);
+  --doubutsu-accent: oklch(0.45 0.09 240);
+  --doubutsu-accent-foreground: oklch(0.97 0.012 230);
+}
+
+/* Sakura: a plum with the blossom pink lit. */
+[data-theme-scope].doubutsu.dark[data-palette="terminal-sakura"] {
+  --foreground: oklch(0.96 0.014 10);
+  --card: oklch(0.29 0.036 350);
+  --primary: oklch(0.8 0.12 350);
+  --primary-foreground: oklch(0.22 0.04 350);
+  --muted: oklch(0.325 0.038 350);
+  --muted-foreground: oklch(0.79 0.035 355);
+  --ring: oklch(0.8 0.12 350);
+  --color-emerald-400: oklch(0.82 0.11 350);
+  --color-emerald-500: oklch(0.77 0.12 350);
+  --doubutsu-button-outline: oklch(0.41 0.05 350);
+  --doubutsu-accent: oklch(0.46 0.1 352);
+  --doubutsu-accent-foreground: oklch(0.97 0.014 10);
 }
