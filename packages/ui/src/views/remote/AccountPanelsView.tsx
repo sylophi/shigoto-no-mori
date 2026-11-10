@@ -50,21 +50,16 @@ function StatePanel({
   children: ReactNode;
 }) {
   return (
-    // The page runs full width for the registry's rows. A centred
-    // placeholder stretched edge to edge is not a design, so the two
-    // empty states keep the prose cap.
-    <div className="max-w-3xl">
-      <EmptyPanel>
-        <div className="flex flex-col items-center gap-3">
-          <Icon aria-hidden className="size-6 text-muted-foreground/60" />
-          <div className="flex flex-col gap-1">
-            <p className="font-medium text-foreground">{title}</p>
-            {children}
-          </div>
-          {action}
+    <EmptyPanel>
+      <div className="flex flex-col items-center gap-3">
+        <Icon aria-hidden className="size-6 text-muted-foreground/60" />
+        <div className="flex flex-col gap-1">
+          <p className="font-medium text-foreground">{title}</p>
+          {children}
         </div>
-      </EmptyPanel>
-    </div>
+        {action}
+      </div>
+    </EmptyPanel>
   );
 }
 

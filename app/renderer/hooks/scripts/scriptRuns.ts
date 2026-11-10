@@ -541,7 +541,7 @@ export class ScriptRuns {
   handleRemovedWorktree(info: RemovedWorktreeScripts): void {
     const seen = this.clearForWorktree(info.worktreeId);
     if (!seen && !this.warnOnUnseenRemoval) return;
-    toast.warning(`${info.worktreeName} was removed outside the app`, {
+    toast.warning(`${info.worktreeName} was deleted outside the app`, {
       description:
         info.scriptCount === 1
           ? "Its running script was stopped."

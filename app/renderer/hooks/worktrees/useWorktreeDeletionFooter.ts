@@ -128,5 +128,5 @@ function limboLabel(
   if (live(teardownState)) {
     return teardownState.cancelling ? "Stopping teardown…" : "Tearing down…";
   }
-  return "Removing worktree…";
+  return "Deleting worktree…";
 }

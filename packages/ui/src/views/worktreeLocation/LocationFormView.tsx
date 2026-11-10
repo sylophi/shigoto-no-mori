@@ -1,3 +1,4 @@
+import { FramedList } from "../../primitives/framed-list.tsx";
 import type { ReactNode } from "react";
 import { RadioGroup } from "@base-ui/react/radio-group";
 import { Button } from "../../primitives/button.tsx";
@@ -89,7 +90,7 @@ export function LocationFormView({
       )}
 
       {toMove.length > 0 && (
-        <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
+        <FramedList>
           {toMove.map(({ worktree: wt, destination }) => {
             return (
               <div
@@ -114,7 +115,7 @@ export function LocationFormView({
               </div>
             );
           })}
-        </div>
+        </FramedList>
       )}
 
       {saveError !== null && (

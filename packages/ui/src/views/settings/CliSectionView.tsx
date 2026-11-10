@@ -43,7 +43,7 @@ export function CliSectionView({
     <section className="space-y-3">
       <SectionIntro title="Command line tool">
         The Shigoto no Mori CLI lets you (or a coding agent) create, list,
-        merge, and remove this app's worktrees from any shell. Installing links
+        merge, and delete this app's worktrees from any shell. Installing links
         the <span className="font-mono">{name}</span> and{" "}
         <span className="font-mono">{status.aliasName}</span> commands into{" "}
         <span className="font-mono">{tildify(status.binDir, home)}</span>.

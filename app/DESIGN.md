@@ -115,7 +115,9 @@ Rules that keep both themes cheap to maintain:
   at, a pointer like focus (`data-slot="guide-ring"`). So rows that v1 rules off say what they are
   instead: a search strip carries `data-slot="search-row"` (it becomes
   an inset tray) and a popup's footer `data-slot="footer-row"` (a
-  muted band). A mark or a control drawn from a border alone has
+  muted band). A list or a panel that is a box from its border alone
+  carries `data-slot="frame"` (`FramedList` for ruled rows), and
+  becomes a tray the wallpaper shows through. A mark or a control drawn from a border alone has
   nothing left here, so it takes a fill, in the component (a skipped
   step's disc) or in doubutsu.css (an unticked checkbox, an off
   switch). A two-state control is checked in doubutsu in both states.
@@ -156,7 +158,9 @@ spellings of one thing read as two things.
   computer the window runs on, said against "your other devices". A
   project's own checkout is its primary checkout.
 - **An act keeps its verb** on every surface it shows: the button, the
-  menu item, the confirm, the pending label, the toast.
+  menu item, the confirm, the pending label, the toast. A worktree is
+  deleted, wherever that is said. "Remove" is for what only leaves a
+  list (a device, a port, a carry-over path).
 - **Sentence case** on everything: buttons, tags, headings, status
   words. A name that is lowercase stays so (`port-pool`).
 - **`…` is one character.** It ends a pending label ("Deleting…") and a
@@ -271,8 +275,8 @@ up smaller and larger:
   tooltip) rather than pushing controls out, rows of controls wrap
   rather than overlap, and nothing scrolls sideways. The window goes
   smaller, but nothing needs designing for below that.
-- **Up to a full display.** More room at the same density: running
-  text keeps a reading width (`max-w-3xl`).
+- **Up to a full display.** More room at the same density, and a page
+  runs the pane's whole width, running text included.
 
 ## Devices: one identity, drawn one way
 

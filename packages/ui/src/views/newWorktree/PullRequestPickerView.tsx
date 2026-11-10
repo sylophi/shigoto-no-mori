@@ -110,7 +110,10 @@ function PullRequestPicker({
 }) {
   if (pullRequests.length === 0) {
     return (
-      <p className="rounded-md border border-input px-3 py-6 text-center text-sm text-muted-foreground">
+      <p
+        data-slot="frame"
+        className="rounded-md border border-input px-3 py-6 text-center text-sm text-muted-foreground"
+      >
         No open pull requests.
       </p>
     );
@@ -125,6 +128,7 @@ function PullRequestPicker({
         if (pr) onSelect(pr);
       }}
       aria-label="Pull request"
+      data-slot="frame"
       // Each row is followed by Radio.Root's hidden input, so the last
       // row is the second child from the end.
       className="max-h-72 divide-y divide-border overflow-y-auto rounded-md border border-input [&>:nth-last-child(2)]:border-b-0"

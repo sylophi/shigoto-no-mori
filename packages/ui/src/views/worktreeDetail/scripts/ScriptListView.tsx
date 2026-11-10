@@ -7,7 +7,10 @@
 // gives way to the frame's width when the frame is narrower still.
 export function ScriptListView({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-md border border-border">
+    <div
+      data-slot="frame"
+      className="overflow-hidden rounded-md border border-border"
+    >
       <div className="-mr-px -mb-px grid grid-cols-[repeat(auto-fill,minmax(min(--spacing(56),100%),1fr))] *:border-r *:border-b *:border-border">
         {children}
       </div>

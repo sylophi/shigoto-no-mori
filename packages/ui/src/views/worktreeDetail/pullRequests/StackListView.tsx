@@ -22,7 +22,10 @@ export function StackListView({
 }) {
   const size = stack.entries.length;
   return (
-    <ol className="divide-y divide-border/60 rounded-md border border-border/60">
+    <ol
+      data-slot="frame"
+      className="divide-y divide-border/60 rounded-md border border-border/60"
+    >
       {stack.entries.toReversed().map((entry, i) => {
         const position = size - i;
         const current = entry.branch === worktree.branch;

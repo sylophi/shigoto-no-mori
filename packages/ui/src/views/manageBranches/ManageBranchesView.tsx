@@ -1,3 +1,4 @@
+import { FramedList } from "../../primitives/framed-list.tsx";
 import { noMatch } from "@shigomori/contracts/words";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -88,9 +89,7 @@ export function LocalBranchListView({
       {filtered.length === 0 ? (
         <p className="text-sm text-muted-foreground">{noMatch("branches")}</p>
       ) : (
-        <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
-          {filtered.map((name) => rows.get(name))}
-        </div>
+        <FramedList>{filtered.map((name) => rows.get(name))}</FramedList>
       )}
     </>
   );

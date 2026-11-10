@@ -31,7 +31,7 @@ export function TidyConfirm({
   );
   return (
     <ModalShell
-      label="Remove worktrees"
+      label="Delete worktrees"
       onClose={onCancel}
       popoverClassName="max-w-lg"
     >

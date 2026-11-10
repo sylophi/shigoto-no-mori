@@ -278,7 +278,7 @@ function WorktreeHeader({
             : {
                 note: unreachable
                   ? `A worktree on ${deviceName}`
-                  : "Removed worktree",
+                  : "Deleted worktree",
               }
       }
       subline={

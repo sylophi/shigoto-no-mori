@@ -114,7 +114,7 @@ export function TidyBodyView({
               }
             />
             <TidyStatView
-              label="Safe to remove"
+              label="Safe to delete"
               value={String(safeCount)}
               detail={
                 safeCount > 0
@@ -185,8 +185,8 @@ export function TidyBodyView({
                     onClick={onRemove}
                   >
                     {batchRunning
-                      ? "Removing…"
-                      : `Remove ${pluralize(selectedCount, "worktree")}`}
+                      ? "Deleting…"
+                      : `Delete ${pluralize(selectedCount, "worktree")}`}
                   </Button>
                 </div>
               </div>
@@ -211,15 +211,6 @@ export function TidyGroupView({
   return (
     <div className="flex flex-col gap-2">
       {heading}
-      {children}
-    </div>
-  );
-}
-
-// Bordered card of rows, rendered once flat or once per project group.
-export function TidyListView({ children }: { children: ReactNode }) {
-  return (
-    <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
       {children}
     </div>
   );
