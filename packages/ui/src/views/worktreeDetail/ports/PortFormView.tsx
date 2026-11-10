@@ -3,6 +3,7 @@
 // is (or will be), so neither act leaves the dialog. Enter submits,
 // Escape cancels, and a number already on the list is refused with the
 // reason rather than silently merged.
+import { KEYS } from "../../../lib/keys.ts";
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { errorMessageOf } from "@shigomori/contracts/errors";
@@ -117,7 +118,7 @@ export function PortFormView({
           </Button>
           <Button
             type="submit"
-            keys="↩"
+            keys={KEYS.enter}
             variant="secondary"
             size="xs"
             disabled={saving || port.length === 0}

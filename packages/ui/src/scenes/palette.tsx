@@ -2,6 +2,7 @@
 // "port", a project and a page it names and the worktree it could make,
 // with the highlighted row's verbs beside them, the verbs holding the
 // keys once ⇥ picks the row, and a pasted URL nothing matches.
+import { KEYS } from "../lib/keys.ts";
 import { noMatch } from "@shigomori/contracts/words";
 import type { ReactNode } from "react";
 import { Copy, FileDiff, Folder, GitPullRequest, Settings } from "lucide-react";
@@ -177,7 +178,7 @@ function verbs() {
             key: "detail",
             label: "Open worktree",
             icon: iconOf(Folder),
-            listKeys: "↩",
+            listKeys: KEYS.enter,
             run: noop,
           },
           {

@@ -9,7 +9,6 @@ import {
 import { FileDiff, VirtualizerContext } from "@pierre/diffs/react";
 import { ChevronDown, Files, Loader2, WrapText } from "lucide-react";
 import { PAGE_HEADER_PADDING } from "../shared/PageHeaderView.tsx";
-import { BackButton } from "../../primitives/back-button.tsx";
 import { CenteredMessage } from "../../primitives/centered-message.tsx";
 import { EmptyPanel } from "../../primitives/empty-panel.tsx";
 import { ChipButton } from "../../primitives/chip-button.tsx";
@@ -55,7 +54,9 @@ const DIFF_THEME = {
   // counts.
   hunkSeparators: "line-info-basic" as const,
   expansionLineCount: 20,
-  unsafeCSS: `${CODE_THEME.unsafeCSS} [data-separator="line-info-basic"] { height: ${CODE_LINE_HEIGHT}px; } [data-separator-last] { visibility: hidden; } [data-separator-content] { font-family: var(--font-sans); font-size: var(--text-2xs); }`,
+  // pierre's header counts deletions first. Additions lead everywhere
+  // else (DiffStats), the file list beside it included.
+  unsafeCSS: `${CODE_THEME.unsafeCSS} [data-separator="line-info-basic"] { height: ${CODE_LINE_HEIGHT}px; } [data-separator-last] { visibility: hidden; } [data-separator-content] { font-family: var(--font-sans); font-size: var(--text-2xs); } [data-additions-count] { order: -1; }`,
 };
 
 // A binary file's header: git counts no lines in it, so pierre's "-0 +0"
@@ -151,7 +152,6 @@ export function DiffHeaderView({
   title,
   subtitle,
   subtitleEnd,
-  back,
   files,
   find,
   wrapLines,
@@ -165,8 +165,6 @@ export function DiffHeaderView({
   // What ends the subtitle's line past its text, which stays the part
   // that truncates: the branch page's base picker.
   subtitleEnd?: ReactNode;
-  // A phone's way back. A wide viewport's is the sidebar's first row.
-  back: { label: string; onClick: () => void } | null;
   // The phone's chip that opens the file list's sheet.
   files: { label: string; count: number; onOpen: () => void } | null;
   find: FindToggle | null;
@@ -183,7 +181,6 @@ export function DiffHeaderView({
         PAGE_HEADER_PADDING,
       )}
     >
-      {back && <BackButton onClick={back.onClick} label={back.label} />}
       {/* A phone gives the title its own row and the controls the
           next, rather than a sliver of the width beside them. */}
       <div className="flex items-start justify-between gap-6 phone:flex-wrap phone:gap-3">

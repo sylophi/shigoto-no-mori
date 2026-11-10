@@ -12,6 +12,7 @@ import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useWarmFilesPage } from "@/hooks/worktrees/useWarmFilesPage";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreeName } from "@/hooks/worktrees/useWorktreeTitle";
+import { useClaimPageBack } from "@/hooks/ui/usePageBack";
 import { peerFilesHiddenNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { readStored, writeStored } from "@/lib/localStorage";
 import { withMember } from "@shigomori/ui/lib/toggleSet.ts";
@@ -77,6 +78,7 @@ function WorktreeFilesPage({
   const warm = useWarmFilesPage(worktree);
   const phone = usePhoneLayout();
   const backLabel = useWorktreeName(worktree);
+  useClaimPageBack(backLabel, onBack);
   const [treeSheetOpen, setTreeSheetOpen] = useState(false);
 
   const toggleFolder = (folder: string, open: boolean) =>
@@ -133,7 +135,6 @@ function WorktreeFilesPage({
       header={
         <FilesHeaderView
           worktreeName={worktree.name}
-          back={phone ? { label: backLabel, onClick: onBack } : null}
           controls={
             canCommand
               ? {

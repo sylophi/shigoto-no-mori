@@ -1,5 +1,6 @@
 // The parts the folder browsers (PathBrowserView) and the filter-first
 // picker (PathPickerView) share: the list and the footer's key hints.
+import { KEYS } from "../../lib/keys.ts";
 import type { ReactNode } from "react";
 import { Command } from "cmdk";
 import { ArrowLeft, CornerLeftUp, Loader2 } from "lucide-react";
@@ -126,7 +127,7 @@ export function BrowseKeyHintsView({
 }) {
   return (
     <>
-      {enterFolder && <KbdHint keys={["↩"]} label="Enter folder" />}
+      {enterFolder && <KbdHint keys={[KEYS.enter]} label="Enter folder" />}
       {goUp && <KbdHint keys={[<ArrowLeft key="left" />]} label="Go up" />}
     </>
   );

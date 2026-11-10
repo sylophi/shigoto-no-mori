@@ -26,9 +26,8 @@ import { PAGE_BODY } from "../shared/PageShellView.tsx";
 import { PinnedMarkView } from "../shared/PinnedMarkView.tsx";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { useNow } from "../../hooks/useNow.ts";
 import { pluralize } from "@shigomori/contracts/words";
-import { formatRelativeTime } from "../../lib/relativeTime.ts";
+import { RelativeDate } from "../../primitives/relative-date.tsx";
 import { cn } from "../../lib/utils.ts";
 import type { Project } from "@shigomori/contracts/schemas";
 import { DeviceBadgeClusterView } from "../sidebar/DeviceBadgeView.tsx";
@@ -311,7 +310,7 @@ export function ProjectTileView({
               {worktrees}
               {worktrees !== null && active && ", active "}
               {worktrees === null && active && "Active "}
-              {active && <Ago at={work.lastActivity} />}
+              {active && <RelativeDate date={work.lastActivity} />}
             </span>
           )}
           {work !== undefined && work.openPullRequests > 0 && (
@@ -334,12 +333,6 @@ export function ProjectTileView({
       {picker}
     </div>
   );
-}
-
-// "3h ago", on a clock of its own, so the tick re-renders this alone.
-function Ago({ at }: { at: number }) {
-  const now = useNow();
-  return <>{formatRelativeTime(at, now)}</>;
 }
 
 // Arrow keys between the tiles: left and right along the reading

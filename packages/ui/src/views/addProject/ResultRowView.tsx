@@ -1,5 +1,6 @@
 import { Command } from "cmdk";
-import { Check, FolderGit2, Square } from "lucide-react";
+import { FolderGit2 } from "lucide-react";
+import { Checkbox } from "../../primitives/checkbox.tsx";
 import { PathSpan } from "../../primitives/path-span.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { ensureTrailingSep } from "@shigomori/contracts/projectPaths";
@@ -38,11 +39,14 @@ export function ResultRowView({
       onSelect={onToggle}
       className={ITEM_CLASS}
     >
-      {isSelected ? (
-        <Check className="size-4 text-foreground" />
-      ) : (
-        <Square className="size-4 text-muted-foreground/60" />
-      )}
+      {/* The row is the control (cmdk's option), so the box only shows
+          its state: it takes no click or focus of its own. */}
+      <Checkbox
+        checked={isSelected}
+        tabIndex={-1}
+        aria-hidden
+        className="pointer-events-none"
+      />
       <FolderGit2 className="size-4 text-muted-foreground/80" />
       {showAbsolute ? (
         <PathSpan

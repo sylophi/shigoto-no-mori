@@ -7,7 +7,8 @@ rule per file in `rules/`.
 | --- | --- |
 | `no-double-cast` | No `x as unknown as T`. |
 | `no-native-tooltip` | No `title` on a DOM element and no SVG `<title>` (SimpleTooltip instead). |
-| `ui-words` | The strings and JSX text of `packages/ui/src` and `app/renderer` keep to the spellings in `app/DESIGN.md`'s "Words". |
+| `no-native-choice` | No `<input type="checkbox">` or `<input type="radio">` (Checkbox, Switch, OptionCard or SegmentedControl instead). |
+| `ui-words` | The strings and JSX text of `packages/ui/src` and `app/renderer` keep to the spellings in `app/DESIGN.md`'s "Words", and spell no key's glyph (the keymap or `lib/keys.ts` does). |
 | `disable-needs-reason` | Every suppression says why: `-- <reason>` after an oxlint or eslint directive, text after a `@ts-expect-error`, `@ts-ignore` or `@ts-nocheck`. |
 | `effect-namespace-imports` | Effect modules come in as namespaces from their subpath, `import * as Effect from "effect/Effect"`. |
 | `no-runtime-in-service` | A service module never builds a `ManagedRuntime` or calls `run*`. |

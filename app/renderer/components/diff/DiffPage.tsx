@@ -13,6 +13,7 @@ import {
 import PatchFilesWorker from "./patchFiles.worker.ts?worker";
 import { useLook } from "@/hooks/ui/useLook";
 import { useWorktreeName } from "@/hooks/worktrees/useWorktreeTitle";
+import { useClaimPageBack } from "@/hooks/ui/usePageBack";
 import { useOpenInEditor } from "@/hooks/launchers/useLaunchers";
 import { useDiffSides } from "@/hooks/worktrees/useWorktreeFile";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
@@ -151,6 +152,7 @@ export function DiffPage({
 }) {
   const { data: patch, isLoading, error } = diff;
   const backLabel = useWorktreeName(worktree);
+  useClaimPageBack(backLabel, onBack);
   const openInEditor = useOpenInEditor(worktree);
   const [diffStyle, setDiffStyle] = useState<DiffStyle>("unified");
   const [wrapLines, setWrapLines] = useState(
@@ -356,7 +358,6 @@ export function DiffPage({
             title={title}
             subtitle={subtitle}
             subtitleEnd={subtitleEnd}
-            back={phone ? { label: backLabel, onClick: onBack } : null}
             files={
               phone &&
               (renderSidebar !== undefined ||

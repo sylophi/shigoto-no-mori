@@ -1,3 +1,4 @@
+import { KEYS } from "../lib/keys.ts";
 import { useRef, useState, type ReactNode } from "react";
 import { Check, X } from "lucide-react";
 import { cn } from "../lib/utils.ts";
@@ -128,7 +129,7 @@ export function InlineEdit({
           size="xs"
           disabled={!canSave}
           onClick={save}
-          keys="↩"
+          keys={KEYS.enter}
         >
           {pending ? "Saving…" : "Save"}
         </Button>

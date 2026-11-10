@@ -1,3 +1,4 @@
+import { KEYS } from "../../lib/keys.ts";
 import type { ReactNode } from "react";
 import { Button } from "../../primitives/button.tsx";
 import { Checkbox } from "../../primitives/checkbox.tsx";
@@ -320,7 +321,12 @@ export function NewWorktreeFormView({
         >
           Cancel
         </Button>
-        <Button type="submit" keys="↩" disabled={!canSubmit || busy} size="sm">
+        <Button
+          type="submit"
+          keys={KEYS.enter}
+          disabled={!canSubmit || busy}
+          size="sm"
+        >
           {busy
             ? "Creating…"
             : deviceLabel

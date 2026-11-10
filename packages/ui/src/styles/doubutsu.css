@@ -22,10 +22,11 @@
  *    --doubutsu-* of its own, including the composed
  *    --doubutsu-sticker-shadow / --doubutsu-stripe-image recipes.
  *
- * 2. data-slot attributes set by our components (with data-variant
- *    beside some), the preferred hook. New UI that doubutsu must
- *    restyle gets a slot of its own, which the rules below select,
- *    rather than a rule on its utility classes.
+ * 2. data-slot attributes set by our components (with data-variant,
+ *    or an ARIA state the component sets, aria-pressed and
+ *    aria-haspopup, beside some), the preferred hook. New UI that
+ *    doubutsu must restyle gets a slot of its own, which the rules
+ *    below select, rather than a rule on its utility classes.
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar",
  *    data-doubutsu-page="settings|tidy|devices|forest|visitors"
@@ -369,6 +370,17 @@
   ) {
   background-color: var(--doubutsu-button-outline);
 }
+/* The fill above also outranks the wash an armed two-step delete rests
+   on (aria-pressed:bg-destructive/10), which would leave only its label
+   to say the next click deletes. The wash goes over the fill instead. */
+.doubutsu
+  [data-slot="button"][data-variant="outline-destructive"][aria-pressed="true"] {
+  background-color: color-mix(
+    in oklab,
+    var(--destructive) 22%,
+    var(--doubutsu-button-outline)
+  );
+}
 
 /* --- Dropdown / menu separator ---
    doubutsu zeroes --border, which leaves the Tailwind `bg-border`
@@ -618,7 +630,11 @@
 .doubutsu
   :is(
     [data-slot="footer-row"],
-    :is([data-slot="modal-shell"], [data-slot="combobox-popup"])
+    :is(
+        [data-slot="modal-shell"],
+        [data-slot="combobox-popup"],
+        [data-slot="popover-content"]
+      )
       [data-slot="search-row"]
   ) {
   background-color: color-mix(in oklab, var(--muted) 30%, transparent);
@@ -675,6 +691,16 @@
    is told apart. */
 .doubutsu [data-slot="checkbox"][data-unchecked] {
   background-color: var(--muted-foreground);
+}
+/* An off switch is the same in light: a cream thumb on a cream track,
+   its shadow stripped. The track darkens until the thumb reads. Dark's
+   cream thumb on charcoal already does. */
+.doubutsu:not(.dark) [data-slot="switch"][data-unchecked] {
+  background-color: color-mix(
+    in oklab,
+    var(--muted-foreground) 45%,
+    transparent
+  );
 }
 
 /* --- Open popups keep their trigger lit ---

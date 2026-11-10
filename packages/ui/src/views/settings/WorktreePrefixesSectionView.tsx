@@ -5,6 +5,7 @@
 // the inbox, when it is live work). Shared
 // settings, so each applies the moment it changes (outside the page's
 // Save) and holds on every device.
+import { KEYS } from "../../lib/keys.ts";
 import { useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
@@ -94,7 +95,7 @@ export function WorktreePrefixesSectionView({
         />
         <Button
           type="submit"
-          keys="↩"
+          keys={KEYS.enter}
           size="sm"
           disabled={!settled || input.trim() === ""}
         >

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { RadioGroup } from "@base-ui/react/radio-group";
 import { Button } from "../../primitives/button.tsx";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import type { RowStatus } from "../../primitives/row-status.tsx";
@@ -51,20 +52,27 @@ export function LocationFormView({
   const home = device.homedir;
   return (
     <>
-      <fieldset className="space-y-2" disabled={batchRunning}>
-        <legend className="sr-only">Worktree location</legend>
-        {LAYOUT_OPTIONS.map((opt) => (
-          <LayoutOptionItemView
-            key={opt.value}
-            option={opt}
-            checked={layout === opt.value}
-            projectPath={projectPath}
-            device={device}
-            customPath={customPath}
-            onSelect={onLayout}
-            onOpenPicker={onOpenPicker}
-          />
-        ))}
+      {/* A fieldset, so a run holds the cards and the custom folder's
+          button alike. */}
+      <fieldset className="min-w-0" disabled={batchRunning}>
+        <RadioGroup<WorktreeLayout>
+          value={layout}
+          onValueChange={onLayout}
+          aria-label="Worktree location"
+          className="flex flex-col gap-2"
+        >
+          {LAYOUT_OPTIONS.map((opt) => (
+            <LayoutOptionItemView
+              key={opt.value}
+              option={opt}
+              checked={layout === opt.value}
+              projectPath={projectPath}
+              device={device}
+              customPath={customPath}
+              onOpenPicker={onOpenPicker}
+            />
+          ))}
+        </RadioGroup>
       </fieldset>
 
       {toMove.length > 0 && (

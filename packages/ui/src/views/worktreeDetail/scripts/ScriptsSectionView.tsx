@@ -35,7 +35,7 @@ export function ScriptsSectionView({
 
       {lifecycle.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center gap-1.5 pl-[18px] text-xs">
+          <div className="flex items-center gap-1.5 pl-4.5 text-xs">
             <span className="font-mono text-muted-foreground">Lifecycle</span>
           </div>
           <ScriptListView>{lifecycle}</ScriptListView>

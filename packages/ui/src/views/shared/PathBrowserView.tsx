@@ -1,3 +1,4 @@
+import { KEYS } from "../../lib/keys.ts";
 import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { Command } from "cmdk";
 import { Folder } from "lucide-react";
@@ -96,7 +97,7 @@ export function PathBrowserView({
         <Button
           variant="outline"
           size="xs"
-          keys={hasHighlighted ? confirmKeys : "↩"}
+          keys={hasHighlighted ? confirmKeys : KEYS.enter}
           onMouseDown={keepFocusInInput}
           onClick={primary.onClick}
           disabled={primary.disabled}

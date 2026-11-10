@@ -37,6 +37,7 @@ import { useOpenProject } from "@/components/sidebar/openProject";
 import { useForestSources } from "@/components/sidebar/forestSources";
 import { useDeepLinks } from "@/hooks/ui/useDeepLinks";
 import { useEscapeGoesBack } from "@/hooks/ui/useEscapeGoesBack";
+import { usePageBack } from "@/hooks/ui/usePageBack";
 import { useKeymapListener } from "@/hooks/ui/useKeymap";
 import { startSidebarResize } from "@/lib/sidebarResize";
 import { useSidebarWidth } from "@/store/layout";
@@ -73,8 +74,13 @@ export function AppShell() {
   useKeymapListener();
   usePaletteVariantHotkey(!pathname.startsWith("/settings"));
   useEscapeGoesBack();
-  // The forest tab a stacked page returns to on a phone.
+  // Where a stacked page's back bar returns to on a phone: the forest
+  // tab, or the page a deeper one names.
   const forestTab = forestTabFor(useSidebarView());
+  const back = usePageBack() ?? {
+    label: forestTab.label,
+    onClick: () => void navigate(forestTab.to),
+  };
   const sidebarWidth = useSidebarWidth();
 
   usePageCanvas(phone);
@@ -132,10 +138,7 @@ export function AppShell() {
       }
       backBar={
         !isTabRoute(pathname) && (
-          <PhoneBackBarView
-            label={forestTab.label}
-            onBack={() => void navigate(forestTab.to)}
-          />
+          <PhoneBackBarView label={back.label} onBack={back.onClick} />
         )
       }
       tabBar={<PhoneTabBar />}

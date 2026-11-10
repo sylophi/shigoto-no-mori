@@ -1,6 +1,7 @@
 // The folders the list of projects gathers projects into, inside their
 // owner (groupSections, listRows): a folder's header and its
 // right-click, a project's pick of folder, and the dialog naming one.
+import { KEYS } from "../../lib/keys.ts";
 import { ChevronDown } from "lucide-react";
 import {
   ContextMenu,
@@ -143,7 +144,12 @@ export function FolderNameDialogView({
       onCancel={onCancel}
       onSubmit={onSave}
       actions={
-        <Button type="submit" keys="↩" size="sm" disabled={name.trim() === ""}>
+        <Button
+          type="submit"
+          keys={KEYS.enter}
+          size="sm"
+          disabled={name.trim() === ""}
+        >
           {verb}
         </Button>
       }

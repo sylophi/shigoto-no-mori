@@ -1,3 +1,4 @@
+import { KEYS } from "../../lib/keys.ts";
 import type { KeyboardEvent, ReactNode, RefObject } from "react";
 import { Command } from "cmdk";
 import { FolderInput, Loader2 } from "lucide-react";
@@ -72,7 +73,7 @@ export function ActionInputRowView({
       <Button
         variant="outline"
         size="xs"
-        keys="↩"
+        keys={KEYS.enter}
         onClick={onSubmit}
         disabled={!canSubmit}
       >
@@ -126,7 +127,7 @@ export function FormFooterView({
 }) {
   return (
     <FooterRow className="justify-between">
-      <KbdHint keys={["↩"]} label={label} />
+      <KbdHint keys={[KEYS.enter]} label={label} />
       <div className="flex items-center gap-3">{children}</div>
     </FooterRow>
   );

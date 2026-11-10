@@ -1,3 +1,4 @@
+import { KEYS } from "../../../lib/keys.ts";
 import { Archive } from "lucide-react";
 import { Button } from "../../../primitives/button.tsx";
 import { Input } from "../../../primitives/input.tsx";
@@ -59,7 +60,7 @@ export function StashListView({
           />
           <Button
             type="submit"
-            keys="↩"
+            keys={KEYS.enter}
             size="sm"
             disabled={changedCount === 0 || pending}
           >

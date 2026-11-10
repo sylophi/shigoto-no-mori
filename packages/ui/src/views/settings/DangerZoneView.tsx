@@ -3,6 +3,7 @@ import type { NukeProgress, NukeReport } from "@shigomori/contracts/schemas";
 import { BlockingOverlay } from "../../primitives/blocking-overlay.tsx";
 import { Button } from "../../primitives/button.tsx";
 import { ConfirmDestructiveButton } from "../../primitives/confirm-destructive-button.tsx";
+import { ModalShell } from "../../primitives/modal-shell.tsx";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
 
 // This machine's nuke: everything shigomori made, gone, and the next
@@ -34,8 +35,14 @@ export function DangerZoneView({
         <BlockingOverlay>{describeNukeProgress(progress)}</BlockingOverlay>
       )}
       {left !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-          <div className="max-w-md space-y-3 px-4">
+        // Restart is the only way on: what's left goes as the app does.
+        <ModalShell
+          label="Nuked"
+          onClose={onRelaunch}
+          dismissable={false}
+          popoverClassName="max-w-md"
+        >
+          <div className="flex flex-col gap-3 p-5">
             <p className="text-sm">
               Nuked, except for what follows. The rest goes as the app restarts.
             </p>
@@ -49,11 +56,11 @@ export function DangerZoneView({
                 </li>
               ))}
             </ul>
-            <Button size="sm" onClick={onRelaunch}>
+            <Button size="sm" className="self-end" onClick={onRelaunch}>
               Restart
             </Button>
           </div>
-        </div>
+        </ModalShell>
       )}
       <SectionHeading className="mb-1">Danger zone</SectionHeading>
       <div className="space-y-3 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3">

@@ -257,7 +257,7 @@ function CommitRow({
       onOpen={onOpen}
       warm={warm}
       trailing={
-        <span className="grid grid-cols-[4.5rem_4.5rem_4.5rem] items-center text-muted-foreground phone:grid-cols-[4.5rem_4.5rem]">
+        <span className="grid grid-cols-[4.5rem_4.5rem_4.5rem] items-center text-muted-foreground phone:grid-cols-[auto_auto] phone:gap-3">
           <span className="font-mono phone:hidden">{commit.hash}</span>
           <span className="truncate">
             <RelativeDate date={commit.date} />
@@ -299,7 +299,7 @@ function BranchLine({
   onOpen: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 pl-[4.75rem] text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 pl-19 text-xs text-muted-foreground">
       <span>
         {more ? `${own}+ commits` : pluralize(own, "commit")} ahead of {base}
         {behind > 0 && `, ${behind} behind`}

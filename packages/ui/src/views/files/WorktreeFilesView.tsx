@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { EyeOff, Files, RefreshCw } from "lucide-react";
 import { PAGE_HEADER_PADDING } from "../shared/PageHeaderView.tsx";
-import { BackButton } from "../../primitives/back-button.tsx";
 import { CenteredMessage } from "../../primitives/centered-message.tsx";
 import { ChipButton } from "../../primitives/chip-button.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
@@ -37,12 +36,9 @@ export function FilesPageView({
 // controls once there are files to show.
 export function FilesHeaderView({
   worktreeName,
-  back,
   controls,
 }: {
   worktreeName: string;
-  // A phone's way back. A wide viewport's is the sidebar's first row.
-  back: { label: string; onClick: () => void } | null;
   // Absent on a peer that shows no files.
   controls: {
     // A phone's way to the tree, once a file has the page.
@@ -59,7 +55,6 @@ export function FilesHeaderView({
         PAGE_HEADER_PADDING,
       )}
     >
-      {back && <BackButton onClick={back.onClick} label={back.label} />}
       <div className="flex items-start justify-between gap-6">
         <div className="min-w-0 flex-1 space-y-1">
           <h1 className="truncate text-xl font-medium tracking-tight phone:text-lg">
