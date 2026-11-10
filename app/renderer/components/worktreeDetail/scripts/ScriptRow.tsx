@@ -18,7 +18,7 @@ export function ScriptRow({
   command: string;
 }) {
   const { toScript } = useWorktreeNav();
-  const { state, busy, canRun, disabledReason, start, stop } = useScriptRunner(
+  const { state, busy, disabledReason, start, stop } = useScriptRunner(
     worktree,
     slot,
   );
@@ -28,7 +28,6 @@ export function ScriptRow({
       command={command}
       state={state}
       busy={busy}
-      canRun={canRun}
       disabledReason={disabledReason}
       onRun={start}
       onStop={stop}

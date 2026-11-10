@@ -196,7 +196,7 @@ function ScriptLaunchButton({
 }) {
   const { toScript } = useWorktreeNav();
   const slot = { kind: "package", name } as const;
-  const { state, busy, canRun, disabledReason, start, stop } = useScriptRunner(
+  const { state, busy, disabledReason, start, stop } = useScriptRunner(
     worktree,
     slot,
   );
@@ -216,7 +216,7 @@ function ScriptLaunchButton({
       name={name}
       command={command}
       busy={busy}
-      disabled={state.cancelling || !canRun}
+      cancelling={state.cancelling}
       disabledReason={disabledReason}
       onClick={handleClick}
     />

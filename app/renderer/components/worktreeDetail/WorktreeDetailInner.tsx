@@ -104,8 +104,9 @@ export function WorktreeDetailInner({
 
   // Banner-only for setup / port-pool provision: those are user scripts
   // (`pnpm install` etc.) that can run alongside the user opening files
-  // or kicking off launches. Carry-over moves real files into the new
-  // worktree, so we lock the page until it finishes. inLimbo wins, so a
+  // or editors, while the scripts wait for them (useScriptRunner).
+  // Carry-over moves real files into the new worktree, so we lock the
+  // page until it finishes. inLimbo wins, so a
   // delete-during-setup race shows the destructive banner instead.
   // Scoped to this machine: the lifecycle broadcast is local, and a
   // pull can mint a local worktree with the SAME id as the peer's (ids

@@ -16,6 +16,7 @@ export function ScriptConsoleView({
   state,
   busy,
   readOnlyNote,
+  runDisabledReason,
   onRun,
   onStop,
   onClear,
@@ -27,6 +28,8 @@ export function ScriptConsoleView({
   // Set for a peer that takes no commands from here: nothing runs,
   // stops or shows.
   readOnlyNote: string | null;
+  // Set while a run can't start (the worktree still being set up).
+  runDisabledReason: string | undefined;
   onRun: () => void;
   onStop: () => void;
   // Set while a finished run's output can be dropped.
@@ -52,10 +55,16 @@ export function ScriptConsoleView({
               {state.cancelling ? "Stopping…" : "Stop"}
             </Button>
           ) : (
-            <Button size="xs" onClick={onRun}>
-              <Play />
-              {state.status === "idle" ? "Run" : "Run again"}
-            </Button>
+            <SimpleTooltip tip={runDisabledReason}>
+              <Button
+                size="xs"
+                onClick={onRun}
+                disabled={runDisabledReason !== undefined}
+              >
+                <Play />
+                {state.status === "idle" ? "Run" : "Run again"}
+              </Button>
+            </SimpleTooltip>
           )}
         </TerminalTabToolbar>
       )}

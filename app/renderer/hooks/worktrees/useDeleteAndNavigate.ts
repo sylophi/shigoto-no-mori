@@ -4,23 +4,17 @@ import {
   isWorktreeSettingUpError,
 } from "@shigomori/contracts/errors";
 import { inboxShowing } from "@/components/sidebar/inbox/inboxOrder";
-import { useHostScope } from "@/hooks/remote/useHostScope";
 import { notifyError } from "@/lib/toast";
-import { useWorktreeCreatePhase } from "@/hooks/worktrees/useWorktreeLifecycle";
+import { useWorktreeSettingUp } from "@/hooks/worktrees/useWorktreeLifecycle";
 import { useDeleteWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { CleanupError, Worktree } from "@shigomori/contracts/schemas";
 
 // Why the worktree can't be deleted right now, if it can't. Delete
 // waits out the create run (carry-over, setup, port provision), which
-// the host refuses to race. Local only: the create phases stream to
-// this machine alone, so a peer's page can't see them and relies on
-// that refusal.
+// the host refuses to race.
 export function useDeleteBlockedReason(worktree: Worktree): string | undefined {
-  const { remote } = useHostScope();
-  const settingUp =
-    useWorktreeCreatePhase(remote ? null : worktree.id) !== null;
-  return settingUp
+  return useWorktreeSettingUp(worktree)
     ? "Can't delete while the worktree is being set up"
     : undefined;
 }

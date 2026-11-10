@@ -243,7 +243,7 @@ export function WorktreePageScene() {
                     name={name}
                     command={`pnpm ${name}`}
                     busy={false}
-                    disabled={false}
+                    cancelling={false}
                     disabledReason={undefined}
                     onClick={noop}
                   />
