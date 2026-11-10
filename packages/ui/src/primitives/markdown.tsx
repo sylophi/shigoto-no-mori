@@ -187,6 +187,12 @@ export function Markdown({
   const { openUrl } = useOutside();
   const html = purify.isSupported ? htmlOf(source, breaks) : "";
   const ref = useRef<HTMLDivElement>(null);
+  // Sanitized above (htmlOf). Not dangerouslySetInnerHTML: React may
+  // write it again on a render with the same html, replacing images the
+  // effects below filled in.
+  useLayoutEffect(() => {
+    if (ref.current) ref.current.innerHTML = html;
+  }, [html]);
   useLayoutEffect(() => {
     if (!images) return;
     for (const img of ref.current?.querySelectorAll<HTMLImageElement>(
@@ -271,9 +277,6 @@ export function Markdown({
         const href = anchor.getAttribute("href") ?? "";
         if (isWebUrl(href)) openUrl(href);
       }}
-      // Sanitized above: DOMPurify strips scripts, handlers and
-      // non-web URLs, and the hooks images from hosts it doesn't know.
-      dangerouslySetInnerHTML={{ __html: html }}
     />
   );
 }
