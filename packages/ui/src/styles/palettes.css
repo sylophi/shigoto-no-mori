@@ -403,3 +403,42 @@
   --doubutsu-modal-card: oklch(0.345 0.012 78);
   --doubutsu-modal-muted: oklch(0.42 0.014 72);
 }
+
+/* --- Ink ---
+   Not a pick: what terminals kept dark wear in a light window
+   (TerminalScope). A dark pick is a look of its own, and its tones
+   clash with the light palette around the drawer, so this one is the
+   light palette's own night: charcoal's lightness steps in the hue of
+   the window's ink, and the window's accent lifted the way charcoal
+   lifts the leaf. The window's root hands both down, since a dark
+   root's own tokens are the ones being set here. The rail tokens stay
+   charcoal's: a terminal draws none. */
+[data-theme-scope].doubutsu:not(.dark) {
+  --light-ink: var(--foreground);
+  --light-accent: var(--primary);
+}
+[data-theme-scope].doubutsu.dark[data-palette="ink"] {
+  --background: oklch(from var(--light-ink) 0.215 calc(c * 0.3) h);
+  --foreground: oklch(from var(--light-ink) 0.95 calc(c * 0.25) h);
+  --card: oklch(from var(--light-ink) 0.275 calc(c * 0.3) h);
+  --card-foreground: var(--foreground);
+  --popover: oklch(from var(--light-ink) 0.29 calc(c * 0.3) h);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(from var(--light-accent) 0.76 c h);
+  --primary-foreground: oklch(from var(--light-ink) 0.2 calc(c * 0.4) h);
+  --secondary: oklch(from var(--light-ink) 0.345 calc(c * 0.4) h);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(from var(--light-ink) 0.305 calc(c * 0.3) h);
+  --muted-foreground: oklch(from var(--light-ink) 0.745 calc(c * 0.5) h);
+  --input: oklch(from var(--light-ink) 0.325 calc(c * 0.3) h);
+  --ring: var(--primary);
+  --color-emerald-400: oklch(from var(--light-accent) 0.78 c h);
+  --color-emerald-500: oklch(from var(--light-accent) 0.74 c h);
+  --doubutsu-button-outline: oklch(from var(--light-ink) 0.385 calc(c * 0.4) h);
+  --doubutsu-accent: oklch(from var(--light-accent) 0.4 calc(c * 0.5) h);
+  --doubutsu-accent-foreground: oklch(
+    from var(--light-ink) 0.97 calc(c * 0.25) h
+  );
+  --doubutsu-modal-card: oklch(from var(--light-ink) 0.315 calc(c * 0.3) h);
+  --doubutsu-modal-muted: oklch(from var(--light-ink) 0.39 calc(c * 0.3) h);
+}
