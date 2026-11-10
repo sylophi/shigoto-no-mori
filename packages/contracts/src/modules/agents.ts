@@ -9,7 +9,7 @@ import {
 // home, and installing edits files in it.
 export const agentsContract = defineContract(
   "agents",
-  "host",
+  { scope: "host", version: 1 },
   invoke(
     "status",
     VoidSchema,

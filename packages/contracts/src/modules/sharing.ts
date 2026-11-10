@@ -9,7 +9,7 @@ import { VoidSchema } from "../schemas/index.ts";
 // link.ts), so they see a device with nothing on it.
 export const sharingContract = defineContract(
   "sharing",
-  "host",
+  { scope: "host", version: 1 },
   // This device's own: no peer reads or flips it.
   invoke("read", VoidSchema, Schema.Boolean, { remote: false, gated: false }),
   view("watch", VoidSchema, Schema.Boolean, { remote: false, gated: false }),

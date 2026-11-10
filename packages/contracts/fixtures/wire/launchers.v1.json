@@ -1,0 +1,36 @@
+{
+  "launchers:detect": {
+    "success": []
+  },
+  "launchers:forProject": {
+    "payload": {
+      "projectId": "😀"
+    },
+    "success": {
+      "entries": [
+        {
+          "kind": "custom",
+          "id": "",
+          "label": "\ud800"
+        }
+      ],
+      "hiddenCount": 0
+    }
+  },
+  "launchers:launch": {
+    "payload": {
+      "projectId": "😀",
+      "worktreeId": "\ud800",
+      "launcherId": "-1"
+    },
+    "success": {}
+  },
+  "launchers:openFile": {
+    "payload": {
+      "projectId": "zH",
+      "worktreeId": " ",
+      "path": "x"
+    },
+    "success": {}
+  }
+}

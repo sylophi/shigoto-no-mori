@@ -1,0 +1,8 @@
+{
+  "terrier:readiness": {
+    "success": {
+      "installed": true,
+      "readable": false
+    }
+  }
+}

@@ -58,6 +58,19 @@ const HubStatusSchema = Schema.Struct({
   // enforces it.
   peerAcceptsCommands: Schema.Record(Schema.String, Schema.Boolean),
   peerSharesData: Schema.Record(Schema.String, Schema.Boolean),
+  // The version of each module the peer serves, as its welcome said
+  // (link.ts, ModuleVersions): what this build holds its own against to
+  // say which of the peer's modules it can't call.
+  peerVersions: Schema.Record(
+    Schema.String,
+    Schema.Record(Schema.String, Schema.Int),
+  ),
+  // The rostered peers this device holds no session to because the two
+  // run different cores (protocol.ts), each with the end on the older.
+  peerCoreOutdated: Schema.Record(
+    Schema.String,
+    Schema.Literals(["peer", "this"]),
+  ),
   // Absent on the web client, which runs no cloudflared.
   tunnel: Schema.optional(TunnelStateSchema),
 });

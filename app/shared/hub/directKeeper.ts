@@ -28,7 +28,12 @@ import {
   wakeable,
 } from "@shared/remote/supervisor";
 import { NoDialableCandidateError } from "./directDial";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { RemoteConnectError } from "@shared/remote/deviceLink";
+import {
+  errorMessageOf,
+  isProtocolVersionMismatchError,
+} from "@shigomori/contracts/errors";
+import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import { log } from "@shared/log";
 
@@ -37,7 +42,21 @@ type DirectKeeperDeps = {
   // means an established session (or one already cached), failing
   // means the attempt failed with the dialer's typed error.
   dial(deviceId: string): Effect.Effect<unknown, unknown>;
+  // A peer's core verdict (coreOutdated) moved.
+  onCoreOutdatedChange(): void;
 };
+
+type CoreOutdated = HubStatus["peerCoreOutdated"][string];
+
+// The end on the older core, when the peer refused this device's hello
+// for running another one.
+const coreOutdatedOf = (error: unknown): CoreOutdated | null =>
+  error instanceof RemoteConnectError &&
+  isProtocolVersionMismatchError(error.refusal)
+    ? error.refusal.hostVersion < error.refusal.clientVersion
+      ? "peer"
+      : "this"
+    : null;
 
 export type DirectKeeper = {
   // The desired set: the live roster, or [] while our own hub link is
@@ -51,6 +70,10 @@ export type DirectKeeper = {
   // dial failure, cleared the moment a dial succeeds), for the
   // bridge's no-session rejection. Null when none applies.
   unavailableReason(deviceId: string): string | null;
+  // The rostered peers whose last dial was refused for the core, each
+  // with the end on the older one. Still dialed on the ladder: the peer
+  // updating is what ends it.
+  coreOutdated(): HubStatus["peerCoreOutdated"];
   // The network is back, the machine awake or a tab back: every peer
   // waiting out the ladder dials now.
   dialNow(): void;
@@ -62,6 +85,7 @@ type PeerState = {
   // drop reported however early ends the session's wait.
   dropped: Deferred.Deferred<void> | null;
   lastFailure: string | null;
+  coreOutdated: CoreOutdated | null;
   // Failed dials since the last session (or since the peer came online).
   failures: number;
   // Cuts its wait on the shared ladder short.
@@ -99,6 +123,12 @@ export const make = (
     // a failed dial counts as 0, and only a drop after a stable run
     // resets the ladder, so a connect-then-die flapper keeps climbing
     // instead of hammering at the bottom rung.
+    const noteCore = (state: PeerState, verdict: CoreOutdated | null) => {
+      if (state.coreOutdated === verdict) return;
+      state.coreOutdated = verdict;
+      deps.onCoreOutdatedChange();
+    };
+
     const attempt = (deviceId: string, state: PeerState) =>
       Effect.gen(function* () {
         const dropped = yield* Deferred.make<void>();
@@ -116,6 +146,10 @@ export const make = (
             );
           }
           state.lastFailure = message;
+          // Kept through a dial that failed some other way, which says
+          // nothing of the peer's build: a session landing clears it.
+          const verdict = coreOutdatedOf(error);
+          if (verdict !== null) noteCore(state, verdict);
           // A peer with no listener (a web client) has nothing to dial
           // while it is one, so the loop parks until its roster re-entry
           // (see the header).
@@ -131,6 +165,7 @@ export const make = (
           );
         }
         state.lastFailure = null;
+        noteCore(state, null);
         state.failures = 0;
         yield* Deferred.await(dropped);
         return elapsedMillisUnsafe(clock) - upSince;
@@ -141,6 +176,7 @@ export const make = (
         loop: null,
         dropped: null,
         lastFailure: null,
+        coreOutdated: null,
         failures: 0,
         wake: makeWake(),
       };
@@ -192,6 +228,16 @@ export const make = (
 
       unavailableReason(deviceId) {
         return states.get(deviceId)?.lastFailure ?? null;
+      },
+
+      coreOutdated() {
+        const verdicts: Record<string, CoreOutdated> = {};
+        for (const [deviceId, state] of states) {
+          if (state.coreOutdated !== null) {
+            verdicts[deviceId] = state.coreOutdated;
+          }
+        }
+        return verdicts;
       },
 
       dialNow() {

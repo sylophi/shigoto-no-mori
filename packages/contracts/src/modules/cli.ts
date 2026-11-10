@@ -63,7 +63,7 @@ const gated = gatedBy("changeApp");
 
 export const cliContract = defineContract(
   "cli",
-  "host",
+  { scope: "host", version: 1 },
   invoke("status", VoidSchema, CliStatusSchema, gated),
   invoke(
     "install",

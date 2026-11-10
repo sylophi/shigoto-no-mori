@@ -3,6 +3,6 @@ import { TerrierReadinessSchema, VoidSchema } from "../schemas/index.ts";
 
 export const terrierContract = defineContract(
   "terrier",
-  "host",
+  { scope: "host", version: 1 },
   invoke("readiness", VoidSchema, TerrierReadinessSchema, ungated),
 );

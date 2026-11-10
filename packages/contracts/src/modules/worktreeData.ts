@@ -18,7 +18,7 @@ import {
 // ports, and its title and description.
 export const worktreeDataContract = defineContract(
   "worktreeData",
-  "host",
+  { scope: "host", version: 1 },
   // A mirror into this device reads its copy's description here
   // (host/lib/sync/worktreeDescription.ts).
   invoke(

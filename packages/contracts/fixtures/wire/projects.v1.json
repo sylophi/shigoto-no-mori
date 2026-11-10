@@ -1,0 +1,220 @@
+{
+  "projects:add": {
+    "payload": {
+      "path": "C"
+    },
+    "success": {
+      "id": "",
+      "name": " ",
+      "path": ""
+    }
+  },
+  "projects:carryOverListing": {
+    "payload": {
+      "projectId": "/",
+      "relative": "\udc00"
+    },
+    "success": [
+      {
+        "name": "",
+        "isDirectory": false,
+        "ignored": true,
+        "inPrimary": true,
+        "worktrees": []
+      },
+      {
+        "name": "\n",
+        "isDirectory": false,
+        "ignored": false,
+        "inPrimary": false,
+        "worktrees": ["😀"]
+      }
+    ]
+  },
+  "projects:carryOverStats": {
+    "payload": {
+      "projectId": "\ud800",
+      "paths": ["\ud800"]
+    },
+    "success": {
+      "": {
+        "isDirectory": true,
+        "inPrimary": true,
+        "worktrees": ["", ".K"]
+      },
+      "😀": {
+        "isDirectory": true,
+        "inPrimary": true,
+        "worktrees": ["\u0000", "\ud800"]
+      }
+    }
+  },
+  "projects:clone": {
+    "payload": {
+      "url": "霬衬ɹ:b睚᪨",
+      "parentDir": "0"
+    },
+    "success": {
+      "id": " ",
+      "name": "X",
+      "path": "RH"
+    }
+  },
+  "projects:cloneFromDevice": {
+    "payload": {
+      "deviceId": "%S",
+      "projectId": "k"
+    },
+    "success": {
+      "project": {
+        "id": "wt",
+        "name": "",
+        "path": " "
+      },
+      "settings": {
+        "copied": false
+      }
+    }
+  },
+  "projects:cloneFromDeviceProgress": {
+    "payload": {
+      "deviceId": "}{",
+      "projectId": "\n",
+      "step": "files"
+    }
+  },
+  "projects:cloneProgress": {
+    "payload": {
+      "parentDir": "ew",
+      "name": "",
+      "progress": {
+        "step": "remote",
+        "percent": 4
+      }
+    }
+  },
+  "projects:cloneUrl": {
+    "payload": {
+      "projectId": "0"
+    },
+    "success": ""
+  },
+  "projects:create": {
+    "payload": {
+      "parentDir": "V",
+      "name": "J"
+    },
+    "success": {
+      "id": "\ud800",
+      "name": "-1",
+      "path": " "
+    }
+  },
+  "projects:defaultBranch": {
+    "payload": {
+      "projectId": "U"
+    },
+    "success": ""
+  },
+  "projects:delete": {
+    "payload": {
+      "id": "\t"
+    }
+  },
+  "projects:icon": {
+    "payload": {
+      "projectId": " "
+    },
+    "success": {
+      "mime": "N5",
+      "base64": "\ud800"
+    }
+  },
+  "projects:list": {
+    "success": [
+      {
+        "id": "\udc00",
+        "name": "😀",
+        "path": ".u"
+      },
+      {
+        "id": "",
+        "name": "\t",
+        "path": "09"
+      }
+    ]
+  },
+  "projects:listBranches": {
+    "payload": {
+      "projectId": "😀"
+    },
+    "success": {
+      "local": ["\u0000", ""],
+      "remote": [" ", "\u0000"]
+    }
+  },
+  "projects:pickWorktreeName": {
+    "payload": {
+      "projectId": "😀"
+    },
+    "success": "\udc00"
+  },
+  "projects:relocate": {
+    "payload": {
+      "id": "Dy",
+      "path": "\n"
+    },
+    "success": {
+      "id": "o\\",
+      "name": ":@",
+      "path": "ef"
+    }
+  },
+  "projects:remoteImage": {
+    "payload": {
+      "projectId": "p_01",
+      "url": "https://git.uni.example/storage/a.png"
+    },
+    "success": "data:image/png;base64,iVBORw=="
+  },
+  "projects:remove": {
+    "payload": {
+      "id": ">s"
+    }
+  },
+  "projects:reorder": {
+    "payload": {
+      "draggedId": "u",
+      "targetId": "j",
+      "position": "before"
+    }
+  },
+  "projects:usageBumped": {
+    "payload": {
+      "projectId": "D"
+    }
+  },
+  "projects:watch": {
+    "success": [
+      {
+        "id": "",
+        "name": "D>",
+        "path": "\n"
+      },
+      {
+        "id": "-1",
+        "name": "\t",
+        "path": ""
+      }
+    ]
+  },
+  "projects:worktreeIncludeStatus": {
+    "payload": {
+      "projectId": "\ud800"
+    },
+    "success": {
+      "fileExists": false,
+      "matchedPaths": ["1U", "/A"]
+    }
+  }
+}

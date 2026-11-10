@@ -91,7 +91,7 @@ const worktreeMutation = <const Key extends string>(
 
 export const worktreesContract = defineContract(
   "worktrees",
-  "host",
+  { scope: "host", version: 1 },
   // A mirror into this device looks its copy up here.
   invoke(
     "list",

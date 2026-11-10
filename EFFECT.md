@@ -380,7 +380,9 @@ export const layer = Layer.effect(Registry, make);
   what it raises, and a link logs its lifecycle transitions, inbound
   and outbound.
 - Bytes that a device on another build can read do not change. A
-  change to them is a protocol version bump with a golden fixture.
+  change to them is a version bump, of their module or of the core,
+  with a golden fixture (`packages/contracts/README.md`, "Wire
+  samples").
 - The store is reached only through the engine's services. No other
   package opens the database.
 

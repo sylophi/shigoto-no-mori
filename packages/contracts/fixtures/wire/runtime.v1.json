@@ -1,0 +1,31 @@
+{
+  "runtime:info": {
+    "success": {
+      "dataDir": "^,",
+      "dataDirSource": "env",
+      "atDefaultDataDir": false,
+      "canonicalDataDirName": "}{",
+      "homedir": "zt"
+    }
+  },
+  "runtime:moveDataDir": {
+    "payload": {
+      "parentDir": "k9"
+    }
+  },
+  "runtime:nuke": {
+    "success": {
+      "left": [
+        {
+          "what": "H",
+          "why": "0"
+        }
+      ]
+    }
+  },
+  "runtime:nukeProgress": {
+    "payload": {
+      "phase": "scripts"
+    }
+  }
+}

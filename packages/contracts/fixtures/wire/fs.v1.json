@@ -1,0 +1,32 @@
+{
+  "fs:isGitRepo": {
+    "payload": {
+      "path": "<<"
+    },
+    "success": true
+  },
+  "fs:listDirectory": {
+    "payload": {
+      "path": "2"
+    },
+    "success": {
+      "path": "\n",
+      "entries": [
+        {
+          "name": "4~",
+          "isGitRepo": true
+        },
+        {
+          "name": "😀",
+          "isGitRepo": false
+        }
+      ]
+    }
+  },
+  "fs:scanForGitRepos": {
+    "payload": {
+      "path": "😀"
+    },
+    "success": ["-1", ""]
+  }
+}

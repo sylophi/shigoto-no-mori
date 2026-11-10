@@ -1,0 +1,21 @@
+{
+  "branches:create": {
+    "payload": {
+      "projectId": "\n",
+      "name": "\u0000"
+    }
+  },
+  "branches:delete": {
+    "payload": {
+      "projectId": "V",
+      "name": "3"
+    }
+  },
+  "branches:rename": {
+    "payload": {
+      "projectId": "4",
+      "oldName": "U",
+      "newName": "\ud800"
+    }
+  }
+}

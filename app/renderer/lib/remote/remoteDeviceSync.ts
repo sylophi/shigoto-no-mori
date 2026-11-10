@@ -16,6 +16,7 @@ import { hashKey, type QueryClient } from "@tanstack/react-query";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { hubContract, type HubStatus } from "@shigomori/contracts/modules/hub";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
+import { outdatedModules } from "@shigomori/contracts/link";
 import * as Effect from "effect/Effect";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -269,6 +270,7 @@ export function startRemoteDeviceSync({
     online: ReadonlySet<string>,
   ): RemoteDevice => {
     const version = current.peerAppVersions[info.deviceId];
+    const coreOutdated = current.peerCoreOutdated[info.deviceId];
     let status: RemoteDeviceStatus;
     if (
       version !== undefined &&
@@ -279,8 +281,19 @@ export function startRemoteDeviceSync({
     } else if (version !== undefined) {
       // A live direct session is the whole data plane, and it outlives a
       // hub blip on purpose, so it reads connected first, before the
-      // socket phase is even consulted.
-      status = { phase: "connected" };
+      // socket phase is even consulted. With what of the peer this build
+      // can't call, when the two run different releases.
+      const outdated = outdatedModules(
+        current.peerVersions[info.deviceId] ?? {},
+      );
+      status =
+        outdated === undefined
+          ? { phase: "connected" }
+          : {
+              phase: "connected",
+              outdated: outdated.side,
+              modules: outdated.modules,
+            };
       followPeer(info.deviceId);
     } else if (current.socket.phase === "blocked") {
       // A blocked socket is a verdict on this device, not on the peers,
@@ -291,6 +304,10 @@ export function startRemoteDeviceSync({
       status = current.socket;
     } else if (!online.has(info.deviceId)) {
       status = { phase: "stopped" };
+    } else if (coreOutdated !== undefined) {
+      // Rostered, and its listener refuses this build's hello: no
+      // session lands until one of the two updates.
+      status = { phase: "outdated", outdated: coreOutdated };
     } else {
       // In the roster but no direct session yet: the direct plane's
       // keeper is dialing or backing off toward one. A view can stand

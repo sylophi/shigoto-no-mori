@@ -14,7 +14,7 @@ import {
   isProtocolVersionMismatchError,
   LinkRefusedError,
 } from "@shigomori/contracts/errors";
-import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
+import { CORE_VERSION } from "@shigomori/contracts/protocol";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
@@ -25,7 +25,7 @@ import * as RpcClient from "effect/rpc/RpcClient";
 import * as Socket from "effect/socket/Socket";
 import type * as Scope from "effect/Scope";
 import type { Link } from "@shared/ipc/transport";
-import type { LinkChannels } from "@shigomori/contracts/link";
+import type { LinkChannels, ModuleVersions } from "@shigomori/contracts/link";
 import { createChannelMux } from "./channels";
 import { watchLiveness } from "@shigomori/engine/liveness";
 import {
@@ -118,6 +118,9 @@ export type DialedDevice = {
   // the loopback, whose host the shell's watchdog judges.
   probe(): void;
   readonly remoteAppVersion: string;
+  // The version of each module the far end serves (its welcome), which
+  // the link held its calls against.
+  readonly remoteVersions: ModuleVersions;
   // Settles when the link drops on its own.
   readonly dropped: Effect.Effect<void>;
 };
@@ -276,7 +279,7 @@ export const dialDevice = (
       deviceKind: options.deviceKind ?? "desktop",
       connectionId: options.connectionId ?? newConnectionId(),
       appVersion: options.appVersion,
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: CORE_VERSION,
       ...(options.seal === undefined ? { token: options.ticket } : {}),
     }).pipe(
       Effect.mapError((error) =>
@@ -286,7 +289,7 @@ export const dialDevice = (
             ? connectError("the peer refused the connect ticket", true, error)
             : connectError(`the hello failed: ${errorMessageOf(error)}`),
       ),
-    )) as { appVersion: string };
+    )) as { deviceId: string; appVersion: string; versions: ModuleVersions };
 
     // The loopback's dial, to this machine's own host.
     const loopback = options.seal === undefined;
@@ -295,6 +298,7 @@ export const dialDevice = (
       group,
       onPush: options.onPush,
       local: loopback,
+      host: welcome,
     });
 
     // A round trip behind the subscriptions, so the link counts as open
@@ -330,6 +334,7 @@ export const dialDevice = (
       channels,
       probe: liveness.probe,
       remoteAppVersion: welcome.appVersion,
+      remoteVersions: welcome.versions,
       dropped: Deferred.await(dropped),
     };
   }).pipe(

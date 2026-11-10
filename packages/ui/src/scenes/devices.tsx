@@ -116,6 +116,7 @@ function row(
       onRename={noop}
       onRemove={noop}
       onCancelRemove={noop}
+      outdated={null}
       iconPicker={
         <DeviceIconPickerView
           icon={icon}

@@ -1,0 +1,306 @@
+{
+  "sync:cancelMove": {
+    "payload": {
+      "sourceWorktreeId": "4e64cca988f8"
+    },
+    "success": {
+      "cancelled": false
+    }
+  },
+  "sync:cloneDestination": {
+    "payload": {
+      "cloneInto": {
+        "parentDir": "k",
+        "name": "觋Y"
+      },
+      "identity": null
+    },
+    "success": "taken"
+  },
+  "sync:dropQueuedMove": {
+    "payload": {
+      "direction": "send",
+      "deviceId": "-1",
+      "projectId": "a",
+      "worktreeId": "063396972d3b"
+    }
+  },
+  "sync:hasCommits": {
+    "payload": {
+      "projectId": "\n",
+      "commits": ["7900", "33ae"]
+    },
+    "success": {
+      "present": ["5d39", "8ab9"]
+    }
+  },
+  "sync:ignoredPaths": {
+    "payload": {
+      "projectId": "n[",
+      "worktreeId": "693c0fd86c1c"
+    },
+    "success": {
+      "paths": ["Q", "#<"],
+      "total": 3,
+      "patterns": ["", "\n"]
+    }
+  },
+  "sync:openSource": {
+    "payload": {
+      "projectId": " ",
+      "worktreeId": "20f8a0fbc3a3",
+      "channelId": "2d432ce4ab422e3708ac6c978ddcbd1e"
+    }
+  },
+  "sync:pullProgress": {
+    "payload": {
+      "sourceWorktreeId": "203e3f214478",
+      "step": "files"
+    }
+  },
+  "sync:pullWorktree": {
+    "payload": {
+      "sourceDeviceId": "0",
+      "sourceProjectId": "PX",
+      "sourceWorktreeId": "c294c97557e5",
+      "sourceIdentity": "\t",
+      "branch": "D"
+    },
+    "success": {
+      "worktree": {
+        "id": " ",
+        "projectId": "Y",
+        "name": "\t",
+        "branch": "\u0000",
+        "path": "P",
+        "ahead": 2,
+        "behind": 3,
+        "hasUpstream": true,
+        "hasRemote": false,
+        "divergedClean": false,
+        "behindPrimary": 2,
+        "unpushedCount": 0,
+        "mergedIntoPrimary": false,
+        "changedCount": 2,
+        "recentCommits": [
+          {
+            "hash": "7a10",
+            "subject": "😀",
+            "author": "6",
+            "date": "",
+            "additions": 0,
+            "deletions": 3
+          },
+          {
+            "hash": "3c14",
+            "subject": "",
+            "author": "\n",
+            "date": "5",
+            "additions": 3,
+            "deletions": 1
+          }
+        ],
+        "isPrimary": true,
+        "isExternal": true,
+        "detached": true,
+        "shelved": false,
+        "autoPull": false
+      },
+      "captured": true,
+      "dirtyApplied": true
+    }
+  },
+  "sync:queued": {
+    "success": [
+      {
+        "direction": "send",
+        "deviceId": "e:",
+        "projectId": "😀",
+        "worktreeId": "119dc2ef24e6",
+        "kind": "mirror",
+        "branch": "z",
+        "identity": "😀",
+        "rule": {
+          "base": "gitignored",
+          "leftOut": [],
+          "brought": []
+        },
+        "runSetup": false,
+        "state": {
+          "status": "done",
+          "landed": {
+            "deviceId": "7",
+            "projectId": "w",
+            "worktreeId": "d1d58be1e122"
+          }
+        }
+      }
+    ]
+  },
+  "sync:queueMove": {
+    "payload": {
+      "direction": "send",
+      "deviceId": "O",
+      "projectId": "S",
+      "worktreeId": "dfe6531cb6a6",
+      "kind": "mirror",
+      "branch": "[q",
+      "identity": "L",
+      "rule": {
+        "base": "everything",
+        "leftOut": ["r{", "\ud800"],
+        "brought": []
+      },
+      "runSetup": false
+    }
+  },
+  "sync:receiveBundle": {
+    "payload": {
+      "projectId": "C",
+      "refs": ["refs/heads/5"],
+      "haves": [],
+      "channelId": "fcb6e38fe016cd5c05959688ecd9e2c0"
+    },
+    "success": {
+      "fetched": [
+        {
+          "ref": "UA",
+          "commit": "0cd0"
+        },
+        {
+          "ref": "a(",
+          "commit": "2762"
+        }
+      ]
+    }
+  },
+  "sync:receiveWorktree": {
+    "payload": {
+      "identity": "\t",
+      "branch": "u",
+      "sourceWorktreeId": "bf1188b6f3bc",
+      "ignoreMode": "custom",
+      "ignores": ["/node_modules"],
+      "channelId": "813d371ffa16f6ca81f8acaea1c5e68b"
+    },
+    "success": {
+      "worktree": {
+        "id": " ",
+        "projectId": "<j",
+        "name": "\n",
+        "branch": "Ss",
+        "path": "-1",
+        "ahead": 0,
+        "behind": 0,
+        "hasUpstream": false,
+        "hasRemote": true,
+        "divergedClean": true,
+        "behindPrimary": 0,
+        "unpushedCount": 2,
+        "mergedIntoPrimary": false,
+        "changedCount": 1,
+        "recentCommits": [
+          {
+            "hash": "c86f",
+            "subject": "{",
+            "author": "0",
+            "date": "",
+            "additions": 0,
+            "deletions": 0
+          },
+          {
+            "hash": "315e",
+            "subject": " ",
+            "author": "$P",
+            "date": "Lt",
+            "additions": 3,
+            "deletions": 4
+          }
+        ],
+        "isPrimary": true,
+        "isExternal": false,
+        "detached": false,
+        "shelved": true,
+        "autoPull": false
+      },
+      "captured": false,
+      "dirtyApplied": true,
+      "receipt": {
+        "branch": "F",
+        "branchTip": "815e",
+        "captured": false,
+        "dirtyApplied": false
+      }
+    }
+  },
+  "sync:sendWorktree": {
+    "payload": {
+      "targetDeviceId": "\ud800",
+      "projectId": "?C",
+      "worktreeId": "958a845eca3b"
+    },
+    "success": {
+      "worktree": {
+        "id": "",
+        "projectId": "8",
+        "name": "\u0000",
+        "branch": "\t",
+        "path": "gB",
+        "ahead": 2,
+        "behind": 0,
+        "hasUpstream": true,
+        "hasRemote": false,
+        "divergedClean": true,
+        "behindPrimary": 0,
+        "unpushedCount": 3,
+        "mergedIntoPrimary": true,
+        "changedCount": 2,
+        "recentCommits": [
+          {
+            "hash": "4cca",
+            "subject": "",
+            "author": "0",
+            "date": "{h",
+            "additions": 3,
+            "deletions": 1
+          },
+          {
+            "hash": "f281",
+            "subject": "",
+            "author": "\ud800",
+            "date": "\udc00",
+            "additions": 0,
+            "deletions": 1
+          }
+        ],
+        "isPrimary": true,
+        "isExternal": false,
+        "detached": false,
+        "shelved": true,
+        "autoPull": true
+      },
+      "captured": true,
+      "dirtyApplied": false
+    }
+  },
+  "sync:teardownSource": {
+    "payload": {
+      "direction": "send",
+      "deviceId": "-1",
+      "projectId": "p",
+      "worktreeId": "2beb2d4c7c18"
+    },
+    "success": {
+      "sourceRemoved": true
+    }
+  },
+  "sync:worktreeFolder": {
+    "payload": {
+      "projectId": "3r",
+      "worktreeId": "115161d51857",
+      "relative": "",
+      "ruleIgnored": true
+    },
+    "success": []
+  }
+}

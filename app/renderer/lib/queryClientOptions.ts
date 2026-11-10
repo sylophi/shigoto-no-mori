@@ -18,11 +18,13 @@ import {
   isHubRateLimitedError,
   isNoDirectConnectionError,
   isNotSharingError,
+  isModuleOutdatedError,
   isPeerRefusal,
 } from "@shigomori/contracts/errors";
 import { isOwnAppDrop } from "@shared/remote/rpcTransport";
 import { notifyError } from "@/lib/toast";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
+import { outdatedCallNote } from "@shigomori/ui/lib/outdatedCopy.ts";
 
 // What a cut action says: the call was lost with the process, which
 // the window's band names (HostBand).
@@ -110,6 +112,7 @@ export function createAppQueryClient(
             !isHubRateLimitedError(error) &&
             !isEntityGoneError(error) &&
             !isGhUnavailableError(error) &&
+            !isModuleOutdatedError(error) &&
             !isPeerRefusal(error)),
       },
     },
@@ -124,6 +127,9 @@ export function createAppQueryClient(
         // A peer that just stopped sharing refuses whatever was still in
         // flight. Its status says so, and its cache is already dropped.
         if (isNotSharingError(err)) return;
+        // A peer on another release refuses every read of the modules
+        // that changed. Its status and the banner over its pages say so.
+        if (isModuleOutdatedError(err)) return;
         // A project or worktree deleted out from under an open page
         // (here, on the peer holding it, from the CLI) fails every
         // query the page had, each under its own title. Each page
@@ -152,6 +158,18 @@ export function createAppQueryClient(
               ? undefined
               : deviceLabelOf(err.deviceId);
           notifyError(peerReadOnlyNote(label ?? UNNAMED_DEVICE), err);
+          return;
+        }
+        // The same for an action a peer on another release can't take:
+        // no inline prompt is about that.
+        if (isModuleOutdatedError(err)) {
+          notifyError(
+            mutation.meta?.errorTitle ?? "Something went wrong",
+            outdatedCallNote(
+              deviceLabelOf(err.deviceId) ?? UNNAMED_DEVICE,
+              err.outdated,
+            ),
+          );
           return;
         }
         if (mutation.meta?.silentError) return;

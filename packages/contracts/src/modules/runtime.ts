@@ -23,7 +23,7 @@ import {
 // names the data dir for any project with a managed worktree.
 export const runtimeContract = defineContract(
   "runtime",
-  "host",
+  { scope: "host", version: 1 },
   invoke("info", VoidSchema, RuntimeInfoSchema, ungated),
   // The host's half of a nuke: everything that needs the store or a
   // running host. The files go at the next start (window:nuke).

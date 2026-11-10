@@ -8,15 +8,19 @@ import {
   annotation,
   callsOf,
   channelOf,
+  type ContractCall,
   type ContractModule,
   isPush,
+  moduleOf,
   Remote,
   nameOf,
   scopeOf,
+  versionOf,
 } from "./contract.ts";
 import {
   CommandRefusedError,
   LinkUnauthenticatedError,
+  ModuleOutdatedError,
   NotSharingError,
   RemoteCallError,
 } from "./errors.ts";
@@ -169,5 +173,64 @@ const loopbackCalls = [
 export const LoopbackGroup = handshakeOf(loopbackCalls).merge(
   restOf(loopbackCalls).middleware(CommandGate).middleware(PeerAuth),
 );
+
+// The version of each module a group carries, by name: what a host's
+// welcome says, and what the dialing end holds it against.
+export type ModuleVersions = Readonly<Record<string, number>>;
+
+type Group = { readonly requests: ReadonlyMap<string, ContractCall> };
+
+export const versionsOf = (group: Group): ModuleVersions => {
+  const versions: Record<string, number> = {};
+  for (const call of group.requests.values()) {
+    const version = versionOf(call);
+    if (version !== undefined) versions[moduleOf(call)] = version;
+  }
+  return versions;
+};
+
+const linkVersions = versionsOf(LinkGroup);
+
+// Why a call is not sent to a host: its welcome named another version
+// for the call's module, or none, as a build older than the module
+// does.
+export const outdatedCall = (
+  call: ContractCall,
+  host: { readonly deviceId: string; readonly versions: ModuleVersions },
+): ModuleOutdatedError | undefined => {
+  const mine = versionOf(call);
+  if (mine === undefined) return undefined;
+  const module = moduleOf(call);
+  const theirs = host.versions[module] ?? 0;
+  return mine === theirs
+    ? undefined
+    : new ModuleOutdatedError({
+        module,
+        outdated: theirs < mine ? "peer" : "this",
+        deviceId: host.deviceId,
+      });
+};
+
+// The end on the older build.
+export type OutdatedSide = ModuleOutdatedError["outdated"];
+
+// What of a peer this build can't call, by its welcome: the modules the
+// two hold at different versions, and the end on the older build.
+// Undefined when they agree on every module this build calls. Releases
+// are a line, so one end is the older in every module that differs.
+export const outdatedModules = (
+  theirs: ModuleVersions,
+): { side: OutdatedSide; modules: string[] } | undefined => {
+  const modules = Object.entries(linkVersions).filter(
+    ([module, mine]) => (theirs[module] ?? 0) !== mine,
+  );
+  if (modules.length === 0) return undefined;
+  return {
+    side: modules.some(([module, mine]) => (theirs[module] ?? 0) < mine)
+      ? "peer"
+      : "this",
+    modules: modules.map(([module]) => module),
+  };
+};
 
 export const ShellCallsGroup = RpcGroup.make(...callsOf(shellCallsContract));

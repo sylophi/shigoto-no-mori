@@ -9,7 +9,7 @@ import {
 
 export const hygieneContract = defineContract(
   "hygiene",
-  "host",
+  { scope: "host", version: 1 },
   // Fast, all-git: safe to await before the tidy list renders.
   invoke(
     "list",

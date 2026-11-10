@@ -3,6 +3,9 @@ import type { TunnelState } from "@shigomori/contracts/modules/hub";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { CommandAccess } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { useCanForwardPorts } from "@/hooks/remote/usePortForwards";
+import { usePeer } from "@/hooks/remote/useDevices";
+import { outdatedNote } from "@shigomori/ui/lib/outdatedCopy.ts";
+import { UpdateOlder } from "./UpdateOlder";
 import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,
@@ -58,6 +61,7 @@ export function DeviceRegistryRow({
   access: CommandAccess;
 }) {
   const canForwardPorts = useCanForwardPorts();
+  const peer = usePeer(device.deviceId);
   // The shared two-step confirm carries the armed flag, so an untouched
   // banner disarms itself.
   const revoke = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
@@ -90,6 +94,14 @@ export function DeviceRegistryRow({
       onRename={() => setRenaming(true)}
       onRemove={() => revoke.trigger(onRevokeDevice)}
       onCancelRemove={revoke.reset}
+      outdated={
+        peer !== undefined && "outdated" in peer.status
+          ? {
+              note: outdatedNote(name, peer.status),
+              update: <UpdateOlder device={peer} />,
+            }
+          : null
+      }
       iconPicker={
         <DeviceIconPicker
           deviceId={device.deviceId}

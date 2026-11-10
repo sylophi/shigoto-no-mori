@@ -1,0 +1,72 @@
+{
+  "sharedSettings:changed": {
+    "payload": {
+      "entries": {
+        "quickCreateDevice/remote:github.com/alex/notes": {
+          "value": "dev_1c94b0da",
+          "at": 1759834800000,
+          "by": "dev_8f3ac2e1"
+        }
+      }
+    }
+  },
+  "sharedSettings:merge": {
+    "payload": {
+      "doc": {
+        "entries": {
+          "quickCreateDevice/remote:github.com/alex/notes": {
+            "value": "dev_1c94b0da",
+            "at": 1759834800000,
+            "by": "dev_8f3ac2e1"
+          }
+        }
+      }
+    },
+    "success": {
+      "entries": {
+        "quickCreateDevice/remote:github.com/alex/notes": {
+          "value": "dev_1c94b0da",
+          "at": 1759834800000,
+          "by": "dev_8f3ac2e1"
+        }
+      }
+    }
+  },
+  "sharedSettings:read": {
+    "success": {
+      "entries": {
+        "quickCreateDevice/remote:github.com/alex/notes": {
+          "value": "dev_1c94b0da",
+          "at": 1759834800000,
+          "by": "dev_8f3ac2e1"
+        }
+      }
+    }
+  },
+  "sharedSettings:set": {
+    "payload": {
+      "key": "+1",
+      "value": "\udc00"
+    },
+    "success": {
+      "entries": {
+        "quickCreateDevice/remote:github.com/alex/notes": {
+          "value": "dev_1c94b0da",
+          "at": 1759834800000,
+          "by": "dev_8f3ac2e1"
+        }
+      }
+    }
+  },
+  "sharedSettings:watch": {
+    "success": {
+      "entries": {
+        "quickCreateDevice/remote:github.com/alex/notes": {
+          "value": "dev_1c94b0da",
+          "at": 1759834800000,
+          "by": "dev_8f3ac2e1"
+        }
+      }
+    }
+  }
+}

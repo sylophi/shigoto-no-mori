@@ -1,3 +1,4 @@
+import { MIRROR_VERSION } from "../protocol.ts";
 import * as Schema from "effect/Schema";
 import { errorMessageOf } from "../errors.ts";
 import { MIRROR_IGNORES_LIMIT } from "../mirrorIgnores.ts";
@@ -478,7 +479,7 @@ const SyncHasCommitsResultSchema = strict(
 
 export const syncContract = defineContract(
   "sync",
-  "host",
+  { scope: "host", version: MIRROR_VERSION },
   // Discloses the names of ignored files.
   invoke(
     "worktreeFolder",

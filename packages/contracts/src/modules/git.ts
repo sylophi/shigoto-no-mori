@@ -4,7 +4,7 @@ import { ProjectScopedPayloadSchema, VoidSchema } from "../schemas/index.ts";
 
 export const gitContract = defineContract(
   "git",
-  "host",
+  { scope: "host", version: 1 },
   // Gated: it always ends in an auto-pull pass, which fast-forwards the
   // marked worktrees.
   invoke(

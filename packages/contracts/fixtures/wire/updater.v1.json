@@ -1,0 +1,16 @@
+{
+  "updater:check": {},
+  "updater:get": {
+    "success": {
+      "kind": "unsupported"
+    }
+  },
+  "updater:install": {},
+  "updater:state": {
+    "payload": {
+      "kind": "downloading",
+      "version": "/}"
+    }
+  },
+  "updater:update": {}
+}

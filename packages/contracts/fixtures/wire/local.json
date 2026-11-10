@@ -1,0 +1,542 @@
+{
+  "account:acceptsCommands": {
+    "success": true
+  },
+  "account:changed": {
+    "payload": {
+      "accountId": null
+    }
+  },
+  "account:enroll": {
+    "payload": "\udc00",
+    "success": {
+      "configured": true,
+      "signedIn": true,
+      "accountId": "",
+      "deviceName": "c@",
+      "deviceIcon": "pine",
+      "detectedDeviceIcon": "bird",
+      "sharedSignIn": false,
+      "codeSignIn": false,
+      "needsDeviceKey": false
+    }
+  },
+  "account:finishCodeSignIn": {
+    "payload": {
+      "userCode": "",
+      "verificationUri": "\u0000",
+      "deviceCode": "",
+      "interval": -4,
+      "expiresIn": -3
+    },
+    "success": "\n"
+  },
+  "account:lastListedDevices": {
+    "success": [
+      {
+        "deviceId": "",
+        "name": "0",
+        "platform": "",
+        "icon": "cloud",
+        "createdAt": 0,
+        "lastSeenAt": null,
+        "online": false
+      }
+    ]
+  },
+  "account:listDevices": {
+    "success": []
+  },
+  "account:revokeDevice": {
+    "payload": "\udc00"
+  },
+  "account:setAcceptsCommands": {
+    "payload": true
+  },
+  "account:setDeviceIcon": {
+    "payload": {
+      "deviceId": "\t",
+      "icon": "browser"
+    },
+    "success": {
+      "configured": true,
+      "signedIn": false,
+      "accountId": "",
+      "deviceName": "",
+      "deviceIcon": "tablet",
+      "detectedDeviceIcon": "flower",
+      "sharedSignIn": false,
+      "codeSignIn": false,
+      "needsDeviceKey": false
+    }
+  },
+  "account:setDeviceName": {
+    "payload": {
+      "deviceId": "0",
+      "name": "F"
+    },
+    "success": {
+      "configured": false,
+      "signedIn": true,
+      "accountId": "\u0000",
+      "deviceName": ",(",
+      "deviceIcon": "gamepad",
+      "detectedDeviceIcon": "pine",
+      "sharedSignIn": false,
+      "codeSignIn": false,
+      "needsDeviceKey": false
+    }
+  },
+  "account:signOut": {},
+  "account:startCodeSignIn": {
+    "success": {
+      "userCode": "\t",
+      "verificationUri": "\ud800",
+      "deviceCode": "\n",
+      "interval": -2,
+      "expiresIn": 2
+    }
+  },
+  "account:status": {
+    "success": {
+      "configured": true,
+      "signedIn": true,
+      "accountId": "",
+      "deviceName": "\n",
+      "deviceIcon": "flower",
+      "detectedDeviceIcon": "coffee",
+      "sharedSignIn": false,
+      "codeSignIn": false,
+      "needsDeviceKey": false
+    }
+  },
+  "clientConfig:patch": {
+    "payload": {
+      "set": {},
+      "clear": ["groupProjectsByOwner", "markTerrierProjects"]
+    }
+  },
+  "clientConfig:read": {
+    "success": {
+      "pauseAnimationsOnBattery": false,
+      "ZJ": "f"
+    }
+  },
+  "clientConfig:rotate": {
+    "payload": {
+      "launching": true
+    },
+    "success": -1.797693134862315e308
+  },
+  "clientConfig:watch": {
+    "success": {
+      "inlineWorktrees": true,
+      "collapsedProjects": []
+    }
+  },
+  "dialog:pickFolder": {
+    "payload": {
+      "buttonLabel": "&q"
+    },
+    "success": "5"
+  },
+  "guide:changed": {
+    "payload": {
+      "harness": "codex",
+      "point": null
+    }
+  },
+  "guide:read": {
+    "success": {
+      "harness": "codex",
+      "point": {
+        "say": " ",
+        "seq": -3
+      }
+    }
+  },
+  "guide:start": {
+    "payload": {
+      "harness": "codex",
+      "terminal": "ghostty"
+    }
+  },
+  "guide:stop": {},
+  "hub:invokePeer": {
+    "payload": {
+      "deviceId": "26",
+      "channel": "Z"
+    },
+    "success": [1.5824638680276052e61, {}]
+  },
+  "hub:peerPush": {
+    "payload": {
+      "deviceId": "^",
+      "channel": "_`"
+    }
+  },
+  "hub:status": {
+    "success": {
+      "socket": {
+        "phase": "connected"
+      },
+      "onlineDeviceIds": ["\ud800"],
+      "peerAppVersions": {},
+      "peerAcceptsCommands": {
+        "": false,
+        "\udc00": false
+      },
+      "peerSharesData": {
+        "": false
+      },
+      "peerVersions": {
+        "dev-1": {
+          "terminals": 1
+        }
+      },
+      "peerCoreOutdated": {
+        "dev-2": "peer"
+      }
+    }
+  },
+  "hub:statusChanged": {
+    "payload": {
+      "socket": {
+        "phase": "idle"
+      },
+      "onlineDeviceIds": [""],
+      "peerAppVersions": {},
+      "peerAcceptsCommands": {
+        "": true,
+        "\t": false
+      },
+      "peerSharesData": {
+        "\t": true
+      },
+      "peerVersions": {
+        "dev-1": {
+          "terminals": 1
+        }
+      },
+      "peerCoreOutdated": {
+        "dev-2": "peer"
+      }
+    }
+  },
+  "hub:watchPeer": {
+    "payload": {
+      "deviceId": "y",
+      "channel": "lM"
+    },
+    "success": null
+  },
+  "menu:setChords": {
+    "payload": {
+      "chords": {
+        "settings": "Cmd+,",
+        "launchTool1": "Cmd+1"
+      }
+    }
+  },
+  "menu:setGuideChoices": {
+    "payload": {
+      "harnesses": ["claude", "codex"],
+      "terminals": [
+        {
+          "id": "ghostty",
+          "label": "Ghostty"
+        }
+      ]
+    }
+  },
+  "menu:setLaunchToolsEnabled": {
+    "payload": {
+      "enabled": false
+    }
+  },
+  "menu:setTerminalFocused": {
+    "payload": false
+  },
+  "migration:changed": {
+    "payload": {
+      "planned": false,
+      "import": null,
+      "worktrees": null
+    }
+  },
+  "migration:continue": {},
+  "migration:read": {
+    "success": {
+      "planned": false,
+      "import": null,
+      "worktrees": {
+        "state": "done",
+        "moved": 1.986711582562313e-9,
+        "total": 9.4e-323,
+        "current": "\t",
+        "stuck": []
+      }
+    }
+  },
+  "migration:retry": {},
+  "nav:addProject": {},
+  "nav:closeTab": {},
+  "nav:deepLink": {},
+  "nav:launchById": {
+    "payload": "\udc00"
+  },
+  "nav:openSettings": {},
+  "nav:showAround": {
+    "payload": {
+      "harness": "claude",
+      "terminal": "iterm"
+    }
+  },
+  "nav:takeDeepLink": {
+    "success": " "
+  },
+  "portForward:changed": {},
+  "portForward:list": {
+    "success": {
+      "forwards": []
+    }
+  },
+  "portForward:start": {
+    "payload": {
+      "deviceId": "\udc00",
+      "remotePort": 4
+    },
+    "success": {
+      "forwardId": "12c52fa8a9d0028904b586a4a732439d",
+      "localPort": 11
+    }
+  },
+  "portForward:stop": {
+    "payload": {
+      "forwardId": "71b7de0064798ee08c59f5d3e0c3f67e"
+    }
+  },
+  "releases:list": {
+    "success": []
+  },
+  "session:account": {
+    "payload": {
+      "hubUrl": "C'",
+      "accountId": "",
+      "credential": "",
+      "deviceKey": "",
+      "webOrigin": "\u0000",
+      "acceptsCommands": false
+    }
+  },
+  "session:accountDevices": {
+    "payload": []
+  },
+  "session:busy": {
+    "success": {
+      "runningScripts": 3,
+      "inflightDeletes": 1,
+      "inflightMoves": 1,
+      "engineChanges": ["pull", "push"],
+      "busyTerminals": 1,
+      "queuedMoves": 1
+    }
+  },
+  "session:guideLaunch": {
+    "payload": {
+      "session": "n80D$PJ9Ebstno7q",
+      "harness": "claude",
+      "terminal": "terminal"
+    }
+  },
+  "session:migrationRetry": {},
+  "session:quit": {
+    "payload": {
+      "hurried": false
+    }
+  },
+  "session:updaterState": {
+    "payload": {
+      "kind": "unsupported"
+    }
+  },
+  "session:wake": {},
+  "session:windowFocused": {
+    "payload": true
+  },
+  "shell:openExternal": {
+    "payload": {
+      "url": "https://example.com/"
+    }
+  },
+  "shell:showItemInFolder": {
+    "payload": {
+      "path": "\ud800"
+    }
+  },
+  "shellCalls:failed": {
+    "payload": {
+      "message": "0",
+      "store": {
+        "report": "e",
+        "newer": true
+      }
+    }
+  },
+  "shellCalls:guide": {
+    "payload": {
+      "session": "P%wpdwD=WUHC`rU%",
+      "action": {
+        "_tag": "screenshot"
+      }
+    },
+    "success": {
+      "route": "^h",
+      "tree": "|"
+    }
+  },
+  "shellCalls:holdUpdater": {
+    "payload": {
+      "for": "reset"
+    },
+    "success": ""
+  },
+  "shellCalls:keepReachable": {
+    "success": false
+  },
+  "shellCalls:migration": {
+    "payload": {
+      "planned": true,
+      "import": {
+        "state": "running"
+      },
+      "worktrees": {
+        "state": "stuck",
+        "moved": -8e-323,
+        "total": 1.7976931348623123e308,
+        "current": null,
+        "stuck": []
+      }
+    }
+  },
+  "shellCalls:moveFailed": {
+    "payload": {
+      "reason": "ob"
+    }
+  },
+  "shellCalls:ready": {
+    "payload": {
+      "port": 3369,
+      "token": "88fcac20d24e7d5e65b787879fea76c6",
+      "deviceId": "😀",
+      "shellToken": "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+    }
+  },
+  "shellCalls:relaunch": {},
+  "shellCalls:resumeUpdater": {},
+  "shellCalls:setAcceptsCommands": {
+    "payload": true
+  },
+  "shellCalls:setKeepReachable": {
+    "payload": false
+  },
+  "shellCalls:stopUpdaterBridge": {},
+  "shellCalls:updaterCheck": {},
+  "shellCalls:updaterInstall": {
+    "payload": {
+      "unattended": true
+    }
+  },
+  "shellCalls:updaterUpdate": {
+    "payload": {
+      "unattended": false
+    }
+  },
+  "villagers:cancel": {
+    "success": {
+      "kind": "failed",
+      "done": 3,
+      "villagers": 3,
+      "message": ""
+    }
+  },
+  "villagers:download": {
+    "success": {
+      "kind": "downloading",
+      "done": 2,
+      "villagers": 4
+    }
+  },
+  "villagers:face": {
+    "payload": {
+      "slug": "oj"
+    },
+    "success": null
+  },
+  "villagers:profiles": {
+    "success": null
+  },
+  "villagers:remove": {
+    "success": {
+      "kind": "absent",
+      "villagers": 1
+    }
+  },
+  "villagers:status": {
+    "success": {
+      "kind": "ready",
+      "downloadedAt": "",
+      "villagers": 1
+    }
+  },
+  "window:blurred": {},
+  "window:focused": {},
+  "window:hostAddress": {
+    "success": {
+      "port": 12,
+      "token": "58127baad461bc036b32bcdf49597a77",
+      "deviceId": "-1"
+    }
+  },
+  "window:hostRestarted": {
+    "payload": {
+      "kind": "silent",
+      "seconds": 1
+    }
+  },
+  "window:networkChanged": {},
+  "window:notify": {
+    "payload": {
+      "title": "😀",
+      "body": "0",
+      "route": "["
+    }
+  },
+  "window:nuke": {
+    "success": {
+      "left": [
+        {
+          "what": "0",
+          "why": ""
+        }
+      ]
+    }
+  },
+  "window:open": {
+    "payload": {
+      "route": "/"
+    }
+  },
+  "window:previewTheme": {
+    "payload": {
+      "theme": "dark"
+    }
+  },
+  "window:relaunch": {},
+  "window:resetLayout": {},
+  "window:showing": {
+    "payload": {
+      "route": "/{"
+    }
+  }
+}

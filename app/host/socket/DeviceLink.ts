@@ -60,7 +60,7 @@ import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { sessionContract } from "@shigomori/contracts/modules/session";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
-import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
+import { CORE_VERSION } from "@shigomori/contracts/protocol";
 import { boundedMessages, MAX_MESSAGE_BYTES } from "./boundedMessages";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -89,6 +89,7 @@ import {
   type LoopbackGroup,
   PeerAuth,
   SharingGate,
+  versionsOf,
 } from "@shigomori/contracts/link";
 import type { KeyPair } from "@shared/crypto/noise";
 import {
@@ -389,6 +390,7 @@ export const make = (options: {
     const clock = yield* Clock.Clock;
     const { auth, sharing } = options;
     const group = (options.group ?? LinkGroup) as typeof LinkGroup;
+    const versions = versionsOf(group);
     const local = options.local === true;
     const sharingNow =
       sharing === undefined ? Effect.succeed(true) : sharing.current;
@@ -498,10 +500,10 @@ export const make = (options: {
             const connection = yield* connectionOf(clientId);
             const phase = connection.phase;
             if (phase.kind !== "preAuth") return yield* new LinkRefusedError();
-            if (payload.protocolVersion !== PROTOCOL_VERSION) {
+            if (payload.protocolVersion !== CORE_VERSION) {
               yield* killSoon(connection, "protocol version mismatch");
               return yield* new ProtocolVersionMismatchError({
-                hostVersion: PROTOCOL_VERSION,
+                hostVersion: CORE_VERSION,
                 clientVersion: payload.protocolVersion,
               });
             }
@@ -579,7 +581,11 @@ export const make = (options: {
               connectionId: payload.connectionId,
               shell,
             };
-            return { deviceId: opts.deviceId, appVersion: opts.appVersion };
+            return {
+              deviceId: opts.deviceId,
+              appVersion: opts.appVersion,
+              versions,
+            };
           });
 
         // The bytes the switches gave: gone the moment either is off.

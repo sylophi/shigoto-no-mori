@@ -1,0 +1,31 @@
+{
+  "worktreeData:describe": {
+    "payload": {
+      "projectId": "😀",
+      "worktreeId": "6157da39cfbe",
+      "description": {}
+    }
+  },
+  "worktreeData:patchPorts": {
+    "payload": {
+      "projectId": "?[",
+      "worktreeId": "ae7544d2ef34",
+      "remove": [3000],
+      "put": [
+        {
+          "port": 3001,
+          "label": "web"
+        }
+      ]
+    }
+  },
+  "worktreeData:read": {
+    "payload": {
+      "projectId": "z",
+      "worktreeId": "e527aea94871"
+    },
+    "success": {
+      "describedAt": 1
+    }
+  }
+}

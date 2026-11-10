@@ -32,7 +32,7 @@ export type AccountStatus = typeof AccountStatusSchema.Type;
 
 export const accountContract = defineContract(
   "account",
-  "client",
+  { scope: "client", version: 1 },
   // Every call is a file read and a keychain decrypt: ask on account
   // events, not on a poll.
   invoke("status", VoidSchema, AccountStatusSchema),

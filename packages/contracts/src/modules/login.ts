@@ -43,7 +43,7 @@ export type LoginStatus = typeof LoginStatusSchema.Type;
 
 export const loginContract = defineContract(
   "login",
-  { scope: "host", remote: false },
+  { scope: "host", remote: false, version: 1 },
   invoke("status", VoidSchema, LoginStatusSchema),
   // Refused while signed in.
   invoke("start", VoidSchema, LoginCodeSchema),

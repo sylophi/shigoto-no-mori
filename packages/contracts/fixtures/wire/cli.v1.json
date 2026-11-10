@@ -1,0 +1,121 @@
+{
+  "cli:doctor": {
+    "success": {
+      "summary": {
+        "ok": -6.4e-323,
+        "warn": -8.17502439655055e109,
+        "fail": -3.5e-323
+      },
+      "repaired": ["", "\n"],
+      "repairFailed": [],
+      "checks": [
+        {
+          "group": "l8",
+          "id": "\u0000",
+          "title": "\t",
+          "status": "ok",
+          "detail": ""
+        },
+        {
+          "group": "]",
+          "id": "t/",
+          "title": "",
+          "status": "ok",
+          "detail": ""
+        }
+      ]
+    }
+  },
+  "cli:doctorFix": {
+    "success": {
+      "summary": {
+        "ok": -1.80295014763094e278,
+        "warn": -1.797693134862313e308,
+        "fail": -6e-323
+      },
+      "repaired": [],
+      "repairFailed": [],
+      "checks": [
+        {
+          "group": "5",
+          "id": "\udc00",
+          "title": "-1",
+          "status": "ok",
+          "detail": "😀"
+        },
+        {
+          "group": "",
+          "id": "\u0000",
+          "title": "",
+          "status": "ok",
+          "detail": ""
+        }
+      ]
+    }
+  },
+  "cli:install": {
+    "payload": {
+      "force": true
+    },
+    "success": {
+      "name": "\udc00",
+      "aliasName": " ",
+      "binDir": "",
+      "linkPath": "",
+      "state": "missing",
+      "foreignPaths": ["\\"],
+      "onPath": false
+    }
+  },
+  "cli:shellInstall": {
+    "success": {
+      "loginShell": null,
+      "shells": []
+    }
+  },
+  "cli:shellStatus": {
+    "success": {
+      "loginShell": " ",
+      "shells": []
+    }
+  },
+  "cli:shellUninstall": {
+    "success": {
+      "loginShell": null,
+      "shells": [
+        {
+          "shell": "0",
+          "path": " ",
+          "state": "missing"
+        },
+        {
+          "shell": "",
+          "path": "4R",
+          "state": "installed"
+        }
+      ]
+    }
+  },
+  "cli:status": {
+    "success": {
+      "name": "",
+      "aliasName": "0",
+      "binDir": "",
+      "linkPath": "-1",
+      "state": "missing",
+      "foreignPaths": [],
+      "onPath": true
+    }
+  },
+  "cli:uninstall": {
+    "success": {
+      "name": "uJ",
+      "aliasName": "-1",
+      "binDir": "0",
+      "linkPath": "\"",
+      "state": "stale",
+      "foreignPaths": ["", ""],
+      "onPath": false
+    }
+  }
+}

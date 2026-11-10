@@ -69,7 +69,7 @@ export type CloneFromDeviceProgress = typeof CloneFromDeviceProgressSchema.Type;
 
 export const projectsContract = defineContract(
   "projects",
-  "host",
+  { scope: "host", version: 1 },
   invoke("list", VoidSchema, Schema.Array(ProjectSchema), ungated),
   view("watch", VoidSchema, Schema.Array(ProjectSchema), ungated),
   invoke("add", AddProjectPayloadSchema, ProjectSchema, gatedBy("browseFiles")),

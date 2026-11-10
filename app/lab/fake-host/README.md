@@ -128,6 +128,11 @@ Poses ride the URL:
   home a fresh install opens on.
 - `?notSharing=mb,mini`: the devices with sharing off, by the same
   keys, which then serve this page nothing.
+- `?outdated=mb:terminals.scripts,mini:core`: the devices on another
+  release of the app, each with the contract modules it holds at
+  another version, whose calls are then refused as the link refuses
+  them, or `core` for one this device can't link with at all.
+  `?outdatedSide=this` poses this device as the one on the older build.
 - `?hubBlocked=update-required`: this device's hub socket blocked, for
   `update-required`, `refused`, `revoked` or `superseded`, in the words
   each gets.

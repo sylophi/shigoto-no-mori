@@ -16,7 +16,7 @@ import {
 
 export const packageScriptsContract = defineContract(
   "packageScripts",
-  "host",
+  { scope: "host", version: 1 },
   invoke(
     "list",
     WorktreeScopedPayloadSchema,

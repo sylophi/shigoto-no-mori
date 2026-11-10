@@ -131,15 +131,21 @@ export const remoteDevicesAtom = Atom.keepAlive(
   Atom.make<readonly RemoteDevice[]>([]),
 );
 
-// Shallow: every arm of the union is a flat object of primitives, so a
-// new field is compared with no switch to update.
+// Shallow: every arm of the union is a flat object of primitives and
+// lists of them, so a new field is compared with no switch to update.
 function sameStatus(a: RemoteDeviceStatus, b: RemoteDeviceStatus): boolean {
   const right = new Map<string, unknown>(Object.entries(b));
   const left = Object.entries(a);
   return (
     left.length === right.size &&
-    left.every(([key, value]) => right.get(key) === value)
+    left.every(([key, value]) => sameField(right.get(key), value))
   );
+}
+
+function sameField(a: unknown, b: unknown): boolean {
+  return Array.isArray(a) && Array.isArray(b)
+    ? a.length === b.length && a.every((item, index) => item === b[index])
+    : a === b;
 }
 
 function sameDevice(a: RemoteDevice, b: RemoteDevice): boolean {

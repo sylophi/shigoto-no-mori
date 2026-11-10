@@ -1,0 +1,8 @@
+{
+  "forward:open": {
+    "payload": {
+      "port": 65531,
+      "channelId": "90ecea1c784d7ca264859b4155a0c9d4"
+    }
+  }
+}

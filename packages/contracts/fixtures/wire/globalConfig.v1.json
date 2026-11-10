@@ -1,0 +1,19 @@
+{
+  "globalConfig:read": {
+    "success": {}
+  },
+  "globalConfig:watch": {
+    "success": {
+      "githubCli": true,
+      "\udc00": -7e-323
+    }
+  },
+  "globalConfig:writeDeviceSettings": {
+    "payload": {
+      "patch": {
+        "autoShelveDays": 14,
+        "portPool": false
+      }
+    }
+  }
+}

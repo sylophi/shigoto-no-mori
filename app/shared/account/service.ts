@@ -34,7 +34,7 @@ import {
   isHubRefusal,
   errorMessageOf,
 } from "@shigomori/contracts/errors";
-import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
+import { CORE_VERSION } from "@shigomori/contracts/protocol";
 import {
   DeviceListResponseSchema,
   type DevicePatch,
@@ -172,7 +172,7 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
               HttpClientRequest.bearerToken(bearer),
               HttpClientRequest.setHeader(
                 PROTOCOL_HEADER,
-                String(PROTOCOL_VERSION),
+                String(CORE_VERSION),
               ),
             ),
           ),

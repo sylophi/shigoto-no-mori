@@ -14,7 +14,7 @@ import {
 // the host by design, and a GUI app it starts opens on that machine.
 export const launchersContract = defineContract(
   "launchers",
-  "host",
+  { scope: "host", version: 1 },
   invoke("detect", VoidSchema, Schema.Array(DetectedLauncherSchema), ungated),
   invoke(
     "forProject",

@@ -11,11 +11,18 @@
 import { normalizeRemoteUrl } from "@shigomori/contracts/predicates/remoteUrl";
 import {
   errorMessageOf,
+  ModuleOutdatedError,
   NotSharingError,
   RemoteCallError,
   UnknownProjectError,
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
+import {
+  LinkGroup,
+  type ModuleVersions,
+  type OutdatedSide,
+  versionsOf,
+} from "@shigomori/contracts/link";
 import type * as Types from "effect/Types";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
@@ -506,6 +513,8 @@ function hostHandlersFor(
       stagedUpdates.delete(deviceId);
       updatingDevices.delete(deviceId);
       updatedDevices.add(deviceId);
+      // It restarted into this device's release.
+      outdatedPeers.delete(deviceId);
       window.fakeHost?.setPeer(deviceId, presence);
       emit("updater:state", updaterState());
     }, 5_000);
@@ -1889,6 +1898,25 @@ function posedMigration(): MigrationProgress {
 // ?notSharing=mb,mini: the devices with sharing off, which then serve
 // this page nothing.
 const notSharing = new Set<string>();
+// ?outdated=mb:terminals.scripts,mini:core: the devices on another
+// release of the app, each with the modules it holds at another
+// version, or `core` for one this device can't link with at all.
+// ?outdatedSide=this poses this device as the one on the older build.
+const outdatedPeers = new Map<string, ReadonlySet<string>>();
+let outdatedSide: OutdatedSide = "peer";
+const CORE = "core";
+const LINK_VERSIONS = versionsOf(LinkGroup);
+
+// The link's refusal of a call into a module posed outdated on a peer.
+function outdatedRefusal(
+  deviceId: string,
+  channel: string,
+): ModuleOutdatedError | undefined {
+  const module = channel.slice(0, channel.indexOf(":"));
+  return outdatedPeers.get(deviceId)?.has(module) === true
+    ? new ModuleOutdatedError({ module, outdated: outdatedSide, deviceId })
+    : undefined;
+}
 const FAKE_UPDATE_VERSION = "3.1.0";
 
 function initPresence(): void {
@@ -1907,6 +1935,15 @@ function initPresence(): void {
   posedDevices(pose.get("updates") ?? "", stagedUpdates);
   posedDevices(pose.get("downloading") ?? "", downloadingUpdates);
   posedDevices(pose.get("notSharing") ?? "", notSharing);
+  if (pose.get("outdatedSide") === "this") outdatedSide = "this";
+  for (const entry of (pose.get("outdated") ?? "").split(",")) {
+    const [key, modules] = entry.split(":");
+    const id = PEER_KEYS[key?.trim() ?? ""];
+    if (id === undefined) continue;
+    outdatedPeers.set(id, new Set((modules ?? "").split(".")));
+    // No session lands between two cores.
+    if (outdatedPeers.get(id)?.has(CORE) === true) directSessions.delete(id);
+  }
   // ?hubBlocked=update-required: this device's hub socket blocked for
   // that reason, with the words the hub or the supervisor gives it.
   const blocked = pose.get("hubBlocked");
@@ -2080,7 +2117,19 @@ function hubSnapshot(): HubStatus {
   const peerAppVersions: Record<string, string> = {};
   const peerAcceptsCommands: Record<string, boolean> = {};
   const peerSharesData: Record<string, boolean> = {};
+  const peerVersions: Record<string, ModuleVersions> = {};
+  const peerCoreOutdated: Record<string, OutdatedSide> = {};
+  for (const [id, modules] of outdatedPeers) {
+    if (modules.has(CORE)) peerCoreOutdated[id] = outdatedSide;
+  }
   for (const id of directSessions) {
+    const moved = outdatedSide === "peer" ? -1 : 1;
+    peerVersions[id] = Object.fromEntries(
+      Object.entries(LINK_VERSIONS).map(([module, version]) => [
+        module,
+        outdatedPeers.get(id)?.has(module) === true ? version + moved : version,
+      ]),
+    );
     peerAppVersions[id] = updatedDevices.has(id)
       ? FAKE_UPDATE_VERSION
       : FAKE_APP_VERSION;
@@ -2093,6 +2142,8 @@ function hubSnapshot(): HubStatus {
     peerAppVersions,
     peerAcceptsCommands,
     peerSharesData,
+    peerVersions,
+    peerCoreOutdated,
     tunnel: "up",
   };
 }
@@ -2327,6 +2378,8 @@ export function installFakeHostBridge(
       if (notSharing.has(deviceId)) {
         return Promise.reject(new NotSharingError());
       }
+      const outdated = outdatedRefusal(deviceId, channel);
+      if (outdated !== undefined) return Promise.reject(outdated);
       return wire.answer(channel, input, signal).finally(wire.touch);
     },
     "shell:openExternal": ({ url }) => {
@@ -2406,6 +2459,8 @@ export function installFakeHostBridge(
       // The peer's SharingGate.
       if (notSharing.has(hop.deviceId))
         return Stream.fail(new NotSharingError());
+      const outdated = outdatedRefusal(hop.deviceId, hop.channel);
+      if (outdated !== undefined) return Stream.fail(outdated);
       return wire.link.view(hop.channel, hop.input);
     },
   );

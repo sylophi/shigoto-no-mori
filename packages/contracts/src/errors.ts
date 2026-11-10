@@ -184,7 +184,8 @@ export class RemoteCallError extends Schema.TaggedError<RemoteCallError>()(
   }
 }
 
-// Terminal until one of the builds updates.
+// The two builds are on different cores (protocol.ts), so they hold no
+// link. Terminal until one of them updates.
 export class ProtocolVersionMismatchError extends Schema.TaggedError<ProtocolVersionMismatchError>()(
   "ProtocolVersionMismatchError",
   { hostVersion: Schema.Int, clientVersion: Schema.Int },
@@ -197,6 +198,27 @@ export class ProtocolVersionMismatchError extends Schema.TaggedError<ProtocolVer
 export const isProtocolVersionMismatchError = Schema.is(
   ProtocolVersionMismatchError,
 );
+
+// A call into a module the two builds hold at different versions
+// (link.ts, outdatedCall): the dialing end refuses it before anything
+// is sent. `outdated` is the end on the older build, and `deviceId`
+// the far end's.
+export class ModuleOutdatedError extends Schema.TaggedError<ModuleOutdatedError>()(
+  "ModuleOutdatedError",
+  {
+    module: Schema.String,
+    outdated: Schema.Literals(["peer", "this"]),
+    deviceId: Schema.String,
+  },
+) {
+  override get message(): string {
+    return this.outdated === "peer"
+      ? "The other device runs an older version of Shigoto no Mori. Update it to do this."
+      : "This device runs an older version of Shigoto no Mori than the other one. Update it to do this.";
+  }
+}
+
+export const isModuleOutdatedError = Schema.is(ModuleOutdatedError);
 
 // Terminal for the dial: a redial with the same ticket gets the same
 // answer.
@@ -379,6 +401,7 @@ export const ContractErrorSchema = Schema.Union([
   CommandRefusedError,
   NotSharingError,
   ProtocolVersionMismatchError,
+  ModuleOutdatedError,
   LinkRefusedError,
   LinkUnauthenticatedError,
   ChannelRefusedError,

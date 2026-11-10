@@ -16,7 +16,7 @@ import {
 // doing or a granted peer's.
 export const portsContract = defineContract(
   "ports",
-  "host",
+  { scope: "host", version: 1 },
   invoke(
     "list",
     WorktreeScopedPayloadSchema,

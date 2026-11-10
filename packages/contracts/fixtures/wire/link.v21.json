@@ -1,0 +1,45 @@
+{
+  "link:end": {
+    "payload": {
+      "channelId": "eb5947651a11954b34b554dfaec19d20"
+    }
+  },
+  "link:hello": {
+    "payload": {
+      "deviceId": "LE",
+      "deviceKind": "web",
+      "connectionId": "7b66588ad2db51677716fe0b8cdc437a",
+      "appVersion": "20",
+      "protocolVersion": -2,
+      "token": "0123456789abcdef0123456789abcdef"
+    },
+    "success": {
+      "deviceId": "0",
+      "appVersion": "I2",
+      "versions": {
+        "terminals": 1,
+        "updater": 1
+      }
+    }
+  },
+  "link:ping": {},
+  "link:read": {
+    "payload": {
+      "channelId": "49f1c16a9e40610b8eb75db553ec394b",
+      "seq": 3
+    },
+    "success": "AQID"
+  },
+  "link:reset": {
+    "payload": {
+      "channelId": "07abceadaf0a9aa35d9980b0d032bf9e"
+    }
+  },
+  "link:write": {
+    "payload": {
+      "channelId": "bd93b7b5b38128029171ed5ac8d49f57",
+      "seq": 1,
+      "data": "5fo="
+    }
+  }
+}

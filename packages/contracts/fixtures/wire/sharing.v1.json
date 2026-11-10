@@ -1,0 +1,14 @@
+{
+  "sharing:changed": {
+    "payload": true
+  },
+  "sharing:read": {
+    "success": true
+  },
+  "sharing:set": {
+    "payload": true
+  },
+  "sharing:watch": {
+    "success": false
+  }
+}
