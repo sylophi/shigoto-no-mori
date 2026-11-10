@@ -1,6 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PublishRepoPayload } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { useAbortableMutation } from "@/lib/cancellable";
 
 // The accounts a new repository can go under, signed-in user first.
 // Asked only once publishing is on the table. Quiet when it fails: the
@@ -18,13 +19,16 @@ export function useGithubOwners(enabled: boolean) {
 
 // Creates the project's repo on GitHub and pushes it there. The project
 // gains a remote, which its group in the sidebar and every GitHub read
-// follow.
+// follow. `cancel` stops it, which can leave the repo made and its push
+// for the branch's Publish.
 export function usePublishRepo() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
-  return useMutation<void, Error, PublishRepoPayload>({
-    mutationFn: (input) => api.run(api.githubCli.publish(input)),
-    onSuccess: (_data, { projectId }) =>
+  return useAbortableMutation<void, PublishRepoPayload>({
+    mutationFn: (input, signal) =>
+      api.run(api.githubCli.publish(input), { signal }),
+    // A cancelled publish too, which can have made the repo.
+    onSettled: (_data, _error, { projectId }) =>
       Promise.all(
         [
           keys.pullRequestsForProject(projectId),

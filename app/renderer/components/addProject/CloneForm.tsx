@@ -41,17 +41,15 @@ export function CloneForm({
 }) {
   const scope = useHostScope();
   const cloneProject = useCloneProject();
-  // The clone in flight, by what interrupts it.
-  const [cloning, setCloning] = useState<AbortController | null>(null);
+  const [cloning, setCloning] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   // Held open while it clones. Undone on unmount too, or a view gone
   // midway would leave the dialog held.
-  const busy = cloning !== null;
   useEffect(() => {
-    if (!busy) return;
+    if (!cloning) return;
     setWorking(true);
     return () => setWorking(false);
-  }, [busy, setWorking]);
+  }, [cloning, setWorking]);
   const { data: readiness } = useGithubCliReadiness();
   const { data: repos = [] } = useGithubRepos(readiness?.unavailable === null);
   // A URL names its repository whole, so the list steps aside for it.
@@ -79,31 +77,27 @@ export function CloneForm({
   // The repository as repo identity spells it (host/owner/repo): the
   // credentials and scheme of a pasted URL are noise here.
   const repo = normalizeRemoteUrl(cloneUrlOf(source)) ?? source.trim();
-  const progress = useCloneProgress(cloning && checkout.parent, name);
+  const progress = useCloneProgress(cloning ? checkout.parent : null, name);
 
   const cloneAndOpen = async () => {
     if (name === null) return;
-    const controller = new AbortController();
-    setCloning(controller);
-    // useCloneProject surfaces the error via toast, and answers a
-    // cancel with null. No try here: React Compiler bails on the early
-    // return one would need.
+    setCloning(true);
+    // useCloneProject surfaces the error via toast, and a cancel quietly.
+    // No try here: React Compiler bails on the early return one would
+    // need.
     const project = await cloneProject
       .mutateAsync({
-        input: {
-          // A peer clones with its own credentials. Ones pasted in with
-          // the URL stay on this device, the rule pickCloneUrl keeps.
-          url: scope.remote ? stripUrlCredentials(source) : source.trim(),
-          parentDir: checkout.parent,
-          name,
-          terrier: checkout.terrier,
-        },
-        signal: controller.signal,
+        // A peer clones with its own credentials. Ones pasted in with
+        // the URL stay on this device, the rule pickCloneUrl keeps.
+        url: scope.remote ? stripUrlCredentials(source) : source.trim(),
+        parentDir: checkout.parent,
+        name,
+        terrier: checkout.terrier,
       })
       .catch(() => null);
     if (project === null) {
       // Back to the URL, still in the input, to fix it or the folder.
-      setCloning(null);
+      setCloning(false);
       setCancelling(false);
       return;
     }
@@ -123,7 +117,7 @@ export function CloneForm({
         cancelling={cancelling}
         onCancel={() => {
           setCancelling(true);
-          cloning.abort();
+          cloneProject.cancel();
         }}
       />
     );

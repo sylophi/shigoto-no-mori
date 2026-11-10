@@ -295,7 +295,7 @@ function usePushShortcut(
   enabled: boolean,
 ): { keys: string; does: string; running?: string } | null {
   const mutations = useSyncMoveMutations();
-  const running = useRunningSyncs(worktree);
+  const { running } = useRunningSyncs(worktree);
   const keys = useBinding("commit");
   const move = worktreeSyncView(worktree).move;
   // Another sync on the worktree holds the send until it's done.

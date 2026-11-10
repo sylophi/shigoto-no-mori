@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
 import { useEffect, useState } from "react";
+import { isCancelledError } from "@tanstack/react-query";
 import { FolderPlus } from "lucide-react";
 import {
   CreateProjectPayloadSchema,
@@ -45,6 +46,7 @@ export function CreateForm({
   const [stage, setStage] = useState<"form" | "creating" | "publishing">(
     "form",
   );
+  const [cancelling, setCancelling] = useState(false);
   // Held open while it works, as CloneForm is.
   const busy = stage !== "form";
   useEffect(() => {
@@ -94,12 +96,13 @@ export function CreateForm({
       // and the flow still ends on it.
       await publishRepo
         .mutateAsync({ projectId: project.id, owner, visibility })
-        .catch((error: unknown) =>
+        .catch((error: unknown) => {
+          if (isCancelledError(error)) return;
           notifyError(
             `Created ${project.name}, but couldn't publish it to GitHub`,
             error,
-          ),
-        );
+          );
+        });
     }
     checkout.finish(project, "Created");
   };
@@ -117,6 +120,15 @@ export function CreateForm({
             : "Publishing to GitHub…"
         }
         dest={checkout.dest}
+        onCancel={
+          stage === "publishing"
+            ? () => {
+                setCancelling(true);
+                publishRepo.cancel();
+              }
+            : undefined
+        }
+        cancelling={cancelling}
       />
     );
   }

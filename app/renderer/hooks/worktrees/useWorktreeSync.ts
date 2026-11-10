@@ -1,6 +1,7 @@
-import { useMutation, useMutationState } from "@tanstack/react-query";
+import { isCancelledError, useMutationState } from "@tanstack/react-query";
 import type { MergeBranchResult, Worktree } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { type Abortable, useAbortableMutation } from "@/lib/cancellable";
 import { notifyError } from "@/lib/toast";
 import { isSyncConflictsError } from "@shigomori/contracts/errors";
 import { useWorkingTreeWriteBack } from "./useWorktreeChanges";
@@ -33,10 +34,14 @@ const syncKey = (deviceId: string, move?: RunningSync) =>
     : ["sync-worktree", deviceId, move];
 
 // Only this window's: a sync from another window or the CLI shows once
-// the worktree's row changes.
-export function useRunningSyncs(worktree: Worktree): RunningSync[] {
+// the worktree's row changes. `cancel` stops them: the host ends their
+// git, past any merge or rebase already started.
+export function useRunningSyncs(worktree: Worktree): {
+  running: RunningSync[];
+  cancel: () => void;
+} {
   const { deviceId } = useHostScope();
-  return useMutationState({
+  const syncs = useMutationState({
     filters: {
       mutationKey: syncKey(deviceId),
       status: "pending",
@@ -44,8 +49,17 @@ export function useRunningSyncs(worktree: Worktree): RunningSync[] {
         (mutation.state.variables as SyncWorktreeInput | undefined)
           ?.worktreeId === worktree.id,
     },
-    select: (mutation) => mutation.options.mutationKey?.[2] as RunningSync,
+    select: (mutation) => ({
+      move: mutation.options.mutationKey?.[2] as RunningSync,
+      abort: (mutation.state.variables as Abortable<SyncWorktreeInput>).abort,
+    }),
   });
+  return {
+    running: syncs.map((sync) => sync.move),
+    cancel: () => {
+      for (const sync of syncs) sync.abort.abort();
+    },
+  };
 }
 
 // Shared shape for the remote-sync family (push, pull, force-push,
@@ -60,9 +74,10 @@ function useSyncMutation(
 ) {
   const { api, deviceId } = useHostScope();
   const writeBack = useWorkingTreeWriteBack();
-  return useMutation<Worktree, Error, SyncWorktreeInput>({
+  return useAbortableMutation<Worktree, SyncWorktreeInput>({
     mutationKey: syncKey(deviceId, move),
-    mutationFn: (input) => api.run(api.worktrees[move](input)),
+    mutationFn: (input, signal) =>
+      api.run(api.worktrees[move](input), { signal }),
     // Pull, overwrite and sync rewrite the working tree, so an open
     // changes page has to re-read its patch and its checkbox states. PR
     // queries refresh via the refs-changed broadcast that the push
@@ -81,7 +96,7 @@ export const useOverwriteWorktree = () =>
 // said here.
 export const useSyncWithPrimaryWorktree = () =>
   useSyncMutation("syncWithPrimary", "Couldn't sync from primary", (err) => {
-    if (!isSyncConflictsError(err)) {
+    if (!isSyncConflictsError(err) && !isCancelledError(err)) {
       notifyError("Couldn't sync from primary", err);
     }
   });
@@ -90,9 +105,10 @@ export const useSyncWithPrimaryWorktree = () =>
 function useMergeKeepingConflicts(move: MergeMove, errorTitle: string) {
   const { api, deviceId } = useHostScope();
   const writeBack = useWorkingTreeWriteBack();
-  return useMutation<MergeBranchResult, Error, SyncWorktreeInput>({
+  return useAbortableMutation<MergeBranchResult, SyncWorktreeInput>({
     mutationKey: syncKey(deviceId, move),
-    mutationFn: (input) => api.run(api.worktrees[move](input)),
+    mutationFn: (input, signal) =>
+      api.run(api.worktrees[move](input), { signal }),
     onSuccess: (data, vars) => writeBack(vars, data.worktree),
     meta: { errorTitle },
   });

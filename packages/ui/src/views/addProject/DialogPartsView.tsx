@@ -134,9 +134,8 @@ export function FormFooterView({
 }
 
 // The dialog while a clone or a new repository is under way, which
-// holds it open until the work is done. A clone, the one that can run
-// long, offers Cancel. A new repository is made at once, and its
-// publish can't be called back halfway.
+// holds it open until the work is done. What can run long (a clone, a
+// publish to GitHub) offers Cancel. A new repository is made at once.
 export function ProgressPanelView({
   icon,
   title,

@@ -40,7 +40,7 @@ export function WorktreeSyncPill({
   // dirties the tree, which swaps it for the held hint before its answer
   // lands, and the way to the diff has to outlive that.
   const mergeUpstream = useMergeUpstreamWorktree();
-  const running = useRunningSyncs(worktree);
+  const { running, cancel } = useRunningSyncs(worktree);
   const { canCommand } = useCommandAccess();
 
   if (!canCommand) return null;
@@ -72,6 +72,7 @@ export function WorktreeSyncPill({
           disabled={move.disabledReason !== undefined || busy}
           pending={running.includes(move.key)}
           onClick={() => mutations[move.key].mutate(input)}
+          onCancel={cancel}
         />
       );
       // A split that merges cleanly can still pick a side instead.
@@ -85,6 +86,7 @@ export function WorktreeSyncPill({
           lead={button}
           busy={busy}
           running={running}
+          cancel={cancel}
           ahead={state.ahead}
           behind={state.behind}
           compact={compact}
@@ -105,10 +107,12 @@ export function WorktreeSyncPill({
               behind={state.behind}
               busy={busy}
               pending={running.includes("mergeUpstream")}
+              cancel={cancel}
             />
           }
           busy={busy}
           running={running}
+          cancel={cancel}
           ahead={state.ahead}
           behind={state.behind}
           compact={compact}
@@ -126,12 +130,14 @@ function MergeUpstream({
   behind,
   busy,
   pending,
+  cancel,
 }: {
   input: { projectId: string; worktreeId: string };
   mergeUpstream: ReturnType<typeof useMergeUpstreamWorktree>;
   behind: number;
   busy: boolean;
   pending: boolean;
+  cancel: () => void;
 }) {
   const nav = useWorktreeNav();
   return (
@@ -139,6 +145,7 @@ function MergeUpstream({
       behind={behind}
       busy={busy}
       pending={pending}
+      onCancel={cancel}
       onClick={() =>
         mergeUpstream.mutate(input, {
           onSuccess: ({ stopped }) => {
@@ -155,6 +162,7 @@ function PickSide({
   lead,
   busy,
   running,
+  cancel,
   ahead,
   behind,
   compact,
@@ -163,6 +171,7 @@ function PickSide({
   lead: ReactNode;
   busy: boolean;
   running: RunningSync[];
+  cancel: () => void;
   ahead: number;
   behind: number;
   compact: boolean;
@@ -199,6 +208,7 @@ function PickSide({
           confirmOverwrite.trigger(() => overwrite.mutate(input));
         },
       }}
+      onCancel={cancel}
       onDisarm={() => {
         confirmPushForce.reset();
         confirmOverwrite.reset();

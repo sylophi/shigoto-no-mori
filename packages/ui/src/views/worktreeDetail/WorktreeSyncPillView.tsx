@@ -48,11 +48,13 @@ export function MergeUpstreamView({
   busy,
   pending,
   onClick,
+  onCancel,
 }: {
   behind: number;
   busy: boolean;
   pending: boolean;
   onClick: () => void;
+  onCancel?: () => void;
 }) {
   return (
     <SyncActionButtonView
@@ -63,6 +65,7 @@ export function MergeUpstreamView({
       pending={pending}
       disabled={busy}
       onClick={onClick}
+      onCancel={onCancel}
     />
   );
 }
@@ -79,6 +82,7 @@ export function PickSideView({
   lead,
   pushForce,
   overwrite,
+  onCancel,
   onDisarm,
 }: {
   ahead: number;
@@ -90,6 +94,8 @@ export function PickSideView({
   // Each a two-step confirm: armed by the first click.
   pushForce: SideMove;
   overwrite: SideMove;
+  // Stops whichever of them runs.
+  onCancel?: () => void;
   // Closing the menu disarms both, so a reopen never finds one a click
   // away from firing.
   onDisarm: () => void;
@@ -168,6 +174,7 @@ export function PickSideView({
         pending={pushForce.pending}
         disabled={busy}
         onClick={pushForce.onClick}
+        onCancel={onCancel}
       />
       <SyncActionButtonView
         tone="rose"
@@ -181,6 +188,7 @@ export function PickSideView({
         pending={overwrite.pending}
         disabled={busy}
         onClick={overwrite.onClick}
+        onCancel={onCancel}
       />
     </span>
   );
