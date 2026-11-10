@@ -233,13 +233,13 @@ function prStatePose(params: URLSearchParams) {
   return key ? FAKE_PR_STATE_POSES[key] : undefined;
 }
 
-// The titles and bodies `sm describe` gave open PRs this session, by
-// head branch.
+// The titles and bodies the worktree's page gave open PRs this session,
+// by head branch.
 const editedPullRequests: Record<string, { title?: string; body?: string }> =
   {};
 
-// What `sm describe` does to the branch's open PR: answers whether
-// there was one to take the edit.
+// What the worktree's page does to the branch's open PR: answers
+// whether there was one to take the edit.
 export function fakeEditPullRequest(
   projectId: string,
   branch: string,

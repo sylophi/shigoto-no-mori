@@ -13,10 +13,9 @@ import type {
 } from "@shigomori/contracts/schemas";
 
 // The open worktree's title and description: its own PR's title in
-// any state (worktreeTitle), and while that PR is open its body too
-// (`sm describe` edits the PR's then). Once it is merged or closed,
-// the worktree's own description comes back, or the PR's body when it
-// has none. The project map knows a PR's title before the page's own
+// any state (worktreeTitle), and while that PR is open its body too.
+// Once it is merged or closed, the worktree's own description comes
+// back, or the PR's body when it has none. The project map knows a PR's title before the page's own
 // lookup answers, but only that lookup brings the body, so a worktree
 // with an open PR shows no description until it does rather than
 // flash the local one it is about to replace.

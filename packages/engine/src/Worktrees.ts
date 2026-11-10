@@ -38,6 +38,7 @@ import {
   type Created,
   DescribeRefused,
   type Described,
+  type DescribedOwn,
   type DescriptionView,
   DirtyWorktree,
   type Here,
@@ -47,6 +48,7 @@ import {
   MarkRefused,
   OrphanedWorktree,
   type PrimaryTarget,
+  PullRequestHoldsDescription,
   PullRequestNeedsTitle,
   PullRequestUnchecked,
   RelocateRefused,
@@ -67,6 +69,7 @@ export {
   DirtyWorktree,
   MarkRefused,
   OrphanedWorktree,
+  PullRequestHoldsDescription,
   PullRequestNeedsTitle,
   PullRequestUnchecked,
   RelocateRefused,
@@ -200,9 +203,18 @@ export class Worktrees extends Context.Service<
     readonly scriptContext: (
       located: Located,
     ) => Effect.Effect<Lifecycle.ScriptContext>;
-    // Sets the title, the description, or both: the open pull
-    // request's while one holds them, else the worktree's own.
+    // Sets the worktree's own title, description, or both, refused
+    // while an open pull request holds them.
     readonly describe: (
+      located: Located,
+      change: { readonly title?: string; readonly description?: string },
+    ) => Effect.Effect<
+      DescribedOwn,
+      DescribeRefused | PullRequestHoldsDescription | PullRequestUnchecked
+    >;
+    // The same, but an open pull request takes the change: an edit made
+    // deliberately on the worktree's page, with the whole body in hand.
+    readonly describeOrEditPullRequest: (
       located: Located,
       change: { readonly title?: string; readonly description?: string },
     ) => Effect.Effect<

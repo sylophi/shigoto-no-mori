@@ -134,14 +134,17 @@ export type DescriptionView = {
 };
 
 // What a describe wrote: the worktree's own pair as stored, with why the
-// pull request couldn't be looked up when that is worth a word, or the
+// pull request couldn't be looked up when that is worth a word.
+export type DescribedOwn = {
+  readonly described: WorktreeData.Description;
+  readonly pullRequest: null;
+  readonly pullRequestUnavailable?: string;
+};
+
+// What an edit from the worktree's page wrote: as a describe, or the
 // open pull request it edited instead, as it now reads.
 export type Described =
-  | {
-      readonly described: WorktreeData.Description;
-      readonly pullRequest: null;
-      readonly pullRequestUnavailable?: string;
-    }
+  | DescribedOwn
   | {
       readonly described: null;
       readonly pullRequest: GitHub.OwningPullRequest;
@@ -356,6 +359,17 @@ export class DescribeRefused extends Schema.TaggedError<DescribeRefused>()(
       case "description-length":
         return `A description is at most ${MAX_DESCRIPTION} characters.`;
     }
+  }
+}
+
+// A describe while the branch has an open pull request, whose title
+// and body stand for the worktree's.
+export class PullRequestHoldsDescription extends Schema.TaggedError<PullRequestHoldsDescription>()(
+  "PullRequestHoldsDescription",
+  { number: Schema.Int },
+) {
+  override get message(): string {
+    return `PR #${this.number} is open, and its title and body stand for the worktree's now, so nothing was changed.`;
   }
 }
 

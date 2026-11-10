@@ -772,7 +772,7 @@ function hostHandlersFor(
     "worktrees:resumeAgent": ({ projectId, worktreeId }) => ({
       terminalId: openFakeTerminal(projectId, worktreeId),
     }),
-    // An open PR takes the edit instead, as `sm describe` gives it.
+    // An open PR takes the edit instead, as on the real host.
     "worktrees:describe": ({ worktreeId, title, description }) => {
       const worktree = findWorktree(worktreeId);
       if (!worktree) throw new Error("Unknown worktree");

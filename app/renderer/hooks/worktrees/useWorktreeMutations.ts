@@ -529,9 +529,9 @@ export function useSetShelved() {
 }
 
 // The worktree's title or description, as edited on its page: its own,
-// or its open PR's while one holds them (`sm describe` edits the PR
-// then). An empty one clears it. Not optimistic: the editor stays open
-// until the save lands, so one the engine refuses keeps its text.
+// or its open PR's while one holds them. An empty one clears it. Not
+// optimistic: the editor stays open until the save lands, so one the
+// engine refuses keeps its text.
 // A PR's edit is written into the page's PR as it lands, so the page
 // doesn't show the old text until the refetch answers (the host moves
 // the project's map itself).
