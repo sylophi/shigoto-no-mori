@@ -438,7 +438,7 @@ export const ClientConfigSchema = Schema.Struct({
   notifyAgentDone: Schema.optional(Schema.Boolean),
   inlineWorktrees: Schema.optional(Schema.Boolean),
   pauseAnimationsOnBattery: Schema.optional(Schema.Boolean),
-  // Terminals wear the dark palette whatever the window's appearance.
+  // Terminals stay dark whatever the window's appearance.
   darkTerminals: Schema.optional(Schema.Boolean),
   // The login item and the relaunch after a crash.
   keepReachable: Schema.optional(Schema.Boolean),
