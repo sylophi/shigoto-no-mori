@@ -847,6 +847,12 @@ export class Git extends Context.Service<
       readonly base: string;
       readonly head: string;
     }) => Effect.Effect<string, GitError>;
+    // The working tree, uncommitted and untracked work too, against
+    // its merge base with `base`.
+    readonly branchDiff: (input: {
+      readonly worktree: string;
+      readonly base: string;
+    }) => Effect.Effect<string, GitError>;
   }
 >()("sm/engine/Git") {}
 

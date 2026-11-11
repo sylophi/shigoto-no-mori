@@ -13,10 +13,9 @@ import {
   BranchDiffSubtitleView,
 } from "@shigomori/ui/views/diff/DiffTitlesView.tsx";
 
-// Everything the branch's commits change against where it left the
-// primary branch, or the ref picked in its place: what a pull request
-// of it would show, with or without one. Uncommitted work is the
-// changes page's.
+// Everything the branch changes against where it left the primary
+// branch, or the ref picked in its place, its uncommitted work
+// included.
 export function BranchDiff() {
   const { projectId, worktree, goBack, missing } = useRouteWorktree();
   const { base: picked } = useSearch({ strict: false }) as { base?: string };
