@@ -264,7 +264,8 @@ export const worktreesContract = defineContract(
     BranchHistorySchema,
     ungated,
   ),
-  // As a pull request would show it, against the primary ref or `base`.
+  // The working tree against its merge base with the primary ref or
+  // `base`, uncommitted work included.
   invoke("branchDiff", BranchDiffPayloadSchema, Schema.String, ungated),
   // A cherry-pick's worktree is the one the commit lands on.
   worktreeMutationOf("revertCommit", CommitDiffPayloadSchema, "commit"),

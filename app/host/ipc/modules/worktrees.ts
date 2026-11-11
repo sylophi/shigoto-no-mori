@@ -430,10 +430,9 @@ export const worktreesHandlers = {
           reason: "This branch has no primary branch to compare with.",
         });
       }
-      return yield* (yield* Git.Git).mergeBaseDiff({
-        repo: identity.path,
+      return yield* (yield* Git.Git).branchDiff({
+        worktree: identity.path,
         base,
-        head: "HEAD",
       });
     }),
 

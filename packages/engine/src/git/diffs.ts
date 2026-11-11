@@ -10,7 +10,7 @@ import type { RunningArea } from "./running.ts";
 
 export const makeDiffs = ({ running }: { readonly running: RunningArea }) =>
   Effect.gen(function* () {
-    const { run, runBytes } = running;
+    const { run, runBytes, gitPath } = running;
     const fs = yield* FileSystem.FileSystem;
     const pathOf = yield* Path.Path;
     const fileDiff = Effect.fn("Git.fileDiff")(function* (input: {
@@ -157,10 +157,10 @@ export const makeDiffs = ({ running }: { readonly running: RunningArea }) =>
     // merge's is against its first parent, what it brought in, as a
     // plain patch rather than git's combined one. Empty for a commit git
     // can't show one for. Paths come out as they are (core.quotePath),
-    // not octal-escaped, here and in mergeBaseDiff and readStashDiff,
-    // since the file list shows them and opens them, and blob ids in
-    // full (--full-index), since a binary file's sides are read back by
-    // them (readBlob).
+    // not octal-escaped, here and in mergeBaseDiff, branchDiff and
+    // readStashDiff, since the file list shows them and opens them, and
+    // blob ids in full (--full-index), since a binary file's sides are
+    // read back by them (readBlob).
     const commitDiff = Effect.fn("Git.commitDiff")(function* (
       worktree: string,
       hash: string,
@@ -208,5 +208,53 @@ export const makeDiffs = ({ running }: { readonly running: RunningArea }) =>
       );
     });
 
-    return { fileDiff, readBlob, isWorkingTreeBlob, commitDiff, mergeBaseDiff };
+    // The working tree, committed or not, against its merge base with
+    // `base`. Untracked files come in as intent-to-add entries of a
+    // scratch copy of the index, so the real one is untouched and a move
+    // not yet staged still reads as a rename.
+    const branchDiff = Effect.fn("Git.branchDiff")(function* ({
+      worktree,
+      base,
+    }: {
+      readonly worktree: string;
+      readonly base: string;
+    }) {
+      const scratch = yield* fs
+        .makeTempDirectoryScoped({ prefix: "sm-branch-diff-" })
+        .pipe(Effect.orDie);
+      const index = pathOf.join(scratch, "index");
+      yield* fs
+        .copyFile(yield* gitPath(worktree, "index"), index)
+        .pipe(Effect.orDie);
+      const env = { GIT_INDEX_FILE: index };
+      yield* run(worktree, ["add", "-A", "-N"], { env });
+      return yield* run(
+        worktree,
+        [
+          "-c",
+          "core.quotePath=false",
+          ...PATCH_CONFIG,
+          "diff-index",
+          "-p",
+          "-M",
+          "--no-color",
+          "--full-index",
+          ...PATCH_FLAGS,
+          "--merge-base",
+          "--end-of-options",
+          base,
+          "--",
+        ],
+        { env, maxOutputBytes: PATCH_MAX_OUTPUT },
+      );
+    }, Effect.scoped);
+
+    return {
+      fileDiff,
+      readBlob,
+      isWorkingTreeBlob,
+      commitDiff,
+      mergeBaseDiff,
+      branchDiff,
+    };
   });

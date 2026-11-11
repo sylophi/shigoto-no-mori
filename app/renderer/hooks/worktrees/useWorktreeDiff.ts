@@ -62,9 +62,9 @@ export function useCommitDiff(
   return useQuery(commitDiffQuery(useHostScope(), projectId, worktreeId, hash));
 }
 
-// What the branch changes against the primary branch, or `base`, the
-// way a pull request would show it. Read afresh on each visit: the
-// branch moves.
+// What the branch changes against the primary branch, or `base`,
+// uncommitted work included. Read afresh on each visit: the branch
+// moves.
 export function useBranchDiff(
   projectId: string,
   worktreeId: string | undefined,
