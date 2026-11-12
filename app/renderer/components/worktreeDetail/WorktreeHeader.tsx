@@ -102,6 +102,7 @@ function TitledHeader({
               stateLabel: <PullRequestStateLabelView pr={pr} pill />,
               base: pr.baseRefName,
               mergeVerb: MERGE_VERB[pr.state],
+              author: detail?.authorLogin,
             }
           : undefined
       }

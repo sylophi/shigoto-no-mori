@@ -3,13 +3,14 @@
 // what the work is called (useWorktreeTitle), then one line with its
 // branch (renamed, switched and copied from it). While a PR names the
 // work, the page names it once and the PR fills in the same two lines:
-// its number and state beside the title, and on the branch's line
-// where it lands, where it sits in a stack (its list in a popover),
-// and its diff, with the repo's GitHub link before the diff. That line
-// never wraps: the base gives way first, then the branch. The title is
-// edited in place (EditableTitleView), the PR's while it is open. What
-// the work is and what to do about its PR follow under the header. The
-// project map's slim PR draws all of it but the diff at once, so the
+// its number beside the title, who opened it and its state at the
+// row's end, and on the branch's line where it lands, where it sits in
+// a stack (its list in a popover), and its diff, with the repo's GitHub
+// link before the diff. That line never wraps: the base gives way
+// first, then the branch. The title is edited in place
+// (EditableTitleView), the PR's while it is open. What the work is and
+// what to do about its PR follow under the header. The project map's
+// slim PR draws all of it but the author and the diff at once, so the
 // header doesn't grow when the lookup answers.
 import type { ReactNode, Ref } from "react";
 import { ArrowLeft, Layers2 } from "lucide-react";
@@ -46,6 +47,8 @@ export function WorktreeHeaderView({
     stateLabel: ReactNode;
     base: string;
     mergeVerb: string;
+    // Who opened it, once the lookup answers.
+    author?: string;
   };
   // The branch's line (BranchTitle).
   branchTitle: ReactNode;
@@ -73,9 +76,17 @@ export function WorktreeHeaderView({
         <EditableTitleView title={title} edit={titleEdit}>
           {pr?.titleLink}
         </EditableTitleView>
+        {/* At the row's end, where a status sits. The author gives way
+            before the title. */}
+        {pr?.author && (
+          <span className="ml-auto min-w-0 shrink-[1000] truncate text-sm text-muted-foreground select-text">
+            by <span className="text-foreground/80">@{pr.author}</span>
+          </span>
+        )}
         {pr && (
-          // At the row's end, where a status sits.
-          <span className="ml-auto inline-flex shrink-0">{pr.stateLabel}</span>
+          <span className={cn("inline-flex shrink-0", !pr.author && "ml-auto")}>
+            {pr.stateLabel}
+          </span>
         )}
       </div>
       {/* One line however narrow. The base gives way first, and goes

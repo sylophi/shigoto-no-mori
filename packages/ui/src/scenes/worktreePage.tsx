@@ -202,6 +202,7 @@ export function WorktreePageScene() {
                 stateLabel: <PullRequestStateLabelView pr={PR} pill />,
                 base: PR.baseRefName,
                 mergeVerb: "Merges into",
+                author: "sylophi",
               }}
               branchTitle={branchTitle(HUMMINGBIRD, true)}
               diff={{
