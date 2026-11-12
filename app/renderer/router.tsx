@@ -194,13 +194,23 @@ function validateDiffSearch(search: Record<string, unknown>): { amend?: true } {
   return search["amend"] === true ? { amend: true } : {};
 }
 
+// `list` keeps the Git page's sidebar on its tab's list (the commits,
+// the stashes) rather than the files of the one the page shows.
+function validateListSearch(search: Record<string, unknown>): { list?: true } {
+  return search["list"] === true ? { list: true } : {};
+}
+
 // `base` is the ref the branch's changes are read against, in place of
 // the primary branch.
 function validateBranchDiffSearch(search: Record<string, unknown>): {
   base?: string;
+  list?: true;
 } {
   const base = search["base"];
-  return typeof base === "string" && base.length > 0 ? { base } : {};
+  return {
+    ...(typeof base === "string" && base.length > 0 ? { base } : {}),
+    ...validateListSearch(search),
+  };
 }
 
 // `dialog` opens the worktree page with one of its dialogs up
@@ -273,12 +283,14 @@ const stashDiffRoute = createRoute({
   getParentRoute: () => worktreePagesRoute,
   path: WORKTREE_ROUTE_PATHS.stash,
   component: StashDiff,
+  validateSearch: validateListSearch,
 });
 
 const commitDiffRoute = createRoute({
   getParentRoute: () => worktreePagesRoute,
   path: WORKTREE_ROUTE_PATHS.commit,
   component: CommitDiff,
+  validateSearch: validateListSearch,
 });
 
 // Params only: a new worktree is a fresh page (its folders), a new

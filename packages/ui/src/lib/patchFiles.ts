@@ -1,5 +1,5 @@
 // How a changed file is described, in one place: the identity the diff
-// scroll area and the file rail agree on, the counts and marker each
+// pane and the file rail agree on, the counts and marker each
 // row shows, and the two ways a rail's rows are built (from a patch on
 // a read-only diff, from git status on the changes page).
 import type { ChangeTypes, FileDiffMetadata } from "@pierre/diffs";
@@ -10,8 +10,7 @@ import type { ChangeMark, IndexEntry } from "./indexEntry.ts";
 
 // Stable identity for one file inside one patch. `name` alone collides
 // on a rename pair (the old path can still appear as another entry), so
-// the previous name is part of the key. That is the same composition
-// the FileDiff list already used for its React key.
+// the previous name is part of the key.
 export function fileKey(file: FileDiffMetadata): string {
   return `${file.prevName ?? ""} ${file.name}`;
 }
@@ -121,9 +120,8 @@ const STATUS_MARKS: Record<ChangeKind, ChangeMark> = {
 // the rail has to know about.
 
 // A read-only patch is its own table of contents: one row per file it
-// carries, in the order the scroll area has them. The key is the
-// patch's own identity for a file, which is what the scroll spy and the
-// jump both speak.
+// carries, in the patch's order. The key is the patch's own identity
+// for a file, which is what the pane's pick speaks.
 export function patchEntries(files: readonly FileDiffMetadata[]): IndexEntry[] {
   return files.map((file) => ({
     key: fileKey(file),

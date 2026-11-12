@@ -88,7 +88,7 @@ function WorktreeChanges({
       changes={controls}
       sidebarActions={<GitPageActions worktree={worktree} />}
       renderSidebar={(fileList) => (
-        <GitPageSidebar worktree={worktree} tab="changes" changes={fileList} />
+        <GitPageSidebar worktree={worktree} tab="changes" files={fileList} />
       )}
       footer={
         <ChangesFooterView
