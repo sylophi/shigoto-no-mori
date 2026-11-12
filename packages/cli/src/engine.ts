@@ -22,8 +22,8 @@ import * as Transfer from "./Transfer.ts";
 const open: Store.OpenDatabase = (filename, options) =>
   SqliteClient.make({ filename, ...options });
 const nativefs = join(dirname(process.execPath), "nativefs");
-// What the agent hooks run: this binary (Agents names it by its real
-// path).
+// What the agent hooks run: this binary (Agents names it by a path
+// that outlasts an update).
 const sm = process.execPath;
 
 // Whether the data dir is a 2.x one the app has yet to migrate.

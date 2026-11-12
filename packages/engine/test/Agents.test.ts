@@ -67,7 +67,7 @@ it("installs without disturbing the rest of the file", async () => {
   writeFileSync(path, original, { mode: 0o600 });
   const claudeHarness = HARNESSES.find(({ id }) => id === "claude");
   assert.ok(claudeHarness);
-  const command = hookCommand(claudeHarness, HOOK_BINARY);
+  const command = hookCommand(claudeHarness, HOOK_BINARY, box.home);
 
   await setHooks(["claude"], true);
   const text = readFileSync(path, "utf8");

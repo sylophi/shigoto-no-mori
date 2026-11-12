@@ -13,6 +13,7 @@ import { basename } from "node:path";
 import * as Predicate from "effect/Predicate";
 import { canonicalJson, members, skipSpace, valueEnd } from "./json.ts";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
+import { tildify } from "@shigomori/contracts/projectPaths";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
 // One hook entry: the event, an optional matcher, and whether it runs
@@ -103,8 +104,17 @@ const HOOK_TIMEOUT = 3;
 // blocks the prompt, or keeps the turn going), and sm failing before
 // `agents event` runs (a data dir it can't open, an older build that
 // lacks the command) must never be one.
-export const hookCommand = (harness: Harness, binary: string) =>
-  `${shellQuote(binary)} agents event --harness ${harness.id} || true`;
+export const hookCommand = (harness: Harness, binary: string, home: string) =>
+  `${binaryWord(binary, home)} agents event --harness ${harness.id} || true`;
+
+// A binary under home goes by $HOME, so a hooks file synced between
+// machines runs each one's own.
+const binaryWord = (binary: string, home: string) => {
+  const tilded = tildify(binary, home);
+  return tilded.startsWith("~/")
+    ? `"$HOME${tilded.slice(1).replace(/["$`\\]/g, "\\$&")}"`
+    : shellQuote(binary);
+};
 
 // Whether a hook command is one of ours for this harness, whatever path
 // it names the binary by.
@@ -115,8 +125,9 @@ export function isOurCommand(
 ): boolean {
   let bin = command;
   let rest = "";
-  if (command.startsWith("'")) {
-    const end = command.indexOf("'", 1);
+  const quote = command[0];
+  if (quote === "'" || quote === '"') {
+    const end = command.indexOf(quote, 1);
     if (end >= 0) {
       bin = command.slice(1, end);
       rest = command.slice(end + 1);

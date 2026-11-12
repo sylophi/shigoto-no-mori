@@ -51,6 +51,7 @@ import {
   parseAgentEvent,
 } from "./agentSessions.ts";
 import { envVar } from "./environment.ts";
+import { installedVersionOf, linuxInstall } from "./linuxInstall.ts";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import * as Launchers from "./Launchers.ts";
 import * as Open from "./Open.ts";
@@ -245,7 +246,8 @@ const make = (binary: string) =>
     const fs = yield* FileSystem.FileSystem;
     const crypto = yield* Crypto.Crypto;
     const path = yield* Path.Path;
-    const { home, binaryName, dataDir } = yield* Paths.Paths;
+    const paths = yield* Paths.Paths;
+    const { home, binaryName, dataDir } = paths;
     const registry = yield* Registry.Registry;
     const worktrees = yield* Worktrees.Worktrees;
     const open = yield* Open.Open;
@@ -253,10 +255,16 @@ const make = (binary: string) =>
     // By its real path, so the app (its bundled copy) and a terminal
     // (through the linked command) write the same entry and agree on
     // whether it is current. One not built yet (a dev run) keeps the
-    // path given.
-    const sm = yield* fs
+    // path given. A Linux install's goes through `current`, which an
+    // update moves on, where its version's folder is pruned.
+    const realBinary = yield* fs
       .realPath(binary)
       .pipe(Effect.orElseSucceed(() => binary));
+    const linux = linuxInstall(paths.flavor, paths);
+    const sm =
+      installedVersionOf(linux, realBinary) === undefined
+        ? realBinary
+        : path.join(linux.current, binaryName);
     // The provider the engine was built with, not the caller's: a fiber
     // with none set reads a copy of the environment taken once.
     const configProvider = yield* ConfigProvider.ConfigProvider;
@@ -265,7 +273,7 @@ const make = (binary: string) =>
         Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
       );
 
-    const command = (harness: Harness) => hookCommand(harness, sm);
+    const command = (harness: Harness) => hookCommand(harness, sm, home);
     const ours = (harness: Harness) => (line: string) =>
       isOurCommand(harness, binaryName, line);
 
