@@ -3,11 +3,11 @@
 // what the work is called (useWorktreeTitle), then one line with its
 // branch (renamed, switched and copied from it). While a PR names the
 // work, the page names it once and the PR fills in the same two lines:
-// its number beside the title, who opened it and its state at the
-// row's end, and on the branch's line where it lands, where it sits in
-// a stack (its list in a popover), and its diff, with the repo's GitHub
-// link before the diff. That line never wraps: the base gives way
-// first, then the branch. The title is edited in place
+// its number and state beside the title, and on the branch's line
+// where it lands, who opened it, where it sits in a stack (its list in
+// a popover), and its diff, with the repo's GitHub link before the
+// diff. That line never wraps: the author gives way first, then the
+// base, then the branch. The title is edited in place
 // (EditableTitleView), the PR's while it is open. What the work is and
 // what to do about its PR follow under the header. The project map's
 // slim PR draws all of it but the author and the diff at once, so the
@@ -76,22 +76,14 @@ export function WorktreeHeaderView({
         <EditableTitleView title={title} edit={titleEdit}>
           {pr?.titleLink}
         </EditableTitleView>
-        {/* At the row's end, where a status sits. The author gives way
-            before the title. */}
-        {pr?.author && (
-          <span className="ml-auto min-w-0 shrink-[1000] truncate text-sm text-muted-foreground select-text">
-            by <span className="text-foreground/80">@{pr.author}</span>
-          </span>
-        )}
         {pr && (
-          <span className={cn("inline-flex shrink-0", !pr.author && "ml-auto")}>
-            {pr.stateLabel}
-          </span>
+          // At the row's end, where a status sits.
+          <span className="ml-auto inline-flex shrink-0">{pr.stateLabel}</span>
         )}
       </div>
-      {/* One line however narrow. The base gives way first, and goes
-          altogether before the branch would have to, then the branch.
-          The stack and the diff keep their place. */}
+      {/* One line however narrow. The author gives way first, then the
+          base, which goes altogether before the branch would have to,
+          then the branch. The stack and the diff keep their place. */}
       <div className="flex min-w-0 items-center justify-between gap-3">
         <div
           ref={lineRef}
@@ -124,6 +116,11 @@ export function WorktreeHeaderView({
             {branchTitle}
           </div>
         </div>
+        {pr?.author && (
+          <span className="min-w-0 shrink-[2000] truncate text-sm text-muted-foreground select-text">
+            by <span className="text-foreground/80">@{pr.author}</span>
+          </span>
+        )}
         <div className="flex shrink-0 items-center gap-1">
           {stack && (
             <Popover>
