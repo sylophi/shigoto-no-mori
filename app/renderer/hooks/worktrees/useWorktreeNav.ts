@@ -143,7 +143,8 @@ export function useWorktreeNav() {
       go("stashes", { projectId, worktreeId }, replace);
     },
 
-    // One stash, on the Git page's Stashes tab.
+    // One stash, on the Git page's Stashes tab, its files in the
+    // sidebar.
     toStash(
       projectId: string,
       worktreeId: string,
@@ -151,6 +152,12 @@ export function useWorktreeNav() {
       replace = false,
     ) {
       go("stash", { projectId, worktreeId, hash }, replace);
+    },
+
+    // The same with the sidebar on the tab's stashes, from within the
+    // Git page.
+    toStashList(projectId: string, worktreeId: string, hash: string) {
+      go("stash", { projectId, worktreeId, hash }, true, { list: true });
     },
 
     // `replace` from within the Git page, so Back leaves the page rather
@@ -164,23 +171,28 @@ export function useWorktreeNav() {
       go("commit", { projectId, worktreeId, hash }, replace);
     },
 
+    // The same with the sidebar on the History tab's commits rather
+    // than the commit's files, from within the Git page.
+    toCommitList(projectId: string, worktreeId: string, hash: string) {
+      go("commit", { projectId, worktreeId, hash }, true, { list: true });
+    },
+
     toPrDiff(projectId: string, worktreeId: string) {
       go("prDiff", { projectId, worktreeId });
     },
 
     // Everything the branch changes against the primary branch, or
-    // against `base`.
+    // against `base`. `list` keeps the sidebar on the History tab's
+    // commits.
     toBranchDiff(
       projectId: string,
       worktreeId: string,
-      opts: { base?: string; replace?: boolean } = {},
+      opts: { base?: string; replace?: boolean; list?: boolean } = {},
     ) {
-      go(
-        "branchDiff",
-        { projectId, worktreeId },
-        opts.replace ?? false,
-        opts.base === undefined ? {} : { base: opts.base },
-      );
+      go("branchDiff", { projectId, worktreeId }, opts.replace ?? false, {
+        ...(opts.base === undefined ? {} : { base: opts.base }),
+        ...(opts.list ? { list: true } : {}),
+      });
     },
 
     // The files page, opened on `path` when given (a file to show). A

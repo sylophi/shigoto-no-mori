@@ -18,7 +18,10 @@ import {
 // included.
 export function BranchDiff() {
   const { projectId, worktree, goBack, missing } = useRouteWorktree();
-  const { base: picked } = useSearch({ strict: false }) as { base?: string };
+  const { base: picked, list } = useSearch({ strict: false }) as {
+    base?: string;
+    list?: true;
+  };
   const nav = useWorktreeNav();
   const diff = useBranchDiff(projectId, worktree?.id, picked);
   const { data: history } = useBranchHistory(projectId, worktree?.id);
@@ -48,6 +51,7 @@ export function BranchDiff() {
           onChange={(next) =>
             nav.toBranchDiff(projectId, worktree.id, {
               base: next === primary ? undefined : next,
+              list,
               replace: true,
             })
           }
@@ -58,8 +62,13 @@ export function BranchDiff() {
         />
       }
       sidebarActions={<GitPageActions worktree={worktree} />}
-      renderSidebar={() => (
-        <GitPageSidebar worktree={worktree} tab="history" selected="branch" />
+      renderSidebar={(files) => (
+        <GitPageSidebar
+          worktree={worktree}
+          tab="history"
+          selected="branch"
+          files={files}
+        />
       )}
       emptyMessage="This branch changes nothing yet."
     />

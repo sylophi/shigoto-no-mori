@@ -19,13 +19,10 @@ import {
 } from "../views/diff/DiffFileIndexView.tsx";
 import {
   DiffFileRowView,
-  DiffFileSlotView,
   DiffFilesSheetView,
   DiffHeaderView,
   DiffPageView,
   DiffPaneView,
-  estimateFileHeight,
-  FILE_GAP,
 } from "../views/diff/DiffPageView.tsx";
 import {
   BRANCH_DIFF_BASE_PICKER,
@@ -36,6 +33,7 @@ import {
   WorktreeDiffSubtitleView,
 } from "../views/diff/DiffTitlesView.tsx";
 import { HunkBarView } from "../views/diff/HunkBarView.tsx";
+import { GitPageSidebarView } from "../views/worktreeDetail/git/GitPageSidebarView.tsx";
 import { LastCommitStripView } from "../views/diff/LastCommitStripView.tsx";
 import {
   MediaDiffSideView,
@@ -97,49 +95,20 @@ const HUNKS = {
   onDiscard: noop,
 };
 
-// A diff page in the window, its file list in the sidebar.
+// A diff page in the window, one file in the pane.
 function diffPage({
-  index,
+  sidebar,
   header,
-  files,
-  singleFile,
+  shown,
+  hunks,
 }: {
-  index: ReactNode;
+  // The file list, as the page's sidebar holds it.
+  sidebar: ReactNode;
   header: ReactNode;
-  files: FileDiffMetadata[];
-  singleFile: boolean;
+  shown: FileDiffMetadata | undefined;
+  // The changes page's hunk ticks.
+  hunks?: typeof HUNKS;
 }) {
-  // Each file where the app's window places it before measuring it.
-  let start = FILE_GAP;
-  const slots = files.map((fileDiff, position) => {
-    const slot = (
-      <DiffFileSlotView
-        key={fileKey(fileDiff)}
-        index={position}
-        start={start}
-        measureRef={noop}
-      >
-        <DiffFileRowView
-          fileDiff={fileDiff}
-          fileId={fileKey(fileDiff)}
-          collapsed={false}
-          diffStyle="unified"
-          wrapLines={false}
-          themeType="light"
-          onToggle={singleFile ? undefined : noop}
-          hunks={singleFile ? HUNKS : undefined}
-          busy={false}
-          media={
-            isMediaBinary(fileDiff) && <SceneMediaDiff fileDiff={fileDiff} />
-          }
-        />
-      </DiffFileSlotView>
-    );
-    start +=
-      estimateFileHeight(fileDiff, { collapsed: false, diffStyle: "unified" }) +
-      FILE_GAP;
-    return slot;
-  });
   return (
     <SceneWindowFrame
       sidebar={
@@ -148,7 +117,7 @@ function diffPage({
           open
           takeover={
             <SidebarTakeoverView back={{ label: HUM.name, onClick: noop }}>
-              {index}
+              {sidebar}
             </SidebarTakeoverView>
           }
         />
@@ -160,13 +129,20 @@ function diffPage({
         header={header}
         findBar={null}
         pane={
-          <DiffPaneView
-            state="files"
-            message={null}
-            virtualizer={null}
-            height={start}
-          >
-            {slots}
+          <DiffPaneView state="files" message={null} virtualizer={null}>
+            {shown && (
+              <DiffFileRowView
+                fileDiff={shown}
+                diffStyle="unified"
+                wrapLines={false}
+                themeType="light"
+                hunks={hunks}
+                busy={false}
+                media={
+                  isMediaBinary(shown) && <SceneMediaDiff fileDiff={shown} />
+                }
+              />
+            )}
           </DiffPaneView>
         }
         sheet={null}
@@ -246,17 +222,15 @@ const branchBar = (
 export function ChangesPageScene() {
   const last = HUM.recentCommits[0];
   return diffPage({
-    singleFile: true,
-    files: PICKED ? filesOf(CHANGES.fileDiff(HUM.id, [PICKED.path])) : [],
-    index: (
+    hunks: HUNKS,
+    shown: PICKED && filesOf(CHANGES.fileDiff(HUM.id, [PICKED.path]))[0],
+    sidebar: (
       <DiffFileIndexView
         entries={changeEntries(FILES)}
         query=""
         onQueryChange={noop}
         activeKey={CONTROLS.selectedKey}
-        collapsedKeys={new Set()}
         onSelect={noop}
-        allCollapsed={false}
         changes={CONTROLS}
         className="min-h-0 flex-1"
         footer={
@@ -306,24 +280,34 @@ export function ChangesPageScene() {
   });
 }
 
-// One of happy-hummingbird's commits, read as one scroll.
+// One of happy-hummingbird's commits: its files in the History tab's
+// place, the first of them shown.
 export function CommitPageScene() {
   const commit = HUM.recentCommits[0];
   const files = filesOf(FAKE_DIFF);
   return diffPage({
-    singleFile: false,
-    files,
-    index: (
-      <DiffFileIndexView
-        entries={patchEntries(files)}
-        query=""
-        onQueryChange={noop}
-        activeKey={files[0] ? fileKey(files[0]) : null}
-        collapsedKeys={new Set()}
-        onSelect={noop}
-        allCollapsed={false}
-        onToggleAll={noop}
-        className="min-h-0 flex-1"
+    shown: files[0],
+    sidebar: (
+      <GitPageSidebarView
+        tab="history"
+        onTab={noop}
+        changedCount={FILES.length}
+        stashCount={0}
+        hasHistory
+        banner={null}
+        stashList={null}
+        historyList={null}
+        onBack={noop}
+        files={
+          <DiffFileIndexView
+            entries={patchEntries(files)}
+            query=""
+            onQueryChange={noop}
+            activeKey={files[0] ? fileKey(files[0]) : null}
+            onSelect={noop}
+            className="min-h-0 flex-1"
+          />
+        }
       />
     ),
     header: pageHeader(

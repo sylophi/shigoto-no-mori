@@ -160,9 +160,9 @@ function revealMatch(
 
 // The diff page's find: its bar, every match in the patch counted and
 // those drawn painted, and the view taken to the one shown. That row
-// may not be drawn: its file not mounted (DiffPane), or folded, or the
-// row outside the window pierre draws of a long file. So the view goes
-// to the file (`toFile`), then on by the rows between the nearest one
+// may not be drawn: its file not the one shown, or the row outside the
+// window pierre draws of a long file. So the pane goes to the file
+// (`toFile`), then the view on by the rows between the nearest one
 // drawn and it, until it is drawn.
 export function useDiffFind({
   scrollRef,
@@ -173,7 +173,7 @@ export function useDiffFind({
   scrollRef: RefObject<HTMLDivElement | null>;
   files: readonly FileDiffMetadata[];
   diffStyle: DiffStyle;
-  // Unfolds a file and puts it at the top of the view.
+  // Shows a file in the pane.
   toFile: (key: string) => void;
 }) {
   const find = useFindBar();

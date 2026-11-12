@@ -7,7 +7,7 @@ import {
   type Virtualizer,
 } from "@pierre/diffs";
 import { FileDiff, VirtualizerContext } from "@pierre/diffs/react";
-import { ChevronDown, Files, Loader2, WrapText } from "lucide-react";
+import { Files, Loader2, WrapText } from "lucide-react";
 import { PAGE_HEADER_PADDING } from "../shared/PageHeaderView.tsx";
 import { CenteredMessage } from "../../primitives/centered-message.tsx";
 import { EmptyPanel } from "../../primitives/empty-panel.tsx";
@@ -17,7 +17,7 @@ import { IconButton } from "../../primitives/icon-button.tsx";
 import { SegmentedControl } from "../../primitives/segmented-control.tsx";
 import { BottomSheet } from "../../primitives/sheet.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { isBinaryChange, isMediaBinary } from "../../lib/patchFiles.ts";
+import { fileKey, isBinaryChange } from "../../lib/patchFiles.ts";
 import { cn } from "../../lib/utils.ts";
 import {
   CODE_GAP_BLOCK,
@@ -76,48 +76,12 @@ const DIFF_METRICS: VirtualFileMetrics = {
   lineHeight: CODE_LINE_HEIGHT,
   hunkSeparatorHeight: CODE_LINE_HEIGHT,
   // What pierre's header comes to at CODE_STYLE's sizes. Measured, since
-  // nothing in CODE_STYLE sets it directly. It holds in both designs and
-  // with or without the fold button: the header keeps its own font.
+  // nothing in CODE_STYLE sets it directly. It holds in both designs: the
+  // header keeps its own font.
   diffHeaderHeight: 30,
   // The padding under a file's last row.
   spacing: CODE_GAP_BLOCK,
 };
-
-// The space around each file in the pane: above the first, between
-// two, and below the last. The slots' inset-x-2 is the same at the
-// sides.
-export const FILE_GAP = 8;
-
-// A media file's sides under its header (MediaDiffView's pt-2 and h-72).
-const MEDIA_SIDES_HEIGHT = 8 + 288;
-
-// A file's height before it is drawn, for the window to place the files
-// it hasn't mounted (DiffPane): its header, and unless folded its hunks'
-// rows at DIFF_METRICS with about a separator each, or a media file's
-// sides. A drawn file is measured, so this only has to be close: it
-// leaves out wrapped lines and the changes page's hunk bars (its one
-// file is measured as soon as it's drawn).
-export function estimateFileHeight(
-  fileDiff: FileDiffMetadata,
-  { collapsed, diffStyle }: { collapsed: boolean; diffStyle: DiffStyle },
-): number {
-  const header = DIFF_METRICS.diffHeaderHeight;
-  if (collapsed) return header;
-  if (isMediaBinary(fileDiff)) return header + MEDIA_SIDES_HEIGHT;
-  const { hunks } = fileDiff;
-  if (hunks.length === 0) return header;
-  const lines = hunks.reduce(
-    (n, hunk) =>
-      n + (diffStyle === "split" ? hunk.splitLineCount : hunk.unifiedLineCount),
-    0,
-  );
-  return (
-    header +
-    lines * DIFF_METRICS.lineHeight +
-    hunks.length * CODE_LINE_HEIGHT +
-    DIFF_METRICS.spacing
-  );
-}
 
 // A diff page (DiffPage.tsx binds it to a patch): the file list taken
 // over into the sidebar, the header, the find bar while it's open, the
@@ -237,27 +201,23 @@ export function DiffHeaderView({
   );
 }
 
-// The scrolling pane under the header: the patch's files, or what
-// stands in for them.
+// The scrolling pane under the header: the file being read, or what
+// stands in for it.
 export function DiffPaneView({
   scrollRef,
   listRef,
   state,
   message,
   virtualizer,
-  height,
   children,
 }: {
   scrollRef?: Ref<HTMLDivElement>;
   listRef?: Ref<HTMLDivElement>;
-  // "empty" shows the message in place of the files.
+  // "empty" shows the message in place of the file.
   state: "loading" | "error" | "empty" | "files";
   message: ReactNode;
   virtualizer: Virtualizer | null;
-  // The files' total, a FILE_GAP around each, as DiffPane places them.
-  // Unset when there are no files to place.
-  height?: number;
-  // The files' rows (DiffFileRowView), each in a DiffFileSlotView.
+  // The file's row (DiffFileRowView).
   children: ReactNode;
 }) {
   return (
@@ -282,8 +242,8 @@ export function DiffPaneView({
         <div
           ref={listRef}
           data-slot="diff-view"
-          className="relative select-text"
-          style={{ ...CODE_STYLE, height }}
+          className="p-2 select-text"
+          style={CODE_STYLE}
         >
           {virtualizer ? (
             <VirtualizerContext value={virtualizer}>
@@ -298,8 +258,8 @@ export function DiffPaneView({
   );
 }
 
-// The file list as a phone's bottom sheet: a patch is still easier to
-// read with its map to hand.
+// The file list as a phone's bottom sheet, the way to another of the
+// patch's files there.
 export function DiffFilesSheetView({
   open,
   onOpenChange,
@@ -318,57 +278,18 @@ export function DiffFilesSheetView({
   );
 }
 
-// A file at its place in the window (DiffPane): its offset from the
-// list's top, and the element the window measures it by.
-export function DiffFileSlotView({
-  index,
-  start,
-  measureRef,
-  children,
-}: {
-  index: number;
-  start: number;
-  measureRef: (node: Element | null) => void;
-  // The file's row (DiffFileRowView).
-  children: ReactNode;
-}) {
-  return (
-    <div
-      data-index={index}
-      ref={measureRef}
-      className="absolute inset-x-2 top-0"
-      style={{ transform: `translateY(${start}px)` }}
-    >
-      {children}
-    </div>
-  );
-}
-
-// One file of the patch. Its own component so folding a file re-renders
-// that file and not the others in view: pierre's FileDiff re-runs a full
-// DOM render on every pass, so untouched rows have to keep their cached
-// element to stay free. That only holds while every prop here is stable
-// per file, which is why `onToggle` is the caller's own setter rather
-// than a per-row closure.
-//
-// `collapsed` is pierre's own option: it drops the file's rendered rows
-// and keeps the header, so folding a file also stops paying for it.
+// The file of the patch being read.
 export function DiffFileRowView({
   fileDiff,
-  fileId,
-  collapsed,
   diffStyle,
   wrapLines,
   themeType,
-  onToggle,
   hunks,
   busy,
   media,
   loadSides,
 }: {
   fileDiff: FileDiffMetadata;
-  fileId: string;
-  collapsed: boolean;
   diffStyle: DiffStyle;
   // Wrapped rows run past CODE_LINE_HEIGHT, so DIFF_METRICS no longer
   // places them exactly. Pierre measures each wrapped row as it draws
@@ -376,9 +297,6 @@ export function DiffFileRowView({
   // as you read rather than up front.
   wrapLines: boolean;
   themeType: "light" | "dark";
-  // Absent when the pane shows one picked file, where there is nothing
-  // to fold away. The header prefix goes with it.
-  onToggle: ((key: string, collapsed: boolean) => void) | undefined;
   // The changes page's hunk ticks for this file, when it has them.
   hunks: HunkControls | undefined;
   busy: boolean;
@@ -392,10 +310,7 @@ export function DiffFileRowView({
   return (
     // The header is pierre's shadow DOM, out of a hover's reach, so the
     // copy button shows while its file is hovered.
-    <div data-diff-file={fileId} className="group/copy">
-      {/* `PatchDiff` requires a single-file patch. For multi-file output
-          we parse with `parsePatchFiles` and spawn one `<FileDiff>` per
-          file per the library's recommended pattern. */}
+    <div data-diff-file={fileKey(fileDiff)} className="group/copy">
       <FileDiff
         fileDiff={fileDiff}
         options={{
@@ -403,7 +318,6 @@ export function DiffFileRowView({
           diffStyle,
           overflow: wrapLines ? "wrap" : "scroll",
           themeType,
-          collapsed,
           loadDiffFiles: loadSides,
         }}
         metrics={DIFF_METRICS}
@@ -426,33 +340,8 @@ export function DiffFileRowView({
             size="xs"
           />
         )}
-        renderHeaderPrefix={
-          onToggle
-            ? () => (
-                <IconButton
-                  size="xs"
-                  onClick={() => onToggle(fileId, !collapsed)}
-                  aria-expanded={!collapsed}
-                  aria-label={
-                    collapsed
-                      ? `Expand ${fileDiff.name}`
-                      : `Collapse ${fileDiff.name}`
-                  }
-                >
-                  <ChevronDown
-                    aria-hidden
-                    className={cn(
-                      "size-3.5 transition-transform",
-                      collapsed && "-rotate-90",
-                    )}
-                  />
-                </IconButton>
-              )
-            : undefined
-        }
       />
-      {!collapsed &&
-        binary &&
+      {binary &&
         (media || (
           <div className="pt-2">
             <EmptyPanel>Binary file, not shown.</EmptyPanel>

@@ -49,8 +49,13 @@ export function StashDiff() {
         )
       }
       sidebarActions={<GitPageActions worktree={worktree} />}
-      renderSidebar={() => (
-        <GitPageSidebar worktree={worktree} tab="stashes" selected={hash} />
+      renderSidebar={(files) => (
+        <GitPageSidebar
+          worktree={worktree}
+          tab="stashes"
+          selected={hash}
+          files={files}
+        />
       )}
       emptyMessage={
         hash

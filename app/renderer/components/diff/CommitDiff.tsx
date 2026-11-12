@@ -63,11 +63,12 @@ export function CommitDiff() {
         )
       }
       sidebarActions={<GitPageActions worktree={worktree} />}
-      renderSidebar={() => (
+      renderSidebar={(files) => (
         <GitPageSidebar
           worktree={worktree}
           tab="history"
           selected={`commit:${hash}`}
+          files={files}
         />
       )}
       emptyMessage="This commit changes no files."

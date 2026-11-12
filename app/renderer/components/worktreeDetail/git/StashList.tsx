@@ -37,7 +37,7 @@ export function StashList({
     if (before.branch !== branch) return setBefore(null);
     if (newest === undefined || before.hashes.has(newest)) return;
     setBefore(null);
-    nav.toStash(projectId, worktreeId, newest, true);
+    nav.toStashList(projectId, worktreeId, newest);
   }, [before, branch, newest, nav, projectId, worktreeId]);
   const submit = () => {
     if (changedCount === 0 || stashChanges.isPending) return;

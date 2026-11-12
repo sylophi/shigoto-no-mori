@@ -25,6 +25,7 @@ import {
   DiffFilesSheetView,
   DiffHeaderView,
   DiffPageView,
+  DiffPaneView,
   type DiffStyle,
 } from "@shigomori/ui/views/diff/DiffPageView.tsx";
 import {
@@ -35,22 +36,14 @@ import {
   patchEntries,
 } from "@shigomori/ui/lib/patchFiles.ts";
 import { DiffFileIndex } from "./DiffFileIndex";
-import { DiffPane } from "./DiffPane";
 import { HighlightWorkers } from "./HighlightWorkers";
 import { MediaDiff } from "./MediaDiff";
 import { useDiffFind } from "./useDiffFind";
-import { withMember } from "@shigomori/ui/lib/toggleSet.ts";
 import { readStored, writeStored } from "@/lib/localStorage";
 
 // Kept across diffs and launches: whether long lines fit the pane is a
 // reading habit, not a property of one patch.
 const WRAP_STORAGE_KEY = "diff.wrapLines";
-
-// Below this a patch is its own table of contents on a phone: two files
-// scroll past in one flick, so the header offers no sheet for them. The
-// sidebar's list costs the diff no width, so a wide viewport always has
-// it.
-const SHEET_MIN_FILES = 3;
 
 // From this size a patch is parsed in a worker (patchFiles.worker.ts).
 // Pierre parses a megabyte of patch in about 10 ms, less than a
@@ -137,15 +130,16 @@ export function DiffPage({
   // Present on the uncommitted-changes page only. Turns the file list into a
   // tick list with the commit composer under it, and keeps the list up
   // on a clean tree too, since amending and undoing the last commit
-  // live there.
+  // live there. Its list picks the file and fetches that file's patch
+  // alone.
   changes?: DiffChangesControls;
   // Mounted at the foot of the file list: the commit composer.
   footer?: ReactNode;
   // Under the title, the header's width: a commit's message and moves.
   details?: ReactNode;
-  // What the sidebar (and a phone's sheet) shows in place of the bare
-  // file list: the Git page's tabs, its Changes tab around this list and
-  // its History tab in place of it. Handed the list.
+  // What the sidebar (and a phone's sheet) shows around the file list
+  // or in its place: the Git page's tabs, which hold this list or a
+  // list of their own. Handed the list.
   renderSidebar?: (index: ReactNode) => ReactNode;
   // At the end of the sidebar's back row: the Git page's branch menu.
   sidebarActions?: ReactNode;
@@ -163,14 +157,10 @@ export function DiffPage({
     setWrapLines(next);
     writeStored(WRAP_STORAGE_KEY, String(next));
   };
-  const [collapsedKeys, setCollapsedKeys] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Draws only the rows near the view, in each file the pane mounts
-  // (DiffPane mounts only the files near it): a lockfile otherwise puts
-  // every row in the DOM up front and holds the window for seconds. A
-  // file keeps its full height, so the pane measures it as if every row
+  // Draws only the rows of the file near the view: a lockfile otherwise
+  // puts every row in the DOM up front and holds the window for seconds.
+  // The file keeps its full height, so the pane scrolls as if every row
   // were drawn.
   //
   // The list's ref arms it, on the list rather than the scroll area: the
@@ -202,43 +192,28 @@ export function DiffPage({
   const { resolved } = useLook();
   const loadSides = useDiffSides(worktree.projectId, worktree.id);
 
-  // Which of the two views this is. The changes page hands over one
-  // file's diff, the one its list picked, so the pane draws what it was
-  // given, holds no fold state and needs no scroll spy. A commit or PR
-  // diff hands over the whole patch, reads as one scroll, and its list
-  // is a map of that scroll.
-  const singleFile = changes !== undefined;
-  const filesLabel = singleFile ? "Changed files" : "Files in this patch";
+  const filesLabel = changes ? "Changed files" : "Files in this patch";
 
-  const { pathname, searchStr } = useLocation();
-  const parsedFiles = usePatchFiles(
-    patch,
-    `${pathname}${searchStr}\n${changes?.selectedKey ?? ""}`,
-  );
+  // Which patch the page is on. `list` only says what the sidebar
+  // shows, so it is no part of that.
+  const { pathname, search } = useLocation();
+  const page = `${pathname}${JSON.stringify({ ...search, list: undefined })}\n${changes?.selectedKey ?? ""}`;
+  const parsedFiles = usePatchFiles(patch, page);
   const allFiles = parsedFiles ?? NO_FILES;
-  const filesKey = allFiles.map(fileKey).join("\n");
-  // The file a combined read is on (DiffPane says as it scrolls), and
-  // the last file the index asked to be put at the top.
-  const [activeKey, setActiveKey] = useState<string | null>(null);
-  const [jump, setJump] = useState<{ key: string } | null>(null);
 
-  // Fold state is keyed by path, so it can only survive a patch whose
-  // file set is unchanged (a commit diff re-rendering). A different set
-  // of files is a different reading session.
-  const [seenFilesKey, setSeenFilesKey] = useState(filesKey);
-  if (seenFilesKey !== filesKey) {
-    setSeenFilesKey(filesKey);
-    if (collapsedKeys.size > 0) setCollapsedKeys(new Set());
-  }
+  // The file the pane shows: the one picked from a whole patch's list,
+  // kept while the next patch has it too (the same file in the next
+  // commit), and otherwise the patch's first, which is the changes
+  // page's one.
+  const [picked, setPicked] = useState<string | null>(null);
+  const shown =
+    allFiles.find((file) => fileKey(file) === picked) ?? allFiles[0];
+  const shownKey = shown && fileKey(shown);
 
   // A read-only patch lists its files once there are some. Until then
   // the pane says why there aren't, and the sidebar holds just the way
   // back rather than an empty list that would read as a clean patch.
-  const showIndex = singleFile || allFiles.length > 0;
-  const allCollapsed =
-    allFiles.length > 0 && collapsedKeys.size >= allFiles.length;
-  const toggleAll = () =>
-    setCollapsedKeys(allCollapsed ? new Set() : new Set(allFiles.map(fileKey)));
+  const showIndex = changes !== undefined || allFiles.length > 0;
 
   // What the file list holds: the patch's files on a read-only diff, git
   // status on the changes page.
@@ -247,39 +222,16 @@ export function DiffPage({
     : patchEntries(allFiles);
 
   // A fresh file starts at its own top, not at the scroll the last one
-  // was left at.
+  // was left at. A file read again as it changes keeps its place.
   useEffect(() => {
-    if (singleFile) scrollRef.current?.scrollTo({ top: 0 });
-  }, [singleFile, patch]);
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [page, shownKey]);
 
-  const setCollapsed = (key: string, collapsed: boolean) =>
-    setCollapsedKeys((prev) => withMember(prev, key, collapsed));
-
-  // What landing on a file means: the changes page fetches it, a
-  // combined read expands it, puts it at the top of the view and marks
-  // it in the index without waiting for the scroll to say so.
-  const selectFile = (key: string) => {
-    if (changes) {
-      changes.onSelect(key);
-      return;
-    }
-    setCollapsed(key, false);
-    setJump({ key });
-    setActiveKey(key);
-  };
-  // Which row the list marks: the picked path, or whatever the scroll
-  // has reached in a combined read.
-  const currentKey = changes ? changes.selectedKey : activeKey;
+  const selectFile = changes?.onSelect ?? setPicked;
   // What the sidebar's list and the phone's sheet both draw.
   const indexProps = {
     entries: indexEntries,
-    activeKey: currentKey,
-    collapsedKeys,
-    allCollapsed,
-    // Folding is a combined-read affordance: with one file in the pane
-    // there is nothing for it to collapse, so the header drops the
-    // control with its handler.
-    onToggleAll: singleFile ? undefined : toggleAll,
+    activeKey: changes ? changes.selectedKey : (shownKey ?? null),
     changes,
     footer,
     onOpen: openInEditor,
@@ -289,8 +241,8 @@ export function DiffPage({
   const sidebarWith = (index: ReactNode) =>
     renderSidebar ? renderSidebar(index) : index;
 
-  // Picking a file in the phone's sheet closes it and jumps, so the tap
-  // lands on the file itself.
+  // Picking a file in the phone's sheet closes it, so the tap lands on
+  // the file itself.
   const selectFromSheet = (key: string) => {
     setFileSheetOpen(false);
     selectFile(key);
@@ -300,43 +252,35 @@ export function DiffPage({
     scrollRef,
     files: allFiles,
     diffStyle,
-    toFile: (key) => {
-      setCollapsed(key, false);
-      setJump({ key });
-    },
+    // Only a whole patch has other files to go to.
+    toFile: setPicked,
   });
 
-  const rows = allFiles.map((fileDiff) => {
-    const key = fileKey(fileDiff);
-    return (
-      <DiffFileRowView
-        key={key}
-        fileDiff={fileDiff}
-        fileId={key}
-        collapsed={!singleFile && collapsedKeys.has(key)}
-        diffStyle={diffStyle}
-        wrapLines={wrapLines}
-        themeType={resolved}
-        // No fold control on a single file: it is the one you asked
-        // for, and folding it away would leave the pane blank with
-        // nothing to unfold it from.
-        onToggle={singleFile ? undefined : setCollapsed}
-        hunks={changes?.readOnly ? undefined : changes?.hunks}
-        busy={changes?.busy ?? false}
-        loadSides={namesBlobsInFull(fileDiff) ? loadSides : undefined}
-        media={
-          isMediaBinary(fileDiff) && (
-            <MediaDiff
-              projectId={worktree.projectId}
-              worktreeId={worktree.id}
-              fileDiff={fileDiff}
-              retry={retryMedia}
-            />
-          )
-        }
-      />
-    );
-  });
+  const row = shown && (
+    <DiffFileRowView
+      // A renderer of its own per file: pierre keeps the last file's
+      // rows up until the next one's are colored, and find would read
+      // them as the new file's.
+      key={shownKey}
+      fileDiff={shown}
+      diffStyle={diffStyle}
+      wrapLines={wrapLines}
+      themeType={resolved}
+      hunks={changes?.readOnly ? undefined : changes?.hunks}
+      busy={changes?.busy ?? false}
+      loadSides={namesBlobsInFull(shown) ? loadSides : undefined}
+      media={
+        isMediaBinary(shown) && (
+          <MediaDiff
+            projectId={worktree.projectId}
+            worktreeId={worktree.id}
+            fileDiff={shown}
+            retry={retryMedia}
+          />
+        )
+      }
+    />
+  );
 
   return (
     <HighlightWorkers>
@@ -359,10 +303,7 @@ export function DiffPage({
             subtitle={subtitle}
             subtitleEnd={subtitleEnd}
             files={
-              phone &&
-              (renderSidebar !== undefined ||
-                singleFile ||
-                allFiles.length >= SHEET_MIN_FILES)
+              phone
                 ? {
                     label: filesLabel,
                     count: indexEntries.length,
@@ -380,7 +321,7 @@ export function DiffPage({
         }
         findBar={find.bar}
         pane={
-          <DiffPane
+          <DiffPaneView
             scrollRef={scrollRef}
             listRef={listRef}
             // Until the status list answers, or the patch is parsed, an
@@ -400,19 +341,14 @@ export function DiffPage({
               // A picked file with no patch of its own (a mode change, or
               // content git won't diff) is not a clean tree and mustn't
               // borrow its wording.
-              singleFile && changes.files.length > 0
+              changes && changes.files.length > 0
                 ? "No text changes to show for this file."
                 : emptyMessage
             }
             virtualizer={virtualizer}
-            files={allFiles}
-            rows={rows}
-            collapsedKeys={collapsedKeys}
-            diffStyle={diffStyle}
-            wrapLines={wrapLines}
-            jump={jump}
-            onRead={singleFile ? undefined : setActiveKey}
-          />
+          >
+            {row}
+          </DiffPaneView>
         }
         sheet={
           phone && (
@@ -422,7 +358,9 @@ export function DiffPage({
               title={filesLabel}
             >
               {sidebarWith(
-                <DiffFileIndex {...indexProps} onSelect={selectFromSheet} />,
+                showIndex && (
+                  <DiffFileIndex {...indexProps} onSelect={selectFromSheet} />
+                ),
               )}
             </DiffFilesSheetView>
           )

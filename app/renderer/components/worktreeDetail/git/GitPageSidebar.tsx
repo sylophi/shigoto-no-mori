@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useWorktreeStashes } from "@/hooks/worktrees/useGitHistory";
 import { useWarmGitPages } from "@/hooks/worktrees/useWarmGitPages";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
@@ -12,21 +13,25 @@ import {
 import { StashList } from "./StashList";
 
 // The Git page's sidebar (GitPageSidebarView): its tabs are the
-// page's routes.
+// page's routes, and so is whether a picked stash or commit shows its
+// files or its tab's list (the routes' `list`).
 export function GitPageSidebar({
   worktree,
   tab,
   selected,
-  changes,
+  files,
 }: {
   worktree: Worktree;
   tab: GitTab;
   // On History, `branch` or `commit:<hash>`. On Stashes, the stash.
   selected?: string;
-  // The Changes tab's content: the file list and its footer.
-  changes?: ReactNode;
+  // The page's file list (on Changes, with its footer).
+  files?: ReactNode;
 }) {
   const nav = useWorktreeNav();
+  const navigate = useNavigate();
+  const { list } = useSearch({ strict: false }) as { list?: true };
+  const showsFiles = tab !== "changes" && !list && selected !== undefined;
   const warm = useWarmGitPages(worktree);
   const { projectId, id: worktreeId } = worktree;
   const head = worktree.recentCommits[0]?.hash;
@@ -39,10 +44,10 @@ export function GitPageSidebar({
         if (next === "changes") {
           nav.toDiff(projectId, worktreeId, { replace: true });
         } else if (next === "history" && head) {
-          nav.toCommit(projectId, worktreeId, head, true);
+          nav.toCommitList(projectId, worktreeId, head);
         } else if (next === "stashes") {
           if (newestStash) {
-            nav.toStash(projectId, worktreeId, newestStash, true);
+            nav.toStashList(projectId, worktreeId, newestStash);
           } else {
             nav.toStashes(projectId, worktreeId, true);
           }
@@ -57,7 +62,20 @@ export function GitPageSidebar({
       stashCount={stashes.length}
       hasHistory={head !== undefined}
       banner={<OperationBanner worktree={worktree} onGitPage />}
-      changes={changes}
+      files={files}
+      onBack={
+        showsFiles
+          ? () =>
+              void navigate({
+                to: ".",
+                search: (search: Record<string, unknown>) => ({
+                  ...search,
+                  list: true,
+                }),
+                replace: true,
+              } as never)
+          : undefined
+      }
       stashList={<StashList worktree={worktree} selected={selected} />}
       historyList={
         <HistoryList worktree={worktree} selected={selected ?? null} />

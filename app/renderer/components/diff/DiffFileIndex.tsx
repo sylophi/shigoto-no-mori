@@ -49,9 +49,9 @@ export function DiffFileIndex(props: Props) {
   });
 
   // Keep the highlighted row on screen: past a screenful the list is
-  // taller than its view, and a scroll spy's marker you can't see is no
-  // marker at all. "auto" is the least scroll that shows the row, so a
-  // row in view stays put and reading down a patch doesn't jitter.
+  // taller than its view, and find moves the pane to a file whose row
+  // may be out of it. "auto" is the least scroll that shows the row, so
+  // a row in view stays put.
   const reveal = useEffectEvent(() => {
     const index = matches.findIndex((entry) => entry.key === activeKey);
     if (index >= 0) virtualizer.scrollToIndex(index, { align: "auto" });

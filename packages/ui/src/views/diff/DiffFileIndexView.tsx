@@ -4,8 +4,6 @@ import {
   ArrowLeftToLine,
   ArrowRightToLine,
   Check,
-  ChevronsDownUp,
-  ChevronsUpDown,
   Copy,
   Ellipsis,
   FilePen,
@@ -45,14 +43,13 @@ import { countIncluded, tickedOf, type Ticked } from "./changesPicks.ts";
 import type { IndexEntry } from "../../lib/indexEntry.ts";
 
 // Below this many files a list is short enough to scan, and a filter
-// field (with a patch's fold-all beside it) would only be one more row
-// between the selected row of the Git page's timeline and its files.
+// field would only be one more row above them.
 const FILTER_MIN_FILES = 8;
 
-// The file list for a diff: every file in scroll order with its
-// change marker and +/- counts. Order is never re-ranked, which is why
-// the filter is a plain substring match and not lib/fuzzyMatch. The
-// list is a map of the scroll area and has to keep its order.
+// The file list for a diff: every file in the patch's order with its
+// change marker and +/- counts, the one the pane shows marked. Order is
+// never re-ranked, which is why the filter is a plain substring match
+// and not lib/fuzzyMatch.
 //
 // With `changes` it is also the changes list: a checkbox per row for
 // the file's index state, a select-all box and a discard menu in the
@@ -77,10 +74,7 @@ export function DiffFileIndexView({
   listRef,
   rowWindow,
   activeKey,
-  collapsedKeys,
   onSelect,
-  allCollapsed,
-  onToggleAll,
   changes,
   onOpen,
   footer,
@@ -93,12 +87,7 @@ export function DiffFileIndexView({
   listRef?: Ref<HTMLDivElement>;
   rowWindow?: IndexWindow;
   activeKey: string | null;
-  collapsedKeys: ReadonlySet<string>;
   onSelect: (key: string) => void;
-  allCollapsed: boolean;
-  // Absent when the pane shows one file at a time: there is no combined
-  // scroll to fold, so the header drops the control.
-  onToggleAll?: () => void;
   // Present on the changes page: makes this the changes list (above).
   changes?: DiffChangesControls;
   // Opens a file in the editor. Absent where the files aren't this
@@ -144,7 +133,6 @@ export function DiffFileIndexView({
       key={entry.key}
       entry={entry}
       active={entry.key === activeKey}
-      collapsed={collapsedKeys.has(entry.key)}
       menuOpen={menu?.open === true && menu.key === entry.key}
       onSelect={selectRow}
       onWarm={changes?.onWarm}
@@ -207,25 +195,10 @@ export function DiffFileIndexView({
             spellCheck={false}
             className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/70"
           />
-          {onToggleAll && (
-            <IconButton
-              size="xs"
-              onClick={onToggleAll}
-              aria-label={
-                allCollapsed ? "Expand all files" : "Collapse all files"
-              }
-            >
-              {allCollapsed ? (
-                <ChevronsUpDown aria-hidden className="size-3.5" />
-              ) : (
-                <ChevronsDownUp aria-hidden className="size-3.5" />
-              )}
-            </IconButton>
-          )}
         </div>
       )}
 
-      {changes && (
+      {changes ? (
         // The changes list's own header: the box that ticks every row,
         // what the ticks add up to, and the bulk actions, on its ⋯ and
         // on a right click anywhere on it. Nothing to tick or throw away
@@ -261,6 +234,12 @@ export function DiffFileIndexView({
           </ContextMenuTrigger>
           {bulkItems && <ContextMenuContent>{bulkItems}</ContextMenuContent>}
         </ContextMenu>
+      ) : (
+        entries.length > 0 && (
+          <p className="tabular pt-2 pr-2 pb-1 pl-3 text-xs leading-5 text-muted-foreground">
+            {pluralize(entries.length, "changed file")}
+          </p>
+        )
       )}
 
       <ContextMenu
@@ -554,7 +533,6 @@ export function DiscardConfirmView({
 function IndexRow({
   entry,
   active,
-  collapsed,
   menuOpen,
   onSelect,
   onWarm,
@@ -566,7 +544,6 @@ function IndexRow({
 }: {
   entry: IndexEntry;
   active: boolean;
-  collapsed: boolean;
   // Its context menu is up: the row stays lit while it is.
   menuOpen: boolean;
   onSelect: (key: string) => void;
@@ -605,7 +582,6 @@ function IndexRow({
           ? "bg-accent text-accent-foreground"
           : "hover:bg-accent/60 hover:text-foreground",
         menuOpen && !active && "bg-accent/50",
-        collapsed && "opacity-55",
       )}
     >
       {row && ticked && onSetTicked && (

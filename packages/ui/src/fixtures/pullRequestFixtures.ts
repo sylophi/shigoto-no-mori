@@ -627,8 +627,7 @@ const FAKE_PR_DETAIL = {
 };
 
 // Four files, so the diff pages pose a real file index (the list in
-// the sidebar on a wide viewport) and the phone's sheet, which needs a
-// patch of at least DiffPage's SHEET_MIN_FILES. One is an image, for
-// the preview of its two sides (fakeBlob in filesFixtures.ts). Git's
-// own output (patches.ts).
+// the sidebar on a wide viewport, the phone's sheet). One is an image,
+// for the preview of its two sides (fakeBlob in filesFixtures.ts).
+// Git's own output (patches.ts).
 export const FAKE_DIFF = COMMIT_PATCH;
