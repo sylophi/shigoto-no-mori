@@ -3,7 +3,7 @@
 // command also takes -p <project>, said once in the prose instead of on
 // every usage line. Help is data, and layout and color are computed.
 import type { flavorNames } from "@shigomori/engine/flavor";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byHostKind, byPlatform } from "@shigomori/engine/platform";
 import { commandName, projectVerb } from "./aliases.ts";
 import { splitAtDashes } from "./argv.ts";
 import { styles, type Styles } from "./output.ts";
@@ -33,9 +33,9 @@ const catalog = (names: Names) => {
         "The tools `open` offers, in the app's order (recent use, then label), hidden ones left out. --json prints {ok, entries: [{kind, id, label, available?}], hiddenCount, usage: {<id>: {lastUsed, recentCount}}}, kind being detected, custom or web. " +
           '--catalog lists every tool the app knows instead, installed or not, with no project needed: --json prints {ok, apps: [{kind: "detected", id: "app:<id>", label, available}]}, sorted by label case-insensitively.',
       ],
-      ...byPlatform<{ darwin: Item[]; linux: Item[] }>({
-        darwin: [["app", "Open the Shigoto no Mori app", ""]],
-        linux: [
+      ...byHostKind<{ app: Item[]; headless: Item[] }>({
+        app: [["app", "Open the Shigoto no Mori app", ""]],
+        headless: [
           [
             "login",
             "Sign this machine in to your account",
@@ -51,7 +51,7 @@ const catalog = (names: Names) => {
       [
         "devices [-p <project>]",
         "List your other devices",
-        `The machines signed in to your account, by the names --to and --from take. Inside a project (or with -p) each says whether it can take part in a send, bring or mirror, and if not, why. ${byPlatform({ darwin: "Needs the app open.", linux: "Needs the host running, signed in (`login`)." })}`,
+        `The machines signed in to your account, by the names --to and --from take. Inside a project (or with -p) each says whether it can take part in a send, bring or mirror, and if not, why. ${byHostKind({ app: "Needs the app open.", headless: "Needs the host running, signed in (`login`)." })}`,
       ],
       [
         "devices share [on|off]",
@@ -63,8 +63,8 @@ const catalog = (names: Names) => {
         "Let your other devices act on this one as you",
         "Runs their commands here: scripts and terminals, worktrees and mirrors into this device, files, ports and settings. Needs sharing on and an account signed in. Off by default, and off again after a sign-out.",
       ],
-      ...byPlatform<{ darwin: Item[]; linux: Item[] }>({
-        darwin: [
+      ...byHostKind<{ app: Item[]; headless: Item[] }>({
+        app: [
           [
             "devices reachable [on|off]",
             "Keep this device reachable",
@@ -72,7 +72,7 @@ const catalog = (names: Names) => {
           ],
         ],
         // The service keeps it reachable (`service`).
-        linux: [
+        headless: [
           [
             "devices rename <name>",
             "Rename this machine on your account",
@@ -90,13 +90,13 @@ const catalog = (names: Names) => {
           ],
         ],
       }),
-      byPlatform<{ darwin: Item; linux: Item }>({
-        darwin: [
+      byHostKind<{ app: Item; headless: Item }>({
+        app: [
           "update [--check]",
           "Update the app to the latest release",
           "Checks GitHub releases, downloads, verifies and installs without opening the app (the linked CLI updates with it), restarting a running app into the new version. --check only reports. A prerelease build takes any later prerelease or release, a release build only a later release.",
         ],
-        linux: [
+        headless: [
           "update [--check]",
           "Update the host to the latest release",
           "Checks GitHub releases, downloads, verifies and installs it (the linked CLI updates with it), restarting a running host into the new version. --check only reports. A prerelease build takes any later prerelease or release, a release build only a later release.",
@@ -105,12 +105,12 @@ const catalog = (names: Names) => {
       [
         "doctor [--fix] [--yes]",
         "Check the installation and data dir",
-        `Checks the environment, the data dir, each project, and the processes a crashed ${byPlatform({ darwin: "app", linux: "host" })} left running. Exits non-zero when anything failed. --fix applies only the safe repairs, asking before each one that deletes something (--yes skips the prompts), and reports anything else. A v2 data dir the app hasn't moved to v3 yet is read as v2 left it, and --fix moves it, as the app's start does.`,
+        `Checks the environment, the data dir, each project, and the processes a crashed ${byHostKind({ app: "app", headless: "host" })} left running. Exits non-zero when anything failed. --fix applies only the safe repairs, asking before each one that deletes something (--yes skips the prompts), and reports anything else. A v2 data dir the app hasn't moved to v3 yet is read as v2 left it, and --fix moves it, as the app's start does.`,
       ],
       [
         "data [move <folder> | reset]",
         "Show or move the data folder",
-        `Prints where it is. move puts it inside <folder> under its own name, and reset puts it back where it starts, as Settings' Data location does. Either stops every running script and restarts the ${byPlatform({ darwin: "app", linux: "host" })} into the new place. Refused while SHIGOMORI_DATA_DIR sets it. --json prints {ok, dataDir, dataDirSource, atDefaultDataDir}, and after a move {ok, dataDir}, null for a reset.`,
+        `Prints where it is. move puts it inside <folder> under its own name, and reset puts it back where it starts, as Settings' Data location does. Either stops every running script and restarts the ${byHostKind({ app: "app", headless: "host" })} into the new place. Refused while SHIGOMORI_DATA_DIR sets it. --json prints {ok, dataDir, dataDirSource, atDefaultDataDir}, and after a move {ok, dataDir}, null for a reset.`,
       ],
       byPlatform<{ darwin: Item; linux: Item }>({
         darwin: [
@@ -548,10 +548,9 @@ const namespacesOf = (bin: string, items: Catalog) => [
     items: items.shell,
     canon: (name: string) => name,
   },
-  // A Mac's app is its host, so only Linux has one to run as a service.
-  ...byPlatform({
-    darwin: [],
-    linux: [
+  ...byHostKind({
+    app: [],
+    headless: [
       {
         name: "service",
         desc: "The host, run by systemd",
@@ -684,7 +683,7 @@ export const helpPages = (look: HelpLook) => {
     ["Config", items.config],
     ["Agents", items.agents],
     ["Shell integration", items.shell],
-    ...byPlatform({ darwin: [], linux: [["Service", items.service] as const] }),
+    ...byHostKind({ app: [], headless: [["Service", items.service] as const] }),
     ["Flags", items.flags],
     ["Environment", items.environment],
   ];

@@ -42,7 +42,7 @@ import {
   mirrorContract,
   mirrorHereBlocker,
 } from "@shigomori/contracts/modules/mirror";
-import { byPlatform } from "@shigomori/engine/platform";
+import { hostKind } from "@shigomori/engine/platform";
 import * as HostAccount from "@host/lib/HostAccount";
 import * as Sharing from "@host/lib/Sharing";
 import * as PeerReach from "@host/ipc/PeerReach";
@@ -94,7 +94,7 @@ export const ownMirrorHereBlocker = Effect.gen(function* () {
       acceptsCommands: account.facts?.acceptsCommands === true,
       sharing: yield* (yield* Sharing.Sharing).current,
     },
-    byPlatform({ darwin: false, linux: true }),
+    hostKind() === "headless",
   );
 });
 

@@ -2,11 +2,11 @@
 // from the terminal, which is what a machine with no windows has for
 // the app's account page. The host does the work (the login contract):
 // it asks Clerk for a code, which the person approves from another
-// device. On a Mac the app's account page signs in. The rest of the
-// page is under `sm devices` (deviceCommands).
+// device. Where the app is the host, its account page signs in. The
+// rest of the page is under `sm devices` (deviceCommands).
 import { DEVICE_ICONS, isDeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { loginContract } from "@shigomori/contracts/modules/login";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byHostKind } from "@shigomori/engine/platform";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Argument from "effect/cli/Argument";
@@ -18,18 +18,18 @@ import { rest } from "../here.ts";
 import { emit, note, out, Output, styles } from "../output.ts";
 import { confirm, interactive } from "../prompt.ts";
 
-const onLinux = byPlatform({
-  darwin: Effect.fail(
+const headlessOnly = byHostKind({
+  app: Effect.fail(
     new UsageError({
       problem: "On a Mac you sign in from the app's account page.",
     }),
   ),
-  linux: Effect.void,
+  headless: Effect.void,
 });
 
 export const login = Command.make("login", { rest }, () =>
   Effect.gen(function* () {
-    yield* onLinux;
+    yield* headlessOnly;
     const { json, stdoutColor, stderrColor } = yield* Effect.service(Output);
     const app = (yield* Control.Control).client(loginContract);
     const status = yield* app.status();
@@ -58,7 +58,7 @@ export const login = Command.make("login", { rest }, () =>
 
 export const logout = Command.make("logout", { rest }, () =>
   Effect.gen(function* () {
-    yield* onLinux;
+    yield* headlessOnly;
     const { json } = yield* Effect.service(Output);
     const app = (yield* Control.Control).client(loginContract);
     const status = yield* app.status();
@@ -135,7 +135,7 @@ const remove = Command.make(
 );
 
 // What the account page sets that `sm devices` has no switch for.
-export const deviceCommands = byPlatform({
-  darwin: [],
-  linux: [rename, icon, remove],
+export const deviceCommands = byHostKind({
+  app: [],
+  headless: [rename, icon, remove],
 });

@@ -21,3 +21,20 @@ export const current = (): Platform => {
 export const byPlatform = <Cases extends { readonly [P in Platform]: unknown }>(
   cases: Cases,
 ): Cases[Platform] => cases[current()];
+
+// What hosts this machine: the desktop app, or a host run headless as a
+// service. Code that differs by that, not by the OS itself, picks its
+// case by host kind (byHostKind).
+type HostKind = "app" | "headless";
+
+const HOST_KINDS: { readonly [P in Platform]: HostKind } = {
+  darwin: "app",
+  linux: "headless",
+};
+
+export const hostKind = (): HostKind => HOST_KINDS[current()];
+
+// The case for this host kind, typed as any of them.
+export const byHostKind = <Cases extends { readonly [K in HostKind]: unknown }>(
+  cases: Cases,
+): Cases[HostKind] => cases[hostKind()];

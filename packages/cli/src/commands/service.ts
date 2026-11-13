@@ -1,12 +1,12 @@
 // sm service <install|uninstall|start|stop|restart|status|logs>: the
 // host of a Linux install, which the user's systemd runs as a unit
 // (engine hostUnit.ts): from boot, and again whenever it exits but for
-// a stop. On a Mac the app is the host, so there is none to manage.
+// a stop. Where the app is the host, there is none to manage.
 import { basename, join } from "node:path";
 import * as HostUnit from "@shigomori/engine/hostUnit";
 import { HOST_BUNDLE, linuxInstall } from "@shigomori/engine/linuxInstall";
 import * as Paths from "@shigomori/engine/Paths";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byHostKind } from "@shigomori/engine/platform";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
@@ -37,13 +37,13 @@ class NoService extends Schema.TaggedError<NoService>()("NoService", {
 
 const place = Effect.gen(function* () {
   const paths = yield* Paths.Paths;
-  return yield* byPlatform({
-    darwin: Effect.fail(
+  return yield* byHostKind({
+    app: Effect.fail(
       new UsageError({
         problem: "On a Mac the app runs the host, so there's no service.",
       }),
     ),
-    linux: Effect.succeed(linuxInstall(flavor, paths)),
+    headless: Effect.succeed(linuxInstall(flavor, paths)),
   });
 });
 

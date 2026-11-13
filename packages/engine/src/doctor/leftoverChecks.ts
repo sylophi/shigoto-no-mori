@@ -8,7 +8,7 @@ import { LOOPBACK_FILE, LoopbackFile } from "@shigomori/contracts/link";
 import * as ProcessTable from "../ProcessTable.ts";
 import { appFolders } from "../footprint.ts";
 import * as Paths from "../Paths.ts";
-import { byPlatform } from "../platform.ts";
+import { byHostKind } from "../platform.ts";
 import { pidAlive } from "../processes.ts";
 import * as RunningScripts from "../RunningScripts.ts";
 import { readTunnelPid, TUNNEL_PID_FILE } from "../tunnelPid.ts";
@@ -23,9 +23,9 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     const { flavor, binaryName } = paths;
     const { readText } = reads;
     // What stops a process the host left behind: its next start.
-    const STOPS_LEFTOVERS = byPlatform({
-      darwin: "Open the app, which stops",
-      linux: `Restart the host (\`${binaryName} service restart\`), which stops`,
+    const STOPS_LEFTOVERS = byHostKind({
+      app: "Open the app, which stops",
+      headless: `Restart the host (\`${binaryName} service restart\`), which stops`,
     });
     // The app records its cloudflared child's pid and kills a leftover one
     // at its next launch. Until then a tunnel whose app crashed keeps this

@@ -20,7 +20,7 @@ import {
 } from "@shigomori/contracts/modules/mirror";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byHostKind } from "@shigomori/engine/platform";
 import type { SyncCloneInto } from "@shigomori/contracts/modules/sync";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { tildify } from "@shigomori/contracts/projectPaths";
@@ -65,10 +65,10 @@ const probe = <A, E, R>(asked: Effect.Effect<A, E, R>, late: () => A) =>
 export const signedOut = () =>
   new ControlError(
     "signed-out",
-    `This device isn't signed in to an account, so it has no other devices to reach. ${byPlatform(
+    `This device isn't signed in to an account, so it has no other devices to reach. ${byHostKind(
       {
-        darwin: "Sign in from the app first.",
-        linux: "Sign in first (`login`).",
+        app: "Sign in from the app first.",
+        headless: "Sign in first (`login`).",
       },
     )}`,
   );

@@ -353,7 +353,7 @@ export function mirrorEngineBlocker(
 }
 
 // "Mirror here" has the peer write into this device, which both of this
-// device's switches must let it do. A host with no window (Linux) has
+// device's switches must let it do. A host with no window (headless) has
 // them turned on from its terminal, not an account page.
 export function mirrorHereBlocker(
   own: {
