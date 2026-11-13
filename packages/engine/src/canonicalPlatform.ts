@@ -72,9 +72,7 @@ const windows = Layer.merge(
 export const canonicalPlatform = <A, E, R>(
   platform: Layer.Layer<A | Path.Path | FileSystem.FileSystem, E, R>,
 ): Layer.Layer<A | Path.Path | FileSystem.FileSystem, E, R> =>
-  Layer.unwrap(
-    Effect.sync(() => {
-      const win32 = Layer.provideMerge(windows, platform);
-      return byPlatform({ darwin: platform, linux: platform, win32 });
-    }),
-  );
+  Layer.suspend(() => {
+    const win32 = Layer.provideMerge(windows, platform);
+    return byPlatform({ darwin: platform, linux: platform, win32 });
+  });

@@ -34,13 +34,7 @@ export function appendBrowsePathSegment(
 
 export function getBrowseParentPath(currentPath: string): string | null {
   const trimmed = currentPath.replace(TRAILING_SEPS, "");
-  if (
-    trimmed === "" ||
-    trimmed === "~" ||
-    pathRoot(`${trimmed}/`) === `${trimmed}/`
-  ) {
-    return null;
-  }
+  if (trimmed === "~" || pathRoot(`${trimmed}/`) === `${trimmed}/`) return null;
   const idx = trimmed.lastIndexOf("/");
   if (idx < 0) return null;
   // "/foo" parents to the root.
@@ -64,7 +58,7 @@ export function isAnchoredPath(value: string): boolean {
 
 export function normalizeForSubmit(value: string): string {
   const trimmed = value.trim();
-  if (trimmed.length <= 1 || trimmed === pathRoot(trimmed)) return trimmed;
+  if (trimmed === pathRoot(trimmed)) return trimmed;
   return trimmed.replace(TRAILING_SEPS, "");
 }
 
@@ -82,8 +76,8 @@ function pathRoot(path: string): string {
   return /^([A-Za-z]:)?\//.exec(path)?.[0] ?? "";
 }
 
-const isWindowsPath = (path: string) =>
-  /^([A-Za-z]:(\/|$)|\/\/[^/]+\/[^/])/.test(path);
+// Spelled with a drive or a share: a root longer than "/".
+const isWindowsPath = (path: string) => pathRoot(`${path}/`).length > 1;
 
 export function trimTrailingSlashes(path: string): string {
   return path.replace(TRAILING_SEPS, "");
