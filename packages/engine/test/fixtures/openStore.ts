@@ -4,7 +4,7 @@
 import { countEvents } from "./killAt.ts";
 
 countEvents();
-const NodeServices = await import("@effect/platform-node/NodeServices");
+const NodeServices = await import("../lib/nodeServices.ts");
 const Effect = await import("effect/Effect");
 const Layer = await import("effect/Layer");
 const SqlClient = await import("effect/sql/SqlClient");

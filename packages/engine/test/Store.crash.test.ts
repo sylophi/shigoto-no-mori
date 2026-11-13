@@ -17,8 +17,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import { dirname, join } from "../../../test/canonicalPaths.mts";
+import * as NodeServices from "./lib/nodeServices.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -75,7 +75,9 @@ write("file-sync/mirror-history.json", {
 
 const configured = (dir: string) =>
   ConfigProvider.layer(
-    ConfigProvider.fromEnv({ env: { HOME: dir, SHIGOMORI_DATA_DIR: dir } }),
+    ConfigProvider.fromEnv({
+      env: { HOME: dir, USERPROFILE: dir, SHIGOMORI_DATA_DIR: dir },
+    }),
   );
 
 // Every table but the migrator's own (its times) and the record of the

@@ -2,8 +2,8 @@
 // stands alone, its migration's reports heard by no one.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import { join } from "../../../../test/canonicalPaths.mts";
+import * as NodeServices from "./nodeServices.ts";
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Layer from "effect/Layer";
@@ -41,7 +41,11 @@ export const onStoreAt =
       Layer.provide(
         ConfigProvider.layer(
           ConfigProvider.fromEnv({
-            env: { HOME: dataDir, SHIGOMORI_DATA_DIR: dataDir },
+            env: {
+              HOME: dataDir,
+              USERPROFILE: dataDir,
+              SHIGOMORI_DATA_DIR: dataDir,
+            },
           }),
         ),
       ),

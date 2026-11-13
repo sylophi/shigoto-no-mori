@@ -8,12 +8,16 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import {
+  delimiter,
+  dirname,
+  join,
+  realpath,
+} from "../../../test/canonicalPaths.mts";
 import type { HandlerContext } from "../../shared/ipc/transport.ts";
 import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -192,7 +196,7 @@ export const scriptEnv = {
 // (macOS puts tmpdir behind a symlink, and git records the real path),
 // that the check's tracker removes.
 export function tempDir(prefix: string, track: Track): string {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
+  const dir = realpath(mkdtempSync(join(tmpdir(), prefix)));
   track(() => rmSync(dir, { recursive: true, force: true }));
   return dir;
 }

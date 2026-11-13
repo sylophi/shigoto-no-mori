@@ -12,6 +12,7 @@ import { canonicalPath } from "./canonicalPath.ts";
 import { type Flavor, flavorNames } from "./flavor.ts";
 import { rescueStrandedMove } from "./dataDirMoveJournal.ts";
 import { isAbsent, isNotFound } from "./platformErrors.ts";
+import { byPlatform } from "./platform.ts";
 
 // The pointer file as it was read: the file, the target it names, and
 // why that target was refused (empty when it wasn't).
@@ -107,7 +108,9 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
   const names = flavorNames(flavor);
   // Unset reads as the working directory.
   const home = canonicalPath(
-    yield* Config.String("HOME").pipe(Config.withDefault(".")),
+    yield* Config.String(
+      byPlatform({ darwin: "HOME", linux: "HOME", win32: "USERPROFILE" }),
+    ).pipe(Config.withDefault(".")),
   );
   const expandHome = (target: string) =>
     expandHomeIn(home, canonicalPath(target));

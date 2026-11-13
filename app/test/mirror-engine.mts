@@ -23,7 +23,7 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join } from "../../test/canonicalPaths.mts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import { RemoteCallError } from "@shigomori/contracts/errors";

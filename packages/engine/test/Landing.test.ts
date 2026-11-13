@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join } from "../../../test/canonicalPaths.mts";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, describe, it } from "vitest";

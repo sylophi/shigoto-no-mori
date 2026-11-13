@@ -5,8 +5,8 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join, realpath } from "../../../test/canonicalPaths.mts";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { afterEach, beforeEach, it, onTestFinished } from "vitest";
@@ -187,7 +187,7 @@ it("carries the id of a worktree git moved before a crash, by the move's record"
   const { repo, v2, wt } = v2Project();
   await state();
   const oldId = worktreeIdFromPath(join(v2, "c"));
-  const link = realpathSync(join(repo, ".git", "worktrees", "c"));
+  const link = realpath(join(repo, ".git", "worktrees", "c"));
   box.git(repo, "worktree", "unlock", join(v2, "c"));
   box.git(repo, "worktree", "move", join(v2, "c"), join(wt, "c"));
   const after = (await box.engine(

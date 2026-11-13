@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import { join } from "../../../test/canonicalPaths.mts";
+import * as NodeServices from "./lib/nodeServices.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -23,7 +23,9 @@ const resolve = () =>
       Paths.layer("prod").pipe(
         Layer.provide(NodeServices.layer),
         Layer.provide(
-          ConfigProvider.layer(ConfigProvider.fromEnv({ env: { HOME: home } })),
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({ env: { HOME: home, USERPROFILE: home } }),
+          ),
         ),
       ),
     ),

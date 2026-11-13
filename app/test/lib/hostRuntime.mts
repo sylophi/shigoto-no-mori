@@ -3,16 +3,10 @@
 // instead of waiting for a graph that never comes (EFFECT.md, runtime
 // boundaries). Every proof's file starts and disposes it (hostSetup.mts),
 // and a bench under plain node disposes it itself.
-import {
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import { join, realpath } from "../../../test/canonicalPaths.mts";
+import * as NodeServices from "@shared/nodeServices";
 import { childDefaults } from "@shigomori/engine/processes";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -54,7 +48,7 @@ import { nativefs } from "../../../packages/engine/test/lib/nativefs.ts";
 // A proof that drives the host's engine calls points the host's own
 // data dir (initDataDirAt) at it too.
 export const engineDataDir = join(
-  realpathSync(mkdtempSync(join(tmpdir(), "sm-proof-data-"))),
+  realpath(mkdtempSync(join(tmpdir(), "sm-proof-data-"))),
   "data",
 );
 

@@ -8,13 +8,12 @@ import {
   chmodSync,
   existsSync,
   mkdtempSync,
-  realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, realpath } from "../../../test/canonicalPaths.mts";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Doctor from "../src/Doctor.ts";
@@ -151,7 +150,7 @@ it("prunes nothing while a managed folder can't be listed", async () => {
 
 it("prunes nothing it couldn't see when the filesystem helper fails", async () => {
   // A helper that can't lstat, as one that can't run would be.
-  const bin = realpathSync(mkdtempSync(join(tmpdir(), "engine-nativefs-")));
+  const bin = realpath(mkdtempSync(join(tmpdir(), "engine-nativefs-")));
   const broken = join(bin, "nativefs");
   writeFileSync(
     broken,

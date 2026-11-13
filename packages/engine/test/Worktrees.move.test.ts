@@ -4,7 +4,7 @@
 // whose id holds one leaves it (real git on a sandbox data dir).
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join } from "../../../test/canonicalPaths.mts";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import { afterEach, beforeEach, it } from "vitest";

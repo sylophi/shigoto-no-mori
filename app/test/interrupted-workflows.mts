@@ -28,7 +28,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join } from "../../test/canonicalPaths.mts";
 import * as Schema from "effect/Schema";
 import { afterAll, it } from "vitest";
 import {
