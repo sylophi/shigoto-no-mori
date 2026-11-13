@@ -19,6 +19,7 @@ import { changing } from "@host/lib/Engine";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import { GithubCli } from "@host/lib/githubCli/GithubCli";
 import * as Scripts from "@host/lib/Scripts";
+import { Terminals } from "@host/lib/terminals/Terminals";
 import { bookingScripts } from "@host/lib/worktrees/documents";
 import { addProject, findProject, listedProjects } from "./index";
 
@@ -184,9 +185,10 @@ export const removeProject = Effect.fn("projects.remove")((id: string) =>
   ),
 );
 
-// Its scripts are stopped once nothing refuses the delete, as a
-// worktree's removal stops them, and the worktrees' teardowns are told
-// to `notify`.
+// Its scripts are stopped and its terminals closed once nothing refuses
+// the delete, as a worktree's removal stops them, since Windows deletes
+// no folder a process works in. The worktrees' teardowns are told to
+// `notify`.
 export const deleteProject = Effect.fn("projects.delete")(
   (id: string, notify: Scripts.NotifyScriptEvent) =>
     removing(id, (scripts) =>
@@ -195,6 +197,7 @@ export const deleteProject = Effect.fn("projects.delete")(
         const project = yield* findProject(id);
         yield* projects.checkDeletable(project);
         yield* scripts.stopProject(id);
+        yield* (yield* Terminals).closeOf({ projectId: id });
         yield* bookingScripts(scripts, notify, (reporter) =>
           projects.removeWithFiles(project, reporter),
         );

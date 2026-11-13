@@ -328,6 +328,12 @@ export class Terminals extends Context.Service<
     readonly closeMissing: (
       gone: (projectId: string) => boolean,
     ) => Effect.Effect<void>;
+    // Closes the terminals of a worktree, or of every worktree of a
+    // project, none saved for the next start: what its delete takes.
+    readonly closeOf: (owner: {
+      readonly projectId: string;
+      readonly worktreeId?: string;
+    }) => Effect.Effect<void>;
     // Closes every terminal, none saved for the next start (a nuke).
     readonly closeEvery: Effect.Effect<void>;
     // How many terminals run something in the foreground: what a quit
@@ -1009,6 +1015,19 @@ const make = <R, E>(options: {
           }
         }
         yield* closeAll((session) => missing.has(session.terminal.terminalId));
+      }),
+      closeOf: Effect.fn("Terminals.closeOf")(function* ({
+        projectId,
+        worktreeId,
+      }: {
+        readonly projectId: string;
+        readonly worktreeId?: string;
+      }) {
+        yield* closeAll(
+          ({ terminal }) =>
+            terminal.projectId === projectId &&
+            (worktreeId === undefined || terminal.worktreeId === worktreeId),
+        );
       }),
       closeEvery: closeAll(() => true),
     });

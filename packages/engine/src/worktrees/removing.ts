@@ -15,8 +15,6 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
-import * as ChildProcess from "effect/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { movedSourceChange } from "@shigomori/contracts/movedSource";
@@ -24,12 +22,15 @@ import type { MovedSource } from "@shigomori/contracts/schemas";
 import * as Config from "../Config.ts";
 import * as Dirty from "../Dirty.ts";
 import * as Git from "../Git.ts";
+import { HoldersOnDelete } from "../HoldersOnDelete.ts";
 import {
   type DeleteEnd,
   MirrorsOnDelete,
   type Stopped,
 } from "../MirrorsOnDelete.ts";
+import { removeEmptyFolder } from "../entries.ts";
 import * as Paths from "../Paths.ts";
+import { byPlatform } from "../platform.ts";
 import { isNotFound } from "../platformErrors.ts";
 import { ownedLevels } from "../worktreeLayout.ts";
 import {
@@ -76,6 +77,15 @@ const stopMirrors = (projectId: string, worktree: WorktreeIdentity) =>
           ),
   );
 
+// What the app runs in the worktree let go before its files go
+// (HoldersOnDelete.ts).
+const releaseHolders = (projectId: string, worktree: WorktreeIdentity) =>
+  Effect.flatMap(Effect.serviceOption(HoldersOnDelete), (holders) =>
+    Option.isNone(holders)
+      ? Effect.void
+      : holders.value.release({ projectId, worktreeId: worktree.id }),
+  );
+
 export const makeRemoving = ({
   listing,
   creating,
@@ -88,7 +98,6 @@ export const makeRemoving = ({
   Effect.gen(function* () {
     const git = yield* Git.Git;
     const dirty = yield* Dirty.Dirty;
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const config = yield* Config.Config;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -144,13 +153,20 @@ export const makeRemoving = ({
       );
 
     // rm -rf, retried for a few seconds while a folder keeps refilling: the
-    // writer that defeated git's sweep may still be landing files.
+    // writer that defeated git's sweep may still be landing files. On
+    // Windows also while a file or folder is held, as an antivirus or the
+    // indexer holds one for a moment. A hold that outlasts the tries (a
+    // process working in the folder) fails the wipe with it.
     const wipe = (dir: string) =>
       fs.remove(dir, { recursive: true, force: true }).pipe(
         Effect.retry({
           while: (error) =>
             Predicate.hasProperty(error.cause, "code") &&
-            error.cause.code === "ENOTEMPTY",
+            byPlatform({
+              darwin: ["ENOTEMPTY"],
+              linux: ["ENOTEMPTY"],
+              win32: ["ENOTEMPTY", "EBUSY", "EPERM"],
+            }).includes(String(error.cause.code)),
           // Five seconds in tries, which no clock step shortens.
           schedule: Schedule.spaced("250 millis").pipe(
             Schedule.upTo({ times: 20 }),
@@ -239,14 +255,10 @@ export const makeRemoving = ({
             ),
           ),
         );
-        // rmdir, which takes only an empty folder: something written there
-        // since keeps it.
+        // Each only when empty: something written there since keeps it.
         let dir = parent;
         for (let level = 0; level < levels; level++) {
-          const code = yield* spawner.exitCode(
-            ChildProcess.make("rmdir", [dir]),
-          );
-          if (code !== 0) return;
+          if (!(yield* removeEmptyFolder(dir))) return;
           dir = path.dirname(dir);
         }
       }).pipe(Effect.ignore);
@@ -458,9 +470,11 @@ export const makeRemoving = ({
       // side is done (an orphaned checkout's too), the rest goes before
       // anything can cut in: what is kept under the id, which a worktree
       // made at the same path later would take over, and the branch, which
-      // nothing would remove after an interrupt (a Ctrl-C, a quit).
+      // nothing would remove after an interrupt (a Ctrl-C, a quit). What
+      // the app runs in it lets go first.
       const removed = yield* Effect.uninterruptible(
         Effect.gen(function* () {
+          yield* releaseHolders(project.id, worktree);
           end = "kept";
           const checkout: Effect.Effect<
             void,
