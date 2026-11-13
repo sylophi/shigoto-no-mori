@@ -13,7 +13,7 @@ import { pidAlive } from "../processes.ts";
 import * as RunningScripts from "../RunningScripts.ts";
 import { readTunnelPid, TUNNEL_PID_FILE } from "../tunnelPid.ts";
 import { check } from "./documents.ts";
-import type { ReadsArea } from "./reads.ts";
+import { CHECK_TIMEOUT, type ReadsArea } from "./reads.ts";
 
 export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
   Effect.gen(function* () {
@@ -36,10 +36,9 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       if (Option.isNone(raw)) return [];
       const pid = readTunnelPid(raw.value);
       if (pid === undefined || pid < 2) return [];
-      // reads.run's bound on a check's program.
       const found = yield* processTable
         .identify(pid)
-        .pipe(Effect.timeoutOption("15 seconds"), Effect.map(Option.flatten));
+        .pipe(Effect.timeoutOption(CHECK_TIMEOUT), Effect.map(Option.flatten));
       // Gone, which is the ordinary case.
       if (Option.isNone(found)) return [];
       const { parent, name } = found.value;

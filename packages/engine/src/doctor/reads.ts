@@ -11,15 +11,17 @@ import { findExecutable } from "../executables.ts";
 import { isNotFound } from "../platformErrors.ts";
 import { exec } from "../processes.ts";
 
+// How long a check waits on a program: gh asks GitHub, and a network
+// that drops packets would hold the doctor for good.
+export const CHECK_TIMEOUT = "15 seconds";
+
 export const makeReads = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const nativeFs = yield* NativeFs.NativeFs;
-  // A program run to its exit. A check waits on nothing longer: gh asks
-  // GitHub, and a network that drops packets would hold the doctor for
-  // good.
+  // A program run to its exit, within CHECK_TIMEOUT.
   const run = (command: string, args: ReadonlyArray<string>) =>
-    exec(command, args, { timeout: "15 seconds" }).pipe(
+    exec(command, args, { timeout: CHECK_TIMEOUT }).pipe(
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
     );
 
