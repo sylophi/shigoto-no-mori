@@ -15,6 +15,7 @@ import {
   type ScriptRunSlot,
 } from "@shigomori/contracts/schemas";
 import { scriptEnvOf, UNATTENDED_ENV } from "@shigomori/contracts/scriptEnv";
+import * as Shells from "@shigomori/engine/Shells";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -200,6 +201,7 @@ export const makeRuns = ({
     const sweep = yield* OrphanSweep;
     const { announce } = yield* ScriptChanges;
     const trees = yield* ProcessTrees.ProcessTrees;
+    const shells = yield* Shells.Shells;
     const ptyRuns = new Map<string, RunRecord>();
     const lifecycle = new Map<string, LifecycleRun>();
     // For the records forward, a synchronous callback, makes.
@@ -362,6 +364,7 @@ export const makeRuns = ({
 
       const { pty, close } = yield* scriptRuns
         .open({
+          shell: yield* shells.script,
           command: args.command,
           cwd: args.worktree.path,
           env,

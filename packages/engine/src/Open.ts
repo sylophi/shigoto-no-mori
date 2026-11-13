@@ -15,13 +15,13 @@ import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Config from "./Config.ts";
 import * as Launchers from "./Launchers.ts";
-import * as Lifecycle from "./Lifecycle.ts";
 import { flavorNames } from "./flavor.ts";
 import * as Paths from "./Paths.ts";
 import { openEnvArgs } from "./relaunchEnv.ts";
 import { errnoText, isAbsent } from "./platformErrors.ts";
 import { byPlatform } from "./platform.ts";
 import { exec } from "./processes.ts";
+import * as Shells from "./Shells.ts";
 import { NO_SCREEN, screenOpener } from "./screen.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
@@ -231,7 +231,7 @@ const make = Effect.gen(function* () {
   const paths = yield* Paths.Paths;
   const { flavor } = paths;
   const launchers = yield* Launchers.Launchers;
-  const lifecycle = yield* Lifecycle.Lifecycle;
+  const shells = yield* Shells.Shells;
   const worktrees = yield* Worktrees.Worktrees;
   const usage = yield* Usage.Usage;
   const config = yield* Config.Config;
@@ -362,7 +362,7 @@ const make = Effect.gen(function* () {
         case "custom": {
           // Started in its own session and left running, the worktree's
           // script variables set.
-          const { shell, args } = yield* lifecycle.loginShell;
+          const { program, args } = yield* shells.script;
           const context = yield* worktrees.scriptContext(located);
           return yield* Effect.scoped(
             Effect.gen(function* () {
@@ -372,7 +372,7 @@ const make = Effect.gen(function* () {
                   [
                     "-c",
                     `"$0" "$@" </dev/null >/dev/null 2>&1 &`,
-                    shell,
+                    program,
                     ...args,
                     "-c",
                     entry.command,

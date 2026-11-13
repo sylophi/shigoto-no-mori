@@ -1,11 +1,10 @@
 // The lifecycle scripts a worktree runs as it is made and removed: the
 // project's setup and teardown, and port-pool's provision and release.
-// Each runs to its end in the user's login shell, in the worktree, with
-// the SHIGOMORI_* variables (packages/contracts scriptEnv) and the
-// unattended-run settings, and every step is reported as the document
-// `sm --json` prints for it, so the terminal and the host relay the same
-// events.
-import { loginShellOf } from "@shigomori/contracts/loginShell";
+// Each runs to its end in the script shell (Shells.ts), in the
+// worktree, with the SHIGOMORI_* variables (packages/contracts
+// scriptEnv) and the unattended-run settings, and every step is
+// reported as the document `sm --json` prints for it, so the terminal
+// and the host relay the same events.
 import { scriptEnvOf, UNATTENDED_ENV } from "@shigomori/contracts/scriptEnv";
 import {
   lifecycleScriptName,
@@ -21,9 +20,9 @@ import * as Result from "effect/Result";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { envVar } from "./environment.ts";
 import { fileUntilExit } from "./processes.ts";
 import * as Paths from "./Paths.ts";
+import * as Shells from "./Shells.ts";
 import { scriptOutputDir, scriptOutputPath } from "./scriptOutput.ts";
 
 // Where a lifecycle step stands, as `sm --json` reports it.
@@ -85,14 +84,6 @@ export class Lifecycle extends Context.Service<
       readonly code: number | null;
       readonly runId: string;
     }>;
-    // The user's login shell, and what makes it one (`-l`, or none for
-    // /bin/sh, when no shell is named). A command line runs in it with
-    // `-c` after, and without one it is a terminal's. The app's scripts
-    // and terminals start in it too.
-    readonly loginShell: Effect.Effect<{
-      readonly shell: string;
-      readonly args: ReadonlyArray<string>;
-    }>;
   }
 >()("sm/engine/Lifecycle") {}
 
@@ -101,37 +92,7 @@ const make = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const fs = yield* FileSystem.FileSystem;
   const paths = yield* Paths.Paths;
-
-  // The user's login shell (contracts' loginShellOf), run as one (no -i)
-  // so .zprofile sets PATH up without zsh's interactive init. The
-  // account's reading is the GUI case: a process launchd started may
-  // carry no $SHELL at all. /bin/sh only when neither names one.
-  const accountShell = spawner
-    .string(
-      ChildProcess.make("/bin/sh", [
-        "-c",
-        `dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null || getent passwd "$(id -u)" | cut -d: -f7`,
-      ]),
-    )
-    .pipe(
-      // Cached for the service's life, so a lookup that never answers
-      // must not hold every launch after it.
-      Effect.timeout("5 seconds"),
-      Effect.map((out) => out.replace(/^UserShell:/, "").trim()),
-      Effect.orElseSucceed(() => ""),
-    );
-  const loginShell = yield* Effect.cached(
-    Effect.gen(function* () {
-      const found = yield* loginShellOf({
-        environment: "own",
-        shellVar: yield* envVar("SHELL"),
-        account: accountShell,
-      });
-      return found === ""
-        ? { shell: "/bin/sh", args: [] }
-        : { shell: found, args: ["-l"] };
-    }),
-  );
+  const shells = yield* Shells.Shells;
 
   const run = Effect.fn("Lifecycle.run")(function* (input: RunInput) {
     const { context, slot, report } = input;
@@ -149,7 +110,7 @@ const make = Effect.gen(function* () {
       });
     const exit = (code: number | null) =>
       script({ runId, kind: "exit", code }).pipe(Effect.as({ code, runId }));
-    const { shell, args } = yield* loginShell;
+    const { program, args } = yield* shells.script;
     // The run's output goes to a file, the worktree's last of this
     // script, not to pipes: a child the script leaves in the background
     // keeps writing there, findable after, and holds nothing of this
@@ -169,15 +130,15 @@ const make = Effect.gen(function* () {
       yield* fs.remove(output, { force: true });
       yield* fs.writeFileString(output, "");
       return yield* spawner.spawn(
-        // A POSIX shell opens the file and becomes the login shell with
-        // it as stdout and stderr, whatever shell the user runs.
+        // A POSIX shell opens the file and becomes the script shell
+        // with it as stdout and stderr, whatever shell that is.
         ChildProcess.make(
           "/bin/sh",
           [
             "-c",
             'exec "$@" >>"$0" 2>&1',
             output,
-            shell,
+            program,
             ...args,
             "-c",
             input.command,
@@ -246,7 +207,7 @@ const make = Effect.gen(function* () {
     );
   });
 
-  return Lifecycle.of({ run, loginShell });
+  return Lifecycle.of({ run });
 });
 
 export const layer = Layer.effect(Lifecycle, make);
