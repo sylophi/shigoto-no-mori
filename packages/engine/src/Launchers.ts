@@ -147,9 +147,8 @@ const launchersOf = (
   };
 };
 
-// Where an installed .app can live, in the order they are looked in,
-// and whether Finder is there, as it always is on a Mac. Linux has
-// neither: its launchers are the tools found on PATH.
+// Where an installed .app can live, in the order they are looked in.
+// Linux has none: its launchers are the tools found on PATH.
 export const appFoldersOf = (path: Path.Path, home: string) =>
   byPlatform({
     darwin: [
@@ -159,7 +158,6 @@ export const appFoldersOf = (path: Path.Path, home: string) =>
     ],
     linux: [],
   });
-const FINDER = byPlatform({ darwin: true, linux: false });
 
 const apps: ReadonlyArray<CatalogApp> = catalog;
 
@@ -173,6 +171,8 @@ const make = Effect.gen(function* () {
   const settings = yield* EngineConfig.Config;
   const usage = yield* Usage.Usage;
   const appFolders = appFoldersOf(path, home);
+  // Whether Finder is there, as it always is on a Mac.
+  const finder = byPlatform({ darwin: true, linux: false });
   // The provider the engine was built with, not the caller's: a fiber
   // with none set reads a copy of the environment taken once.
   const configProvider = yield* ConfigProvider.ConfigProvider;
@@ -193,7 +193,7 @@ const make = Effect.gen(function* () {
   const available = (app: CatalogApp) =>
     Effect.gen(function* () {
       for (const bundle of app.bundleNames ?? []) {
-        if (bundle === "__finder__") return FINDER;
+        if (bundle === "__finder__") return finder;
         for (const folder of appFolders) {
           if (yield* exists(path.join(folder, bundle))) return true;
         }
@@ -278,7 +278,7 @@ const make = Effect.gen(function* () {
   const bundleOf = (app: CatalogApp) =>
     Effect.gen(function* () {
       for (const bundle of app.bundleNames ?? []) {
-        if (bundle === "__finder__") return FINDER ? bundle : undefined;
+        if (bundle === "__finder__") return finder ? bundle : undefined;
         for (const folder of appFolders) {
           const found = path.join(folder, bundle);
           if (yield* exists(found)) return found;

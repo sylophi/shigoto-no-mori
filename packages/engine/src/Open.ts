@@ -20,13 +20,16 @@ import * as Paths from "./Paths.ts";
 import { openEnvArgs } from "./relaunchEnv.ts";
 import { errnoText, isAbsent } from "./platformErrors.ts";
 import { byPlatform } from "./platform.ts";
-import { exec } from "./processes.ts";
 import * as Shells from "./Shells.ts";
-import { NO_SCREEN, screenOpener } from "./screen.ts";
-import { errorMessageOf } from "@shigomori/contracts/errors";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import * as Usage from "./Usage.ts";
 import * as Worktrees from "./Worktrees.ts";
+import { makeCommands } from "./open/commands.ts";
+import type { Desktop } from "./open/desktop.ts";
+import { LaunchFailed } from "./open/documents.ts";
+import { makeLaunchServices } from "./open/launchServices.ts";
+import { makeXdg } from "./open/xdg.ts";
+export { LaunchFailed } from "./open/documents.ts";
 
 // No launcher of the project's goes by `tool`.
 export class UnknownLauncher extends Schema.TaggedError<UnknownLauncher>()(
@@ -39,16 +42,6 @@ export class UnknownLauncher extends Schema.TaggedError<UnknownLauncher>()(
 
   override get message(): string {
     return `Unknown tool ${JSON.stringify(this.tool)}. Available: ${this.labels.join(", ")}.`;
-  }
-}
-
-// The launcher wouldn't open, in the words of what refused.
-export class LaunchFailed extends Schema.TaggedError<LaunchFailed>()(
-  "LaunchFailed",
-  { label: Schema.String, said: Schema.String },
-) {
-  override get message(): string {
-    return `Couldn't open ${this.label}: ${this.said}`;
   }
 }
 
@@ -101,65 +94,6 @@ export class NoAppWindow extends Schema.TaggedError<NoAppWindow>()(
     return "On Linux the app is its host, with no window to open: open this machine from the app on another device.";
   }
 }
-
-// How each terminal runs a command line, as an AppleScript taking it as
-// its one argument: into a new window, or into the first one a terminal
-// opened as it launched.
-const terminalScript = (
-  app: string,
-  intoNewWindow: string,
-  intoLaunchWindow: string,
-) => `on run argv
-	set cmd to item 1 of argv
-	set wasRunning to application "${app}" is running
-	tell application "${app}"
-		if not wasRunning then
-			repeat 100 times
-				if (count of windows) > 0 then exit repeat
-				delay 0.05
-			end repeat
-		end if
-		if not wasRunning and (count of windows) > 0 then
-			${intoLaunchWindow}
-		else
-			${intoNewWindow}
-		end if
-		activate
-	end tell
-end run`;
-
-const TERMINAL_SCRIPTS: Readonly<Record<string, string>> = {
-  terminal: terminalScript(
-    "Terminal",
-    "do script cmd",
-    "do script cmd in window 1",
-  ),
-  iterm: terminalScript(
-    "iTerm",
-    "tell current session of (create window with default profile) to write text cmd",
-    "tell current session of current window to write text cmd",
-  ),
-  ghostty: terminalScript(
-    "Ghostty",
-    `set cfg to new surface configuration
-			set initial input of cfg to cmd & linefeed
-			new window with configuration cfg`,
-    `set t to focused terminal of selected tab of front window
-			input text cmd to t
-			send key "enter" to t`,
-  ),
-  cmux: `on run argv
-	set cmd to item 1 of argv
-	tell application "cmux"
-		set w to new tab
-		select tab w
-		input text (cmd & linefeed) to focused terminal of w
-		activate
-	end tell
-end run`,
-};
-
-const DEFAULT_TERMINAL = "terminal";
 
 // A path as Go's url.QueryEscape writes it into a deep link.
 const queryEscape = (text: string) =>
@@ -235,39 +169,12 @@ const make = Effect.gen(function* () {
   const worktrees = yield* Worktrees.Worktrees;
   const usage = yield* Usage.Usage;
   const config = yield* Config.Config;
-
-  // Runs a program to its exit: its exit code, and what it printed.
-  const ran = (program: string, args: ReadonlyArray<string>) =>
-    exec(program, args, { all: true, anyExit: true }).pipe(
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-      Effect.map(({ code, stdout }) => ({ code, output: stdout.trim() })),
-      Effect.catch(({ cause }) =>
-        Effect.succeed({ code: -1, output: errorMessageOf(cause) }),
-      ),
-    );
-
-  // `open` and the like: done once it exits 0.
-  const run = (label: string, program: string, args: ReadonlyArray<string>) =>
-    Effect.flatMap(ran(program, args), ({ code, output }) =>
-      code === 0
-        ? Effect.void
-        : Effect.fail(
-            new LaunchFailed({
-              label,
-              said: code === -1 ? output : `exit status ${code}`,
-            }),
-          ),
-    );
-
-  // What `args` name, opened on this machine's screen.
-  const onScreen = (label: string, args: ReadonlyArray<string>) =>
-    Effect.flatMap(
-      screenOpener,
-      Option.match({
-        onNone: () => Effect.fail(new LaunchFailed({ label, said: NO_SCREEN })),
-        onSome: (opener) => run(label, opener, args),
-      }),
-    );
+  const commands = yield* makeCommands;
+  const { ran, onScreen } = commands;
+  const desktop: Desktop = yield* byPlatform({
+    darwin: makeLaunchServices(commands),
+    linux: makeXdg(commands),
+  });
 
   // A terminal tool's command line, run in a folder or a worktree in
   // `picked`, else the user's chosen terminal: a worktree's in the app
@@ -306,49 +213,13 @@ const make = Effect.gen(function* () {
           );
       }
       const folder = typeof where === "string" ? where : where.worktree.path;
-      return yield* byPlatform({
-        darwin: inTerminalApp(label, command, folder, chosen, entries),
-        linux: Effect.fail(
-          new LaunchFailed({
-            label,
-            said: `Linux has no terminal app for sm to open, so run \`${command}\` in a terminal of your own`,
-          }),
-        ),
-      });
-    });
-
-  // The command line in a new window of the chosen terminal app, driven
-  // by AppleScript.
-  const inTerminalApp = (
-    label: string,
-    command: string,
-    folder: string,
-    chosen: string,
-    entries?: ReadonlyArray<Launchers.Launchable>,
-  ) =>
-    Effect.gen(function* () {
-      const installed =
-        TERMINAL_SCRIPTS[chosen] === undefined
-          ? undefined
-          : entries === undefined
-            ? yield* launchers.installed(chosen)
-            : entries.find(
-                (entry) => entry.kind === "detected" && entry.app.id === chosen,
-              );
-      const id = installed === undefined ? DEFAULT_TERMINAL : chosen;
-      const terminal = installed?.label ?? "Terminal";
-      const { code, output } = yield* ran("osascript", [
-        "-e",
-        TERMINAL_SCRIPTS[id] ?? "",
-        `cd ${shellQuote(folder)}\n${command}`,
-      ]);
-      if (code === 0) return;
-      const said = output.includes("(-1743)")
-        ? `macOS blocked controlling ${terminal}. Allow it in System Settings > Privacy & Security > Automation, then try again.`
-        : output.includes("(-1712)")
-          ? `${terminal} didn't answer in time. If macOS asked to let it be controlled, allow that and try again.`
-          : `Couldn't open ${terminal}: ${output === "" ? `exit status ${code}` : output}`;
-      return yield* new LaunchFailed({ label, said });
+      return yield* desktop.inTerminalApp(
+        label,
+        command,
+        folder,
+        chosen,
+        entries,
+      );
     });
 
   const launch = (
@@ -430,22 +301,14 @@ const make = Effect.gen(function* () {
               said: `No installed app found for ${app.label}.`,
             });
           }
-          // `open --args` only reaches an app as it launches, so this
-          // starts a new process each time (-n).
           if (app.openArgs !== undefined && app.openArgs.length > 0) {
-            return yield* run(entry.label, "open", [
-              "-n",
-              "-a",
+            return yield* desktop.startApp(
+              entry.label,
               bundle,
-              "--args",
-              ...app.openArgs.map((arg) => arg.replaceAll("{path}", where)),
-            ]);
+              app.openArgs.map((arg) => arg.replaceAll("{path}", where)),
+            );
           }
-          return yield* run(entry.label, "open", [
-            "-a",
-            path.basename(bundle, ".app"),
-            where,
-          ]);
+          return yield* desktop.openApp(entry.label, bundle, where);
         }
       }
     });
@@ -476,24 +339,6 @@ const make = Effect.gen(function* () {
     yield* inTerminal("the terminal", command, where, undefined, terminal);
   });
 
-  // On a Mac an executable's default app runs it, and a file no app
-  // claims (a Makefile, often a .ts) has none, so those open in the
-  // default text editor (open -t). xdg-open goes by the file's type,
-  // which hands a script to its editor.
-  const withDefaultApp = (label: string, file: string, executable: boolean) =>
-    byPlatform({
-      darwin: Effect.gen(function* () {
-        if (!executable && (yield* ran("open", [file])).code === 0) return;
-        const { code, output } = yield* ran("open", ["-t", file]);
-        if (code === 0) return;
-        return yield* new LaunchFailed({
-          label,
-          said: output === "" ? `exit status ${code}` : output,
-        });
-      }),
-      linux: onScreen(label, [file]),
-    });
-
   const edit = Effect.fn("Open.edit")(function* (
     located: Worktrees.Located,
     file: string,
@@ -520,7 +365,7 @@ const make = Effect.gen(function* () {
         candidate.app.editor === true,
     );
     if (entry?.kind !== "detected") {
-      yield* withDefaultApp(label, absolute, (info.mode & 0o111) !== 0);
+      yield* desktop.openFile(label, absolute, info);
       return absolute;
     }
     const { app } = entry;
@@ -541,7 +386,7 @@ const make = Effect.gen(function* () {
         said: `No installed app found for ${app.label}.`,
       });
     }
-    yield* run(label, "open", ["-a", path.basename(bundle, ".app"), absolute]);
+    yield* desktop.openApp(label, bundle, absolute);
     return absolute;
   });
 
