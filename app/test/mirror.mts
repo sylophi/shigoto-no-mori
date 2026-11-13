@@ -51,7 +51,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join } from "../../test/canonicalPaths.mts";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, it } from "vitest";
 import * as PeerReach from "@host/ipc/PeerReach";
@@ -67,7 +67,7 @@ import {
 import type { Project } from "@shigomori/contracts/schemas";
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeServices from "@shared/nodeServices";
 import * as Effect from "effect/Effect";
 import { RemoteCallError } from "@shigomori/contracts/errors";
 import * as Layer from "effect/Layer";

@@ -9,9 +9,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join } from "../../../test/canonicalPaths.mts";
 import { promisify } from "node:util";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeServices from "./lib/nodeServices.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -46,7 +46,7 @@ const storeLayer = (dir: string) =>
     Layer.provide(
       ConfigProvider.layer(
         ConfigProvider.fromEnv({
-          env: { HOME: dir, SHIGOMORI_DATA_DIR: dir },
+          env: { HOME: dir, USERPROFILE: dir, SHIGOMORI_DATA_DIR: dir },
         }),
       ),
     ),
@@ -57,7 +57,9 @@ const platformAt = (dir: string) =>
     Layer.provideMerge(NodeServices.layer),
     Layer.provide(
       ConfigProvider.layer(
-        ConfigProvider.fromEnv({ env: { HOME: dir, SHIGOMORI_DATA_DIR: dir } }),
+        ConfigProvider.fromEnv({
+          env: { HOME: dir, USERPROFILE: dir, SHIGOMORI_DATA_DIR: dir },
+        }),
       ),
     ),
   );

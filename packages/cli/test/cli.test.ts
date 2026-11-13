@@ -14,7 +14,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join } from "../../../test/canonicalPaths.mts";
 import {
   afterEach,
   beforeAll,
@@ -184,7 +184,12 @@ describe("shell", () => {
   it("installs the hook in the shell's config and takes it out again", async () => {
     const home = homeWith({ ".zshrc": "export A=1\n" });
     const run = (...args: string[]) =>
-      piped(box.home, args, { HOME: home, SHELL: "/bin/zsh" }, "");
+      piped(
+        box.home,
+        args,
+        { HOME: home, USERPROFILE: home, SHELL: "/bin/zsh" },
+        "",
+      );
     await run("shell", "install");
     // Idempotent.
     await run("shell", "install", "zsh");
@@ -201,7 +206,7 @@ describe("shell", () => {
     });
     const before = readFileSync(join(home, ".zshrc"), "utf8");
     const run = (...args: string[]) =>
-      piped(box.home, args, { HOME: home }, "");
+      piped(box.home, args, { HOME: home, USERPROFILE: home }, "");
     await run("shell", "install", "zsh");
     await run("shell", "uninstall");
     assert.equal(readFileSync(join(home, ".zshrc"), "utf8"), before);
@@ -213,7 +218,7 @@ describe("shell", () => {
     const home = homeWith({ "dotfiles/zshrc": "export A=1\n" });
     symlinkSync("dotfiles/zshrc", join(home, ".zshrc"));
     const run = (...args: string[]) =>
-      piped(box.home, args, { HOME: home }, "");
+      piped(box.home, args, { HOME: home, USERPROFILE: home }, "");
     await run("shell", "install", "zsh");
     assert.ok(lstatSync(join(home, ".zshrc")).isSymbolicLink());
     assert.match(

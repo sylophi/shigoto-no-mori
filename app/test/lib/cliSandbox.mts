@@ -4,9 +4,9 @@
 // smBinary.mts) beside the engine the host runs on, and git wrappers
 // over the scrubbed environment.
 import { execFile } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, realpath } from "../../../test/canonicalPaths.mts";
 import { promisify } from "node:util";
 import { GIT_IDENTITY } from "../../../test/gitIsolation.ts";
 import { createCliRunner, scrubProcessGitEnv } from "./checkKit.mts";
@@ -33,7 +33,7 @@ export function cliSandbox(prefix: string, extraSmEnv: NodeJS.ProcessEnv = {}) {
   // Sandbox: everything (data dir, repos, the built binary) under one
   // temp tree. realpath because worktree ids derive from git's resolved
   // paths (/var/folders is a symlink on macOS).
-  const sandbox = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
+  const sandbox = realpath(mkdtempSync(join(tmpdir(), prefix)));
   const dataDir = join(sandbox, "data");
 
   // The kit's scrub (no inherited GIT_*, config pinned) applied to

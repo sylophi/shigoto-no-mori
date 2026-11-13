@@ -7,13 +7,12 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import { dirname, join, realpath } from "../../../../test/canonicalPaths.mts";
+import * as NodeServices from "./nodeServices.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
 import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
 import * as Deferred from "effect/Deferred";
@@ -175,7 +174,7 @@ export function sandbox(
 ): Sandbox {
   const helper = options.nativefs ?? nativefs();
   const originalPath = process.env.PATH;
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "engine-sandbox-")));
+  const root = realpath(mkdtempSync(join(tmpdir(), "engine-sandbox-")));
   const seed = join(root, "seed");
   mkdirSync(seed);
   const sides = new Set<string>();
@@ -208,6 +207,7 @@ export function sandbox(
         ConfigProvider.fromEnv({
           env: {
             HOME: root,
+            USERPROFILE: root,
             PATH: process.env.PATH ?? "",
             SHIGOMORI_DATA_DIR: sideDir(side),
             ...options.env,
@@ -286,6 +286,7 @@ export function sandbox(
   const env = (side: string): NodeJS.ProcessEnv => ({
     ...sideEnv(),
     HOME: root,
+    USERPROFILE: root,
     SHIGOMORI_DATA_DIR: sideDir(side),
   });
 
