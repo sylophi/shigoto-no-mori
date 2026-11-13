@@ -147,10 +147,15 @@ export async function runHost<E>(root: {
   // a boot that stalls later must not leave it running too. Awaited
   // before the graph, whose Tunnel writes the file again. The pid file is
   // in the shell's own data so it outlives the host that wrote it.
+  const nativefs = bundledBinaryPath(
+    facts,
+    NATIVEFS_DIST_DIR,
+    NATIVEFS_BINARY_NAME,
+  );
   const reaped = Effect.runPromise(
     reapOrphanedConnector(join(facts.userDataPath, TUNNEL_PID_FILE)).pipe(
       Effect.provide(
-        ProcessTable.layer.pipe(
+        ProcessTable.layer(nativefs).pipe(
           Layer.provide(childDefaults),
           Layer.provideMerge(HostNodeServices.layer),
         ),
@@ -162,7 +167,7 @@ export async function runHost<E>(root: {
   await initDataDir(flavor);
   const engine = {
     flavor,
-    nativefs: bundledBinaryPath(facts, NATIVEFS_DIST_DIR, NATIVEFS_BINARY_NAME),
+    nativefs,
     sm: bundledBinaryPath(facts, CLI_DIST_DIR, cliBinaryName(flavor)),
   };
   const migration = await Effect.runPromise(Migration.make);

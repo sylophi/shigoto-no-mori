@@ -114,15 +114,15 @@ const commandMatches = (recorded: string, live: string) => {
 // The identity proof. A live pid says nothing on its own, so three
 // independent facts have to agree: the process leads its own group when
 // it did (a script's PTY child leads a session of its own, and setsid
-// survives an exec, while a lifecycle script ran in the app's group), it
-// started when we recorded that it started, and its command line still
-// looks like the one we launched.
+// survives an exec, while a lifecycle script ran in the app's group),
+// where the OS has groups, it started when we recorded that it started,
+// and its command line still looks like the one we launched.
 const isSameProcess = (
   record: RunningScript,
   live: ProcessTable.LiveProcess | undefined,
 ) =>
   live !== undefined &&
-  record.groupLeader === live.leadsGroup &&
+  (live.leadsGroup === undefined || record.groupLeader === live.leadsGroup) &&
   Math.abs(live.startedAt - record.startedAt) <=
     ProcessTable.BIRTH_TOLERANCE_MS &&
   commandMatches(record.command, live.command);
