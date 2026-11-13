@@ -9,13 +9,13 @@ export const canonicalPath = (raw: string): string =>
 const asIs = (raw: string) => raw;
 
 // Git for Windows' spelling: `/` separated, an upper-case drive letter,
-// no `\\?\` prefix, and a trailing slash only on a root. A share's root
-// is `//server/share`. Case is kept.
+// no `\\?\` or `\\.\` prefix before a drive or a share, and a trailing
+// slash only on a root. A share's root is `//server/share`. Case is kept.
 const windowsPath = (raw: string): string => {
   const path = raw
     .replaceAll("\\", "/")
-    .replace(/^\/\/\?\/UNC\//i, "//")
-    .replace(/^\/\/\?\//, "")
+    .replace(/^\/\/[?.]\/UNC\//i, "//")
+    .replace(/^\/\/[?.]\/(?=[A-Za-z]:)/, "")
     .replace(/(?<!^)\/+/g, "/")
     .replace(/^[a-z]:/, (drive) => drive.toUpperCase());
   const trimmed = path.replace(/\/+$/, "");

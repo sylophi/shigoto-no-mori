@@ -58,7 +58,8 @@ export function isAnchoredPath(value: string): boolean {
 
 export function normalizeForSubmit(value: string): string {
   const trimmed = value.trim();
-  if (trimmed === pathRoot(trimmed)) return trimmed;
+  if (trimmed !== "" && trimmed === pathRoot(trimmed))
+    return cleanPath(trimmed);
   return trimmed.replace(TRAILING_SEPS, "");
 }
 

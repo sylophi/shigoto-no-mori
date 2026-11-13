@@ -43,6 +43,7 @@ import {
   savedConfigDoc,
   settingKeys,
 } from "./configDoc.ts";
+import { canonicalPath } from "./canonicalPath.ts";
 import catalog from "./data/launcher-catalog.json" with { type: "json" };
 import * as Git from "./Git.ts";
 import * as Identity from "./Identity.ts";
@@ -476,9 +477,11 @@ const parseValue = (
     case "string": {
       if (key.choices.length > 0 && !key.choices.includes(raw))
         return invalid("enum");
-      return key.name === "customWorktreePath" && !isAnchoredPath(raw)
-        ? invalid("absolutePath")
-        : Effect.succeed(raw);
+      if (key.name !== "customWorktreePath") return Effect.succeed(raw);
+      const path = canonicalPath(raw);
+      return isAnchoredPath(path)
+        ? Effect.succeed(path)
+        : invalid("absolutePath");
     }
   }
 };
