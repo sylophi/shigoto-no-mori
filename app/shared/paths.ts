@@ -156,8 +156,8 @@ export function legacyDataDirPointerPath(): string | null {
   return pointerFiles().legacy;
 }
 
-// The one place the app reads the home folder. os.homedir() falls back
-// to the account's home where HOME is unset, which Paths.home does not.
+// The home folder as the OS gives it, which is the account's home where
+// HOME is unset. Paths.home reads HOME alone.
 export function home(): string {
   return canonicalPath(homedir());
 }
