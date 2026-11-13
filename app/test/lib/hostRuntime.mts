@@ -144,7 +144,7 @@ const hostBelow = Worktrees.layer.pipe(
   Layer.provideMerge(HostPushes.layer),
   Layer.provideMerge(EngineStoreChanges.layer),
   Layer.provideMerge(ScriptRuns.layer),
-  Layer.provideMerge(ProcessTrees.layer),
+  Layer.provideMerge(ProcessTrees.layer(nativefs())),
   Layer.provideMerge(ScriptChanges.layer),
   Layer.provideMerge(FileSync.layer(() => null)),
   Layer.provideMerge(GithubCli.layer),

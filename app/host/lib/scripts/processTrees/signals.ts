@@ -71,8 +71,8 @@ export const makeSignals = Effect.gen(function* () {
     ),
     // Descendants that escaped the group via setsid() get reparented,
     // same as if we hadn't signaled at all.
-    askNow: Effect.fn("ProcessTrees.askNow")((pid: number) =>
-      Effect.sync(() => safeKill(-pid, "SIGTERM")),
+    askNow: Effect.fn("ProcessTrees.askNow")((tree: Tree) =>
+      Effect.sync(() => safeKill(-tree.pid, "SIGTERM")),
     ),
     end: Effect.fn("ProcessTrees.end")((tree: Tree) => send(tree, "SIGKILL")),
   };
