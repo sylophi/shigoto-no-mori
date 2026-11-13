@@ -26,10 +26,8 @@ import * as Result from "effect/Result";
 import * as Semaphore from "effect/Semaphore";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Git from "./Git.ts";
-import {
-  externalVolumeRoot,
-  isSameOrInside,
-} from "@shigomori/contracts/git/worktreeLayout";
+import { externalVolumeRoot } from "@shigomori/contracts/git/worktreeLayout";
+import { isSameOrInside } from "@shigomori/contracts/projectPaths";
 import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
 import * as Registry from "./Registry.ts";

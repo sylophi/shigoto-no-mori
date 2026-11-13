@@ -75,7 +75,7 @@
 // before the relaunch goes with the old tree; a copy can take a mirrored
 // file mid-write (the peer's next cycle sends it again); under reftable
 // a capture ref git can't open reads as absent.
-import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
+import { isSameOrInside } from "@shigomori/contracts/projectPaths";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";

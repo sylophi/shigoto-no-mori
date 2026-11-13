@@ -3,26 +3,18 @@
 // project's own external drive. The engine places worktrees by it and
 // the renderer previews them by it, so it is posix strings only.
 
-import { cleanPath, expandHome } from "../projectPaths.ts";
+import {
+  cleanPath,
+  expandHome,
+  joinPath,
+  lastSegment,
+  relativeInside,
+} from "../projectPaths.ts";
 import { PROJECT_CONFIG_DEFAULTS } from "../schemas/projectConfigDefaults.ts";
 
 // The folder worktrees live in under each root: short, since agents and
 // people read and type these paths all day.
 export const WORKTREES_DIR = "wt";
-
-// The whole subtree, as destructive flows guarding against it want.
-// The engine's isManagedPath uses parent equality instead.
-export function isSameOrInside(path: string, ancestor: string): boolean {
-  const folded = path.replace(/\/+$/, "");
-  const base = ancestor.replace(/\/+$/, "");
-  return folded === base || folded.startsWith(`${base}/`);
-}
-
-const joinPath = (...parts: string[]) =>
-  cleanPath(parts.filter((part) => part !== "").join("/"));
-
-const lastSegment = (path: string) =>
-  path.split("/").findLast((segment) => segment !== "") ?? "";
 
 // None for the mount point itself.
 export function externalVolumeRoot(path: string): string | undefined {
@@ -78,8 +70,8 @@ export function projectDriveBase(
   const volume = externalVolumeRoot(projectPath);
   if (
     volume !== undefined &&
-    [place.dataDir, place.dataDirReal].some((dir) =>
-      dir?.startsWith(`${volume}/`),
+    [place.dataDir, place.dataDirReal].some(
+      (dir) => dir !== undefined && relativeInside(dir, volume) !== undefined,
     )
   ) {
     return undefined;

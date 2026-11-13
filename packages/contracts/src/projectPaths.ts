@@ -53,7 +53,7 @@ export function canNavigateUp(currentPath: string): boolean {
 // cwd the host process happens to have, which is never what the user
 // meant when picking a folder.
 export function isAnchoredPath(value: string): boolean {
-  return value.startsWith("/") || value === "~" || value.startsWith("~/");
+  return pathRoot(value) !== "" || value === "~" || value.startsWith("~/");
 }
 
 export function normalizeForSubmit(value: string): string {
@@ -62,38 +62,75 @@ export function normalizeForSubmit(value: string): string {
   return trimmed.replace(TRAILING_SEPS, "");
 }
 
+// The helpers below take a path as the engine spells it: `/` separated
+// on every OS, so the same folder always hashes to the same id.
+
+// "/" for an absolute path, "" for a relative one.
+function pathRoot(path: string): string {
+  return path.startsWith("/") ? "/" : "";
+}
+
+// Whether two paths name the same folder.
+export function samePath(a: string, b: string): boolean {
+  return a === b;
+}
+
+// The part of `path` under `ancestor`, none when it isn't strictly under
+// it. Neither side's trailing slash is dropped.
+export function relativeInside(
+  path: string,
+  ancestor: string,
+): string | undefined {
+  return path[ancestor.length] === "/" &&
+    samePath(path.slice(0, ancestor.length), ancestor)
+    ? path.slice(ancestor.length + 1)
+    : undefined;
+}
+
+// The whole subtree, as destructive flows guarding against it want.
+// The engine's isManagedPath takes direct children only.
+export function isSameOrInside(path: string, ancestor: string): boolean {
+  const folded = path.replace(TRAILING_SEPS, "");
+  const base = ancestor.replace(TRAILING_SEPS, "");
+  return samePath(folded, base) || relativeInside(folded, base) !== undefined;
+}
+
+export function joinPath(...parts: ReadonlyArray<string>): string {
+  return cleanPath(parts.filter((part) => part !== "").join("/"));
+}
+
+export function lastSegment(path: string): string {
+  return path.split("/").findLast((segment) => segment !== "") ?? "";
+}
+
 // A path as Go's filepath.Clean leaves it: `.` and `..` resolved, no
 // doubled or trailing slash, and `.` for a relative path that resolves
 // to nothing.
 export function cleanPath(path: string): string {
-  const absolute = path.startsWith("/");
+  const root = pathRoot(path);
   const parts: string[] = [];
-  for (const part of path.split("/")) {
+  for (const part of path.slice(root.length).split("/")) {
     if (part === "" || part === ".") continue;
     if (part !== "..") parts.push(part);
     else if (parts.length > 0 && parts.at(-1) !== "..") parts.pop();
-    else if (!absolute) parts.push("..");
+    else if (root === "") parts.push("..");
   }
   const joined = parts.join("/");
-  return absolute ? `/${joined}` : joined || ".";
+  return root === "" ? joined || "." : `${root}${joined}`;
 }
 
 // A `~` or `~/` path joined to `home` and cleaned as Go's filepath.Join
 // cleans it, and any other path as it is.
 export function expandHome(home: string, path: string): string {
   if (!/^~(\/|$)/.test(path)) return path;
-  return cleanPath(
-    [home, path.slice(2)].filter((part) => part !== "").join("/"),
-  );
+  return joinPath(home, path.slice(2));
 }
 
 export function tildify(path: string, home: string | null | undefined): string {
   if (!home || !path) return path;
-  if (path === home) return "~";
-  if (path.startsWith(`${home}/`)) {
-    return `~${path.slice(home.length)}`;
-  }
-  return path;
+  if (samePath(path, home)) return "~";
+  const inside = relativeInside(path, home);
+  return inside === undefined ? path : `~/${inside}`;
 }
 
 // Tildify, then progressively abbreviate middle segments to a single

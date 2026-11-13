@@ -18,7 +18,10 @@ import * as NativeFs from "./NativeFs.ts";
 import * as Git from "./Git.ts";
 import { keptAnswers } from "./keptAnswers.ts";
 import type { RegisteredProject } from "./Registry.ts";
-import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
+import {
+  isSameOrInside,
+  relativeInside,
+} from "@shigomori/contracts/projectPaths";
 import * as Worktrees from "./Worktrees.ts";
 
 // A folder's measure, the contract's for a worktree without its id,
@@ -308,10 +311,9 @@ const make = Effect.gen(function* () {
   ) {
     const base = root.replace(/\/+$/, "");
     // Stepped over by the walk itself, never read.
-    const skip = exclude
-      .map((path) => path.replace(/\/+$/, ""))
-      .filter((path) => path !== base && isSameOrInside(path, base))
-      .map((path) => path.slice(base.length + 1));
+    const skip = exclude.flatMap(
+      (path) => relativeInside(path.replace(/\/+$/, ""), base) ?? [],
+    );
     // Whether a path's own name and every folder above it may date
     // activity.
     const countsAsActivity = (rel: string) =>

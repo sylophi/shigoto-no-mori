@@ -5,7 +5,7 @@
 import { installingWords } from "@host/lib/Shell";
 import { cp, mkdir, open, readdir, rmdir } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
-import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
+import { isSameOrInside } from "@shigomori/contracts/projectPaths";
 import { callFailureOf, errorMessageOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

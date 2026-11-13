@@ -5,7 +5,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { isAbsolute, relative } from "node:path";
-import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
+import { isSameOrInside } from "@shigomori/contracts/projectPaths";
 import { isSafeRelPath } from "@shigomori/contracts/predicates/relPath";
 import * as Config from "@shigomori/engine/Config";
 import type { ConfigDoc } from "@shigomori/engine/configDoc";
