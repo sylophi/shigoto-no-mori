@@ -2,7 +2,6 @@
 // Launch Services and AppleScript (launchServices.ts), Linux's through
 // its screen opener (xdg.ts).
 import type * as Effect from "effect/Effect";
-import type * as FileSystem from "effect/FileSystem";
 import type * as Launchers from "../Launchers.ts";
 import type { LaunchFailed } from "./documents.ts";
 
@@ -24,11 +23,10 @@ export type Desktop = {
   readonly openFile: (
     label: string,
     file: string,
-    info: FileSystem.File.Info,
+    runnable: boolean,
   ) => Effect.Effect<void, LaunchFailed>;
   // Runs `command` in `folder` in the terminal app `chosen` names.
-  // `entries` are the launchers already read, which say whether it is
-  // installed. Without them it is looked up.
+  // `entries` are the launchers already read, if any.
   readonly inTerminalApp: (
     label: string,
     command: string,

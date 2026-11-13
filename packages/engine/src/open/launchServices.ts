@@ -82,9 +82,8 @@ export const makeLaunchServices = ({ ran, run }: CommandsArea) =>
       // An executable's default app runs it, and a file no app claims (a
       // Makefile, often a .ts) has none, so those open in the default text
       // editor (open -t).
-      openFile: (label, file, info) =>
+      openFile: (label, file, executable) =>
         Effect.gen(function* () {
-          const executable = (info.mode & 0o111) !== 0;
           if (!executable && (yield* ran("open", [file])).code === 0) return;
           const { code, output } = yield* ran("open", ["-t", file]);
           if (code === 0) return;

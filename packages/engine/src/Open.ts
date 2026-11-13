@@ -19,6 +19,7 @@ import { flavorNames } from "./flavor.ts";
 import * as Paths from "./Paths.ts";
 import { openEnvArgs } from "./relaunchEnv.ts";
 import { errnoText, isAbsent } from "./platformErrors.ts";
+import { isRunnableMode } from "./executables.ts";
 import { byPlatform } from "./platform.ts";
 import * as Shells from "./Shells.ts";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
@@ -365,7 +366,7 @@ const make = Effect.gen(function* () {
         candidate.app.editor === true,
     );
     if (entry?.kind !== "detected") {
-      yield* desktop.openFile(label, absolute, info);
+      yield* desktop.openFile(label, absolute, isRunnableMode(info.mode));
       return absolute;
     }
     const { app } = entry;
