@@ -3,7 +3,8 @@
 // goes, the refusals only the host can make, the scripts and the updater
 // held, the copy to another volume, and what holds the folder let go.
 import { installingWords } from "@host/lib/Shell";
-import { cp, mkdir, open, readdir, rmdir, stat } from "node:fs/promises";
+import { chmod, cp, mkdir, open, readdir, rmdir, stat } from "node:fs/promises";
+import { userInfo } from "node:os";
 import type { Dirent } from "node:fs";
 import { join } from "node:path";
 import {
@@ -85,9 +86,10 @@ const nodeCopy = (from: string, to: string) =>
   fsStep(() => cp(from, to, { recursive: true, verbatimSymlinks: true }));
 
 // On Windows by the engine's copy, which keeps a junction a junction,
-// into a folder made the owner's alone first: what is copied in takes
+// into a folder made the user's alone first: what is copied in takes
 // its folder's access, and another drive's root lets every account of
-// the machine read what is under it.
+// the machine read what is under it. The user by name, since a move run
+// elevated makes the Administrators group the owner of what it writes.
 // The store's shared-memory index stays behind: SQLite holds it locked
 // while the store is open, and builds it again from the WAL when the
 // copy opens.
@@ -98,7 +100,7 @@ const copyOwnersOnly = (from: string, to: string) =>
       to,
       "/inheritance:r",
       "/grant:r",
-      "*S-1-3-4:(OI)(CI)F",
+      `${userInfo().username}:(OI)(CI)F`,
       "*S-1-5-18:(OI)(CI)F",
     ]).pipe(Effect.mapError(callFailureOf));
     const names = yield* fsStep(() => readdir(from));
@@ -123,14 +125,20 @@ const flush = async (at: string, flag: "r" | "r+" = "r") => {
 };
 
 // Windows flushes a file only through a handle that may write it, so a
-// read-only one (git's objects) reaches the disk with the cache's next
-// writes, seconds later.
+// read-only one (git's objects) is made writable for its flush.
 const flushFile = (file: string) =>
   byPlatform({
     darwin: () => flush(file),
     linux: () => flush(file),
     win32: async () => {
-      if (((await stat(file)).mode & 0o200) !== 0) await flush(file, "r+");
+      const { mode } = await stat(file);
+      if ((mode & 0o200) !== 0) return flush(file, "r+");
+      await chmod(file, mode | 0o200);
+      try {
+        await flush(file, "r+");
+      } finally {
+        await chmod(file, mode);
+      }
     },
   })();
 

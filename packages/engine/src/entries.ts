@@ -14,7 +14,7 @@ import {
   symlink,
   utimes,
 } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -111,8 +111,10 @@ const cpTree = (
 // lands between two. A file keeps its attributes (git's read-only
 // objects stay read-only) and its last write. A link to a folder by its
 // absolute path is made again as a junction, which needs no privilege.
-// Any other link is a symbolic link, which needs Developer Mode or an
-// elevated process, and without it fails the copy.
+// A junction holds only an absolute path (pnpm links node_modules with
+// them), so one into the tree is pointed into the copy, as a relative
+// link would be. Any other link is a symbolic link, which needs
+// Developer Mode or an elevated process, and without it fails the copy.
 export const copyEntries = (from: string, to: string, keepTimes: boolean) => {
   const step = <A>(run: () => Promise<A>) =>
     Effect.tryPromise({
@@ -133,13 +135,17 @@ export const copyEntries = (from: string, to: string, keepTimes: boolean) => {
             () => false,
           ),
         );
-        return yield* step(() =>
-          symlink(
-            named,
-            target,
-            folder && isAbsolute(named) ? "junction" : undefined,
-          ),
-        );
+        if (!folder || !isAbsolute(named)) {
+          return yield* step(() =>
+            symlink(named, target, folder ? "dir" : "file"),
+          );
+        }
+        const inside = relative(from, named);
+        const at =
+          inside.startsWith("..") || isAbsolute(inside)
+            ? named
+            : join(to, inside);
+        return yield* step(() => symlink(at, target, "junction"));
       }
       if (!info.isDirectory()) {
         return yield* step(() =>
