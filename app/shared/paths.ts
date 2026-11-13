@@ -18,6 +18,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { DataDirSource } from "@shigomori/engine/Paths";
 import { expandHome as expandHomeIn } from "@shigomori/contracts/projectPaths";
+import { canonicalPath } from "@shigomori/engine/canonicalPath";
 import * as Paths from "@shigomori/engine/Paths";
 import type { Flavor } from "@shigomori/engine/flavor";
 import * as Effect from "effect/Effect";
@@ -86,7 +87,7 @@ export function initDataDirAt(
     dataDir: dir,
     source,
     dataDirName: ".sm",
-    defaultDataDir: join(homedir(), ".sm"),
+    defaultDataDir: join(home(), ".sm"),
     pointer: null,
     pointerFiles: null,
   };
@@ -108,7 +109,7 @@ export function dataDir(): string {
 export function dataDirReal(): string | undefined {
   const dir = dataDir();
   try {
-    const real = realpathSync(dir);
+    const real = canonicalPath(realpathSync(dir));
     return real === resolve(dir) ? undefined : real;
   } catch {
     return undefined;
@@ -155,13 +156,20 @@ export function legacyDataDirPointerPath(): string | null {
   return pointerFiles().legacy;
 }
 
+// The user's home directory, the one place the app reads it. The OS's
+// answer, which falls back to the account's home where HOME is unset,
+// unlike the engine's Paths.home.
+export function home(): string {
+  return canonicalPath(homedir());
+}
+
 export function expandHome(path: string): string {
-  return expandHomeIn(homedir(), path);
+  return expandHomeIn(home(), canonicalPath(path));
 }
 
 export function toAbsolute(path: string): string {
   const expanded = expandHome(path);
-  return isAbsolute(expanded) ? expanded : resolve(expanded);
+  return canonicalPath(isAbsolute(expanded) ? expanded : resolve(expanded));
 }
 
 export function isENOENT(error: unknown): boolean {

@@ -8,7 +8,7 @@ import {
   isNoDirectConnectionError,
   isNotSharingError,
 } from "@shigomori/contracts/errors";
-import { homedir } from "node:os";
+import { home } from "@shared/paths";
 import {
   type ControlDevice,
   ControlError,
@@ -365,7 +365,7 @@ export const cloneIntoOn = (
   project: Project,
   parent: string | undefined,
 ) => {
-  const here = homedir();
+  const here = home();
   if (parent !== undefined) {
     return Effect.succeed<SyncCloneInto>(
       cloneIntoOf(tildify(parent, here), project.path),

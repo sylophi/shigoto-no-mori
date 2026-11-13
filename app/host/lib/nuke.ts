@@ -13,7 +13,6 @@
 // run after an interrupted one finishes the job. The projects' repos,
 // external worktrees and terrier's registry are never touched.
 import { installingWords } from "@host/lib/Shell";
-import { homedir } from "node:os";
 import type {
   NukeProgress,
   NukeReport,
@@ -30,7 +29,7 @@ import * as Git from "@shigomori/engine/Git";
 import { findProjectInsideDataDir, listedProjects } from "./projects";
 import * as Scripts from "./Scripts";
 import * as Worktrees from "./Worktrees";
-import { dataDir } from "@shared/paths";
+import { dataDir, home } from "@shared/paths";
 
 class NukeRefusedError extends Schema.TaggedError<NukeRefusedError>()(
   "NukeRefusedError",
@@ -100,7 +99,7 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
   const { onProgress } = options;
   const projects = yield* listedProjects;
   // Refuse up front, before any script is stopped or worktree removed.
-  const trap = nukeTrap(projects, dataDir(), options.home ?? homedir());
+  const trap = nukeTrap(projects, dataDir(), options.home ?? home());
   if (trap !== null) return yield* new NukeRefusedError({ reason: trap });
   // An install restarts the app out of the folder the reset wipes, and
   // a check stages into it. Past this, neither starts.
