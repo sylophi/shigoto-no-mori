@@ -9,6 +9,10 @@ import * as Path from "effect/Path";
 import { envVar } from "./environment.ts";
 import { byPlatform } from "./platform.ts";
 
+// The file a program of ours is built as.
+export const programFile = (name: string) =>
+  name + byPlatform({ darwin: "", linux: "", win32: ".exe" });
+
 const pathSeparator = () => byPlatform({ darwin: ":", linux: ":" });
 
 export const joinSearchPath = (dirs: ReadonlyArray<string>) =>

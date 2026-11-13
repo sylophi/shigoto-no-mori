@@ -65,6 +65,8 @@ const original = `{
 it("installs without disturbing the rest of the file", async () => {
   const path = join(configDir(".claude"), "settings.json");
   writeFileSync(path, original, { mode: 0o600 });
+  // Windows keeps of a mode only whether the file is read-only.
+  const mode = statSync(path).mode & 0o777;
   const claudeHarness = HARNESSES.find(({ id }) => id === "claude");
   assert.ok(claudeHarness);
   const command = hookCommand(claudeHarness, HOOK_BINARY, box.home);
@@ -75,7 +77,7 @@ it("installs without disturbing the rest of the file", async () => {
   assert.ok(text.includes("say done"));
   assert.ok(text.indexOf(`"model"`) < text.indexOf(`"env"`));
   assert.ok(text.indexOf(`"B"`) < text.indexOf(`"A"`));
-  assert.equal(statSync(path).mode & 0o777, 0o600);
+  assert.equal(statSync(path).mode & 0o777, mode);
 
   // Installing again changes nothing, not even the file's formatting.
   const written = readFileSync(path, "utf8");

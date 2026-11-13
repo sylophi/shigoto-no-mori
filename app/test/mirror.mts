@@ -105,6 +105,7 @@ import {
   standInMirror,
   standInPeers,
 } from "./lib/hostStandIns.mts";
+import { EXE } from "../../packages/engine/test/lib/nativefs.ts";
 import { runHost } from "./lib/hostRuntime.mts";
 import {
   bootDirectWire,
@@ -140,7 +141,7 @@ const fixture = cliSandbox("sm-mirror-check-", {
   CGO_CFLAGS: "-Wno-deprecated-declarations",
 });
 const { sandbox, smEnv, git, gitOut, addWorktree } = fixture;
-const fileSyncBinary = join(sandbox, "file-sync");
+const fileSyncBinary = join(sandbox, `file-sync${EXE}`);
 const fileSyncDataDir = join(sandbox, "file-sync-data");
 
 const read = (path: string) => readFileSync(path, "utf8");

@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { existsSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "../../../test/canonicalPaths.mts";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
-import { afterEach, beforeEach, it } from "vitest";
+import { afterEach, beforeEach, it, onTestFinished } from "vitest";
 import * as Git from "../src/Git.ts";
+import { HoldersOnDelete } from "../src/HoldersOnDelete.ts";
 import { MirrorsOnDelete } from "../src/MirrorsOnDelete.ts";
 import * as Registry from "../src/Registry.ts";
 import * as Worktrees from "../src/Worktrees.ts";
@@ -222,6 +224,95 @@ it("a delete its checks refuse never stops the worktree's mirror", async () => {
   const { located, loose } = await withLooseFile();
   assert.deepEqual(await removingMirrored(located, { force: false }), []);
   assert.ok(existsSync(loose));
+});
+
+// A process working in the worktree, and the app's side of
+// HoldersOnDelete, which ends it and notes whom it was asked for and
+// whether the worktree's files were there then.
+const removingHeld = async (
+  located: Worktrees.Located,
+  options: { readonly force: boolean },
+) => {
+  const held = spawn(process.execPath, ["-e", "setInterval(() => {}, 1e9)"], {
+    cwd: located.worktree.path,
+    stdio: "ignore",
+  });
+  onTestFinished(() => {
+    held.kill();
+  });
+  const told: Array<{ owner: object; filesThere: boolean }> = [];
+  const removed = await box.engine(
+    Effect.flatMap(Effect.service(Worktrees.Worktrees), (worktrees) =>
+      worktrees.remove(
+        located,
+        { ...options, keepBranch: false, skipCleanup: true },
+        silent,
+      ),
+    ).pipe(
+      Effect.provideService(
+        HoldersOnDelete,
+        HoldersOnDelete.of({
+          release: (owner) =>
+            Effect.promise(
+              () =>
+                new Promise<void>((resolve) => {
+                  told.push({
+                    owner,
+                    filesThere: existsSync(located.worktree.path),
+                  });
+                  held.once("exit", () => resolve());
+                  held.kill();
+                }),
+            ),
+        }),
+      ),
+    ),
+  );
+  return { removed, told };
+};
+
+// Windows deletes no folder a process works in.
+it("lets go of what the app runs in a worktree right before its files go", async () => {
+  const { located } = await withLooseFile();
+  const { told } = await removingHeld(located, { force: true });
+  assert.deepEqual(told, [
+    {
+      owner: { projectId: located.project.id, worktreeId: located.worktree.id },
+      filesThere: true,
+    },
+  ]);
+  assert.ok(!existsSync(located.worktree.path));
+});
+
+it("a delete its checks refuse keeps what the app runs in the worktree", async () => {
+  const { located, loose } = await withLooseFile();
+  const { removed, told } = await removingHeld(located, { force: false });
+  assert.equal(
+    (removed as Record<string, unknown>)["code"],
+    "uncommitted-changes",
+  );
+  assert.deepEqual(told, []);
+  assert.ok(existsSync(loose));
+});
+
+// Windows refuses to delete a read-only file unless asked to clear it.
+it("removes a worktree holding read-only files", async () => {
+  const { located, loose } = await withLooseFile();
+  const nested = join(located.worktree.path, "built");
+  mkdirSync(nested);
+  writeFileSync(join(nested, "out.js"), "x\n");
+  chmodSync(join(nested, "out.js"), 0o444);
+  chmodSync(loose, 0o444);
+  await box.engine(
+    Effect.flatMap(Effect.service(Worktrees.Worktrees), (worktrees) =>
+      worktrees.remove(
+        located,
+        { force: true, keepBranch: false, skipCleanup: true },
+        silent,
+      ),
+    ),
+  );
+  assert.ok(!existsSync(located.worktree.path));
 });
 
 // An id from before a rename follows to the worktree it became, until

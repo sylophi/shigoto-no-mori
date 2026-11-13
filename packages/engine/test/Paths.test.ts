@@ -1,11 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  chmodSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "../../../test/canonicalPaths.mts";
 import * as NodeServices from "./lib/nodeServices.ts";
@@ -15,6 +9,7 @@ import * as Layer from "effect/Layer";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Paths from "../src/Paths.ts";
 import { JOURNAL } from "../src/dataDirMoveJournal.ts";
+import { readOnly } from "./lib/holds.ts";
 
 let home: string;
 beforeEach(() => {
@@ -64,11 +59,11 @@ it("refuses to resolve a data dir a rename landed whose pointer can't be written
   const config = join(home, ".config", "shigomori");
   mkdirSync(config, { recursive: true });
   writeFileSync(join(config, "data-dir.tmp.ab12"), `${moved}\n`);
-  chmodSync(config, 0o555);
+  const release = readOnly(config);
   try {
     await assert.rejects(resolve(), { _tag: "DataDirStranded" });
   } finally {
-    chmodSync(config, 0o755);
+    release();
   }
 });
 
@@ -86,10 +81,10 @@ it("refuses to resolve when a pre-2.0 pointer to the folder that left can't be r
   const config = join(home, ".config", "shigomori");
   mkdirSync(config, { recursive: true });
   writeFileSync(join(config, "root"), `${left}\n`);
-  chmodSync(config, 0o555);
+  const release = readOnly(config);
   try {
     await assert.rejects(resolve(), { _tag: "DataDirStranded" });
   } finally {
-    chmodSync(config, 0o755);
+    release();
   }
 });

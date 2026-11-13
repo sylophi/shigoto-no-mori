@@ -25,7 +25,7 @@ import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as NativeFs from "./NativeFs.ts";
-import { copyFailure, copyTree, entryExists } from "./entries.ts";
+import { copyFailure, copyTree, entryExists, linkFolder } from "./entries.ts";
 import { stagingName } from "./worktreeLayout.ts";
 import { pidAlive } from "./processes.ts";
 import * as Git from "./Git.ts";
@@ -233,8 +233,8 @@ const make = Effect.gen(function* () {
       }),
     );
 
-  // A copy-on-write clone of the tree where the volume can, else `cp -R
-  // -P`. The destination must not exist.
+  // A copy-on-write clone of the tree where the volume can, else a copy
+  // (copyTree). The destination must not exist.
   const cloneOrCopy = (from: string, to: string) =>
     Effect.gen(function* () {
       const cloned = yield* nativeFs.clone({ from, to }).pipe(
@@ -291,10 +291,14 @@ const make = Effect.gen(function* () {
           return yield* Effect.fail("Destination already exists");
         }
         if (entry.mode === "symlink" && source.isPrimary) {
-          // Absolute, so the link survives the worktree moving.
-          yield* fs
-            .symlink(from, to)
-            .pipe(Effect.mapError((error) => error.message));
+          // Absolute, so the link survives the worktree moving. A file's
+          // on Windows needs Developer Mode, and without it fails the
+          // entry in Windows' words.
+          yield* isDirectory
+            ? linkFolder(from, to)
+            : fs
+                .symlink(from, to)
+                .pipe(Effect.mapError((error) => error.message));
           return isDirectory ? entry.path : undefined;
         }
         // Copied whole beside the worktree, then renamed in, so an entry

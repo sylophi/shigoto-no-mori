@@ -8,6 +8,7 @@ import * as DataDirLock from "@shigomori/engine/DataDirLock";
 import type { Flavor } from "@shigomori/engine/flavor";
 import { doctorLayer, engineServices } from "@shigomori/engine/layer";
 import * as Migration from "@shigomori/engine/Migration";
+import { programFile } from "@shigomori/engine/executables";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Store from "@shigomori/engine/Store";
 import { StoreError } from "@shigomori/engine/storeErrors";
@@ -21,7 +22,7 @@ import * as Transfer from "./Transfer.ts";
 
 const open: Store.OpenDatabase = (filename, options) =>
   SqliteClient.make({ filename, ...options });
-const nativefs = join(dirname(process.execPath), "nativefs");
+const nativefs = () => join(dirname(process.execPath), programFile("nativefs"));
 // What the agent hooks run: this binary (Agents names it by a path
 // that outlasts an update).
 const sm = process.execPath;
@@ -47,7 +48,7 @@ export const engine = (flavor: Flavor) =>
             flavor,
             store: owed ? Store.fromFiles(open, true) : Store.layer(open),
             open,
-            nativefs,
+            nativefs: nativefs(),
             sm,
           }),
         ),
@@ -91,4 +92,4 @@ export const changingWithFix = <
 // `sm doctor`'s, which opens the store inside each run, so a store that
 // won't open still gets its checklist.
 export const doctor = (flavor: Flavor) =>
-  doctorLayer({ flavor, open, nativefs });
+  doctorLayer({ flavor, open, nativefs: nativefs() });

@@ -60,7 +60,7 @@ import * as Paths from "./Paths.ts";
 import { errnoText, isNotFound } from "./platformErrors.ts";
 import * as Registry from "./Registry.ts";
 import * as Worktrees from "./Worktrees.ts";
-import { isDirectory } from "./entries.ts";
+import { isDirectory, linkFolder } from "./entries.ts";
 
 // A session as its harness and id name it.
 export type SessionRef = {
@@ -623,7 +623,7 @@ const make = (binary: string) =>
           .pipe(Effect.orElseSucceed(() => ""));
         if (held.trim() !== wanted) {
           yield* fs.remove(source, { recursive: true, force: true });
-          if (link !== undefined) yield* fs.symlink(link, source);
+          if (link !== undefined) yield* linkFolder(link, source);
           yield* fs.writeFileString(tagFile, `${wanted}\n`);
         }
       }).pipe(

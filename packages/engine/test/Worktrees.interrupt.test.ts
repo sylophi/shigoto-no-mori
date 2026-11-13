@@ -12,7 +12,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import {
-  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -40,6 +39,7 @@ import { errorDocument } from "../src/errorDocument.ts";
 import * as Registry from "../src/Registry.ts";
 import * as WorktreeData from "../src/WorktreeData.ts";
 import * as Worktrees from "../src/Worktrees.ts";
+import { readOnly } from "./lib/holds.ts";
 import { type Engine, type Sandbox, sandbox } from "./lib/sandbox.ts";
 import { type Stop, stopWrappers } from "./lib/stopAt.ts";
 
@@ -1106,17 +1106,14 @@ it("an adopt whose removal fails after git let go keeps the replacement, the det
         (row) => row.path === outside,
       );
       assert.ok(external?.detached);
-      chmodSync(stuck, 0o555);
+      const release = readOnly(stuck);
       const failed = yield* worktrees
         .adopt(
           { project, worktree: external },
           { force: false },
           { report: () => Effect.void, color: false },
         )
-        .pipe(
-          Effect.result,
-          Effect.ensuring(Effect.sync(() => chmodSync(stuck, 0o755))),
-        );
+        .pipe(Effect.result, Effect.ensuring(Effect.sync(release)));
       const heads = (yield* worktrees.identities(project)).map((listed) =>
         box.git(listed.path, "rev-parse", "HEAD").trim(),
       );
@@ -1149,17 +1146,14 @@ it("an adopt whose removal leaves the original listed without a HEAD keeps the r
         (row) => row.path === outside,
       );
       assert.ok(external?.detached);
-      chmodSync(logs, 0o555);
+      const release = readOnly(logs);
       const failed = yield* worktrees
         .adopt(
           { project, worktree: external },
           { force: false },
           { report: () => Effect.void, color: false },
         )
-        .pipe(
-          Effect.result,
-          Effect.ensuring(Effect.sync(() => chmodSync(logs, 0o755))),
-        );
+        .pipe(Effect.result, Effect.ensuring(Effect.sync(release)));
       const heads = (yield* worktrees.identities(project)).flatMap((listed) => {
         try {
           return [box.git(listed.path, "rev-parse", "HEAD").trim()];
