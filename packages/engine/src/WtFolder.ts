@@ -209,7 +209,7 @@ const make = Effect.gen(function* () {
       if (entries.length === 1 && entries[0] === ".DS_Store") {
         yield* fs.remove(path.join(dir, ".DS_Store")).pipe(Effect.ignore);
       }
-      return yield* removeEmptyFolder(dir);
+      return yield* removeEmptyFolder(spawner, dir);
     });
 
   // The emptied v2 roots of `rows`' moves, and the `worktrees` folder

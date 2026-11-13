@@ -15,6 +15,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { movedSourceChange } from "@shigomori/contracts/movedSource";
@@ -22,7 +23,7 @@ import type { MovedSource } from "@shigomori/contracts/schemas";
 import * as Config from "../Config.ts";
 import * as Dirty from "../Dirty.ts";
 import * as Git from "../Git.ts";
-import { HoldersOnDelete } from "../HoldersOnDelete.ts";
+import { releaseHolders } from "../HoldersOnDelete.ts";
 import {
   type DeleteEnd,
   MirrorsOnDelete,
@@ -77,15 +78,6 @@ const stopMirrors = (projectId: string, worktree: WorktreeIdentity) =>
           ),
   );
 
-// What the app runs in the worktree let go before its files go
-// (HoldersOnDelete.ts).
-const releaseHolders = (projectId: string, worktree: WorktreeIdentity) =>
-  Effect.flatMap(Effect.serviceOption(HoldersOnDelete), (holders) =>
-    Option.isNone(holders)
-      ? Effect.void
-      : holders.value.release({ projectId, worktreeId: worktree.id }),
-  );
-
 export const makeRemoving = ({
   listing,
   creating,
@@ -98,6 +90,7 @@ export const makeRemoving = ({
   Effect.gen(function* () {
     const git = yield* Git.Git;
     const dirty = yield* Dirty.Dirty;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const config = yield* Config.Config;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -258,7 +251,7 @@ export const makeRemoving = ({
         // Each only when empty: something written there since keeps it.
         let dir = parent;
         for (let level = 0; level < levels; level++) {
-          if (!(yield* removeEmptyFolder(dir))) return;
+          if (!(yield* removeEmptyFolder(spawner, dir))) return;
           dir = path.dirname(dir);
         }
       }).pipe(Effect.ignore);
@@ -474,7 +467,10 @@ export const makeRemoving = ({
       // the app runs in it lets go first.
       const removed = yield* Effect.uninterruptible(
         Effect.gen(function* () {
-          yield* releaseHolders(project.id, worktree);
+          yield* releaseHolders({
+            projectId: project.id,
+            worktreeId: worktree.id,
+          });
           end = "kept";
           const checkout: Effect.Effect<
             void,

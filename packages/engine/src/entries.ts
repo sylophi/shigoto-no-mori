@@ -19,6 +19,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as FileSystem from "effect/FileSystem";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { byPlatform } from "./platform.ts";
 import { exec } from "./processes.ts";
@@ -112,11 +113,7 @@ const cpTree = (
 // absolute path is made again as a junction, which needs no privilege.
 // Any other link is a symbolic link, which needs Developer Mode or an
 // elevated process, and without it fails the copy.
-const copyEntries = (
-  from: string,
-  to: string,
-  keepTimes: boolean,
-) => {
+export const copyEntries = (from: string, to: string, keepTimes: boolean) => {
   const step = <A>(run: () => Promise<A>) =>
     Effect.tryPromise({
       try: run,
@@ -130,7 +127,7 @@ const copyEntries = (
       const info = yield* step(() => lstat(source));
       if (info.isSymbolicLink()) {
         const named = yield* step(() => readlink(source));
-        const folder = yield* step(() =>
+        const folder = yield* Effect.promise(() =>
           stat(source).then(
             (found) => found.isDirectory(),
             () => false,
@@ -158,21 +155,37 @@ const copyEntries = (
   return entry(from, to);
 };
 
-// A junction at `at` to the folder `target`: Windows' link to a folder
-// on this machine, which needs none of the privilege a symbolic link
-// does.
-export const junction = (target: string, at: string) =>
+// A link at `at` to the folder `target`: on Windows a junction, which
+// needs none of the privilege a symbolic link does there.
+export const linkFolder = (target: string, at: string) =>
   Effect.tryPromise({
     try: () => symlink(target, at, "junction"),
     catch: errorMessageOf,
   });
 
-// rmdir(2), which takes only an empty folder: something written there
-// since keeps it. Answers whether it went.
-export const removeEmptyFolder = (dir: string) =>
-  Effect.promise(() =>
-    rmdir(dir).then(
-      () => true,
-      () => false,
-    ),
+// rmdir, which takes only an empty folder: something written there
+// since keeps it. Answers whether it went. Windows has no rmdir program.
+export const removeEmptyFolder = (
+  spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
+  dir: string,
+) =>
+  byPlatform({
+    darwin: rmdirCommand,
+    linux: rmdirCommand,
+    win32: () =>
+      Effect.promise(() =>
+        rmdir(dir).then(
+          () => true,
+          () => false,
+        ),
+      ),
+  })(spawner, dir);
+
+const rmdirCommand = (
+  spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
+  dir: string,
+) =>
+  spawner.exitCode(ChildProcess.make("rmdir", [dir])).pipe(
+    Effect.map((code) => code === 0),
+    Effect.orElseSucceed(() => false),
   );

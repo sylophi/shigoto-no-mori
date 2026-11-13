@@ -4,14 +4,18 @@
 // delete's checks and its cleanup, so a delete refused keeps them. A
 // process without it (no app running) has none to let go.
 import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+
+// A worktree, or without `worktreeId` every one of the project.
+type Owner = { readonly projectId: string; readonly worktreeId?: string };
 
 export class HoldersOnDelete extends Context.Service<
   HoldersOnDelete,
-  {
-    readonly release: (worktree: {
-      readonly projectId: string;
-      readonly worktreeId: string;
-    }) => Effect.Effect<void>;
-  }
+  { readonly release: (owner: Owner) => Effect.Effect<void> }
 >()("sm/engine/HoldersOnDelete") {}
+
+export const releaseHolders = (owner: Owner) =>
+  Effect.flatMap(Effect.serviceOption(HoldersOnDelete), (holders) =>
+    Option.isNone(holders) ? Effect.void : holders.value.release(owner),
+  );

@@ -6,7 +6,7 @@
 // and pass it in.
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { byPlatform } from "@shigomori/engine/platform";
+import { programFile } from "@shigomori/engine/executables";
 
 export type AppPlace = {
   readonly packaged: boolean;
@@ -21,7 +21,7 @@ export function bundledBinaryPath(
   devDistDir: string,
   name: string,
 ): string {
-  const file = name + byPlatform({ darwin: "", linux: "", win32: ".exe" });
+  const file = programFile(name);
   return place.packaged
     ? path.join(place.resourcesPath, file)
     : path.join(place.appPath, devDistDir, file);

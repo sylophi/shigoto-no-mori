@@ -4,6 +4,7 @@
 // held, the copy to another volume, and what holds the folder let go.
 import { installingWords } from "@host/lib/Shell";
 import { cp, mkdir, open, readdir, rmdir, stat } from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import { join } from "node:path";
 import {
   isSameOrInside,
@@ -19,7 +20,6 @@ import * as DataDirMove from "@shigomori/engine/dataDirMove";
 import * as Entries from "@shigomori/engine/entries";
 import { byPlatform } from "@shigomori/engine/platform";
 import { exec } from "@shigomori/engine/processes";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { busyRefusal } from "@shared/busy";
 import { hostCallFailure } from "./Engine";
 import * as Scripts from "./Scripts";
@@ -85,15 +85,14 @@ const nodeCopy = (from: string, to: string) =>
   fsStep(() => cp(from, to, { recursive: true, verbatimSymlinks: true }));
 
 // On Windows by the engine's copy, which keeps a junction a junction,
-// into a folder made the owner's alone first, as the data dir is
-// (Store.ts): what is copied in takes its folder's access, and another
-// drive's root lets every account of the machine read what is under it.
+// into a folder made the owner's alone first: what is copied in takes
+// its folder's access, and another drive's root lets every account of
+// the machine read what is under it.
 // The store's shared-memory index stays behind: SQLite holds it locked
 // while the store is open, and builds it again from the WAL when the
 // copy opens.
 const copyOwnersOnly = (from: string, to: string) =>
   Effect.gen(function* () {
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     yield* fsStep(() => mkdir(to));
     yield* exec("icacls", [
       to,
@@ -106,9 +105,9 @@ const copyOwnersOnly = (from: string, to: string) =>
     yield* Effect.forEach(
       names.filter((name) => name !== "store.db-shm"),
       (name) =>
-        Entries.copyTree(spawner, join(from, name), join(to, name), {
-          keepTimes: true,
-        }).pipe(Effect.mapError(callFailureOf)),
+        Entries.copyEntries(join(from, name), join(to, name), true).pipe(
+          Effect.mapError(callFailureOf),
+        ),
       { discard: true },
     );
   });
@@ -155,18 +154,22 @@ const flushTree = (dir: string) =>
       (file) => fsStep(() => flushFile(file)),
       { concurrency: 32, discard: true },
     );
-    const folders = [
+    yield* byPlatform({
+      darwin: flushFolders,
+      linux: flushFolders,
+      win32: () => Effect.void,
+    })(dir, entries);
+  });
+
+const flushFolders = (dir: string, entries: ReadonlyArray<Dirent>) =>
+  Effect.forEach(
+    [
       ...entries.filter((entry) => entry.isDirectory()).map(entryPath),
       dir,
-    ];
-    yield* Effect.forEach(
-      byPlatform({ darwin: folders, linux: folders, win32: [] }).toSorted(
-        (a, b) => depth(b) - depth(a),
-      ),
-      (folder) => fsStep(() => flush(folder)),
-      { discard: true },
-    );
-  });
+    ].toSorted((a, b) => depth(b) - depth(a)),
+    (folder) => fsStep(() => flush(folder)),
+    { discard: true },
+  );
 
 export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // The new parent, or undefined to reset to the default location.

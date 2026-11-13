@@ -227,8 +227,8 @@ it("a delete its checks refuse never stops the worktree's mirror", async () => {
 });
 
 // A process working in the worktree, and the app's side of
-// HoldersOnDelete, which ends it and notes whether the worktree's files
-// were there then.
+// HoldersOnDelete, which ends it and notes whom it was asked for and
+// whether the worktree's files were there then.
 const removingHeld = async (
   located: Worktrees.Located,
   options: { readonly force: boolean },
@@ -240,7 +240,7 @@ const removingHeld = async (
   onTestFinished(() => {
     held.kill();
   });
-  const told: string[] = [];
+  const told: Array<{ owner: object; filesThere: boolean }> = [];
   const removed = await box.engine(
     Effect.flatMap(Effect.service(Worktrees.Worktrees), (worktrees) =>
       worktrees.remove(
@@ -252,13 +252,14 @@ const removingHeld = async (
       Effect.provideService(
         HoldersOnDelete,
         HoldersOnDelete.of({
-          release: ({ projectId, worktreeId }) =>
+          release: (owner) =>
             Effect.promise(
               () =>
                 new Promise<void>((resolve) => {
-                  told.push(
-                    `released ${projectId === located.project.id && worktreeId === located.worktree.id ? "its" : "another's"}, files ${existsSync(located.worktree.path) ? "there" : "gone"}`,
-                  );
+                  told.push({
+                    owner,
+                    filesThere: existsSync(located.worktree.path),
+                  });
                   held.once("exit", () => resolve());
                   held.kill();
                 }),
@@ -274,7 +275,12 @@ const removingHeld = async (
 it("lets go of what the app runs in a worktree right before its files go", async () => {
   const { located } = await withLooseFile();
   const { told } = await removingHeld(located, { force: true });
-  assert.deepEqual(told, ["released its, files there"]);
+  assert.deepEqual(told, [
+    {
+      owner: { projectId: located.project.id, worktreeId: located.worktree.id },
+      filesThere: true,
+    },
+  ]);
   assert.ok(!existsSync(located.worktree.path));
 });
 

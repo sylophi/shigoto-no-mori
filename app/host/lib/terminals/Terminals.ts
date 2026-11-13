@@ -1019,9 +1019,6 @@ const make = <R, E>(options: {
       closeOf: Effect.fn("Terminals.closeOf")(function* ({
         projectId,
         worktreeId,
-      }: {
-        readonly projectId: string;
-        readonly worktreeId?: string;
       }) {
         yield* closeAll(
           ({ terminal }) =>
