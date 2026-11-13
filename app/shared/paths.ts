@@ -156,9 +156,8 @@ export function legacyDataDirPointerPath(): string | null {
   return pointerFiles().legacy;
 }
 
-// The user's home directory, the one place the app reads it. The OS's
-// answer, which falls back to the account's home where HOME is unset,
-// unlike the engine's Paths.home.
+// The one place the app reads the home folder. os.homedir() falls back
+// to the account's home where HOME is unset, which Paths.home does not.
 export function home(): string {
   return canonicalPath(homedir());
 }
@@ -169,7 +168,7 @@ export function expandHome(path: string): string {
 
 export function toAbsolute(path: string): string {
   const expanded = expandHome(path);
-  return canonicalPath(isAbsolute(expanded) ? expanded : resolve(expanded));
+  return isAbsolute(expanded) ? expanded : canonicalPath(resolve(expanded));
 }
 
 export function isENOENT(error: unknown): boolean {
