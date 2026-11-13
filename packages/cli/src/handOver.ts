@@ -56,10 +56,10 @@ const FROM_TERMINAL = new Set<NodeJS.Signals>([
   "SIGCONT",
 ]);
 
-// On Windows the console's Ctrl-C and Ctrl-Break reach every process
-// attached to it, the program included, so sm only holds them off, and
-// no other signal comes to pass on.
-const CONSOLE: ReadonlyArray<NodeJS.Signals> = ["SIGINT", "SIGBREAK"];
+// On Windows the console's Ctrl-C, Ctrl-Break and close reach every
+// process attached to it, the program included, so sm only holds them
+// off, and no other signal comes to pass on.
+const CONSOLE: ReadonlyArray<NodeJS.Signals> = ["SIGINT", "SIGBREAK", "SIGHUP"];
 
 // Runs `program` with the terminal handed to it, and ends as it ended.
 // Until it exits, the runtime's own handlers are set aside, so a signal

@@ -38,7 +38,8 @@ package main
 // dies without cleaning up: stdin reaching EOF (the kernel closes the
 // host's end of the pipe when its process ends, whatever the cause),
 // SIGTERM from the host's quit-time reap, and a watchdog that exits
-// when the parent pid changes (main.go, watchParent). A daemon that
+// once the host is gone (watchParent: the parent pid changing, or on
+// Windows the host's process handle). A daemon that
 // outlives the app would keep mirroring with nobody to show or stop
 // it, which is exactly the state this design refuses to allow.
 //

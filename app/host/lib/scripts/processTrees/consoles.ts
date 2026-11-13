@@ -30,12 +30,15 @@ export const makeConsoles = (nativefs: string) =>
         Effect.map((table) => {
           const root = table.get(pid);
           if (root === undefined) return [];
+          const children = new Map<number, Array<typeof root>>();
+          for (const row of table.values()) {
+            const siblings = children.get(row.parent);
+            if (siblings === undefined) children.set(row.parent, [row]);
+            else siblings.push(row);
+          }
           const found = [root];
-          for (let i = 0; i < found.length; i++) {
-            const parent = found[i]?.pid;
-            for (const row of table.values()) {
-              if (row.parent === parent) found.push(row);
-            }
+          for (const member of found) {
+            found.push(...(children.get(member.pid) ?? []));
           }
           return found;
         }),
