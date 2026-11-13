@@ -3,7 +3,7 @@
 // goes, the refusals only the host can make, the scripts and the updater
 // held, the copy to another volume, and what holds the folder let go.
 import { installingWords } from "@host/lib/Shell";
-import { cp, mkdir, open, readdir, rmdir } from "node:fs/promises";
+import { cp, mkdir, open, readdir, rmdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   isSameOrInside,
@@ -16,6 +16,10 @@ import * as Path from "effect/Path";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as DataDirMove from "@shigomori/engine/dataDirMove";
+import * as Entries from "@shigomori/engine/entries";
+import { byPlatform } from "@shigomori/engine/platform";
+import { exec } from "@shigomori/engine/processes";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { busyRefusal } from "@shared/busy";
 import { hostCallFailure } from "./Engine";
 import * as Scripts from "./Scripts";
@@ -71,17 +75,65 @@ export const sessionPlace = Effect.try({
 // The tree at `from` copied to `to`, symlinks (carry-over entries) as
 // links rather than followed.
 const copyTree = (from: string, to: string) =>
+  byPlatform({
+    darwin: nodeCopy,
+    linux: nodeCopy,
+    win32: copyOwnersOnly,
+  })(from, to);
+
+const nodeCopy = (from: string, to: string) =>
   fsStep(() => cp(from, to, { recursive: true, verbatimSymlinks: true }));
 
+// On Windows by the engine's copy, which keeps a junction a junction,
+// into a folder made the owner's alone first, as the data dir is
+// (Store.ts): what is copied in takes its folder's access, and another
+// drive's root lets every account of the machine read what is under it.
+// The store's shared-memory index stays behind: SQLite holds it locked
+// while the store is open, and builds it again from the WAL when the
+// copy opens.
+const copyOwnersOnly = (from: string, to: string) =>
+  Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    yield* fsStep(() => mkdir(to));
+    yield* exec("icacls", [
+      to,
+      "/inheritance:r",
+      "/grant:r",
+      "*S-1-3-4:(OI)(CI)F",
+      "*S-1-5-18:(OI)(CI)F",
+    ]).pipe(Effect.mapError(callFailureOf));
+    const names = yield* fsStep(() => readdir(from));
+    yield* Effect.forEach(
+      names.filter((name) => name !== "store.db-shm"),
+      (name) =>
+        Entries.copyTree(spawner, join(from, name), join(to, name), {
+          keepTimes: true,
+        }).pipe(Effect.mapError(callFailureOf)),
+      { discard: true },
+    );
+  });
+
 // A file or folder flushed to disk (on macOS, past the drive's cache).
-const flush = async (at: string) => {
-  const handle = await open(at, "r");
+const flush = async (at: string, flag: "r" | "r+" = "r") => {
+  const handle = await open(at, flag);
   try {
     await handle.sync();
   } finally {
     await handle.close();
   }
 };
+
+// Windows flushes a file only through a handle that may write it, so a
+// read-only one (git's objects) reaches the disk with the cache's next
+// writes, seconds later.
+const flushFile = (file: string) =>
+  byPlatform({
+    darwin: () => flush(file),
+    linux: () => flush(file),
+    win32: async () => {
+      if (((await stat(file)).mode & 0o200) !== 0) await flush(file, "r+");
+    },
+  })();
 
 const entryPath = (entry: {
   readonly parentPath: string;
@@ -90,7 +142,9 @@ const entryPath = (entry: {
 const depth = (folder: string) => folder.split("/").length;
 
 // Every file and folder of the tree at `dir` flushed, each folder after
-// what it holds; a link is its folder's entry, flushed with it.
+// what it holds; a link is its folder's entry, flushed with it. Windows
+// can't flush a folder (the engine's dataDirMove.ts says what that
+// leaves).
 const flushTree = (dir: string) =>
   Effect.gen(function* () {
     const entries = yield* fsStep(() =>
@@ -98,14 +152,17 @@ const flushTree = (dir: string) =>
     );
     yield* Effect.forEach(
       entries.filter((entry) => entry.isFile()).map(entryPath),
-      (file) => fsStep(() => flush(file)),
+      (file) => fsStep(() => flushFile(file)),
       { concurrency: 32, discard: true },
     );
+    const folders = [
+      ...entries.filter((entry) => entry.isDirectory()).map(entryPath),
+      dir,
+    ];
     yield* Effect.forEach(
-      [
-        ...entries.filter((entry) => entry.isDirectory()).map(entryPath),
-        dir,
-      ].toSorted((a, b) => depth(b) - depth(a)),
+      byPlatform({ darwin: folders, linux: folders, win32: [] }).toSorted(
+        (a, b) => depth(b) - depth(a),
+      ),
       (folder) => fsStep(() => flush(folder)),
       { discard: true },
     );
