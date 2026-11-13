@@ -14,7 +14,8 @@
 // (`endAll`), and the signal ends the process as it would have. vitest
 // SIGTERMs its forks at the end of a run (SIGKILL 500 ms later), and
 // the terminal's Ctrl-C reaches them, so a fork ends its own there.
-import { type ChildProcess, spawnSync } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { processTable, type Row, signalGroup } from "./processTable.mts";
 
 const ends = new Set<() => void>();
 const SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
@@ -125,45 +126,6 @@ const GRACE_MS = 250;
 const KILLED_WITHIN_MS = 2_000;
 const POLL_MS = 50;
 
-type Row = {
-  ppid: number;
-  pgid: number;
-  zombie: boolean;
-  // When it started, to the second.
-  start: number;
-  command: string;
-};
-
-function processTable(): Map<number, Row> {
-  const listed = spawnSync(
-    "/bin/ps",
-    ["-axo", "pid=,ppid=,pgid=,stat=,lstart=,command="],
-    {
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-      // lstart in a form Date.parse reads, whatever the locale.
-      env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
-    },
-  );
-  if (listed.error !== undefined) {
-    throw new Error(`ps didn't run: ${listed.error.message}`);
-  }
-  const rows = new Map<number, Row>();
-  for (const line of listed.stdout.split("\n")) {
-    const [pid, ppid, pgid, stat, ...rest] = line.trim().split(/\s+/);
-    // ps lists itself, a child of this process.
-    if (stat === undefined || Number(pid) === listed.pid) continue;
-    rows.set(Number(pid), {
-      ppid: Number(ppid),
-      pgid: Number(pgid),
-      zombie: stat.startsWith("Z"),
-      start: Date.parse(`${rest.slice(0, 5).join(" ")} UTC`),
-      command: rest.slice(5).join(" "),
-    });
-  }
-  return rows;
-}
-
 // This process and its ancestors (vitest, pnpm, lefthook, a `git commit`,
 // the terminal's job), and their groups: never signalled. A child
 // spawned without `detached` shares this process's group, which is
@@ -247,7 +209,7 @@ function endTrees(roots: ReadonlyMap<number, number>): void {
   };
   const signal = (name: NodeJS.Signals) => {
     const pids = alive();
-    for (const group of groups) signalIfAlive(-group, name);
+    for (const group of groups) signalGroup(group, name);
     for (const pid of pids) signalIfAlive(pid, name);
   };
   const waitGone = (ms: number) => {

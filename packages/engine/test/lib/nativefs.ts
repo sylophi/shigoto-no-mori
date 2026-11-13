@@ -18,6 +18,8 @@ import { isolatedGitEnv } from "../../../../test/gitIsolation.ts";
 const dir = join(import.meta.dirname, "..", "..", "..", "..", "nativefs");
 let built: string | undefined;
 
+export const EXE = process.platform === "win32" ? ".exe" : "";
+
 export function nativefs(): string {
   if (built !== undefined) return built;
   const hash = createHash("sha256");
@@ -35,7 +37,7 @@ export function nativefs(): string {
   const binary = join(
     tmpdir(),
     `nativefs-${hash.digest("hex").slice(0, 16)}`,
-    "nativefs",
+    `nativefs${EXE}`,
   );
   if (!existsSync(binary)) {
     mkdirSync(dirname(binary), { recursive: true });

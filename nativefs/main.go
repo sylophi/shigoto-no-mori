@@ -1,6 +1,6 @@
 // nativefs: the filesystem calls Node has no binding for, for the
-// engine's NativeFs service, on macOS (sys_darwin.go) and Linux
-// (sys_linux.go). Six verbs:
+// engine's NativeFs service, on macOS (sys_darwin.go), Linux
+// (sys_linux.go) and Windows (sys_windows.go). Six verbs:
 //
 //	nativefs clone [-stdin] <src> <dst>   copy-on-write clone of a tree, mode and mtime kept
 //	nativefs exchange <a> <b>             the two swapped in one step
@@ -32,7 +32,6 @@ import (
 	"bytes"
 	"cmp"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -41,8 +40,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
-
-	"golang.org/x/sys/unix"
 )
 
 func main() {
@@ -100,12 +97,19 @@ type entryError struct {
 }
 
 func failure(rel string, err error) failed {
-	var errno unix.Errno
-	if errors.As(err, &errno) {
-		return failed{rel, entryError{unix.ErrnoName(errno), errno.Error()}}
+	if e, ok := errnoOf(err); ok {
+		return failed{rel, e}
 	}
 	return failed{rel, entryError{"", err.Error()}}
 }
+
+// A mode's file kind, as lstat(2) has it.
+const (
+	sIFMT  = 0o170000
+	sIFDIR = 0o040000
+	sIFREG = 0o100000
+	sIFLNK = 0o120000
+)
 
 // What a verb does for one entry, given the roots and the entry's path
 // relative to them.
@@ -147,18 +151,12 @@ var verbs = map[string]verb{
 		var asked sync.Once
 		return func(roots []string, rel string) (any, error) {
 			p := filepath.Join(roots[0], rel)
-			var st unix.Stat_t
-			if err := unix.Lstat(p, &st); err != nil {
+			out, err := lstat(p)
+			if err != nil {
 				return nil, err
 			}
-			out := statted{
-				Path: rel, Dev: uint32(st.Dev), Ino: st.Ino, Mode: uint32(st.Mode),
-				UID: st.Uid, GID: st.Gid, Size: st.Size,
-				CtimeSec: st.Ctim.Sec, CtimeNsec: st.Ctim.Nsec,
-				MtimeSec: st.Mtim.Sec, MtimeNsec: st.Mtim.Nsec,
-				Flags: statFlags(&st), Blocks: st.Blocks, Nlink: uint32(st.Nlink),
-			}
-			if *withPrivate && st.Mode&unix.S_IFMT == unix.S_IFREG && st.Blocks > 0 {
+			out.Path = rel
+			if *withPrivate && out.Mode&sIFMT == sIFREG && out.Blocks > 0 {
 				asked.Do(func() { shares, _ = cloneable(roots[0]) })
 				if shares {
 					if n, ok := privateSize(p); ok {
@@ -262,6 +260,8 @@ func walk(root string, skip map[string]bool, paths chan<- string, lines chan<- a
 		if d != nil && d.IsDir() && skip[rel] {
 			return filepath.SkipDir
 		}
+		// Keyed with slashes on every OS.
+		rel = filepath.ToSlash(rel)
 		if err != nil {
 			lines <- failure(rel, err)
 			return nil

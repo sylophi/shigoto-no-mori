@@ -15,6 +15,10 @@ packages:
 nodeLinker: hoisted
 hoistingLimits: workspaces
 
+# Scripts run in pnpm's own shell on every OS, so one written for sh
+# (`VAR=x cmd`, `$(...)`, `$PWD`) runs on Windows too.
+shellEmulator: true
+
 # blockExoticSubdeps: false is a project-scoped allowance for the
 # @electron/node-gyp transitive dep (git+https://github.com/electron/node-gyp.git,
 # pinned SHA, used by @electron/rebuild during native-module builds).

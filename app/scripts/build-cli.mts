@@ -30,8 +30,10 @@ const version =
     ? "dev"
     : JSON.parse(readFileSync(join(appRoot, "package.json"), "utf8")).version;
 
+// Bun names a Windows binary .exe whatever it is asked for.
+const exe = process.platform === "win32" ? ".exe" : "";
 const outdir = join(appRoot, CLI_DIST_DIR);
-const outfile = join(outdir, cliBinaryName(flavor));
+const outfile = join(outdir, cliBinaryName(flavor) + exe);
 
 execFileSync(
   "node",
@@ -39,7 +41,7 @@ execFileSync(
   { cwd: join(repoRoot, "packages", "cli"), stdio: "inherit" },
 );
 
-const nativefs = join(appRoot, NATIVEFS_DIST_DIR, NATIVEFS_BINARY_NAME);
-if (existsSync(nativefs))
-  copyFileSync(nativefs, join(outdir, NATIVEFS_BINARY_NAME));
+const helper = NATIVEFS_BINARY_NAME + exe;
+const nativefs = join(appRoot, NATIVEFS_DIST_DIR, helper);
+if (existsSync(nativefs)) copyFileSync(nativefs, join(outdir, helper));
 console.log(`built ${outfile} (version ${version})`);
