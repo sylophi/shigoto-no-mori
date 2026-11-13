@@ -93,11 +93,12 @@ export class Paths extends Context.Service<
   }
 >()("sm/engine/Paths") {}
 
-// An environment variable, none when unset or empty.
+// An environment variable naming a path, none when unset or empty.
 const env = (name: string) =>
   Config.String(name).pipe(
     Config.option,
     Config.map(Option.filter((value) => value !== "")),
+    Config.map(Option.map(canonicalPath)),
   );
 
 const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
@@ -125,17 +126,14 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
       Effect.orElseSucceed(() => false),
     );
 
-  const configHome = Option.getOrElse(
-    Option.map(yield* env("XDG_CONFIG_HOME"), canonicalPath),
-    () => path.join(home, ".config"),
+  const configHome = Option.getOrElse(yield* env("XDG_CONFIG_HOME"), () =>
+    path.join(home, ".config"),
   );
-  const dataHome = Option.getOrElse(
-    Option.map(yield* env("XDG_DATA_HOME"), canonicalPath),
-    () => path.join(home, ".local", "share"),
+  const dataHome = Option.getOrElse(yield* env("XDG_DATA_HOME"), () =>
+    path.join(home, ".local", "share"),
   );
-  const stateHome = Option.getOrElse(
-    Option.map(yield* env("XDG_STATE_HOME"), canonicalPath),
-    () => path.join(home, ".local", "state"),
+  const stateHome = Option.getOrElse(yield* env("XDG_STATE_HOME"), () =>
+    path.join(home, ".local", "state"),
   );
   const pointerFile = path.join(configHome, names.configDir, names.pointer);
   const legacyPointerFile =

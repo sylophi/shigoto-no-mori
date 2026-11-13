@@ -28,10 +28,12 @@ const warning = Effect.gen(function* () {
   );
 });
 
+// Throws once its folder is removed under the shell.
+const currentDir = () => canonicalPath(process.cwd());
+
 // A folder removed under the shell has no cwd, which reads as ".".
-export const cwd = Effect.try(() => process.cwd()).pipe(
+export const cwd = Effect.try(currentDir).pipe(
   Effect.orElseSucceed(() => "."),
-  Effect.map(canonicalPath),
 );
 
 const where = Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
@@ -218,7 +220,7 @@ export const absolute = (raw: string) =>
     const expanded = expandHome(raw);
     if (isAbsolute(expanded)) return expanded;
     try {
-      return canonicalPath(resolve(process.cwd(), expanded));
+      return resolve(currentDir(), expanded);
     } catch {
       return expanded;
     }
@@ -232,7 +234,7 @@ export const cwdInside = (path: string) => {
   const pwd = canonicalPath(process.env.PWD ?? "");
   if (pwd !== "" && isSameOrInside(pwd, path)) return true;
   try {
-    return isSameOrInside(canonicalPath(process.cwd()), path);
+    return isSameOrInside(currentDir(), path);
   } catch {
     return false;
   }
