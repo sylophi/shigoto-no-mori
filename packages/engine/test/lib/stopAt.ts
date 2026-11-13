@@ -5,9 +5,9 @@
 // made to refuse as it does across volumes (`crossVolume`), which takes
 // the copy path on one disk. The stop is written beside the wrappers,
 // since the engine hands a command only part of its environment.
-import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { delimiter, join } from "node:path";
+import { realTool, writeStub } from "./stubs.ts";
 
 export type Stop = {
   readonly tool: "git" | "cp" | "rmdir";
@@ -16,9 +16,6 @@ export type Stop = {
 };
 
 const quoted = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
-
-const real = (tool: string) =>
-  execFileSync("/usr/bin/which", [tool], { encoding: "utf8" }).trim();
 
 // The wrappers in `dir`, and the environment that arms them: a stop at
 // `stop` (none runs every command as itself), held for `seconds`.
@@ -41,8 +38,9 @@ export function stopWrappers(
 fi
 `
         : "";
-    writeFileSync(
-      join(dir, tool),
+    writeStub(
+      dir,
+      tool,
       `#!/bin/bash
 source "${join(dir, "stop.env")}"
 args="$*"
@@ -53,13 +51,12 @@ hold() {
   fi
 }
 ${refuse}hold before
-"${real(tool)}" "$@"
+"${realTool(tool)}" "$@"
 code=$?
 [ $code -eq 0 ] && hold after
 exit $code
 `,
     );
-    chmodSync(join(dir, tool), 0o755);
   }
   writeFileSync(
     join(dir, "stop.env"),
@@ -74,5 +71,5 @@ exit $code
       .map(([key, value]) => `${key}=${quoted(value)}\n`)
       .join(""),
   );
-  return { PATH: `${dir}:${process.env["PATH"] ?? ""}` };
+  return { PATH: `${dir}${delimiter}${process.env["PATH"] ?? ""}` };
 }
