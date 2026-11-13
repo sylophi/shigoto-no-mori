@@ -69,8 +69,8 @@ export const makeSignals = Effect.gen(function* () {
     ask: Effect.fn("ProcessTrees.ask")(
       (tree: Tree, how: keyof typeof SIGNALS) => send(tree, SIGNALS[how]),
     ),
-    // Descendants that escaped the group via setsid() get reparented to
-    // launchd, same as if we hadn't signaled at all.
+    // Descendants that escaped the group via setsid() get reparented,
+    // same as if we hadn't signaled at all.
     askNow: Effect.fn("ProcessTrees.askNow")((pid: number) =>
       Effect.sync(() => safeKill(-pid, "SIGTERM")),
     ),
