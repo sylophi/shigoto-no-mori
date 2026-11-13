@@ -1,6 +1,4 @@
-// The platform services the app's processes run on, the one place each
-// takes them from: the shell, the host (host/process/nodeServices.ts
-// adds its removes to them), and what runs before their layer graphs.
-import * as NodeServices from "@effect/platform-node/NodeServices";
-
-export const layer = NodeServices.layer;
+// The platform services every process of the app runs on, taken from
+// here alone: the shell's and the host's layer graphs, and the runs
+// made before them.
+export { layer } from "@effect/platform-node/NodeServices";
