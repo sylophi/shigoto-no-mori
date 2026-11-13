@@ -1,5 +1,5 @@
 // The user's login shell, on a Mac and on Linux, for scripts and
-// terminals alike.
+// terminals alike, and /bin/sh for the engine's own sh.
 import { loginShellOf } from "@shigomori/contracts/loginShell";
 import * as Effect from "effect/Effect";
 import * as ChildProcess from "effect/process/ChildProcess";
@@ -40,5 +40,9 @@ export const makeLogin = Effect.gen(function* () {
     }),
   );
 
-  return { script: loginShell, interactive: loginShell };
+  return {
+    script: loginShell,
+    interactive: loginShell,
+    sh: Effect.succeed("/bin/sh"),
+  };
 });

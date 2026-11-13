@@ -11,6 +11,7 @@ import { isRunnableMode, joinSearchPath } from "../executables.ts";
 import * as Git from "../Git.ts";
 import { splitZ } from "../gitParse.ts";
 import { captureToFiles } from "../processes.ts";
+import * as Shells from "../Shells.ts";
 import { HookFailed } from "./documents.ts";
 
 export const makeHook = Effect.gen(function* () {
@@ -18,6 +19,7 @@ export const makeHook = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const shells = yield* Shells.Shells;
 
   // Runs post-checkout as `git worktree add` does after its checkout:
   // every hook `git hook list` names, in its order, in the new worktree,
@@ -76,6 +78,7 @@ export const makeHook = Effect.gen(function* () {
         env: hookEnv,
       }).pipe(
         Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.provideService(Shells.Shells, shells),
         Effect.map(({ code, stdout }) =>
           code === 0
             ? Option.none<HookFailed>()
@@ -108,7 +111,7 @@ export const makeHook = Effect.gen(function* () {
         if (Option.isNone(commands)) continue;
         const values = splitZ(commands.value);
         const command = values.at(-1) ?? "";
-        failed = yield* run("/bin/sh", [
+        failed = yield* run(yield* shells.sh, [
           "-c",
           `${command} "$@"`,
           command,

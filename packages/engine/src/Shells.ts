@@ -1,5 +1,5 @@
-// Which shell runs what: a project's command lines, and a terminal's
-// prompt. Each OS picks its own (shells/).
+// Which shell runs what: a project's command lines, a terminal's
+// prompt, and the engine's own sh. Each OS picks its own (shells/).
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -22,6 +22,8 @@ export class Shells extends Context.Service<
     readonly script: Effect.Effect<Shell>;
     // The shell a terminal runs at its prompt, and `sm cd`'s subshell.
     readonly interactive: Effect.Effect<Shell>;
+    // A POSIX sh, for the engine's own plumbing written in sh.
+    readonly sh: Effect.Effect<string>;
   }
 >()("sm/engine/Shells") {}
 

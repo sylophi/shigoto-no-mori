@@ -133,7 +133,7 @@ const make = Effect.gen(function* () {
         // A POSIX shell opens the file and becomes the script shell
         // with it as stdout and stderr, whatever shell that is.
         ChildProcess.make(
-          "/bin/sh",
+          yield* shells.sh,
           [
             "-c",
             'exec "$@" >>"$0" 2>&1',
