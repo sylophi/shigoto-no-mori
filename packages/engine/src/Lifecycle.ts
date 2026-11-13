@@ -110,7 +110,6 @@ const make = Effect.gen(function* () {
       });
     const exit = (code: number | null) =>
       script({ runId, kind: "exit", code }).pipe(Effect.as({ code, runId }));
-    const { program, args } = yield* shells.script;
     // The run's output goes to a file, the worktree's last of this
     // script, not to pipes: a child the script leaves in the background
     // keeps writing there, findable after, and holds nothing of this
@@ -121,6 +120,7 @@ const make = Effect.gen(function* () {
       lifecycleScriptName(slot),
     );
     const spawned = Effect.gen(function* () {
+      const { program, args, env: shellEnv } = yield* shells.script;
       yield* fs.makeDirectory(
         scriptOutputDir(paths.dataDir, context.worktree.id),
         { recursive: true },
@@ -134,15 +134,13 @@ const make = Effect.gen(function* () {
         // with it as stdout and stderr, whatever shell that is.
         ChildProcess.make(
           yield* shells.sh,
-          [
-            "-c",
-            'exec "$@" >>"$0" 2>&1',
+          shells.shArgs('exec "$@" >>"$0" 2>&1', [
             output,
             program,
             ...args,
             "-c",
             input.command,
-          ],
+          ]),
           {
             cwd: context.worktree.path,
             // In this process's group, as a terminal runs it: Ctrl-C
@@ -151,6 +149,7 @@ const make = Effect.gen(function* () {
             detached: false,
             extendEnv: true,
             env: {
+              ...shellEnv,
               ...scriptEnvOf(context, lifecycleScriptName(slot)),
               ...UNATTENDED_ENV,
               COLUMNS: "120",

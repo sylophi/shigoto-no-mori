@@ -9,7 +9,6 @@ import {
 } from "@shigomori/contracts/schemas/config";
 import * as Config from "@shigomori/engine/Config";
 import { byHostKind } from "@shigomori/engine/platform";
-import * as Shells from "@shigomori/engine/Shells";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
@@ -199,7 +198,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
       writeFileSync(file, `${JSON.stringify(stored, null, 2)}\n`, {
         mode: 0o600,
       });
-      const failed = runEditor(yield* (yield* Shells.Shells).sh, editor, file);
+      const failed = yield* runEditor(editor, file);
       if (failed !== undefined) {
         rmSync(dir, { recursive: true, force: true });
         return yield* new EditFailed({ problem: failed });

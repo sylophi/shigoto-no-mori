@@ -91,8 +91,9 @@ export const layer = Layer.effect(
     return HookShell.of({
       read: Effect.gen(function* () {
         const { program, args } = yield* shells.interactive;
-        // /bin/sh, when no login shell is named: none to integrate with.
-        if (args.length === 0) return { zdotdir: "", loginShell: "" };
+        // Not a login shell (/bin/sh when none is named, PowerShell on
+        // Windows): none to integrate with.
+        if (!args.includes("-l")) return { zdotdir: "", loginShell: "" };
         const place = yield* probes.get(program).pipe(Effect.option);
         return Option.match(place, {
           onNone: () => ({ zdotdir: "", loginShell: program }),

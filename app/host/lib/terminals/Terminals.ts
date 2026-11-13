@@ -389,7 +389,8 @@ const make = <R, E>(options: {
     const processTable = yield* ProcessTable.ProcessTable;
     const trees = yield* ProcessTrees.ProcessTrees;
     const fs = yield* FileSystem.FileSystem;
-    const { interactive } = yield* Shells.Shells;
+    const shellsService = yield* Shells.Shells;
+    const { interactive } = shellsService;
     const saved = yield* SavedTerminals.SavedTerminals;
     const terrier = yield* Terrier.Terrier;
     const sessions = new Map<string, Session>();
@@ -642,6 +643,7 @@ const make = <R, E>(options: {
           Scope.provide(scope),
           Effect.provideService(ProcessTrees.ProcessTrees, trees),
           Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.provideService(Shells.Shells, shellsService),
         );
         // A restored history is a chunk of its own in a new incarnation,
         // so a client that saw the shell before the restart starts over.

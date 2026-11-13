@@ -7,7 +7,7 @@ import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { envVar } from "../environment.ts";
-import { isRunnableMode, joinSearchPath } from "../executables.ts";
+import { isRunnable, joinSearchPath } from "../executables.ts";
 import * as Git from "../Git.ts";
 import { splitZ } from "../gitParse.ts";
 import { captureToFiles } from "../processes.ts";
@@ -46,11 +46,10 @@ export const makeHook = Effect.gen(function* () {
     } else {
       // A git without `hook list` has no config hooks either, only the
       // hooks folder's, which runs when it's executable.
-      const hook = yield* fs
-        .stat(path.join(yield* hooksDir, "post-checkout"))
-        .pipe(Effect.option);
+      const hookPath = path.join(yield* hooksDir, "post-checkout");
+      const hook = yield* fs.stat(hookPath).pipe(Effect.option);
       list =
-        Option.isSome(hook) && isRunnableMode(hook.value.mode)
+        Option.isSome(hook) && (yield* isRunnable(hookPath, hook.value.mode))
           ? "hook from hookdir"
           : "";
     }
@@ -60,10 +59,16 @@ export const makeHook = Effect.gen(function* () {
     const dir = yield* fs
       .realPath(worktree)
       .pipe(Effect.orElseSucceed(() => worktree));
-    const searched = yield* envVar("PATH");
-    // The environment git gives its hooks: its exec path exported and
-    // first on PATH, no prefix.
+    const shell = yield* Effect.result(shells.script);
+    if (Result.isFailure(shell)) {
+      return yield* new HookFailed({ cause: shell.failure });
+    }
+    const { env: shellEnv } = shell.success;
+    const searched = shellEnv["PATH"] ?? (yield* envVar("PATH"));
+    // The environment git gives its hooks: the script shell's, its exec
+    // path exported and first on PATH, no prefix.
     const hookEnv = {
+      ...shellEnv,
       GIT_EXEC_PATH: execPath,
       GIT_PREFIX: "",
       PATH: joinSearchPath([execPath, searched]),
@@ -111,12 +116,14 @@ export const makeHook = Effect.gen(function* () {
         if (Option.isNone(commands)) continue;
         const values = splitZ(commands.value);
         const command = values.at(-1) ?? "";
-        failed = yield* run(yield* shells.sh, [
-          "-c",
-          `${command} "$@"`,
-          command,
-          ...args,
-        ]);
+        failed = yield* shells.sh.pipe(
+          Effect.flatMap((sh) =>
+            run(sh, ["-c", `${command} "$@"`, command, ...args]),
+          ),
+          Effect.catchTag("NoScriptShell", (cause) =>
+            Effect.succeedSome(new HookFailed({ cause })),
+          ),
+        );
       }
       if (first === undefined && Option.isSome(failed)) first = failed.value;
     }
