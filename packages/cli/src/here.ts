@@ -32,9 +32,7 @@ const warning = Effect.gen(function* () {
 const currentDir = () => canonicalPath(process.cwd());
 
 // A folder removed under the shell has no cwd, which reads as ".".
-export const cwd = Effect.try(currentDir).pipe(
-  Effect.orElseSucceed(() => "."),
-);
+export const cwd = Effect.try(currentDir).pipe(Effect.orElseSucceed(() => "."));
 
 const where = Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
   Effect.flatMap(cwd, worktrees.here),
@@ -220,7 +218,7 @@ export const absolute = (raw: string) =>
     const expanded = expandHome(raw);
     if (isAbsolute(expanded)) return expanded;
     try {
-      return resolve(currentDir(), expanded);
+      return canonicalPath(resolve(process.cwd(), expanded));
     } catch {
       return expanded;
     }

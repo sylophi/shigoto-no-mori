@@ -180,7 +180,7 @@ const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const config = yield* Config.Config;
   const { expandHome, binaryName } = yield* Paths.Paths;
-  const path = yield* Path.Path;
+  const { isAbsolute } = yield* Path.Path;
 
   // What `terrier ls --json` answered, toggle or not. The listing runs
   // before every command, so a wedged terrier is ended.
@@ -221,9 +221,9 @@ const make = Effect.gen(function* () {
     }
     // Home-expanded and absolute, never resolved against the working
     // directory, which differs between the app and a shell.
-    const paths = listed.paths.flatMap((listedPath) => {
-      const expanded = expandHome(listedPath);
-      return path.isAbsolute(expanded) ? [expanded] : [];
+    const paths = listed.paths.flatMap((path) => {
+      const expanded = expandHome(path);
+      return isAbsolute(expanded) ? [expanded] : [];
     });
     return { paths, trouble: Option.none() };
   };

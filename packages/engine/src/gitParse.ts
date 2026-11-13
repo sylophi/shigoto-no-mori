@@ -9,6 +9,7 @@ import type {
   StagedState,
 } from "@shigomori/contracts/schemas";
 import { isCommitHash } from "@shigomori/contracts/schemas";
+import { canonicalPath } from "./canonicalPath.ts";
 
 // For `-z` output: NUL-separated records, with a trailing NUL that
 // would otherwise yield a phantom empty entry.
@@ -77,7 +78,7 @@ export function parseWorktreeList(stdout: string): WorktreeEntry[] {
     const space = field.indexOf(" ");
     const key = space < 0 ? field : field.slice(0, space);
     const value = space < 0 ? "" : field.slice(space + 1);
-    if (key === "worktree") current.path = value;
+    if (key === "worktree") current.path = canonicalPath(value);
     else if (key === "HEAD") current.head = value;
     else if (key === "branch") current.branch = value;
     else if (key === "bare") current.bare = true;

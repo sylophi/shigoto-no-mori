@@ -44,6 +44,7 @@ import {
 import type { PortPoolListing, ReadsArea } from "./reads.ts";
 import type { DataDirChecksArea } from "./dataDirChecks.ts";
 import { mtimeOf } from "../entries.ts";
+import { canonicalPath } from "../canonicalPath.ts";
 
 export const makeProjectChecks = ({
   reads,
@@ -149,7 +150,7 @@ export const makeProjectChecks = ({
         const admin = yield* git.adminDirOf(dir);
         if (Option.isNone(admin)) return "";
         const raw = yield* readText(path.join(admin.value, "gitdir"));
-        const recorded = Option.getOrElse(raw, () => "").trim();
+        const recorded = canonicalPath(Option.getOrElse(raw, () => "").trim());
         if (recorded === "") return "";
         // worktree.useRelativePaths
         return path.dirname(

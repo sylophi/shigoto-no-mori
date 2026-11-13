@@ -35,7 +35,7 @@ export const makeWorktreeVerbs = ({
     ) {
       return parseWorktreeList(
         yield* run(repo, ["worktree", "list", "--porcelain", "-z"]),
-      ).map((entry) => ({ ...entry, path: canonicalPath(entry.path) }));
+      );
     });
 
     const addWorktree = Effect.fn("Git.addWorktree")(function* (input: {
