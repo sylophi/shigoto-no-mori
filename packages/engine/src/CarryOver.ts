@@ -25,7 +25,8 @@ import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as NativeFs from "./NativeFs.ts";
-import { copyFailure, copyTree, entryExists } from "./entries.ts";
+import { copyFailure, copyTree, entryExists, junction } from "./entries.ts";
+import { byPlatform } from "./platform.ts";
 import { stagingName } from "./worktreeLayout.ts";
 import { pidAlive } from "./processes.ts";
 import * as Git from "./Git.ts";
@@ -233,8 +234,8 @@ const make = Effect.gen(function* () {
       }),
     );
 
-  // A copy-on-write clone of the tree where the volume can, else `cp -R
-  // -P`. The destination must not exist.
+  // A copy-on-write clone of the tree where the volume can, else a copy
+  // (copyTree). The destination must not exist.
   const cloneOrCopy = (from: string, to: string) =>
     Effect.gen(function* () {
       const cloned = yield* nativeFs.clone({ from, to }).pipe(
@@ -291,10 +292,18 @@ const make = Effect.gen(function* () {
           return yield* Effect.fail("Destination already exists");
         }
         if (entry.mode === "symlink" && source.isPrimary) {
-          // Absolute, so the link survives the worktree moving.
-          yield* fs
+          // Absolute, so the link survives the worktree moving. A folder's
+          // on Windows is a junction, which needs no privilege. A file's
+          // is a symbolic link there too, which without Developer Mode
+          // fails the entry in Windows' words.
+          const symlink = fs
             .symlink(from, to)
             .pipe(Effect.mapError((error) => error.message));
+          yield* byPlatform({
+            darwin: symlink,
+            linux: symlink,
+            win32: isDirectory ? junction(from, to) : symlink,
+          });
           return isDirectory ? entry.path : undefined;
         }
         // Copied whole beside the worktree, then renamed in, so an entry

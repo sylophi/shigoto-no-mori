@@ -57,10 +57,11 @@ import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import * as Launchers from "./Launchers.ts";
 import * as Open from "./Open.ts";
 import * as Paths from "./Paths.ts";
+import { byPlatform } from "./platform.ts";
 import { errnoText, isNotFound } from "./platformErrors.ts";
 import * as Registry from "./Registry.ts";
 import * as Worktrees from "./Worktrees.ts";
-import { isDirectory } from "./entries.ts";
+import { isDirectory, junction } from "./entries.ts";
 
 // A session as its harness and id name it.
 export type SessionRef = {
@@ -623,7 +624,14 @@ const make = (binary: string) =>
           .pipe(Effect.orElseSucceed(() => ""));
         if (held.trim() !== wanted) {
           yield* fs.remove(source, { recursive: true, force: true });
-          if (link !== undefined) yield* fs.symlink(link, source);
+          // A checkout is a folder here: on Windows a junction to it.
+          if (link !== undefined) {
+            yield* byPlatform({
+              darwin: fs.symlink(link, source),
+              linux: fs.symlink(link, source),
+              win32: junction(link, source),
+            });
+          }
           yield* fs.writeFileString(tagFile, `${wanted}\n`);
         }
       }).pipe(

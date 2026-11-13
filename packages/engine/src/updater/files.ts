@@ -66,7 +66,22 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
     // By rm, not FileSystem.remove: in the app, Electron's fs takes the
     // app.asar inside a bundle for a folder, so a recursive remove of an
     // .app fails on it, leaving a husk a rename onto then refuses.
+    // Windows has no rm: there it is FileSystem.remove, which clears a
+    // read-only file and takes a junction without what it names. What an
+    // app.asar does to it is the Windows install layout's to settle.
     const removeAll = (target: string) =>
+      byPlatform({
+        darwin: removeByRm,
+        linux: removeByRm,
+        win32: removeByFs,
+      })(target);
+    const removeByFs = (target: string) =>
+      fs
+        .remove(target, { recursive: true, force: true })
+        .pipe(
+          Effect.mapError((cause) => new RemoveFailed({ path: target, cause })),
+        );
+    const removeByRm = (target: string) =>
       run("rm", ["-rf", "--", target]).pipe(
         Effect.flatMap((ran) =>
           ran.ok

@@ -24,6 +24,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import { findExecutable } from "../executables.ts";
 import * as Git from "../Git.ts";
 import { copyTree } from "../entries.ts";
+import { byPlatform } from "../platform.ts";
 import * as ProcessTable from "../ProcessTable.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
@@ -37,6 +38,15 @@ import type { ListingArea } from "./listing.ts";
 import type { CreatingArea } from "./creating.ts";
 import type { KeptArea } from "./kept.ts";
 import type { RemovingArea } from "./removing.ts";
+
+// How git words the rename(2) that can't cross volumes (EXDEV): its C
+// library's text for the error, the only trace of the code it leaves.
+const crossDevice = () =>
+  byPlatform({
+    darwin: "cross-device link",
+    linux: "cross-device link",
+    win32: "improper link",
+  });
 
 type MovingRow = {
   readonly from_path: string;
@@ -261,13 +271,13 @@ export const makeMoving = ({
             Effect.andThen(renamed ? wipeLinkLast(to) : Effect.void),
           ),
         ).pipe(Effect.ignore);
-        const cp = (flags: ReadonlyArray<string>) =>
-          copyTree(spawner, from, partial, flags);
-        // -p keeps the times and modes. A volume that can't hold some of
-        // them fails it, so the plain copy is the second try.
+        const cp = (keepTimes: boolean) =>
+          copyTree(spawner, from, partial, { keepTimes });
+        // A volume that can't hold the times and modes fails the first
+        // try, so the plain copy is the second.
         const copied = yield* restore(
-          cp(["-p"]).pipe(
-            Effect.catch(() => wipe(partial).pipe(Effect.andThen(cp([])))),
+          cp(true).pipe(
+            Effect.catch(() => wipe(partial).pipe(Effect.andThen(cp(false)))),
           ),
         ).pipe(
           Effect.onInterrupt(() => undo),
@@ -373,9 +383,7 @@ export const makeMoving = ({
                 Effect.asVoid,
                 Effect.catchTags({
                   GitCommandError: (error) =>
-                    Git.stderrOf(error)
-                      .toLowerCase()
-                      .includes("cross-device link")
+                    Git.stderrOf(error).toLowerCase().includes(crossDevice())
                       ? Effect.suspend(() => {
                           crossed = true;
                           return moveAcrossVolumes(

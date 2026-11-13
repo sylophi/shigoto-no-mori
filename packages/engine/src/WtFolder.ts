@@ -20,11 +20,11 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Result from "effect/Result";
 import * as Semaphore from "effect/Semaphore";
 import * as SqlClient from "effect/sql/SqlClient";
+import { removeEmptyFolder } from "./entries.ts";
 import * as Git from "./Git.ts";
 import { externalVolumeRoot } from "@shigomori/contracts/git/worktreeLayout";
 import { isSameOrInside } from "@shigomori/contracts/projectPaths";
@@ -199,9 +199,8 @@ const make = Effect.gen(function* () {
       ),
     );
 
-  // rmdir, which takes only an empty folder. Finder's .DS_Store, which
-  // a v2 root it was opened in holds when nothing else is left there,
-  // counts as nothing.
+  // Only an empty folder. Finder's .DS_Store, which a v2 root it was
+  // opened in holds when nothing else is left there, counts as nothing.
   const removeEmpty = (dir: string) =>
     Effect.gen(function* () {
       const entries = yield* fs
@@ -210,10 +209,7 @@ const make = Effect.gen(function* () {
       if (entries.length === 1 && entries[0] === ".DS_Store") {
         yield* fs.remove(path.join(dir, ".DS_Store")).pipe(Effect.ignore);
       }
-      return yield* spawner.exitCode(ChildProcess.make("rmdir", [dir])).pipe(
-        Effect.map((code) => code === 0),
-        Effect.orElseSucceed(() => false),
-      );
+      return yield* removeEmptyFolder(dir);
     });
 
   // The emptied v2 roots of `rows`' moves, and the `worktrees` folder
