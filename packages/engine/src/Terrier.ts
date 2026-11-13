@@ -10,7 +10,7 @@ import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Config from "./Config.ts";
 import * as Paths from "./Paths.ts";
-import { byPlatform } from "./platform.ts";
+import { byHostKind } from "./platform.ts";
 import { type CommandError, exec, stderrOf } from "./processes.ts";
 import { keptAnswers } from "./keptAnswers.ts";
 import { terrierProjectId } from "./terrierId.ts";
@@ -204,10 +204,9 @@ const make = Effect.gen(function* () {
     if (listed.kind === "missing") {
       return trouble(
         "on in Settings but `terrier` isn't on PATH, so no terrier projects are listed",
-        byPlatform({
-          darwin:
-            "Install terrier, or turn the toggle off in the app's Settings.",
-          linux: `Install terrier, or turn it off (\`${binaryName} config set terrier false\`).`,
+        byHostKind({
+          app: "Install terrier, or turn the toggle off in the app's Settings.",
+          headless: `Install terrier, or turn it off (\`${binaryName} config set terrier false\`).`,
         }),
       );
     }

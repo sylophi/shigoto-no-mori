@@ -48,7 +48,7 @@ import type {
 import { type Flavor, flavorNames, isFlavor } from "@shigomori/engine/flavor";
 import { answerWithin } from "@shigomori/engine/liveness";
 import * as Paths from "@shigomori/engine/Paths";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byHostKind } from "@shigomori/engine/platform";
 import { pidAlive } from "@shigomori/engine/processes";
 import * as Registry from "@shigomori/engine/Registry";
 import {
@@ -78,13 +78,13 @@ class AppNotRunning extends Schema.TaggedError<AppNotRunning>()(
 ) {
   override get message(): string {
     const bin = flavorNames(this.flavor).binaryName;
-    return byPlatform({
-      darwin: `The Shigoto no Mori app isn't running, and it is what reaches your other devices. ${
+    return byHostKind({
+      app: `The Shigoto no Mori app isn't running, and it is what reaches your other devices. ${
         this.flavor === "dev"
           ? "Start it with `pnpm dev` in a checkout, sign in, and try again."
           : `Open it (${bin} app), sign in, and try again.`
       }`,
-      linux: `This machine's host isn't running, and it is what reaches your other devices. ${
+      headless: `This machine's host isn't running, and it is what reaches your other devices. ${
         this.flavor === "dev"
           ? "Start it with `pnpm headless` in a checkout and try again."
           : `Start it (${bin} service start) and try again.`
@@ -293,11 +293,11 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
     new ControlRefused({
       channel,
       said: appOlder
-        ? byPlatform({
-            darwin: `The app running here is older than this ${paths.binaryName}. Restart it to update (quit it and open it again), and try again.`,
-            linux: `The host running here is older than this ${paths.binaryName}. Restart it to update (\`${paths.binaryName} service restart\`), and try again.`,
+        ? byHostKind({
+            app: `The app running here is older than this ${paths.binaryName}. Restart it to update (quit it and open it again), and try again.`,
+            headless: `The host running here is older than this ${paths.binaryName}. Restart it to update (\`${paths.binaryName} service restart\`), and try again.`,
           })
-        : `This ${paths.binaryName} is older than the ${byPlatform({ darwin: "app", linux: "host" })} running here. Run \`${paths.binaryName} doctor\` to see the ${paths.binaryName} binaries on PATH.`,
+        : `This ${paths.binaryName} is older than the ${byHostKind({ app: "app", headless: "host" })} running here. Run \`${paths.binaryName} doctor\` to see the ${paths.binaryName} binaries on PATH.`,
     });
 
   // A call's failure as the verbs read it. A refusal of commands is a

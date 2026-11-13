@@ -3,7 +3,7 @@
 // it (host/ipc/modules/runtime.ts).
 import { join, resolve } from "node:path";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byHostKind } from "@shigomori/engine/platform";
 import * as Effect from "effect/Effect";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
@@ -11,9 +11,9 @@ import * as Control from "../Control.ts";
 import { rest } from "../here.ts";
 import { emit, out, Output, styles } from "../output.ts";
 
-const RESTARTS = byPlatform({
-  darwin: "The app restarts into it.",
-  linux: "The host restarts into it.",
+const RESTARTS = byHostKind({
+  app: "The app restarts into it.",
+  headless: "The host restarts into it.",
 });
 
 const moveTo = (parentDir: string | undefined) =>
