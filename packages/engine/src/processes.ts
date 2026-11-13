@@ -4,7 +4,6 @@
 // caller ends it with its process group. The long-lived children
 // (cloudflared, the file-sync daemon, the scripts) hold their handles
 // themselves.
-import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -68,88 +67,6 @@ export const isPidAlive = (pid: number) => {
 };
 
 export const pidAlive = (pid: number) => Effect.sync(() => isPidAlive(pid));
-
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
-
-// ps's `lstart` ("Sat Oct 17 03:21:24 2026"), as ps prints it under
-// PS_BIRTH_ENV, in epoch milliseconds, and none for anything else.
-export const parseLstart = (text: string): Option.Option<number> => {
-  const match =
-    /^\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})\s+(\d{4})$/.exec(
-      text.trim(),
-    );
-  if (match === null) return Option.none();
-  const [, month = "", day, hours, minutes, seconds, year] = match;
-  const index = MONTHS.indexOf(month);
-  if (index < 0) return Option.none();
-  return Option.some(
-    DateTime.toEpochMillis(
-      DateTime.makeUnsafe({
-        year: Number(year),
-        month: index + 1,
-        day: Number(day),
-        hour: Number(hours),
-        minute: Number(minutes),
-        second: Number(seconds),
-      }),
-    ),
-  );
-};
-
-// What `ps -o lstart` runs under: UTC, so a zone or a daylight-saving
-// change doesn't move a birth, and C, so its names are English.
-export const PS_BIRTH_ENV = { TZ: "UTC", LC_ALL: "C" };
-
-// When `pid` was born, in epoch milliseconds to the second: the stamp
-// the kernel took at its fork, which no later clock step moves. None
-// when ps can't say.
-export const startOf = (pid: number) =>
-  exec("ps", ["-o", "lstart=", "-p", String(pid)], {
-    env: PS_BIRTH_ENV,
-    extendEnv: true,
-    timeout: "5 seconds",
-  }).pipe(
-    Effect.map(({ stdout }) => parseLstart(stdout)),
-    Effect.orElseSucceed(() => Option.none<number>()),
-  );
-
-// A record's birth when the process that wrote it couldn't read its own.
-export const UNKNOWN_BIRTH = 0;
-
-// How far a birth ps reports may be from a recorded one of the same
-// process: ps counts in whole seconds, and a spawn is stamped just after
-// it returns. Generous enough for a loaded machine, still orders of
-// magnitude tighter than any plausible pid reuse.
-export const BIRTH_TOLERANCE_MS = 5_000;
-
-// Whether the process that recorded itself as `pid`, born at
-// `startedAt`, still runs: a live pid born at another time is another
-// process the system handed the number to since. A birth unknown on
-// either side counts as the same process, so nothing takes over the
-// work of an owner it can't tell is gone.
-export const stillRunning = (pid: number, startedAt: number) =>
-  Effect.gen(function* () {
-    if (pid < 2 || !(yield* pidAlive(pid))) return false;
-    if (startedAt === UNKNOWN_BIRTH) return true;
-    const started = yield* startOf(pid);
-    return (
-      Option.isNone(started) ||
-      Math.abs(started.value - startedAt) <= BIRTH_TOLERANCE_MS
-    );
-  });
 
 const text = <E>(stream: Stream.Stream<Uint8Array, E>) =>
   stream.pipe(Stream.decodeText(), Stream.mkString);

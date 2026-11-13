@@ -55,6 +55,7 @@ import {
   CLOUDFLARED_DIST_DIR,
 } from "@shared/packaging/cloudflaredDist.mts";
 import * as Processes from "@shigomori/engine/processes";
+import * as ProcessTable from "@shigomori/engine/ProcessTable";
 import {
   readTunnelPid,
   TUNNEL_PID_FILE,
@@ -341,6 +342,7 @@ interface Memory {
 export const reapOrphanedConnector = (pidFile: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const processTable = yield* ProcessTable.ProcessTable;
     const raw = yield* fs.readFileString(pidFile).pipe(Effect.option);
     if (Option.isNone(raw)) return;
     const pid = readTunnelPid(raw.value);
@@ -348,14 +350,12 @@ export const reapOrphanedConnector = (pidFile: string) =>
     // groups, self, or launchd on a corrupt file.
     if (pid !== undefined && pid >= 2 && (yield* Processes.pidAlive(pid))) {
       // Bounded: the host's boot waits on this.
-      const name = yield* Processes.exec(
-        "ps",
-        ["-p", String(pid), "-o", "comm="],
-        { timeout: "5 seconds" },
-      ).pipe(Effect.option);
+      const found = yield* processTable
+        .identify(pid)
+        .pipe(Effect.timeoutOption("5 seconds"), Effect.map(Option.flatten));
       if (
-        Option.isSome(name) &&
-        name.value.stdout.trim().toLowerCase().includes("cloudflared")
+        Option.isSome(found) &&
+        found.value.name.toLowerCase().includes("cloudflared")
       ) {
         yield* Effect.try(() => process.kill(pid, "SIGKILL")).pipe(
           Effect.ignore,

@@ -50,6 +50,7 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Processes from "@shigomori/engine/processes";
+import * as ProcessTable from "@shigomori/engine/ProcessTable";
 import { byPlatform } from "@shigomori/engine/platform";
 import { type PtyHandle, PtySpawnError, spawn } from "../scripts/ScriptRuns";
 import { type History, makeHistory } from "./history";
@@ -378,6 +379,7 @@ const make = <R, E>(options: {
       );
     const layerScope = yield* Effect.scope;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const processTable = yield* ProcessTable.ProcessTable;
     const fs = yield* FileSystem.FileSystem;
     const lifecycle = yield* Lifecycle.Lifecycle;
     const saved = yield* SavedTerminals.SavedTerminals;
@@ -447,31 +449,10 @@ const make = <R, E>(options: {
       );
     };
 
-    // The shells among `among` that a command holds: one is held while
-    // its terminal's foreground process group is not its own. Fails
-    // when `ps` does.
+    // The shells among `among` that a command holds. Fails when the
+    // process table can't be read.
     const held = (among: readonly Session[]) =>
-      Effect.gen(function* () {
-        if (among.length === 0) return new Set<number>();
-        const { stdout } = yield* Processes.exec("ps", [
-          "-o",
-          "pid=,tpgid=",
-          "-p",
-          among.map((session) => session.pty.pid).join(","),
-        ]).pipe(
-          Effect.provideService(
-            ChildProcessSpawner.ChildProcessSpawner,
-            spawner,
-          ),
-        );
-        return new Set(
-          stdout
-            .split("\n")
-            .map((line) => line.trim().split(/\s+/).map(Number))
-            .filter(([pid, tpgid = 0]) => tpgid > 0 && tpgid !== pid)
-            .map(([pid = 0]) => pid),
-        );
-      });
+      processTable.held(among.map((session) => session.pty.pid));
 
     const exists = (path: string) =>
       fs.exists(path).pipe(Effect.orElseSucceed(() => false));

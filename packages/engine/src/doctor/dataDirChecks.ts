@@ -5,7 +5,6 @@ import { parse } from "semver";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -13,6 +12,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
+import * as ProcessTable from "../ProcessTable.ts";
 import * as Config from "../Config.ts";
 import { storedProblem } from "../Config.ts";
 import type { ConfigDoc } from "../configDoc.ts";
@@ -147,7 +147,7 @@ const checkGlobalConfig = (
 export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const processTable = yield* ProcessTable.ProcessTable;
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
     const nativeFs = yield* NativeFs.NativeFs;
@@ -501,10 +501,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
             // Through the lock, which breaks only a dead holder's: an
             // update that took it over meanwhile keeps it.
             apply: Effect.scoped(acquireStagingLock(updater.stagingLock)).pipe(
-              Effect.provideService(
-                ChildProcessSpawner.ChildProcessSpawner,
-                spawner,
-              ),
+              Effect.provideService(ProcessTable.ProcessTable, processTable),
               Effect.provideService(FileSystem.FileSystem, fs),
               Effect.provideService(Path.Path, path),
             ),
@@ -591,8 +588,8 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
               apply: Effect.gen(function* () {
                 yield* acquireStagingLock(updater.stagingLock).pipe(
                   Effect.provideService(
-                    ChildProcessSpawner.ChildProcessSpawner,
-                    spawner,
+                    ProcessTable.ProcessTable,
+                    processTable,
                   ),
                 );
                 for (const item of yield* updateLeftovers(version)) {

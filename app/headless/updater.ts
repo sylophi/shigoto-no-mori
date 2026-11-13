@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { UpdaterState } from "@shigomori/contracts/schemas";
 import * as Paths from "@shigomori/engine/Paths";
+import * as ProcessTable from "@shigomori/engine/ProcessTable";
 import * as Updater from "@shigomori/engine/Updater";
 import * as Graph from "@host/process/graph";
 import { quit } from "@host/process/run";
@@ -43,12 +44,13 @@ export const makeHeadlessUpdater = (
   });
   return {
     ...updater,
-    // Over the engine's updater, its paths and fetch.
+    // Over the engine's updater, its paths, fetch and process table.
     layer: updater.layer.pipe(
       Layer.provide(
         Updater.layer(facts.flavor).pipe(
           Layer.provide(FetchHttpClient.layer),
           Layer.provide(Paths.layer(facts.flavor)),
+          Layer.provide(ProcessTable.layer),
         ),
       ),
     ),

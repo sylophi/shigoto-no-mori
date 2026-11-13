@@ -3,9 +3,9 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Path from "effect/Path";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { plural, pluralize } from "@shigomori/contracts/words";
 import { LOOPBACK_FILE, LoopbackFile } from "@shigomori/contracts/link";
+import * as ProcessTable from "../ProcessTable.ts";
 import { appFolders } from "../footprint.ts";
 import * as Paths from "../Paths.ts";
 import { byPlatform } from "../platform.ts";
@@ -13,15 +13,15 @@ import { pidAlive } from "../processes.ts";
 import * as RunningScripts from "../RunningScripts.ts";
 import { readTunnelPid, TUNNEL_PID_FILE } from "../tunnelPid.ts";
 import { check } from "./documents.ts";
-import type { ReadsArea } from "./reads.ts";
+import { CHECK_TIMEOUT, type ReadsArea } from "./reads.ts";
 
 export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const processTable = yield* ProcessTable.ProcessTable;
     const { flavor, binaryName } = paths;
-    const { run, readText } = reads;
+    const { readText } = reads;
     // What stops a process the host left behind: its next start.
     const STOPS_LEFTOVERS = byPlatform({
       darwin: "Open the app, which stops",
@@ -36,18 +36,12 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       if (Option.isNone(raw)) return [];
       const pid = readTunnelPid(raw.value);
       if (pid === undefined || pid < 2) return [];
-      const ps = yield* run("ps", [
-        "-o",
-        "ppid=,comm=",
-        "-p",
-        String(pid),
-      ]).pipe(Effect.option);
+      const found = yield* processTable
+        .identify(pid)
+        .pipe(Effect.timeoutOption(CHECK_TIMEOUT), Effect.map(Option.flatten));
       // Gone, which is the ordinary case.
-      if (Option.isNone(ps)) return [];
-      const output = ps.value.stdout.trim();
-      const space = output.indexOf(" ");
-      const ppid = space < 0 ? output : output.slice(0, space);
-      const comm = space < 0 ? "" : output.slice(space + 1);
+      if (Option.isNone(found)) return [];
+      const { parent, name } = found.value;
       // With the app alive it is the host's child, and the app's
       // business. Outliving the host is a parent that isn't the one the
       // loopback names (launchd, init, a session's reaper).
@@ -57,8 +51,8 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
         Effect.map(Option.flatMap(Schema.decodeUnknownOption(LoopbackFile))),
       );
       if (
-        !comm.toLowerCase().includes("cloudflared") ||
-        Option.exists(host, (file) => String(file.pid) === ppid.trim())
+        !name.toLowerCase().includes("cloudflared") ||
+        Option.exists(host, (file) => file.pid === parent)
       ) {
         return [];
       }
@@ -82,9 +76,7 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       }
       const orphans = yield* RunningScripts.survivors(
         recorded.filter(({ ownerPid }) => gone.has(ownerPid)),
-      ).pipe(
-        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-      );
+      ).pipe(Effect.provideService(ProcessTable.ProcessTable, processTable));
       if (orphans.length === 0) return [];
       const n = orphans.length;
       return [
