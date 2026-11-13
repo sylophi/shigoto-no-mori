@@ -46,7 +46,7 @@ import * as Updater from "@shigomori/engine/Updater";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { writeTraceLine } from "./electron/logFile";
 import * as ClerkTokenStorage from "./electron/clerkTokenStorage";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeServices from "@shared/nodeServices";
 import { childDefaults } from "@shigomori/engine/processes";
 import * as ProcessTable from "@shigomori/engine/ProcessTable";
 import { log } from "@shared/log";

@@ -4,7 +4,7 @@
 // store inside its own run, reads the 2.x files leniently where the
 // store refused them, and names the file at fault the way `sm doctor`
 // does.
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeServices from "@shared/nodeServices";
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import * as Doctor from "@shigomori/engine/Doctor";
 import type { Flavor } from "@shigomori/engine/flavor";

@@ -2,6 +2,7 @@
 // registered projects, terrier's included (and written through to it),
 // and each one's settings. clone is a cross-device verb (transfer.ts).
 import { basename, dirname } from "node:path";
+import { canonicalPath } from "@shigomori/engine/canonicalPath";
 import {
   keyDescriptions,
   ShigomoriConfigSchema,
@@ -371,7 +372,7 @@ const deleteProject = Command.make("delete", unregisterArgs, (input) =>
         ),
       );
     // A shell left standing in the deleted folder is told where to go.
-    const hint = cdHintFor(project.path, dirname(project.path));
+    const hint = cdHintFor(project.path, canonicalPath(dirname(project.path)));
     const { json } = yield* Effect.service(Output);
     if (json) {
       return yield* emit({

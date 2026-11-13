@@ -24,6 +24,7 @@ import { byHostKind } from "@shigomori/engine/platform";
 import type { SyncCloneInto } from "@shigomori/contracts/modules/sync";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { tildify } from "@shigomori/contracts/projectPaths";
+import { canonicalPath } from "@shigomori/engine/canonicalPath";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { PROBE_TIMEOUT_MS } from "@shared/remote/link";
 import { answerWithin } from "@shigomori/engine/liveness";
@@ -368,7 +369,7 @@ export const cloneIntoOn = (
   const here = home();
   if (parent !== undefined) {
     return Effect.succeed<SyncCloneInto>(
-      cloneIntoOf(tildify(parent, here), project.path),
+      cloneIntoOf(tildify(canonicalPath(parent), here), project.path),
     );
   }
   return Effect.map(

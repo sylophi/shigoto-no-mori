@@ -43,6 +43,7 @@ import {
 import { type Project } from "@shigomori/contracts/schemas";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { tildify } from "@shigomori/contracts/projectPaths";
+import { canonicalPath } from "@shigomori/engine/canonicalPath";
 import { home } from "@shared/paths";
 import {
   parseLeaveOutPreset,
@@ -585,7 +586,7 @@ export const clone = (
         projectId: project.id,
         ...(input.cloneInto === undefined
           ? {}
-          : { parentDir: tildify(input.cloneInto, home()) }),
+          : { parentDir: tildify(canonicalPath(input.cloneInto), home()) }),
       });
       return {
         ...cloned,

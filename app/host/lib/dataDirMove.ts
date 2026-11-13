@@ -4,7 +4,7 @@
 // held, the copy to another volume, and what holds the folder let go.
 import { installingWords } from "@host/lib/Shell";
 import { cp, mkdir, open, readdir, rmdir } from "node:fs/promises";
-import { dirname, isAbsolute, join } from "node:path";
+import { join } from "node:path";
 import {
   isSameOrInside,
   trimTrailingSlashes,
@@ -12,6 +12,7 @@ import {
 import { callFailureOf, errorMessageOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as DataDirMove from "@shigomori/engine/dataDirMove";
@@ -141,18 +142,19 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
 ) {
   const { place } = opts;
   const oldDir = place.dataDir;
+  const path = yield* Path.Path;
   const parent =
     parentDir === undefined
-      ? dirname(place.defaultDataDir)
+      ? path.dirname(place.defaultDataDir)
       : expandHome(parentDir);
   // Never resolve against the process cwd: a relative parent would land
   // the data dir somewhere the user never saw.
-  if (!isAbsolute(parent)) {
+  if (!path.isAbsolute(parent)) {
     return yield* new DataDirMoveError({
       reason: `The new parent folder must be an absolute path: ${parentDir}`,
     });
   }
-  const newDir = join(parent, place.dataDirName);
+  const newDir = path.join(parent, place.dataDirName);
   const fs = yield* FileSystem.FileSystem;
   const oldReal = yield* fs
     .realPath(oldDir)
@@ -190,7 +192,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     return yield* new DataDirMoveError({ reason: refused });
   }
   yield* fsStep(() => mkdir(parent, { recursive: true }));
-  const newReal = join(
+  const newReal = path.join(
     yield* fs.realPath(parent).pipe(Effect.orElseSucceed(() => parent)),
     place.dataDirName,
   );

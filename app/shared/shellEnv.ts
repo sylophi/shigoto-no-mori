@@ -13,7 +13,7 @@
 // the overrides a launcher sets for the app itself. Every launch then
 // looks the same however it was started, and the shell's exports reach
 // every child.
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeServices from "@shared/nodeServices";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
