@@ -113,7 +113,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
   opts: SpawnOptions,
   stopping: () => Stopping,
 ) {
-  const { program: shell, args: shellArgs } = opts.shell;
+  const { program, args } = opts.shell;
   // node-pty's helper does the chdir and execs the shell in the child,
   // and exits 1 without a word if either fails, which would show as a
   // bare "exit 1".
@@ -122,12 +122,12 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
     fs.exists(path).pipe(Effect.orElseSucceed(() => false));
   const missing = !(yield* exists(opts.cwd))
     ? "cwd-missing"
-    : !(yield* exists(shell))
+    : !(yield* exists(program))
       ? "shell-missing"
       : null;
   if (missing !== null) {
     return yield* new PtySpawnError({
-      shell,
+      shell: program,
       cwd: opts.cwd,
       reason: missing,
       cause: undefined,
@@ -157,10 +157,8 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
     Effect.try({
       try: (): IPty => {
         const spawned = spawnPty(
-          shell,
-          opts.command === null
-            ? [...shellArgs]
-            : [...shellArgs, "-c", opts.command],
+          program,
+          opts.command === null ? [...args] : [...args, "-c", opts.command],
           {
             name: "xterm-256color",
             cols: opts.cols,
@@ -180,7 +178,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
       },
       catch: (cause) =>
         new PtySpawnError({
-          shell,
+          shell: program,
           cwd: opts.cwd,
           reason: "failed",
           cause,
@@ -197,7 +195,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
         yield* trees.end(tree);
         if (yield* waitExit(UNKILLABLE_WAIT_MS)) return;
         yield* Effect.logWarning(
-          `[scripts] "${opts.command ?? shell}" (pid ${spawned.pid}) survived SIGKILL, giving up on it`,
+          `[scripts] "${opts.command ?? program}" (pid ${spawned.pid}) survived SIGKILL, giving up on it`,
         );
       }),
   );
