@@ -1,5 +1,6 @@
 import type { TerrierReadiness } from "@shigomori/contracts/schemas/terrier";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import { lastSegment } from "@shigomori/contracts/projectPaths";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -131,10 +132,7 @@ const parseListing = (
 };
 
 // The last element of a path, as Go's filepath.Base takes it.
-const baseName = (path: string) => {
-  const trimmed = path.replace(/\/+$/, "");
-  return trimmed === "" ? "/" : trimmed.slice(trimmed.lastIndexOf("/") + 1);
-};
+const baseName = (path: string) => lastSegment(path) || "/";
 
 // Why `terrier ls --json` didn't answer, in Go's words for an exit and
 // a kill.

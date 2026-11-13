@@ -1,7 +1,7 @@
 // Worktrees' relocating: a project moved or renamed by hand, pointed at
 // where it is now, its worktrees re-linked.
 import { UnknownProjectError } from "@shigomori/contracts/errors";
-import { cleanPath } from "@shigomori/contracts/projectPaths";
+import { cleanPath, relativeInside } from "@shigomori/contracts/projectPaths";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -78,8 +78,9 @@ export const makeRelocating = ({
         for (const entry of entries) {
           if (yield* exists(entry.path)) {
             for (const [from, to] of pairs) {
-              if (!entry.path.startsWith(`${to}/`)) continue;
-              const before = path.join(from, entry.path.slice(to.length + 1));
+              const inside = relativeInside(entry.path, to);
+              if (inside === undefined) continue;
+              const before = path.join(from, inside);
               if (!(yield* exists(before))) {
                 moved.set(before, entry.path);
                 break;
@@ -88,8 +89,9 @@ export const makeRelocating = ({
             continue;
           }
           for (const [from, to] of pairs) {
-            if (!entry.path.startsWith(`${from}/`)) continue;
-            const candidate = path.join(to, entry.path.slice(from.length + 1));
+            const inside = relativeInside(entry.path, from);
+            if (inside === undefined) continue;
+            const candidate = path.join(to, inside);
             if (yield* isDirectory(fs, candidate)) {
               moved.set(entry.path, candidate);
               break;

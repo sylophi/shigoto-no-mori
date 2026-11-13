@@ -20,7 +20,7 @@ import type {
   Project,
 } from "@shigomori/contracts/schemas";
 import { messageOf } from "@shigomori/engine/errorDocument";
-import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
+import { isSameOrInside } from "@shigomori/contracts/projectPaths";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
