@@ -29,7 +29,7 @@ import type { Installation } from "./installation.ts";
 import type { StagingArea } from "./staging.ts";
 import type { SwapArea } from "./swap.ts";
 import type { RestartArea } from "./restart.ts";
-import { openEnvArgs, type Relaunched } from "../relaunchEnv.ts";
+import type { Relaunched } from "../relaunchEnv.ts";
 
 export const makeMethods = ({
   files,
@@ -51,22 +51,12 @@ export const makeMethods = ({
 
     const requestPath = files.at.request;
 
-    const { run, writeShared, appRunning, runningApp } = files;
+    const { writeShared, appRunning, runningApp } = files;
     const { updates, queryFeed } = feeds;
-    const { installed: installedOf } = installation;
+    const { installed: installedOf, relaunch } = installation;
     const { stageUpdate } = staging;
     const { installStaged } = swap;
     const { waitForRestart, appendInstallLog, noteInstallFailure } = restart;
-    const relaunchArgs = (
-      bundle: string,
-      endpoints: Omit<Relaunched, "dataDir">,
-    ) => [
-      ...openEnvArgs({
-        ...endpoints,
-        dataDir: paths.dataDirSource === "env" ? paths.dataDir : undefined,
-      }),
-      bundle,
-    ];
 
     const available = (endpoints: {
       readonly feedUrl?: string;
@@ -188,6 +178,10 @@ export const makeMethods = ({
         noteInstallFailure(pid, `${causeText(error)}${after}`, {
           message: causeText(error),
         });
+      const carried: Relaunched = {
+        ...input,
+        dataDir: paths.dataDirSource === "env" ? paths.dataDir : undefined,
+      };
       const bundle = yield* installedOf(input.running.executable).pipe(
         Effect.tapError((error) => failed(error)),
       );
@@ -210,13 +204,11 @@ export const makeMethods = ({
         // than leaving it closed. A failed swap has restored it.
         Effect.tapError((error) =>
           failed(error, " (relaunching the current app)").pipe(
-            Effect.andThen(run("open", relaunchArgs(bundle, input))),
+            Effect.andThen(relaunch(bundle, carried)),
           ),
         ),
       );
-      // By path, in front: the user asked for the restart. A bundle id could
-      // still resolve to the aside bundle just deleted.
-      const relaunched = yield* run("open", relaunchArgs(bundle, input));
+      const relaunched = yield* relaunch(bundle, carried);
       if (!relaunched.ok) {
         const error = new RelaunchFailed({
           version: installed.version,

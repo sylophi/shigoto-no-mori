@@ -24,6 +24,7 @@ import type { ReleaseInfo } from "../updateFeed.ts";
 import {
   DigestRejected,
   NotInBundle,
+  type Ran,
   SignatureRejected,
   StagingFailed,
   SwapFailed,
@@ -37,6 +38,11 @@ import type { Installation } from "./installation.ts";
 // What an update leaves beside versions/ while it lands.
 const INCOMING = ".incoming-";
 const NEXT_CURRENT = ".current-";
+
+// Nothing to start: the host's unit starts the new version once the host
+// exits.
+const relaunch = () =>
+  Effect.succeed<Ran>({ ok: true, output: "", cause: undefined });
 
 export const makeVersions = ({
   flavor,
@@ -238,5 +244,6 @@ export const makeVersions = ({
       pruneLeftovers,
       unpack,
       swap,
+      relaunch,
     } satisfies Installation;
   });
