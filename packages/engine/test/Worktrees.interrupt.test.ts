@@ -393,6 +393,12 @@ const deadRecord = (
       })}`,
   );
 
+// A live process for a record to name.
+const sleep = () =>
+  spawn(process.execPath, ["-e", "setTimeout(() => {}, 30_000)"], {
+    stdio: "ignore",
+  });
+
 // A checkout's entry of git's, as a move records it.
 const linkOf = (dir: string) =>
   realpath(
@@ -520,7 +526,7 @@ it("a copy across volumes whose delete of the original was cut short is finished
 });
 
 it("a move another live process holds is left to it", async () => {
-  const sleeper = spawn("/bin/sleep", ["30"], { stdio: "ignore" });
+  const sleeper = sleep();
   onTestFinished(() => void sleeper.kill());
   const result = await withFox(({ project, worktree }) =>
     Effect.gen(function* () {
@@ -701,7 +707,7 @@ it("a resume leaves a copy this process is making alone", async () => {
 });
 
 it("a move into a folder another move still names is refused", async () => {
-  const sleeper = spawn("/bin/sleep", ["30"], { stdio: "ignore" });
+  const sleeper = sleep();
   onTestFinished(() => void sleeper.kill());
   const result = await withFox(({ project, worktree }) =>
     Effect.gen(function* () {

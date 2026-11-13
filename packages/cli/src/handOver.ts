@@ -3,6 +3,7 @@
 // passes signals on to it without being ended by them, and ends as it
 // ended, killed by its signal included.
 import { spawn } from "node:child_process";
+import { byPlatform } from "@shigomori/engine/platform";
 import { errnoWords } from "@shigomori/engine/platformErrors";
 import { KILL_GRACE } from "@shigomori/engine/processes";
 import * as Effect from "effect/Effect";
@@ -55,6 +56,11 @@ const FROM_TERMINAL = new Set<NodeJS.Signals>([
   "SIGCONT",
 ]);
 
+// On Windows the console's Ctrl-C, Ctrl-Break and close reach every
+// process attached to it, the program included, so sm only holds them
+// off, and no other signal comes to pass on.
+const CONSOLE: ReadonlyArray<NodeJS.Signals> = ["SIGINT", "SIGBREAK", "SIGHUP"];
+
 // Runs `program` with the terminal handed to it, and ends as it ended.
 // Until it exits, the runtime's own handlers are set aside, so a signal
 // sm gets goes to the program and never interrupts sm. SIGTSTP stops sm
@@ -90,11 +96,16 @@ export const handOver = (
       child.once("exit", () => resolve());
       child.once("error", () => resolve());
     });
-    const pass = (signal: NodeJS.Signals) => {
+    const relay = (signal: NodeJS.Signals) => {
       if (!(atTerminal && FROM_TERMINAL.has(signal))) child.kill(signal);
       if (signal === "SIGTSTP") process.kill(process.pid, "SIGSTOP");
     };
-    const set = PASSED.map((signal) => {
+    const { held, pass } = byPlatform({
+      darwin: { held: PASSED, pass: relay },
+      linux: { held: PASSED, pass: relay },
+      win32: { held: CONSOLE, pass: () => {} },
+    });
+    const set = held.map((signal) => {
       const listeners = process.listeners(signal);
       const listener = () => pass(signal);
       process.removeAllListeners(signal);
