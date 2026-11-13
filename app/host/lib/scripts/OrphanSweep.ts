@@ -26,7 +26,7 @@ import * as Schedule from "effect/Schedule";
 import type { OrphanScriptReport } from "@shigomori/contracts/schemas";
 import * as RunningScripts from "@shigomori/engine/RunningScripts";
 import * as Processes from "@shigomori/engine/processes";
-import { signalPidTree, signalTree } from "./process";
+import * as ProcessTrees from "./ProcessTrees";
 
 // SIGTERM -> grace -> SIGKILL, same shape as a run's stop (./runs.ts).
 // Shorter than the interactive grace: this runs at boot, and a script
@@ -52,10 +52,11 @@ const waitForExit = (pid: number, ms: number) =>
 // A lifecycle script's group is the dead app's, which its other
 // leftovers share, so only its own tree is signaled.
 const killOrphan = Effect.fnUntraced(function* (record: RecordedScript) {
-  const signal = record.groupLeader ? signalTree : signalPidTree;
-  yield* signal(record.pid, "SIGTERM");
+  const trees = yield* ProcessTrees.ProcessTrees;
+  const tree = { pid: record.pid, ownGroup: record.groupLeader };
+  yield* trees.ask(tree, "stop");
   if (yield* waitForExit(record.pid, ORPHAN_GRACE_MS)) return true;
-  yield* signal(record.pid, "SIGKILL");
+  yield* trees.end(tree);
   const died = yield* waitForExit(record.pid, ORPHAN_GRACE_MS);
   if (!died) {
     yield* Effect.logWarning(

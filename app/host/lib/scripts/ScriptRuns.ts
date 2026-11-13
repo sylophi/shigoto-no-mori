@@ -7,7 +7,7 @@
 // (interactive prompts, vite's "r"/"q" shortcuts, TUIs). node-pty is not
 // a child_process, so this is the wrapper that gives a PTY child the
 // shape of an effect/process one: acquired in a scope, its release the
-// kill chain (./process.ts), its exit an effect to wait on.
+// kill chain (./ProcessTrees.ts), its exit an effect to wait on.
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -18,11 +18,10 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { type IPty, spawn as spawnPty } from "node-pty";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import * as Lifecycle from "@shigomori/engine/Lifecycle";
-import { signalTree, signalTreeBestEffort } from "./process";
+import * as ProcessTrees from "./ProcessTrees";
 
 // No process could be started: a missing folder to start in or login
 // shell, or a PTY that could not be allocated. The console shows the
@@ -58,15 +57,14 @@ export interface SpawnOptions {
   readonly rows: number;
 }
 
-// How a run is stopped. `wait: false` sends the first signal and
-// moves on: an update's installer is waiting on the app to exit. The
-// first signal is SIGTERM unless `signal` says otherwise: an
-// interactive shell ignores SIGTERM and ends on SIGHUP, as when its
-// terminal window closes.
+// How a run is stopped. `wait: false` asks it to stop and moves on: an
+// update's installer is waiting on the app to exit. The ask is a stop
+// unless `how` says otherwise: an interactive shell ignores a stop and
+// ends on a hangup, as when its terminal window closes.
 export interface Stopping {
   readonly graceMs: number;
   readonly wait: boolean;
-  readonly signal?: NodeJS.Signals;
+  readonly how?: "stop" | "hangup";
 }
 
 // What the layer's close stops a run it finds still open with.
@@ -143,6 +141,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
       env[key] = value;
     }
   }
+  const trees = yield* ProcessTrees.ProcessTrees;
   const exited = yield* Deferred.make<{
     exitCode: number;
     signal: number | undefined;
@@ -153,8 +152,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
       Effect.timeoutOption(Duration.millis(ms)),
       Effect.map(Option.isSome),
     );
-  // The PTY child runs in its own session, so its pgid === pid and the
-  // whole tree is signaled through -pid.
+  // The PTY child runs in its own session, so it leads its own group.
   const child = yield* Effect.acquireRelease(
     Effect.try({
       try: (): IPty => {
@@ -191,14 +189,12 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
     (spawned) =>
       Effect.gen(function* () {
         if (yield* Deferred.isDone(exited)) return;
-        const { graceMs, wait, signal = "SIGTERM" } = stopping();
-        if (!wait) {
-          signalTreeBestEffort(spawned.pid, signal);
-          return;
-        }
-        yield* signalTree(spawned.pid, signal);
+        const { graceMs, wait, how = "stop" } = stopping();
+        if (!wait) return yield* trees.askNow(spawned.pid);
+        const tree = { pid: spawned.pid, ownGroup: true };
+        yield* trees.ask(tree, how);
         if (yield* waitExit(graceMs)) return;
-        yield* signalTree(spawned.pid, "SIGKILL");
+        yield* trees.end(tree);
         if (yield* waitExit(UNKILLABLE_WAIT_MS)) return;
         yield* Effect.logWarning(
           `[scripts] "${opts.command ?? shell}" (pid ${spawned.pid}) survived SIGKILL, giving up on it`,
@@ -259,7 +255,7 @@ export class ScriptRuns extends Context.Service<
 >()("sm/host/ScriptRuns") {}
 
 const make = Effect.gen(function* () {
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const trees = yield* ProcessTrees.ProcessTrees;
   const fs = yield* FileSystem.FileSystem;
   const lifecycle = yield* Lifecycle.Lifecycle;
   const scope = yield* Effect.scope;
@@ -270,7 +266,7 @@ const make = Effect.gen(function* () {
     let stopping = DEFAULT_STOPPING;
     const handle = yield* spawn(opts, () => stopping).pipe(
       Scope.provide(run),
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Effect.provideService(ProcessTrees.ProcessTrees, trees),
       Effect.provideService(FileSystem.FileSystem, fs),
       Effect.provideService(Lifecycle.Lifecycle, lifecycle),
       Effect.onError(() => Scope.close(run, Exit.void)),

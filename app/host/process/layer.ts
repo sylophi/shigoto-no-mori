@@ -29,6 +29,7 @@ import * as PullRequestMaps from "@host/lib/githubCli/PullRequestMaps";
 import * as Views from "@host/lib/Views";
 import * as Ports from "@host/lib/Ports";
 import * as ScriptRuns from "@host/lib/scripts/ScriptRuns";
+import * as ProcessTrees from "@host/lib/scripts/ProcessTrees";
 import * as ScriptChanges from "@host/lib/scripts/ScriptChanges";
 import * as Terminals from "@host/lib/terminals/Terminals";
 import { terminalStart, terminalWorktrees } from "@host/ipc/scriptRun";
@@ -234,6 +235,8 @@ const scriptsAndFoundation = (options: {
     // Every script run, each in a scope the quit's policy above has
     // already closed or shortened.
     Layer.provideMerge(ScriptRuns.layer),
+    // How the scripts, the terminals and the sweep end a process tree.
+    Layer.provideMerge(ProcessTrees.layer),
     Layer.provideMerge(foundation(options.engine, options.migration)),
   );
 

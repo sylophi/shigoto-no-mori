@@ -28,6 +28,7 @@ import * as GithubCli from "../../host/lib/githubCli/GithubCli.ts";
 import * as PullRequestMaps from "../../host/lib/githubCli/PullRequestMaps.ts";
 import * as Scripts from "../../host/lib/Scripts.ts";
 import * as ScriptRuns from "../../host/lib/scripts/ScriptRuns.ts";
+import * as ProcessTrees from "../../host/lib/scripts/ProcessTrees.ts";
 import * as ScriptChanges from "../../host/lib/scripts/ScriptChanges.ts";
 import * as Terminals from "../../host/lib/terminals/Terminals.ts";
 import * as HostAccount from "../../host/lib/HostAccount.ts";
@@ -143,6 +144,7 @@ const hostBelow = Worktrees.layer.pipe(
   Layer.provideMerge(HostPushes.layer),
   Layer.provideMerge(EngineStoreChanges.layer),
   Layer.provideMerge(ScriptRuns.layer),
+  Layer.provideMerge(ProcessTrees.layer),
   Layer.provideMerge(ScriptChanges.layer),
   Layer.provideMerge(FileSync.layer(() => null)),
   Layer.provideMerge(GithubCli.layer),

@@ -346,8 +346,8 @@ export const reapOrphanedConnector = (pidFile: string) =>
     const raw = yield* fs.readFileString(pidFile).pipe(Effect.option);
     if (Option.isNone(raw)) return;
     const pid = readTunnelPid(raw.value);
-    // The same pid floor as scripts/process.ts safeKill: never signal
-    // groups, self, or launchd on a corrupt file.
+    // The same pid floor as safeKill in scripts/processTrees/signals.ts:
+    // never signal groups, self, or launchd on a corrupt file.
     if (pid !== undefined && pid >= 2 && (yield* Processes.pidAlive(pid))) {
       // Bounded: the host's boot waits on this.
       const found = yield* processTable
