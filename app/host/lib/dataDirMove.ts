@@ -5,7 +5,10 @@
 import { installingWords } from "@host/lib/Shell";
 import { cp, mkdir, open, readdir, rmdir } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
-import { isSameOrInside } from "@shigomori/contracts/projectPaths";
+import {
+  isSameOrInside,
+  trimTrailingSlashes,
+} from "@shigomori/contracts/projectPaths";
 import { callFailureOf, errorMessageOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -107,8 +110,6 @@ const flushTree = (dir: string) =>
     );
   });
 
-const trimmed = (dir: string) => dir.replace(/\/+$/, "");
-
 export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // The new parent, or undefined to reset to the default location.
   parentDir: string | undefined,
@@ -156,9 +157,11 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   const oldReal = yield* fs
     .realPath(oldDir)
     .pipe(Effect.orElseSucceed(() => oldDir));
-  const spellings = [trimmed(oldDir), trimmed(oldReal)];
+  const spellings = [trimTrailingSlashes(oldDir), trimTrailingSlashes(oldReal)];
   // A rename would move the link and leave its target where it is.
-  const link = yield* fs.readLink(trimmed(oldDir)).pipe(Effect.option);
+  const link = yield* fs
+    .readLink(trimTrailingSlashes(oldDir))
+    .pipe(Effect.option);
   if (Option.isSome(link)) {
     return yield* new DataDirMoveError({
       reason: `The data folder is a link to ${oldReal}. Move that folder instead.`,
