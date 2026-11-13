@@ -6,7 +6,8 @@ import type * as Launchers from "../Launchers.ts";
 import type { LaunchFailed } from "./documents.ts";
 
 export type Desktop = {
-  // Opens `target` in the app found at `found`.
+  // Opens `target` in the app found at `found`, or in a copy of it the
+  // desktop knows by the same name.
   readonly openApp: (
     label: string,
     found: string,

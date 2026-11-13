@@ -82,20 +82,19 @@ export const makeLaunchServices = ({ ran, run }: CommandsArea) =>
       // An executable's default app runs it, and a file no app claims (a
       // Makefile, often a .ts) has none, so those open in the default text
       // editor (open -t).
-      openFile: (label, file, executable) =>
-        Effect.gen(function* () {
-          if (!executable && (yield* ran("open", [file])).code === 0) return;
-          const { code, output } = yield* ran("open", ["-t", file]);
-          if (code === 0) return;
-          return yield* new LaunchFailed({
-            label,
-            said: output === "" ? `exit status ${code}` : output,
-          });
-        }),
+      openFile: Effect.fnUntraced(function* (label, file, runnable) {
+        if (!runnable && (yield* ran("open", [file])).code === 0) return;
+        const { code, output } = yield* ran("open", ["-t", file]);
+        if (code === 0) return;
+        return yield* new LaunchFailed({
+          label,
+          said: output === "" ? `exit status ${code}` : output,
+        });
+      }),
       // The command line in a new window of the chosen terminal app,
       // driven by AppleScript.
-      inTerminalApp: (label, command, folder, chosen, entries) =>
-        Effect.gen(function* () {
+      inTerminalApp: Effect.fnUntraced(
+        function* (label, command, folder, chosen, entries) {
           const installed =
             TERMINAL_SCRIPTS[chosen] === undefined
               ? undefined
@@ -119,6 +118,7 @@ export const makeLaunchServices = ({ ran, run }: CommandsArea) =>
               ? `${terminal} didn't answer in time. If macOS asked to let it be controlled, allow that and try again.`
               : `Couldn't open ${terminal}: ${output === "" ? `exit status ${code}` : output}`;
           return yield* new LaunchFailed({ label, said });
-        }),
+        },
+      ),
     } satisfies Desktop;
   });
