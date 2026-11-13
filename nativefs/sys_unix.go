@@ -4,9 +4,13 @@ package main
 
 import (
 	"errors"
+	"io"
 
 	"golang.org/x/sys/unix"
 )
+
+// ps reads the processes here.
+var processVerbs = map[string]func(args []string, stdout, stderr io.Writer) int{}
 
 // An errno's name ("ENOENT") and its text.
 func errnoOf(err error) (entryError, bool) {
