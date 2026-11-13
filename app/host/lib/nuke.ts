@@ -47,9 +47,9 @@ type Left = NukeReport["left"][number];
 export function nukeTrap(
   projects: readonly Project[],
   root: string,
-  home: string,
+  homeDir: string,
 ): string | null {
-  if (isSameOrInside(home, root)) {
+  if (isSameOrInside(homeDir, root)) {
     return (
       `Refusing to nuke: the data folder is ${root}, which holds your ` +
       "home folder. Point SHIGOMORI_DATA_DIR or the data folder elsewhere first."
