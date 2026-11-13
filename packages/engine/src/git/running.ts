@@ -12,6 +12,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { canonicalPath } from "../canonicalPath.ts";
 import { findExecutable } from "../executables.ts";
 import { keptAnswers } from "../keptAnswers.ts";
 import { subcommandOf } from "../gitParse.ts";
@@ -421,7 +422,7 @@ export const makeRunning = Effect.gen(function* () {
   const gitPath = (cwd: string, name: string) =>
     Effect.map(
       run(cwd, ["rev-parse", "--path-format=absolute", "--git-path", name]),
-      (out) => out.trim(),
+      (out) => canonicalPath(out.trim()),
     );
 
   return {

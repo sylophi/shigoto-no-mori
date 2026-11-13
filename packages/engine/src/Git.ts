@@ -23,6 +23,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
+import { canonicalPath } from "./canonicalPath.ts";
 import type { BranchRefs, WorktreeEntry } from "./gitParse.ts";
 import { makeRunning } from "./git/running.ts";
 import { makeWorktreeVerbs } from "./git/worktreeVerbs.ts";
@@ -99,8 +100,9 @@ export const commonDirOf = (projectPath: string) =>
     if (stat.value.type !== "File") return null;
     const text = yield* fs.readFileString(dotGit).pipe(Effect.option);
     if (Option.isNone(text)) return null;
-    const pointed = /^gitdir:\s*(.+)$/m.exec(text.value)?.[1]?.trim();
-    if (pointed === undefined) return null;
+    const found = /^gitdir:\s*(.+)$/m.exec(text.value)?.[1]?.trim();
+    if (found === undefined) return null;
+    const pointed = canonicalPath(found);
     const gitDir = path.isAbsolute(pointed)
       ? pointed
       : path.resolve(projectPath, pointed);
@@ -109,7 +111,7 @@ export const commonDirOf = (projectPath: string) =>
       .readFileString(path.join(gitDir, "commondir"))
       .pipe(Effect.option);
     if (Option.isNone(common)) return gitDir;
-    const dir = common.value.trim();
+    const dir = canonicalPath(common.value.trim());
     return path.isAbsolute(dir) ? dir : path.resolve(gitDir, dir);
   });
 

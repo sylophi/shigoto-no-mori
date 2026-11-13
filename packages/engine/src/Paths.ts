@@ -8,6 +8,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { expandHome as expandHomeIn } from "@shigomori/contracts/projectPaths";
+import { canonicalPath } from "./canonicalPath.ts";
 import { type Flavor, flavorNames } from "./flavor.ts";
 import { rescueStrandedMove } from "./dataDirMoveJournal.ts";
 import { isAbsent, isNotFound } from "./platformErrors.ts";
@@ -92,11 +93,12 @@ export class Paths extends Context.Service<
   }
 >()("sm/engine/Paths") {}
 
-// An environment variable, none when unset or empty.
+// An environment variable naming a path, none when unset or empty.
 const env = (name: string) =>
   Config.String(name).pipe(
     Config.option,
     Config.map(Option.filter((value) => value !== "")),
+    Config.map(Option.map(canonicalPath)),
   );
 
 const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
@@ -104,8 +106,11 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
   const path = yield* Path.Path;
   const names = flavorNames(flavor);
   // Unset reads as the working directory.
-  const home = yield* Config.String("HOME").pipe(Config.withDefault("."));
-  const expandHome = (target: string) => expandHomeIn(home, target);
+  const home = canonicalPath(
+    yield* Config.String("HOME").pipe(Config.withDefault(".")),
+  );
+  const expandHome = (target: string) =>
+    expandHomeIn(home, canonicalPath(target));
 
   // A directory a pointer may aim at: one that doesn't exist yet, is
   // empty, or already holds sm's state, so a pointer at ~/Documents

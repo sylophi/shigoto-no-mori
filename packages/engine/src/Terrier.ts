@@ -5,6 +5,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -179,6 +180,7 @@ const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const config = yield* Config.Config;
   const { expandHome, binaryName } = yield* Paths.Paths;
+  const { isAbsolute } = yield* Path.Path;
 
   // What `terrier ls --json` answered, toggle or not. The listing runs
   // before every command, so a wedged terrier is ended.
@@ -221,7 +223,7 @@ const make = Effect.gen(function* () {
     // directory, which differs between the app and a shell.
     const paths = listed.paths.flatMap((path) => {
       const expanded = expandHome(path);
-      return expanded.startsWith("/") ? [expanded] : [];
+      return isAbsolute(expanded) ? [expanded] : [];
     });
     return { paths, trouble: Option.none() };
   };
