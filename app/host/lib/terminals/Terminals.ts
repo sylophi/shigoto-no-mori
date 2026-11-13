@@ -52,6 +52,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Processes from "@shigomori/engine/processes";
 import * as ProcessTable from "@shigomori/engine/ProcessTable";
 import { byPlatform } from "@shigomori/engine/platform";
+import * as ProcessTrees from "../scripts/ProcessTrees";
 import { type PtyHandle, PtySpawnError, spawn } from "../scripts/ScriptRuns";
 import { type History, makeHistory } from "./history";
 import { makeScreen, type Screen } from "./screen";
@@ -133,9 +134,9 @@ const SCREEN_BEHIND = 1024 * 1024;
 // no save and a sleep spends none of the minute.
 const SAVE_QUIET = Duration.seconds(2);
 const SAVE_AT_MOST = Duration.minutes(1);
-// A shell is stopped with SIGHUP, as when its window closes, and
-// SIGKILL a moment later if it is still there.
-const STOPPING = { graceMs: 1_000, wait: true, signal: "SIGHUP" } as const;
+// A shell is hung up on, as when its window closes, and ended a moment
+// later if it is still there.
+const STOPPING = { graceMs: 1_000, wait: true, how: "hangup" } as const;
 // How often the shells are asked whether a command holds them.
 const BUSY_EVERY = Duration.seconds(2);
 // A private mode set or reset (CSI in seven or eight bits), its modes as
@@ -380,6 +381,7 @@ const make = <R, E>(options: {
     const layerScope = yield* Effect.scope;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const processTable = yield* ProcessTable.ProcessTable;
+    const trees = yield* ProcessTrees.ProcessTrees;
     const fs = yield* FileSystem.FileSystem;
     const lifecycle = yield* Lifecycle.Lifecycle;
     const saved = yield* SavedTerminals.SavedTerminals;
@@ -628,10 +630,7 @@ const make = <R, E>(options: {
           () => STOPPING,
         ).pipe(
           Scope.provide(scope),
-          Effect.provideService(
-            ChildProcessSpawner.ChildProcessSpawner,
-            spawner,
-          ),
+          Effect.provideService(ProcessTrees.ProcessTrees, trees),
           Effect.provideService(FileSystem.FileSystem, fs),
           Effect.provideService(Lifecycle.Lifecycle, lifecycle),
         );

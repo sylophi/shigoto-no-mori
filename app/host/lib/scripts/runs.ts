@@ -20,10 +20,9 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
 import * as Option from "effect/Option";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type { Marks } from "./marks";
 import { OrphanSweep } from "./OrphanSweep";
-import { signalPidTree } from "./process";
+import * as ProcessTrees from "./ProcessTrees";
 import { ScriptChanges } from "./ScriptChanges";
 import { type PtyHandle, ScriptRuns, UNKILLABLE_WAIT_MS } from "./ScriptRuns";
 import {
@@ -200,7 +199,7 @@ export const makeRuns = ({
     const scriptRuns = yield* ScriptRuns;
     const sweep = yield* OrphanSweep;
     const { announce } = yield* ScriptChanges;
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const trees = yield* ProcessTrees.ProcessTrees;
     const ptyRuns = new Map<string, RunRecord>();
     const lifecycle = new Map<string, LifecycleRun>();
     // For the records forward, a synchronous callback, makes.
@@ -232,19 +231,21 @@ export const makeRuns = ({
 
     // The kill chain for a lifecycle script, which leads no group of its
     // own: its pid and descendants, never its group.
-    const stopPidTree = Effect.fnUntraced(
-      function* (pid: number, done: Promise<void>, graceMs: number) {
-        yield* signalPidTree(pid, "SIGTERM");
-        if (yield* settledWithin(done, graceMs)) return;
-        yield* signalPidTree(pid, "SIGKILL");
-        if (!(yield* settledWithin(done, UNKILLABLE_WAIT_MS))) {
-          yield* Effect.logWarning(
-            `[scripts] lifecycle script (pid ${pid}) survived SIGKILL; giving up on this kill attempt`,
-          );
-        }
-      },
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-    );
+    const stopPidTree = Effect.fnUntraced(function* (
+      pid: number,
+      done: Promise<void>,
+      graceMs: number,
+    ) {
+      const tree = { pid, ownGroup: false };
+      yield* trees.ask(tree, "stop");
+      if (yield* settledWithin(done, graceMs)) return;
+      yield* trees.end(tree);
+      if (!(yield* settledWithin(done, UNKILLABLE_WAIT_MS))) {
+        yield* Effect.logWarning(
+          `[scripts] lifecycle script (pid ${pid}) survived SIGKILL; giving up on this kill attempt`,
+        );
+      }
+    });
 
     // An exit the app cancelled reports null the way a cancelled PTY run
     // does, so the UI says stopped, not failed (the shell turns SIGTERM
@@ -281,12 +282,7 @@ export const makeRuns = ({
               done,
               stream: createRunStream(notify),
               stop: (graceMs) => stopPidTree(pid, done, graceMs),
-              signal: signalPidTree(pid, "SIGTERM").pipe(
-                Effect.provideService(
-                  ChildProcessSpawner.ChildProcessSpawner,
-                  spawner,
-                ),
-              ),
+              signal: trees.ask({ pid, ownGroup: false }, "stop"),
               flushOutput: () => {},
               settle,
               projectId: event.projectId,
