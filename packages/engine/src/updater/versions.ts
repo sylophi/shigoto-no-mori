@@ -20,6 +20,7 @@ import {
   linuxPackageName,
 } from "../linuxInstall.ts";
 import * as Paths from "../Paths.ts";
+import { openEnvArgs, type Relaunched } from "../relaunchEnv.ts";
 import type { ReleaseInfo } from "../updateFeed.ts";
 import {
   DigestRejected,
@@ -233,10 +234,16 @@ export const makeVersions = ({
       }
     });
 
+    // The host's unit starts the new version once the host exits, and only
+    // a Mac's app hands its install to --finish-install.
+    const relaunch = (folder: string, carried: Relaunched) =>
+      run("open", [...openEnvArgs(carried), folder]);
+
     return {
       installed,
       pruneLeftovers,
       unpack,
       swap,
+      relaunch,
     } satisfies Installation;
   });

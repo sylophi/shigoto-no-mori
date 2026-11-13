@@ -7,6 +7,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as NativeFs from "../NativeFs.ts";
+import { openEnvArgs, type Relaunched } from "../relaunchEnv.ts";
 import type { ReleaseInfo } from "../updateFeed.ts";
 import {
   NotInBundle,
@@ -315,10 +316,16 @@ export const makeBundle = ({
       yield* prune(aside);
     });
 
+    // By path, in front: the user asked for the restart. A bundle id could
+    // still resolve to the aside bundle just deleted.
+    const relaunch = (bundle: string, carried: Relaunched) =>
+      run("open", [...openEnvArgs(carried), bundle]);
+
     return {
       installed,
       pruneLeftovers,
       unpack,
       swap,
+      relaunch,
     } satisfies Installation;
   });
