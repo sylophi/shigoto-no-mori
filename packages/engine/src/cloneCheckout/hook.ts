@@ -7,6 +7,7 @@ import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { envVar } from "../environment.ts";
+import { isRunnableMode, joinSearchPath } from "../executables.ts";
 import * as Git from "../Git.ts";
 import { splitZ } from "../gitParse.ts";
 import { captureToFiles } from "../processes.ts";
@@ -47,7 +48,7 @@ export const makeHook = Effect.gen(function* () {
         .stat(path.join(yield* hooksDir, "post-checkout"))
         .pipe(Effect.option);
       list =
-        Option.isSome(hook) && (hook.value.mode & 0o111) !== 0
+        Option.isSome(hook) && isRunnableMode(hook.value.mode)
           ? "hook from hookdir"
           : "";
     }
@@ -63,7 +64,7 @@ export const makeHook = Effect.gen(function* () {
     const hookEnv = {
       GIT_EXEC_PATH: execPath,
       GIT_PREFIX: "",
-      PATH: `${execPath}:${searched}`,
+      PATH: joinSearchPath([execPath, searched]),
       GIT_DIR: undefined,
       GIT_WORK_TREE: undefined,
     };
