@@ -6,8 +6,8 @@
 // shell's config lives.
 import type { ShellIntegrationStatus } from "@shigomori/contracts/modules/cli";
 import { outputUntil } from "@shared/shellEnv";
-import * as Lifecycle from "@shigomori/engine/Lifecycle";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
+import * as Shells from "@shigomori/engine/Shells";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -61,7 +61,7 @@ export const layer = Layer.effect(
   HookShell,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const lifecycle = yield* Lifecycle.Lifecycle;
+    const shells = yield* Shells.Shells;
     // Read up to END, then the shell's exit, which a job its startup
     // files left holding stdout doesn't hold. Past the budget its scope
     // ends it.
@@ -90,13 +90,13 @@ export const layer = Layer.effect(
     );
     return HookShell.of({
       read: Effect.gen(function* () {
-        const { shell, args } = yield* lifecycle.loginShell;
+        const { program, args } = yield* shells.interactive;
         // /bin/sh, when no login shell is named: none to integrate with.
         if (args.length === 0) return { zdotdir: "", loginShell: "" };
-        const place = yield* probes.get(shell).pipe(Effect.option);
+        const place = yield* probes.get(program).pipe(Effect.option);
         return Option.match(place, {
-          onNone: () => ({ zdotdir: "", loginShell: shell }),
-          onSome: (found) => ({ ...found, loginShell: shell }),
+          onNone: () => ({ zdotdir: "", loginShell: program }),
+          onSome: (found) => ({ ...found, loginShell: program }),
         });
       }),
     });

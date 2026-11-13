@@ -15,7 +15,7 @@
 // loose after a moment, and catches up from the history, a ring of the
 // latest chunks (./history.ts), while it still holds the client's last
 // one. Any other attach is sent the screen as it is (./screen.ts).
-import * as Lifecycle from "@shigomori/engine/Lifecycle";
+import * as Shells from "@shigomori/engine/Shells";
 import {
   UnknownProjectError,
   UnknownTerminalError,
@@ -383,7 +383,7 @@ const make = <R, E>(options: {
     const processTable = yield* ProcessTable.ProcessTable;
     const trees = yield* ProcessTrees.ProcessTrees;
     const fs = yield* FileSystem.FileSystem;
-    const lifecycle = yield* Lifecycle.Lifecycle;
+    const { interactive } = yield* Shells.Shells;
     const saved = yield* SavedTerminals.SavedTerminals;
     const terrier = yield* Terrier.Terrier;
     const sessions = new Map<string, Session>();
@@ -622,6 +622,7 @@ const make = <R, E>(options: {
       return yield* Effect.gen(function* () {
         const pty = yield* spawn(
           {
+            shell: yield* interactive,
             command: null,
             cwd,
             env,
@@ -632,7 +633,6 @@ const make = <R, E>(options: {
           Scope.provide(scope),
           Effect.provideService(ProcessTrees.ProcessTrees, trees),
           Effect.provideService(FileSystem.FileSystem, fs),
-          Effect.provideService(Lifecycle.Lifecycle, lifecycle),
         );
         // A restored history is a chunk of its own in a new incarnation,
         // so a client that saw the shell before the restart starts over.

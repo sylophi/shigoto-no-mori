@@ -74,8 +74,8 @@ export class HookFileError extends Schema.TaggedError<HookFileError>()(
 export type HookShell = {
   readonly zdotdir?: string | undefined;
   readonly configHome?: string | undefined;
-  // The login shell's path, or "" (or `/bin/sh`, Lifecycle's fallback)
-  // for none.
+  // The login shell's path, or "" (or `/bin/sh`, Shells' fallback) for
+  // none.
   readonly loginShell: string;
 };
 

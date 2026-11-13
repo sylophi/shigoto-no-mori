@@ -3,10 +3,10 @@
 // (a terminal's, or the app's once rebuilt at launch) $SHELL is their
 // choice and comes first. In one a launcher handed over (the packaged
 // app's before the rebuild) it is the launcher's, so the account's
-// does. The engine's `Lifecycle.loginShell` reads it for everything
-// that runs in the shell, the launch rebuild (app/shared/shellEnv.ts)
-// for the shell it captures. "" when neither names one. The second
-// reading runs only when the first named none.
+// does. The engine's `Shells` reads it for everything that runs in the
+// shell, the launch rebuild (app/shared/shellEnv.ts) for the shell it
+// captures. "" when neither names one. The second reading runs only
+// when the first named none.
 import * as Effect from "effect/Effect";
 
 export const loginShellOf = <E, R>(input: {

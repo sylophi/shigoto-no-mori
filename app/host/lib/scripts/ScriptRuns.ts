@@ -20,7 +20,7 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import { type IPty, spawn as spawnPty } from "node-pty";
 import { messageOf } from "@shigomori/engine/errorDocument";
-import * as Lifecycle from "@shigomori/engine/Lifecycle";
+import type { Shell } from "@shigomori/engine/Shells";
 import * as ProcessTrees from "./ProcessTrees";
 
 // No process could be started: a missing folder to start in or login
@@ -48,8 +48,9 @@ export class PtySpawnError extends Schema.TaggedError<PtySpawnError>()(
 }
 
 export interface SpawnOptions {
-  // What the login shell runs, or null for the shell itself,
-  // interactive (a terminal's).
+  readonly shell: Shell;
+  // What the shell runs, or null for the shell itself, interactive (a
+  // terminal's).
   readonly command: string | null;
   readonly cwd: string;
   readonly env: NodeJS.ProcessEnv;
@@ -112,8 +113,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
   opts: SpawnOptions,
   stopping: () => Stopping,
 ) {
-  const { shell, args: shellArgs } = yield* (yield* Lifecycle.Lifecycle)
-    .loginShell;
+  const { program, args } = opts.shell;
   // node-pty's helper does the chdir and execs the shell in the child,
   // and exits 1 without a word if either fails, which would show as a
   // bare "exit 1".
@@ -122,12 +122,12 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
     fs.exists(path).pipe(Effect.orElseSucceed(() => false));
   const missing = !(yield* exists(opts.cwd))
     ? "cwd-missing"
-    : !(yield* exists(shell))
+    : !(yield* exists(program))
       ? "shell-missing"
       : null;
   if (missing !== null) {
     return yield* new PtySpawnError({
-      shell,
+      shell: program,
       cwd: opts.cwd,
       reason: missing,
       cause: undefined,
@@ -157,10 +157,8 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
     Effect.try({
       try: (): IPty => {
         const spawned = spawnPty(
-          shell,
-          opts.command === null
-            ? [...shellArgs]
-            : [...shellArgs, "-c", opts.command],
+          program,
+          opts.command === null ? [...args] : [...args, "-c", opts.command],
           {
             name: "xterm-256color",
             cols: opts.cols,
@@ -180,7 +178,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
       },
       catch: (cause) =>
         new PtySpawnError({
-          shell,
+          shell: program,
           cwd: opts.cwd,
           reason: "failed",
           cause,
@@ -197,7 +195,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
         yield* trees.end(tree);
         if (yield* waitExit(UNKILLABLE_WAIT_MS)) return;
         yield* Effect.logWarning(
-          `[scripts] "${opts.command ?? shell}" (pid ${spawned.pid}) survived SIGKILL, giving up on it`,
+          `[scripts] "${opts.command ?? program}" (pid ${spawned.pid}) survived SIGKILL, giving up on it`,
         );
       }),
   );
@@ -257,7 +255,6 @@ export class ScriptRuns extends Context.Service<
 const make = Effect.gen(function* () {
   const trees = yield* ProcessTrees.ProcessTrees;
   const fs = yield* FileSystem.FileSystem;
-  const lifecycle = yield* Lifecycle.Lifecycle;
   const scope = yield* Effect.scope;
   const open = Effect.fn("ScriptRuns.open")(function* (opts: SpawnOptions) {
     const run = yield* Scope.fork(scope);
@@ -268,7 +265,6 @@ const make = Effect.gen(function* () {
       Scope.provide(run),
       Effect.provideService(ProcessTrees.ProcessTrees, trees),
       Effect.provideService(FileSystem.FileSystem, fs),
-      Effect.provideService(Lifecycle.Lifecycle, lifecycle),
       Effect.onError(() => Scope.close(run, Exit.void)),
     );
     // The stopping is taken when close is called, not when its effect

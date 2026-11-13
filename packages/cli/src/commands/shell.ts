@@ -3,9 +3,9 @@
 // shellHook says how). And sm cd, which enters a worktree through the
 // wrapper's directive file, or in a subshell without one.
 import { envVar } from "@shigomori/engine/environment";
-import * as Lifecycle from "@shigomori/engine/Lifecycle";
 import * as Paths from "@shigomori/engine/Paths";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
+import * as Shells from "@shigomori/engine/Shells";
 import {
   CD_FILE_ENV,
   cdDirective,
@@ -29,10 +29,10 @@ import { childEnv } from "@shigomori/engine/processes";
 import { pickProject, pickWorktree } from "../pickers.ts";
 
 // The terminal's shell: its own ZDOTDIR and XDG_CONFIG_HOME, and the
-// login shell the engine runs.
+// login shell a terminal runs.
 const terminalShell = Effect.gen(function* () {
-  const { shell } = yield* (yield* Lifecycle.Lifecycle).loginShell;
-  return { loginShell: shell };
+  const { program } = yield* (yield* Shells.Shells).interactive;
+  return { loginShell: program };
 });
 
 // The wrapper's names, which init prints.
@@ -194,9 +194,9 @@ export const enter = (name: string, target: string, cdFile: string) =>
       if (written) return yield* note(`Entering ${where}.`);
       // The subshell still gets them there.
     }
-    const { shell } = yield* (yield* Lifecycle.Lifecycle).loginShell;
+    const { program } = yield* (yield* Shells.Shells).interactive;
     yield* note(`Entering ${where}. Exit the shell to return.`);
-    yield* handOver("shell", shell, [], {
+    yield* handOver("shell", program, [], {
       cwd: target,
       env: { ...childEnv(process.env), SHIGOMORI_WORKTREE: name },
     });
