@@ -21,6 +21,7 @@ import type { RegisteredProject } from "./Registry.ts";
 import {
   isSameOrInside,
   relativeInside,
+  trimTrailingSlashes,
 } from "@shigomori/contracts/projectPaths";
 import * as Worktrees from "./Worktrees.ts";
 
@@ -309,10 +310,10 @@ const make = Effect.gen(function* () {
     root: string,
     exclude: ReadonlyArray<string>,
   ) {
-    const base = root.replace(/\/+$/, "");
+    const base = trimTrailingSlashes(root);
     // Stepped over by the walk itself, never read.
     const skip = exclude.flatMap(
-      (path) => relativeInside(path.replace(/\/+$/, ""), base) ?? [],
+      (path) => relativeInside(trimTrailingSlashes(path), base) ?? [],
     );
     // Whether a path's own name and every folder above it may date
     // activity.

@@ -70,6 +70,10 @@ function pathRoot(path: string): string {
   return path.startsWith("/") ? "/" : "";
 }
 
+export function trimTrailingSlashes(path: string): string {
+  return path.replace(TRAILING_SEPS, "");
+}
+
 // Whether two paths name the same folder.
 export function samePath(a: string, b: string): boolean {
   return a === b;
@@ -88,10 +92,10 @@ export function relativeInside(
 }
 
 // The whole subtree, as destructive flows guarding against it want.
-// The engine's isManagedPath takes direct children only.
+// The engine's isManagedPath uses parent equality instead.
 export function isSameOrInside(path: string, ancestor: string): boolean {
-  const folded = path.replace(TRAILING_SEPS, "");
-  const base = ancestor.replace(TRAILING_SEPS, "");
+  const folded = trimTrailingSlashes(path);
+  const base = trimTrailingSlashes(ancestor);
   return samePath(folded, base) || relativeInside(folded, base) !== undefined;
 }
 
