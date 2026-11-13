@@ -34,7 +34,13 @@ export function appendBrowsePathSegment(
 
 export function getBrowseParentPath(currentPath: string): string | null {
   const trimmed = currentPath.replace(TRAILING_SEPS, "");
-  if (trimmed === "" || trimmed === "~") return null;
+  if (
+    trimmed === "" ||
+    trimmed === "~" ||
+    pathRoot(`${trimmed}/`) === `${trimmed}/`
+  ) {
+    return null;
+  }
   const idx = trimmed.lastIndexOf("/");
   if (idx < 0) return null;
   // "/foo" parents to the root.
@@ -58,25 +64,35 @@ export function isAnchoredPath(value: string): boolean {
 
 export function normalizeForSubmit(value: string): string {
   const trimmed = value.trim();
-  if (trimmed.length <= 1) return trimmed;
+  if (trimmed.length <= 1 || trimmed === pathRoot(trimmed)) return trimmed;
   return trimmed.replace(TRAILING_SEPS, "");
 }
 
 // The helpers below take a path as the engine spells it: `/` separated
-// on every OS, so the same folder always hashes to the same id.
+// on every OS, so the same folder always hashes to the same id. A
+// Windows path is told by its spelling, a drive (`C:/`) or a share
+// (`//server/share`), not by the OS this runs on: a browser can show
+// another device's paths.
 
-// "/" for an absolute path, "" for a relative one.
+// "/", a drive's "C:/" or a share's "//server/share/" for an absolute
+// path, "" for a relative one.
 function pathRoot(path: string): string {
-  return path.startsWith("/") ? "/" : "";
+  const share = /^\/\/[^/]+\/[^/]+(?=\/|$)/.exec(path)?.[0];
+  if (share !== undefined) return `${share}/`;
+  return /^([A-Za-z]:)?\//.exec(path)?.[0] ?? "";
 }
+
+const isWindowsPath = (path: string) =>
+  /^([A-Za-z]:(\/|$)|\/\/[^/]+\/[^/])/.test(path);
 
 export function trimTrailingSlashes(path: string): string {
   return path.replace(TRAILING_SEPS, "");
 }
 
-// Whether two paths name the same folder.
+// Whether two paths name the same folder. Windows' file systems ignore
+// case.
 export function samePath(a: string, b: string): boolean {
-  return a === b;
+  return isWindowsPath(a) ? a.toLowerCase() === b.toLowerCase() : a === b;
 }
 
 // The part of `path` under `ancestor`, none when it isn't strictly under
@@ -99,8 +115,12 @@ export function isSameOrInside(path: string, ancestor: string): boolean {
   return samePath(folded, base) || relativeInside(folded, base) !== undefined;
 }
 
+// The root is the first part's: `/` joined to `x` is `/x`, never a share.
 export function joinPath(...parts: ReadonlyArray<string>): string {
-  return cleanPath(parts.filter((part) => part !== "").join("/"));
+  const [first = "", ...rest] = parts.filter((part) => part !== "");
+  const root = pathRoot(first);
+  const tail = [first.slice(root.length), ...rest].join("/");
+  return cleanPath(`${root}${tail.replace(/^\/+/, "")}`);
 }
 
 export function lastSegment(path: string): string {
@@ -120,7 +140,11 @@ export function cleanPath(path: string): string {
     else if (root === "") parts.push("..");
   }
   const joined = parts.join("/");
-  return root === "" ? joined || "." : `${root}${joined}`;
+  if (root === "") return joined || ".";
+  // A share's root is spelled without its last slash.
+  return joined === "" && root.startsWith("//")
+    ? root.slice(0, -1)
+    : `${root}${joined}`;
 }
 
 // A `~` or `~/` path joined to `home` and cleaned as Go's filepath.Join
