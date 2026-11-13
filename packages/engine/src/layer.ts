@@ -44,6 +44,7 @@ import * as WorktreeData from "./WorktreeData.ts";
 import * as Worktrees from "./Worktrees.ts";
 import * as WtFolder from "./WtFolder.ts";
 import { childDefaults } from "./processes.ts";
+import * as ProcessTable from "./ProcessTable.ts";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
@@ -123,6 +124,7 @@ const services = (options: EngineOptions) =>
         DataDirLock.layer(options.open),
       ),
     ),
+    Layer.provideMerge(ProcessTable.layer),
     Layer.provideMerge(childDefaults),
   );
 
@@ -168,5 +170,6 @@ export const doctorLayer = (options: {
     // still.
     Layer.merge(DataDirLock.layer(options.open)),
     Layer.provideMerge(Paths.layer(options.flavor)),
+    Layer.provideMerge(ProcessTable.layer),
     Layer.provideMerge(childDefaults),
   );

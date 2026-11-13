@@ -50,6 +50,7 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Processes from "@shigomori/engine/processes";
+import * as ProcessTable from "@shigomori/engine/ProcessTable";
 import { byPlatform } from "@shigomori/engine/platform";
 import { type PtyHandle, PtySpawnError, spawn } from "../scripts/ScriptRuns";
 import { type History, makeHistory } from "./history";
@@ -378,6 +379,7 @@ const make = <R, E>(options: {
       );
     const layerScope = yield* Effect.scope;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const processTable = yield* ProcessTable.ProcessTable;
     const fs = yield* FileSystem.FileSystem;
     const lifecycle = yield* Lifecycle.Lifecycle;
     const saved = yield* SavedTerminals.SavedTerminals;
@@ -446,32 +448,6 @@ const make = <R, E>(options: {
         Effect.orElseSucceed(() => Option.none<string>()),
       );
     };
-
-    // The shells among `among` that a command holds: one is held while
-    // its terminal's foreground process group is not its own. Fails
-    // when `ps` does.
-    const held = (among: readonly Session[]) =>
-      Effect.gen(function* () {
-        if (among.length === 0) return new Set<number>();
-        const { stdout } = yield* Processes.exec("ps", [
-          "-o",
-          "pid=,tpgid=",
-          "-p",
-          among.map((session) => session.pty.pid).join(","),
-        ]).pipe(
-          Effect.provideService(
-            ChildProcessSpawner.ChildProcessSpawner,
-            spawner,
-          ),
-        );
-        return new Set(
-          stdout
-            .split("\n")
-            .map((line) => line.trim().split(/\s+/).map(Number))
-            .filter(([pid, tpgid = 0]) => tpgid > 0 && tpgid !== pid)
-            .map(([pid = 0]) => pid),
-        );
-      });
 
     const exists = (path: string) =>
       fs.exists(path).pipe(Effect.orElseSucceed(() => false));
@@ -803,7 +779,9 @@ const make = <R, E>(options: {
     // look that fails leaves them as they were.
     yield* Effect.gen(function* () {
       const shells = living();
-      const pids = yield* held(shells);
+      const pids = yield* processTable.held(
+        shells.map((session) => session.pty.pid),
+      );
       let changed = false;
       for (const session of shells) {
         const busy = pids.has(session.pty.pid);
@@ -944,7 +922,7 @@ const make = <R, E>(options: {
           projectId: session.terminal.projectId,
           worktreeId,
         });
-        const isHeld = yield* held([session]).pipe(
+        const isHeld = yield* processTable.held([session.pty.pid]).pipe(
           Effect.map((pids) => pids.has(session.pty.pid)),
           Effect.orElseSucceed(() => true),
         );
@@ -995,7 +973,9 @@ const make = <R, E>(options: {
         );
         yield* PubSub.publish(session.events, { kind: "size", ...size });
       }),
-      busy: Effect.suspend(() => held(living())).pipe(
+      busy: Effect.suspend(() =>
+        processTable.held(living().map((session) => session.pty.pid)),
+      ).pipe(
         Effect.map((pids) => pids.size),
         Effect.orElseSucceed(() => 0),
         Effect.withSpan("Terminals.busy"),

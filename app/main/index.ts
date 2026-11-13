@@ -48,6 +48,7 @@ import { writeTraceLine } from "./electron/logFile";
 import * as ClerkTokenStorage from "./electron/clerkTokenStorage";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { childDefaults } from "@shigomori/engine/processes";
+import * as ProcessTable from "@shigomori/engine/ProcessTable";
 import { log } from "@shared/log";
 import * as ShellLayer from "./shellLayer";
 import * as ClientConfig from "./electron/clientConfig";
@@ -224,6 +225,7 @@ const runtime = ManagedRuntime.make(
     ),
     // The client config, read before the first window (below).
     Layer.provideMerge(ClientConfig.layer),
+    Layer.provideMerge(ProcessTable.layer),
     Layer.provideMerge(childDefaults),
     Layer.provideMerge(NodeServices.layer),
   ),

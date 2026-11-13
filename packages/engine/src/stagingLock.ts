@@ -12,7 +12,7 @@ import * as Predicate from "effect/Predicate";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { atoi } from "./doctorParse.ts";
-import { startOf, stillRunning, UNKNOWN_BIRTH } from "./processes.ts";
+import * as ProcessTable from "./ProcessTable.ts";
 
 // A stager is downloading an update, and owns the files in updates/.
 export class UpdateInProgress extends Schema.TaggedError<UpdateInProgress>()(
@@ -50,6 +50,7 @@ export const stagingHolder = Effect.fn("stagingHolder")(function* (
   file: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
+  const processTable = yield* ProcessTable.ProcessTable;
   const raw = yield* fs.readFileString(file).pipe(Effect.option);
   if (Option.isNone(raw)) return Option.none();
   const [pidText = "", startText] = raw.value.trim().split(/\s+/);
@@ -60,7 +61,10 @@ export const stagingHolder = Effect.fn("stagingHolder")(function* (
   const recorded = startText === undefined ? undefined : atoi(startText);
   return Option.some({
     pid,
-    alive: yield* stillRunning(pid, recorded ?? UNKNOWN_BIRTH),
+    alive: yield* processTable.stillRunning(
+      pid,
+      recorded ?? ProcessTable.UNKNOWN_BIRTH,
+    ),
   });
 });
 
@@ -73,11 +77,12 @@ export const acquireStagingLock = Effect.fn("acquireStagingLock")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const processTable = yield* ProcessTable.ProcessTable;
   // One try: taken, or a dead holder's file cleared for the next.
   const attempt = Effect.gen(function* () {
     // Only an existing file is someone else's: a folder that can't be
     // written, or a full disk, says so.
-    const self = yield* startOf(process.pid);
+    const self = yield* processTable.startedAt(process.pid);
     const taken = yield* fs
       .writeFileString(
         file,

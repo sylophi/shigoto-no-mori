@@ -9,6 +9,7 @@ import { closeSync, openSync, renameSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { isTestFlavor } from "@shigomori/engine/flavor";
 import { childDefaults } from "@shigomori/engine/processes";
+import * as ProcessTable from "@shigomori/engine/ProcessTable";
 import type { HostFailureSchema } from "@shigomori/contracts/modules/shellCalls";
 import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
 import * as Effect from "effect/Effect";
@@ -149,7 +150,10 @@ export async function runHost<E>(root: {
   const reaped = Effect.runPromise(
     reapOrphanedConnector(join(facts.userDataPath, TUNNEL_PID_FILE)).pipe(
       Effect.provide(
-        childDefaults.pipe(Layer.provideMerge(HostNodeServices.layer)),
+        ProcessTable.layer.pipe(
+          Layer.provideMerge(childDefaults),
+          Layer.provideMerge(HostNodeServices.layer),
+        ),
       ),
     ),
   );

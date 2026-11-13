@@ -24,7 +24,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import { findExecutable } from "../executables.ts";
 import * as Git from "../Git.ts";
 import { copyTree } from "../entries.ts";
-import { startOf, stillRunning, UNKNOWN_BIRTH } from "../processes.ts";
+import * as ProcessTable from "../ProcessTable.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import { stagingName, worktreeIdFromPath } from "../worktreeLayout.ts";
@@ -63,6 +63,7 @@ export const makeMoving = ({
   Effect.gen(function* () {
     const git = yield* Git.Git;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const processTable = yield* ProcessTable.ProcessTable;
     const sql = yield* SqlClient.SqlClient;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -72,10 +73,6 @@ export const makeMoving = ({
     const { checkName, occupied, portPoolActive } = creating;
     const { wipe, pruneEmptyParents } = removing;
 
-    const withSpawner = Effect.provideService(
-      ChildProcessSpawner.ChildProcessSpawner,
-      spawner,
-    );
     // This process as a move's record names it, read once it could be:
     // a ps that failed is asked again at the next move, so one slow ps
     // doesn't leave this process's records unknown for its life.
@@ -84,10 +81,13 @@ export const makeMoving = ({
     const self = Effect.suspend(() =>
       known !== null
         ? Effect.succeed(known)
-        : Effect.map(withSpawner(startOf(process.pid)), (started) => {
+        : Effect.map(processTable.startedAt(process.pid), (started) => {
             const owner = {
               pid: process.pid,
-              started_at: Option.getOrElse(started, () => UNKNOWN_BIRTH),
+              started_at: Option.getOrElse(
+                started,
+                () => ProcessTable.UNKNOWN_BIRTH,
+              ),
             };
             if (Option.isSome(started)) known = owner;
             return owner;
@@ -103,7 +103,7 @@ export const makeMoving = ({
         return record.pid === owner.pid &&
           record.started_at === owner.started_at
           ? underWay.has(record.from_path)
-          : yield* withSpawner(stillRunning(record.pid, record.started_at));
+          : yield* processTable.stillRunning(record.pid, record.started_at);
       });
 
     // The record of a move about to start, refused while another move
