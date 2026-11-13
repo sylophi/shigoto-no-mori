@@ -10,12 +10,16 @@ import * as FileSystem from "effect/FileSystem";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
+import { startable } from "./batchFiles.ts";
+import { findOn } from "./executables.ts";
+import { keptAnswers } from "./keptAnswers.ts";
 import { byPlatform } from "./platform.ts";
 import { isMissingProgram } from "./platformErrors.ts";
 import * as Shells from "./Shells.ts";
@@ -47,13 +51,63 @@ const withDefaults = (command: ChildProcess.Command): ChildProcess.Command =>
       })
     : command;
 
+// Windows starts a batch file only through cmd (startable), and Node
+// finds a bare name only as an .exe or a .com, past a batch file
+// earlier on PATH, so a bare name is found as cmd finds it, on the
+// child's PATH. Looked up again each minute, for a program installed
+// or removed meanwhile.
+const windowsSpawner = Effect.fnUntraced(function* (
+  inner: ChildProcessSpawner.ChildProcessSpawner["Service"],
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const found = yield* keptAnswers(
+    ([searched, name]: readonly [string, string]) =>
+      findOn(searched, name).pipe(
+        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.provideService(Path.Path, path),
+      ),
+    "1 minute",
+  );
+  return (command: ChildProcess.Command) =>
+    Effect.gen(function* () {
+      if (!ChildProcess.isStandardCommand(command)) {
+        return yield* inner.spawn(command);
+      }
+      const { env } = command.options;
+      const program =
+        path.basename(command.command) === command.command
+          ? Option.getOrElse(
+              yield* found.get([
+                env?.["PATH"] ?? process.env["PATH"] ?? "",
+                command.command,
+              ]),
+              () => command.command,
+            )
+          : command.command;
+      const started = startable(program, command.args);
+      return yield* inner.spawn(
+        ChildProcess.make(started.command, started.args, {
+          ...command.options,
+          shell: started.shell,
+        }),
+      );
+    });
+});
+
 // The platform's spawner with those defaults, provided once by each
 // graph that spawns: the engine's (`layer.ts`) and the host's.
 export const childDefaults = Layer.effect(
   ChildProcessSpawner.ChildProcessSpawner,
-  Effect.map(ChildProcessSpawner.ChildProcessSpawner, (inner) =>
-    ChildProcessSpawner.make((command) => inner.spawn(withDefaults(command))),
-  ),
+  Effect.gen(function* () {
+    const inner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const spawn = yield* byPlatform({
+      darwin: Effect.succeed(inner.spawn),
+      linux: Effect.succeed(inner.spawn),
+      win32: windowsSpawner(inner),
+    });
+    return ChildProcessSpawner.make((command) => spawn(withDefaults(command)));
+  }),
 );
 
 // Whether a process with the pid exists, whoever owns it. Signal 0
@@ -78,6 +132,19 @@ const text = <E>(stream: Stream.Stream<Uint8Array, E>) =>
 // nothing the command starts holds: `sh -c FILES_SCRIPT <stdout file>
 // <stderr file> command ...args`.
 export const FILES_SCRIPT = 'err=$1; shift; "$@" >>"$0" 2>>"$err"; echo $?';
+
+// Git Bash's sh rewrites an argument that reads as a POSIX path (a
+// commit message `/fix the docs`) for a program not its own, as git is.
+// One named in MSYS2_ARG_CONV_EXCL stays as it is, and the hooks the
+// command runs, which inherit it, still have their own rewritten.
+const keptArguments = (args: ReadonlyArray<string>) =>
+  byPlatform({
+    darwin: {},
+    linux: {},
+    win32: {
+      MSYS2_ARG_CONV_EXCL: args.filter((arg) => arg.includes("/")).join(";"),
+    },
+  });
 
 // A command with its output in files, not pipes, read at its exit to
 // the size each had then: for one that runs the person's hooks. What a
@@ -116,14 +183,13 @@ export const captureToFiles = (
       const handle = yield* spawner.spawn(
         ChildProcess.make(
           yield* shells.sh,
-          ["-c", FILES_SCRIPT, out, err, command, ...args],
+          shells.shArgs(FILES_SCRIPT, [out, err, command, ...args]),
           {
             stdin: options.stdin ?? "ignore",
             stderr: "ignore",
             ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-            ...(options.env === undefined
-              ? {}
-              : { env: options.env, extendEnv: true }),
+            env: { ...options.env, ...keptArguments([command, ...args]) },
+            extendEnv: true,
           },
         ),
       );

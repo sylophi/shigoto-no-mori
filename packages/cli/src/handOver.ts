@@ -3,6 +3,9 @@
 // passes signals on to it without being ended by them, and ends as it
 // ended, killed by its signal included.
 import { spawn } from "node:child_process";
+import { basename } from "node:path";
+import { startable } from "@shigomori/engine/batchFiles";
+import { findOn } from "@shigomori/engine/executables";
 import { byPlatform } from "@shigomori/engine/platform";
 import { errnoWords } from "@shigomori/engine/platformErrors";
 import { KILL_GRACE } from "@shigomori/engine/processes";
@@ -69,10 +72,49 @@ export const handOver = (
   kind: StartFailed["kind"],
   program: string,
   args: ReadonlyArray<string>,
-  options: {
-    readonly cwd: string;
-    readonly env: Readonly<Record<string, string | undefined>>;
+  options: Options,
+) =>
+  Effect.flatMap(startOf(program, args, options.env["PATH"] ?? ""), (start) =>
+    handedOver(kind, program, start, options),
+  );
+
+type Options = {
+  readonly cwd: string;
+  readonly env: Readonly<Record<string, string | undefined>>;
+};
+
+// How `program` starts: as named, and on Windows a bare name as cmd
+// finds it on `searched` (Node's spawn finds no batch file), a batch
+// file through cmd.
+const startOf = (
+  program: string,
+  args: ReadonlyArray<string>,
+  searched: string,
+) =>
+  byPlatform({
+    darwin: Effect.succeed({ command: program, args, shell: false }),
+    linux: Effect.succeed({ command: program, args, shell: false }),
+    win32: Effect.gen(function* () {
+      const found =
+        basename(program) === program
+          ? yield* findOn(searched, program)
+          : Option.none<string>();
+      return startable(
+        Option.getOrElse(found, () => program),
+        args,
+      );
+    }),
+  });
+
+const handedOver = (
+  kind: StartFailed["kind"],
+  program: string,
+  start: {
+    readonly command: string;
+    readonly args: ReadonlyArray<string>;
+    readonly shell: boolean;
   },
+  options: Options,
 ) =>
   Effect.callback<
     { readonly code: number } | { readonly signal: NodeJS.Signals },
@@ -86,10 +128,11 @@ export const handOver = (
       Object.entries(options.env).filter(([, value]) => value !== undefined),
     );
     releaseStdin();
-    const child = spawn(program, args, {
+    const child = spawn(start.command, start.args, {
       cwd: options.cwd,
       env,
       stdio: "inherit",
+      shell: start.shell,
     });
     // Settles once the child is gone, or never started.
     const gone = new Promise<void>((resolve) => {
