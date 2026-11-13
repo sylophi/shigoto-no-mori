@@ -114,11 +114,12 @@ const contents = (dir: string) =>
 // The fixture's open of the store in a process of its own, which kills
 // itself just before its `killAt`th event, a statement or a file removal
 // (fixtures/killAt.ts), or none to let it finish. Answers whether it finished,
-// the signal that ended it, and how many events a finished run made.
+// the event its own kill ended it at, and how many events a finished run
+// made.
 const openIn = (dir: string, killAt?: number) =>
   new Promise<{
     readonly finished: boolean;
-    readonly signal: NodeJS.Signals | null;
+    readonly killedAt: number | undefined;
     readonly events: number;
   }>((resolve) => {
     const child = spawn(
@@ -142,7 +143,16 @@ const openIn = (dir: string, killAt?: number) =>
     });
     child.once("close", (code, signal) => {
       const events = /^events (\d+)$/m.exec(said)?.[1];
-      resolve({ finished: code === 0, signal, events: Number(events ?? 0) });
+      // A SIGKILL, or on Windows, which has no signals, TerminateProcess,
+      // whose exit code Node gives as 1.
+      const killed =
+        signal === "SIGKILL" || (process.platform === "win32" && code === 1);
+      const killing = /^killing (\d+)$/m.exec(said)?.[1];
+      resolve({
+        finished: code === 0,
+        killedAt: killed && killing !== undefined ? Number(killing) : undefined,
+        events: Number(events ?? 0),
+      });
     });
   });
 
@@ -168,7 +178,7 @@ it("an import killed anywhere in its run is whole after the next open", async ()
     const dir = copy(`cut-${step}`);
     const killAt = 1 + Math.round((step * (events - 1)) / (steps - 1));
     const cut = await openIn(dir, killAt);
-    assert.equal(cut.signal, "SIGKILL", `not killed at event ${killAt}`);
+    assert.equal(cut.killedAt, killAt, `not killed at event ${killAt}`);
     const after = await contents(dir);
     assert.deepEqual(after.held, reference.held, `killed at event ${killAt}`);
     const left = V2_FILES.filter((file) => existsSync(join(dir, file)));
