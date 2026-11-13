@@ -39,7 +39,7 @@ import {
 import * as Git from "@shigomori/engine/Git";
 import { errnoWords } from "@shigomori/engine/platformErrors";
 import { pidAlive } from "@shigomori/engine/processes";
-import { expandHome } from "@shared/paths";
+import { expandHome, home } from "@shared/paths";
 import * as EngineConfig from "@shigomori/engine/Config";
 import * as Identity from "@shigomori/engine/Identity";
 import { messageOf } from "@shigomori/engine/errorDocument";
@@ -54,7 +54,6 @@ import {
   projectsContract,
 } from "@shigomori/contracts/modules/projects";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
-import { homedir } from "node:os";
 import { peerEffects } from "@host/ipc/PeerReach";
 import { transferFilesOnce } from "@host/mirror/oneShot";
 import { onlyIgnores } from "@shigomori/contracts/mirrorIgnores";
@@ -434,7 +433,7 @@ export const clonePeerProject = Effect.fnUntraced(function* (
         sourcePath: peer.path,
         sourceHome: (yield* peerEffects(runtimeContract, deviceId).info())
           .homedir,
-        destinationHome: homedir(),
+        destinationHome: home(),
         destinationProjects: yield* listedProjects,
       }),
     peer.path,

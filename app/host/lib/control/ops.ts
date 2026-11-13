@@ -43,7 +43,7 @@ import {
 import { type Project } from "@shigomori/contracts/schemas";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { tildify } from "@shigomori/contracts/projectPaths";
-import { homedir } from "node:os";
+import { home } from "@shared/paths";
 import {
   parseLeaveOutPreset,
   sharedSettingKeys,
@@ -585,7 +585,7 @@ export const clone = (
         projectId: project.id,
         ...(input.cloneInto === undefined
           ? {}
-          : { parentDir: tildify(input.cloneInto, homedir()) }),
+          : { parentDir: tildify(input.cloneInto, home()) }),
       });
       return {
         ...cloned,
