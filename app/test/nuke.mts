@@ -9,7 +9,6 @@
 // Run: pnpm test nuke.
 import assert from "node:assert/strict";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -19,6 +18,7 @@ import {
 import { basename, join } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterAll, beforeAll, it } from "vitest";
+import { readOnly } from "../../packages/engine/test/lib/holds.ts";
 import { runHost } from "./lib/hostRuntime.mts";
 import { cliSandbox } from "./lib/cliSandbox.mts";
 import {
@@ -230,17 +230,20 @@ it("deletes all it can past a path it can't, says which, and keeps the marker fo
   writeFileSync(join(held, "file"), "x");
   writeNukeMarker(userData, [join(held, "file"), data]);
   // A folder its file can't leave (a worktree's read-only directory).
-  chmodSync(held, 0o500);
+  const release = readOnly(held);
   try {
     const finished = finishPendingNuke(userData);
     assert.equal(finished?.left.length, 1);
     assert.equal(finished?.left[0]?.path, join(held, "file"));
-    assert.match(finished?.left[0]?.why ?? "", /permission denied|EACCES/i);
+    assert.match(
+      finished?.left[0]?.why ?? "",
+      /permission denied|not permitted/,
+    );
     assert.ok(!existsSync(data), "stopped at the path it couldn't delete");
     assert.ok(!existsSync(join(userData, "account.json")));
     assert.ok(existsSync(join(userData, NUKE_MARKER)));
   } finally {
-    chmodSync(held, 0o700);
+    release();
   }
   assert.deepEqual(finishPendingNuke(userData), { left: [] });
   assert.ok(!existsSync(join(held, "file")));

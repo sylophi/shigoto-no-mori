@@ -26,7 +26,6 @@
 // Run: pnpm test data-dir-move.
 import assert from "node:assert/strict";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -59,6 +58,7 @@ import {
   rescueStrandedMove,
   reviveStore,
 } from "@shigomori/engine/dataDirMoveJournal";
+import { readOnly, unreadable } from "../../packages/engine/test/lib/holds.ts";
 import * as Fixtures from "./lib/engineFixtures.mts";
 import { addProject } from "../host/lib/projects/index.ts";
 import { initDataDirAt } from "../shared/paths.ts";
@@ -346,12 +346,12 @@ it("a copied move whose old tree couldn't be removed keeps its journal, and the 
   });
   writeFileSync(join(old, JOURNAL), journal);
   writeFileSync(join(engineDataDir, JOURNAL), journal);
-  chmodSync(stuck, 0o555);
-  trackTest(() => chmodSync(stuck, 0o755));
+  const release = readOnly(stuck);
+  trackTest(release);
   await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(existsSync(join(old, JOURNAL)), true, "the old tree still ours");
   assert.equal(journalLeft(), true, "the journal kept with the old tree owed");
-  chmodSync(stuck, 0o755);
+  release();
   await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(existsSync(old), false, "the old tree removed");
   assert.equal(journalLeft(), false);
@@ -370,10 +370,10 @@ it("a finish that can't read the old tree's journal keeps its own, and finishes 
   });
   writeFileSync(join(old, JOURNAL), journal);
   writeFileSync(join(engineDataDir, JOURNAL), journal);
-  chmodSync(join(old, JOURNAL), 0o000);
+  const release = unreadable(join(old, JOURNAL));
   await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(journalLeft(), true);
-  chmodSync(join(old, JOURNAL), 0o644);
+  release();
   await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(existsSync(old), false);
   assert.equal(journalLeft(), false);
@@ -544,7 +544,12 @@ it("finds a data folder whose move a crash cut before its pointer moved", async 
   assert.equal(await rescue(join(root, "elsewhere")), null);
 });
 
-it("a rename interrupted before its pointer moved keeps the staged pointer the next start finds it by", async () => {
+const WINDOWS_COPIES = "Windows copies every move, renaming no folder";
+
+it("a rename interrupted before its pointer moved keeps the staged pointer the next start finds it by", async ({
+  skip,
+}) => {
+  skip(process.platform === "win32", WINDOWS_COPIES);
   const parent = join(elsewhere, "same-volume");
   const destination = join(parent, "moved");
   const pointerFile = join(elsewhere, "config-3", "data-dir");
@@ -608,7 +613,10 @@ it("a rename interrupted before its pointer moved keeps the staged pointer the n
 // rename and its mark are one step, so the folder that landed is kept
 // whole, with the staged pointer the next start finds it by, and never
 // undone where the data no longer is.
-it("a cancel during the folder's rename keeps the landed folder and its staged pointer", async () => {
+it("a cancel during the folder's rename keeps the landed folder and its staged pointer", async ({
+  skip,
+}) => {
+  skip(process.platform === "win32", WINDOWS_COPIES);
   const parent = join(elsewhere, "same-volume-cancel");
   const destination = join(parent, "moved");
   const pointerFile = join(elsewhere, "config-5", "data-dir");

@@ -3,13 +3,7 @@
 // and one that can't follow stays where it was. And a create at a path
 // whose id holds one leaves it (real git on a sandbox data dir).
 import assert from "node:assert/strict";
-import {
-  chmodSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -17,6 +11,7 @@ import { afterEach, beforeEach, it } from "vitest";
 import * as Registry from "../src/Registry.ts";
 import * as Worktrees from "../src/Worktrees.ts";
 import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
+import { unreadable } from "./lib/holds.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox;
@@ -184,11 +179,11 @@ it("fails a re-key back whose capture can't be read, and carries it once it can"
       const head = box.git(repo, "rev-parse", "HEAD").trim();
       box.git(repo, "update-ref", `refs/shigomori/dirty/${to}`, head);
       const loose = join(repo, ".git", "refs", "shigomori", "dirty", to);
-      chmodSync(loose, 0o000);
+      const release = unreadable(loose);
       const first = yield* Effect.flip(
         worktrees.rekey(project, to, fromPath, { expect: head, back: true }),
       );
-      chmodSync(loose, 0o644);
+      release();
       yield* worktrees.rekey(project, to, fromPath, {
         expect: head,
         back: true,
