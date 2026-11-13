@@ -13,6 +13,8 @@ export const NODE_PTY_PREBUILDS = `${NODE_PTY_PACKAGE}/prebuilds`;
 export const NODE_PTY_ADDON = "pty.node";
 export const NODE_PTY_BUILT_ADDON = `${NODE_PTY_PACKAGE}/build/Release/${NODE_PTY_ADDON}`;
 export const NODE_PTY_SPAWN_HELPER = "spawn-helper";
+// Windows' addon, for ConPTY.
+export const NODE_PTY_CONPTY_ADDON = "conpty.node";
 
 // The prebuild directory for one platform/arch pair, e.g. darwin-arm64.
 export function nodePtyPrebuildDir(platform: string, arch: string): string {
