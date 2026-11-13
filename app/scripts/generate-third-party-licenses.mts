@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFile } from "node:child_process";
+import { exec, execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { lstat, readdir, readFile, mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -40,6 +40,7 @@ const OUT_DIR =
 const JSON_OUT = join(OUT_DIR, "third-party-licenses.json");
 const TEXT_OUT = join(OUT_DIR, "THIRD-PARTY-LICENSES.txt");
 
+const execP = promisify(exec);
 const execFileP = promisify(execFile);
 
 // The Bun CI compiles the terminal sm with (.github/actions/setup-toolchains).
@@ -211,17 +212,9 @@ type Listed = {
 async function shippedPackages(): Promise<Set<string>> {
   const listings = await Promise.all(
     NPM_ROOTS.map((root) =>
-      execFileP(
-        "pnpm",
-        [
-          "--filter",
-          `./${relative(repoRoot, root)}`,
-          "list",
-          "--prod",
-          "--json",
-          "--depth",
-          "Infinity",
-        ],
+      // Through a shell, as pnpm is a .cmd script on Windows.
+      execP(
+        `pnpm --filter ./${relative(repoRoot, root)} list --prod --json --depth Infinity`,
         { cwd: repoRoot, maxBuffer: 256 * 1024 * 1024 },
       ),
     ),

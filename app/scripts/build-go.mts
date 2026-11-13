@@ -36,7 +36,8 @@ if (name !== "file-sync" && name !== "nativefs") {
   throw new Error("Usage: build-go.mts <file-sync|nativefs>");
 }
 const helper = HELPERS[name];
-const outfile = join(appRoot, helper.outfile);
+const exe = process.platform === "win32" ? ".exe" : "";
+const outfile = join(appRoot, helper.outfile + exe);
 
 execFileSync(
   "go",

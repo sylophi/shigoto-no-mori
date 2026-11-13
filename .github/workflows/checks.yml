@@ -126,3 +126,58 @@ jobs:
 
       - name: Proofs
         run: pnpm run check:proofs
+
+  # What passes on Windows so far: the static checks, the contracts'
+  # fixtures and the Go helpers. The engine's, the terminal's and the
+  # proofs join as the port lands.
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    # Git's bash rather than PowerShell, so a step reads as it does in the
+    # jobs above.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: ./.github/actions/setup-toolchains
+
+      - uses: ./.github/actions/install-workspace
+        id: install
+
+      - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:lint
+
+      - name: Format
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:format
+
+      - name: Typecheck
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:typecheck
+
+      - name: Knip
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:knip
+
+      - name: Contract fixtures
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:contracts
+
+      - name: Third-party notices have license metadata
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm -C app run licenses --out "$RUNNER_TEMP/licenses"
+
+      - name: Go helpers build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm -C app run file-sync:build && pnpm -C app run nativefs:build
+
+      - name: Go vet
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: go vet -C file-sync ./... && go vet -C nativefs ./...
+
+      - name: Go tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:go

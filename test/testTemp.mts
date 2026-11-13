@@ -1,7 +1,7 @@
 // The one owner of every test run's temp files. Each runner here (the
 // vitest configs, the smoke, the scene comparison, and the Go tests
 // through `node test/testTemp.mts`) takes a run folder,
-// `<temp>/sm-test/<family>/<id>/`, and points TMPDIR and
+// `<temp>/sm-test/<family>/<id>/`, and points the temp dir and
 // XDG_CONFIG_HOME at it before any test starts, so whatever a test, the
 // code under it or a process it spawns puts in the temp dir or the
 // config folder lands there. A run removes its folder as
@@ -14,6 +14,7 @@ import { spawnSync } from "node:child_process";
 import {
   appendFileSync,
   chmodSync,
+  cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -39,8 +40,8 @@ const UNCLAIMED_MS = 2 * 60 * 60_000;
 // The run this process took, which it leaves as it exits.
 let owned: { root: string; run: string } | undefined;
 
-// Takes a run folder for `family` and points this process's TMPDIR and
-// XDG_CONFIG_HOME at it. Inside a run already (a runner that spawns
+// Takes a run folder for `family` and points this process's temp dir
+// and XDG_CONFIG_HOME at it. Inside a run already (a runner that spawns
 // another that calls this too), joins that run instead, so the run is
 // held while either process lives. Returns the run folder.
 export function ownTestTemp(family: string): string {
@@ -55,7 +56,8 @@ export function ownTestTemp(family: string): string {
   const userConfig = process.env["XDG_CONFIG_HOME"];
   process.env[ROOT] = root;
   process.env[RUN] = run;
-  process.env["TMPDIR"] = run;
+  // Windows reads TEMP and TMP.
+  for (const name of ["TMPDIR", "TEMP", "TMP"]) process.env[name] = run;
   // The config folder too, where the engine keeps the data dir's pointer
   // and the data-folder lock beside it (Paths, DataDirLock): the
   // machine's own would be one lock for every run here and the plain
@@ -82,7 +84,8 @@ export function leaveTestTemp(): void {
 // pnpm and Bun read their global settings (the release cooldown,
 // ignore-scripts) from XDG_CONFIG_HOME once it is set, so the run's
 // folder links the user's own back in, or an install inside a run would
-// go without them.
+// go without them. Windows links only with Developer Mode on, so there
+// the run gets a copy.
 function linkPackageManagers(config: string, userConfig?: string): void {
   const home = homedir();
   const sources: Record<string, string> = {
@@ -91,14 +94,21 @@ function linkPackageManagers(config: string, userConfig?: string): void {
         ? join(userConfig, "pnpm")
         : process.platform === "darwin"
           ? join(home, "Library", "Preferences", "pnpm")
-          : join(home, ".config", "pnpm"),
+          : process.platform === "win32"
+            ? join(home, "AppData", "Local", "pnpm", "config")
+            : join(home, ".config", "pnpm"),
     ".bunfig.toml":
       userConfig !== undefined && existsSync(join(userConfig, ".bunfig.toml"))
         ? join(userConfig, ".bunfig.toml")
         : join(home, ".bunfig.toml"),
   };
   for (const [name, source] of Object.entries(sources)) {
-    if (existsSync(source)) symlinkSync(source, join(config, name));
+    if (!existsSync(source)) continue;
+    if (process.platform === "win32") {
+      cpSync(source, join(config, name), { recursive: true });
+    } else {
+      symlinkSync(source, join(config, name));
+    }
   }
 }
 

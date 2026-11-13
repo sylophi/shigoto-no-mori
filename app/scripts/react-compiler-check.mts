@@ -15,7 +15,7 @@
 //   node scripts/react-compiler-check.mts <file>... check those files
 import { createRequire } from "node:module";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { reactCompilerPreset } from "@vitejs/plugin-react";
 import type { LoggerEvent } from "babel-plugin-react-compiler";
 import { REACT_COMPILER_OPTIONS } from "../vite.reactCompiler.ts";
@@ -51,6 +51,11 @@ type Bailout = {
 
 const keyOf = (b: Bailout) => `${b.file} ${b.function} ${b.category}`;
 
+// A file as the list names it: from the repo's root, with forward
+// slashes on every OS.
+const fromRepo = (path: string) =>
+  relative(repoRoot, path).replaceAll(sep, "/");
+
 const isSource = (path: string) =>
   /\.(tsx?|mts)$/.test(path) && !path.endsWith(".d.ts");
 
@@ -84,7 +89,7 @@ function namesByStart(ast: object): Map<number, string> {
 function bailoutsIn(path: string): Bailout[] {
   const code = readFileSync(path, "utf8");
   if (!COMPILER_FILTER.test(code)) return [];
-  const file = relative(repoRoot, path);
+  const file = fromRepo(path);
   const ast = babel.parseSync(code, {
     filename: path,
     babelrc: false,
@@ -130,14 +135,13 @@ const named = args
 // A change to the check or its list is checked against every file.
 const full =
   named.length === 0 ||
-  named.some((p) => p.includes("/app/scripts/react-compiler-"));
+  named.some((p) => fromRepo(p).startsWith("app/scripts/react-compiler-"));
 const files = full
   ? ROOTS.flatMap((r) => sources(join(repoRoot, r)))
   : named.filter(
-      (p) =>
-        isSource(p) && ROOTS.some((r) => p.startsWith(join(repoRoot, r) + "/")),
+      (p) => isSource(p) && ROOTS.some((r) => fromRepo(p).startsWith(`${r}/`)),
     );
-const checked = new Set(files.map((f) => relative(repoRoot, f)));
+const checked = new Set(files.map(fromRepo));
 
 const found = files.flatMap(bailoutsIn);
 const listed: Bailout[] = JSON.parse(readFileSync(LIST, "utf8"));
