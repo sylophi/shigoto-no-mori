@@ -449,6 +449,11 @@ const make = <R, E>(options: {
       );
     };
 
+    // The shells among `among` that a command holds. Fails when the
+    // process table can't be read.
+    const held = (among: readonly Session[]) =>
+      processTable.held(among.map((session) => session.pty.pid));
+
     const exists = (path: string) =>
       fs.exists(path).pipe(Effect.orElseSucceed(() => false));
 
@@ -779,9 +784,7 @@ const make = <R, E>(options: {
     // look that fails leaves them as they were.
     yield* Effect.gen(function* () {
       const shells = living();
-      const pids = yield* processTable.held(
-        shells.map((session) => session.pty.pid),
-      );
+      const pids = yield* held(shells);
       let changed = false;
       for (const session of shells) {
         const busy = pids.has(session.pty.pid);
@@ -922,7 +925,7 @@ const make = <R, E>(options: {
           projectId: session.terminal.projectId,
           worktreeId,
         });
-        const isHeld = yield* processTable.held([session.pty.pid]).pipe(
+        const isHeld = yield* held([session]).pipe(
           Effect.map((pids) => pids.has(session.pty.pid)),
           Effect.orElseSucceed(() => true),
         );
@@ -973,9 +976,7 @@ const make = <R, E>(options: {
         );
         yield* PubSub.publish(session.events, { kind: "size", ...size });
       }),
-      busy: Effect.suspend(() =>
-        processTable.held(living().map((session) => session.pty.pid)),
-      ).pipe(
+      busy: Effect.suspend(() => held(living())).pipe(
         Effect.map((pids) => pids.size),
         Effect.orElseSucceed(() => 0),
         Effect.withSpan("Terminals.busy"),

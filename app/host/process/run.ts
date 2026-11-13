@@ -151,7 +151,7 @@ export async function runHost<E>(root: {
     reapOrphanedConnector(join(facts.userDataPath, TUNNEL_PID_FILE)).pipe(
       Effect.provide(
         ProcessTable.layer.pipe(
-          Layer.provideMerge(childDefaults),
+          Layer.provide(childDefaults),
           Layer.provideMerge(HostNodeServices.layer),
         ),
       ),

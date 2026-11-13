@@ -74,8 +74,8 @@ export const makeMoving = ({
     const { wipe, pruneEmptyParents } = removing;
 
     // This process as a move's record names it, read once it could be:
-    // a ps that failed is asked again at the next move, so one slow ps
-    // doesn't leave this process's records unknown for its life.
+    // a read that failed is asked again at the next move, so one slow
+    // read doesn't leave this process's records unknown for its life.
     let known: { readonly pid: number; readonly started_at: number } | null =
       null;
     const self = Effect.suspend(() =>

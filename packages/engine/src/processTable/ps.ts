@@ -124,10 +124,8 @@ export const makePs = Effect.gen(function* () {
   }, withSpawner);
 
   // One is held while its terminal's foreground process group is not
-  // its own.
-  const held = Effect.fn("ProcessTable.held")(function* (
-    pids: ReadonlyArray<number>,
-  ) {
+  // its own. Untraced, as the terminals ask every two seconds.
+  const held = Effect.fnUntraced(function* (pids: ReadonlyArray<number>) {
     if (pids.length === 0) return new Set<number>();
     const { stdout } = yield* exec("ps", [
       "-o",
