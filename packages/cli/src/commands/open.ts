@@ -2,6 +2,7 @@
 // its launchers, and sm [worktrees] edit <file> [<worktree>]: one of its
 // files in the editor.
 import { resolve } from "node:path";
+import { canonicalPath } from "@shigomori/engine/canonicalPath";
 import { flavorNames } from "@shigomori/engine/flavor";
 import * as Open from "@shigomori/engine/Open";
 import * as Paths from "@shigomori/engine/Paths";
@@ -126,7 +127,7 @@ export const edit = Command.make(
         });
       }
       const { located, fromCwd } = yield* commandTarget(input, "edit <file>");
-      const target = fromCwd ? resolve(yield* cwd, file) : file;
+      const target = fromCwd ? canonicalPath(resolve(yield* cwd, file)) : file;
       const opened = yield* (yield* Open.Open).edit(located, target).pipe(
         Effect.asSome,
         // With no screen to open it on (a Linux server over SSH), it

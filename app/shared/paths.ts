@@ -15,7 +15,7 @@
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeServices from "@shared/nodeServices";
 import type { DataDirSource } from "@shigomori/engine/Paths";
 import { expandHome as expandHomeIn } from "@shigomori/contracts/projectPaths";
 import { canonicalPath } from "@shigomori/engine/canonicalPath";
@@ -87,7 +87,7 @@ export function initDataDirAt(
     dataDir: dir,
     source,
     dataDirName: ".sm",
-    defaultDataDir: join(home(), ".sm"),
+    defaultDataDir: canonicalPath(join(home(), ".sm")),
     pointer: null,
     pointerFiles: null,
   };
@@ -110,7 +110,7 @@ export function dataDirReal(): string | undefined {
   const dir = dataDir();
   try {
     const real = canonicalPath(realpathSync(dir));
-    return real === resolve(dir) ? undefined : real;
+    return real === canonicalPath(resolve(dir)) ? undefined : real;
   } catch {
     return undefined;
   }

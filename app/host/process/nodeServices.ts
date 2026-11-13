@@ -4,7 +4,7 @@
 // update) stops partway. original-fs is Node's fs without it, and the
 // headless host's plain node has only that.
 import * as NFS from "node:fs";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeServices from "@shared/nodeServices";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
