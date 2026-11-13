@@ -17,6 +17,7 @@ import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
 import { isMissingProgram } from "./platformErrors.ts";
+import * as Shells from "./Shells.ts";
 import { CD_FILE_ENV } from "./shellHook.ts";
 
 // How long a child has after its SIGTERM before it is SIGKILLed. Given
@@ -104,6 +105,7 @@ export const captureToFiles = (
   Effect.scoped(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
+      const shells = yield* Shells.Shells;
       const dir = yield* fs.makeTempDirectoryScoped({ prefix: "sm-run-" });
       const out = `${dir}/out`;
       const err = options.all === true ? out : `${dir}/err`;
@@ -112,7 +114,7 @@ export const captureToFiles = (
       if (onStderr !== undefined) yield* fs.writeFile(err, new Uint8Array());
       const handle = yield* spawner.spawn(
         ChildProcess.make(
-          "/bin/sh",
+          yield* shells.sh,
           ["-c", FILES_SCRIPT, out, err, command, ...args],
           {
             stdin: options.stdin ?? "ignore",

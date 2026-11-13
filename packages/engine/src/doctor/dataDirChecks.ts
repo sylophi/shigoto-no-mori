@@ -648,7 +648,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       ];
     });
 
-    // Custom launchers fire and forget through /bin/sh, so one whose
+    // Custom launchers fire and forget through sh, so one whose
     // program isn't installed fails with nothing on screen.
     const launcherFindings = (
       line: ReturnType<typeof check>,

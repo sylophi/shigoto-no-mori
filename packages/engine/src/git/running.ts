@@ -37,6 +37,7 @@ import {
   readToExit,
 } from "../processes.ts";
 import { current } from "../platform.ts";
+import * as Shells from "../Shells.ts";
 
 // A transfer that stalls (a connection left half open by a sleep or a
 // network that changed) ends rather than waiting for good: http's own
@@ -157,6 +158,7 @@ export const makeRunning = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const shells = yield* Shells.Shells;
   const slots = yield* Semaphore.make(SPAWN_SLOTS);
 
   // Apple's /usr/bin/git is a launcher that looks up the selected
@@ -262,6 +264,7 @@ export const makeRunning = Effect.gen(function* () {
                 onStderr: options.onStderr,
               }).pipe(
                 Effect.provideService(FileSystem.FileSystem, fs),
+                Effect.provideService(Shells.Shells, shells),
                 Effect.flatMap(({ stdout, stderr, code }) =>
                   Effect.map(
                     read(Stream.make(stdout), limit, tooLarge),

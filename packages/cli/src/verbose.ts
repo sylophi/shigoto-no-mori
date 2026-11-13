@@ -13,7 +13,7 @@ const trace = (command: ChildProcess.Command) => {
   if (!("command" in command)) return Effect.void;
   // A command whose output goes to files is its shell's.
   const [program, ...rest] =
-    command.command === "/bin/sh" && command.args[1] === FILES_SCRIPT
+    command.args[0] === "-c" && command.args[1] === FILES_SCRIPT
       ? command.args.slice(4)
       : [command.command, ...command.args];
   const name = basename(program ?? "");

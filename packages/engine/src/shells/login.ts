@@ -40,5 +40,9 @@ export const makeLogin = Effect.gen(function* () {
     }),
   );
 
-  return { script: loginShell, interactive: loginShell };
+  return {
+    script: loginShell,
+    interactive: loginShell,
+    sh: Effect.succeed("/bin/sh"),
+  };
 });
