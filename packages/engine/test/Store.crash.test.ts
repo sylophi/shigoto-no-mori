@@ -141,16 +141,13 @@ const openIn = (dir: string, killAt?: number) =>
     child.stdout.on("data", (chunk: Buffer) => {
       said += chunk.toString();
     });
-    child.once("close", (code, signal) => {
+    child.once("close", (code) => {
       const events = /^events (\d+)$/m.exec(said)?.[1];
-      // A SIGKILL, or on Windows, which has no signals, TerminateProcess,
-      // whose exit code Node gives as 1.
-      const killed =
-        signal === "SIGKILL" || (process.platform === "win32" && code === 1);
       const killing = /^killing (\d+)$/m.exec(said)?.[1];
       resolve({
         finished: code === 0,
-        killedAt: killed && killing !== undefined ? Number(killing) : undefined,
+        killedAt:
+          code === 0 || killing === undefined ? undefined : Number(killing),
         events: Number(events ?? 0),
       });
     });

@@ -16,8 +16,6 @@ package main
 // its child. command is absent where it can't be read.
 
 import (
-	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -39,13 +37,10 @@ type process struct {
 	Birth   int64   `json:"birth"`
 	Name    string  `json:"name"`
 	Command *string `json:"command,omitempty"`
-	// The birth as Windows keeps it, in 100 ns ticks, which tells a
-	// parent from a child born the same millisecond.
-	created int64
+	// The birth as Windows keeps it, to 100 ns, which tells a parent
+	// from a child born the same millisecond.
+	created windows.Filetime
 }
-
-// The 100 ns ticks from 1601 to 1970.
-const unixEpochTicks = 116444736000000000
 
 // Every process, read in one call, so the table is one moment's.
 func snapshot() (map[uint32]*process, error) {
@@ -69,12 +64,13 @@ func snapshot() (map[uint32]*process, error) {
 		info := (*windows.SYSTEM_PROCESS_INFORMATION)(unsafe.Pointer(&buf[at]))
 		// Pid 0 is the idle process, born at no time.
 		if pid := uint32(info.UniqueProcessID); pid != 0 {
+			created := windows.Filetime{LowDateTime: uint32(info.CreateTime), HighDateTime: uint32(info.CreateTime >> 32)}
 			table[pid] = &process{
 				Pid:     pid,
 				Parent:  uint32(info.InheritedFromUniqueProcessID),
-				Birth:   (info.CreateTime - unixEpochTicks) / 10_000,
+				Birth:   created.Nanoseconds() / 1e6,
 				Name:    info.ImageName.String(),
-				created: info.CreateTime,
+				created: created,
 			}
 		}
 		if info.NextEntryOffset == 0 {
@@ -83,7 +79,7 @@ func snapshot() (map[uint32]*process, error) {
 		at += info.NextEntryOffset
 	}
 	for _, p := range table {
-		if parent, ok := table[p.Parent]; !ok || parent.created >= p.created {
+		if parent, ok := table[p.Parent]; !ok || parent.created.Nanoseconds() >= p.created.Nanoseconds() {
 			p.Parent = 0
 		}
 	}
@@ -97,8 +93,7 @@ func open(p *process, access uint32) (windows.Handle, bool) {
 		return 0, false
 	}
 	var created, exited, kernel, user windows.Filetime
-	if windows.GetProcessTimes(h, &created, &exited, &kernel, &user) != nil ||
-		int64(created.HighDateTime)<<32|int64(created.LowDateTime) != p.created {
+	if windows.GetProcessTimes(h, &created, &exited, &kernel, &user) != nil || created != p.created {
 		windows.CloseHandle(h)
 		return 0, false
 	}
@@ -140,21 +135,17 @@ func listProcesses(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "nativefs processes: %v\n", err)
 		return 1
 	}
-	out := bufio.NewWriter(stdout)
-	enc := json.NewEncoder(out)
-	enc.SetEscapeHTML(false)
+	lines := make(chan any, len(table))
 	for _, p := range table {
 		if named[p.Pid] {
 			if command, ok := commandLine(p); ok {
 				p.Command = &command
 			}
 		}
-		if err := enc.Encode(p); err != nil {
-			fmt.Fprintf(stderr, "nativefs processes: %v\n", err)
-			return 1
-		}
+		lines <- p
 	}
-	if err := out.Flush(); err != nil {
+	close(lines)
+	if err := write(stdout, lines); err != nil {
 		fmt.Fprintf(stderr, "nativefs processes: %v\n", err)
 		return 1
 	}

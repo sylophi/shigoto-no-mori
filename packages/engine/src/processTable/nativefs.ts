@@ -76,19 +76,14 @@ export const makeNativefs = (helper: string) =>
       }).pipe(
         Effect.orElseSucceed(() => new Map<number, typeof Process.Type>()),
       );
-      return new Map(
-        pids.flatMap((pid) => {
-          const found = table.get(pid);
-          return found === undefined
-            ? []
-            : [
-                [
-                  pid,
-                  { startedAt: found.birth, command: found.command ?? "" },
-                ] as const,
-              ];
-        }),
-      );
+      const found = new Map<number, { startedAt: number; command: string }>();
+      for (const pid of pids) {
+        const row = table.get(pid);
+        if (row !== undefined) {
+          found.set(pid, { startedAt: row.birth, command: row.command ?? "" });
+        }
+      }
+      return found;
     }, withSpawner);
 
     const identify = Effect.fn("ProcessTable.identify")(function* (
@@ -96,10 +91,7 @@ export const makeNativefs = (helper: string) =>
     ) {
       const table = yield* readProcesses(helper).pipe(Effect.option);
       return Option.flatMap(table, (processes) =>
-        Option.map(
-          Option.fromNullishOr(processes.get(pid)),
-          ({ parent, name }) => ({ parent, name }),
-        ),
+        Option.fromNullishOr(processes.get(pid)),
       );
     }, withSpawner);
 
