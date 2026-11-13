@@ -17,8 +17,8 @@ export const interactive = Effect.map(
 export const terminalEditor = () =>
   process.env["VISUAL"] || process.env["EDITOR"] || "";
 
-// `file` in `editor` at this terminal until it quits, run by `sh`: why
-// it failed, or undefined for a clean exit.
+// `file` in `editor` at this terminal until it quits: why it failed, or
+// undefined for a clean exit.
 export const runEditor = (sh: string, editor: string, file: string) => {
   const ran = spawnSync(sh, ["-c", `${editor} "$0"`, file], {
     stdio: "inherit",
