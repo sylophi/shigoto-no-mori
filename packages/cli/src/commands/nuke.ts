@@ -63,9 +63,13 @@ type NukedApp = {
   >;
   // Its helpers gone, which go a moment after it.
   readonly gone: Effect.Effect<void>;
-  // A Mac's bundle, deleted last but for --keep-app. A Linux install
-  // is in the app's own folder, so it has none.
-  readonly bundle: string | null;
+  // The app's own deletion, last but for --keep-app, and where it is: a
+  // Mac's bundle. A Linux install is in the app's own folder, so it has
+  // none.
+  readonly removal: {
+    readonly place: string;
+    readonly remove: Effect.Effect<void>;
+  } | null;
 };
 type Unit = ReturnType<typeof HostUnit.uninstallUnit>;
 
@@ -103,7 +107,18 @@ const macApp = (appName: string): NukedApp | null => {
     gone: until(() => runningFrom().length === 0, GONE_WITHIN_MS).pipe(
       Effect.asVoid,
     ),
-    bundle,
+    removal: {
+      place: bundle,
+      remove: Effect.sync(() => {
+        // The URL scheme it registered goes with it.
+        spawnSync(
+          "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+          ["-u", bundle],
+          { stdio: "ignore" },
+        );
+        rmSync(bundle, { recursive: true, force: true });
+      }),
+    },
   };
 };
 
@@ -121,7 +136,7 @@ const linuxApp = (
     start: [join(folder, HOST_RUNTIME), join(folder, HOST_BUNDLE)],
     quit: HostUnit.uninstallUnit(install).pipe(Effect.as(true)),
     gone: Effect.void,
-    bundle: null,
+    removal: null,
   };
 };
 
@@ -153,7 +168,7 @@ export const nuke = Command.make(
           problem: `nuke runs from a packaged build's ${paths.binaryName}. A dev build's is in Settings, under Danger zone.`,
         });
       }
-      if (input.keepApp && nuked.bundle === null) {
+      if (input.keepApp && nuked.removal === null) {
         return yield* new UsageError({
           problem:
             "--keep-app keeps a Mac's bundle. A Linux install is in the app's own folder, so it goes.",
@@ -236,18 +251,10 @@ export const nuke = Command.make(
           }
         }
       }
-      const { bundle } = nuked;
-      if (bundle !== null && !input.keepApp) {
-        // The URL scheme it registered goes with it.
-        spawnSync(
-          "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
-          ["-u", bundle],
-          { stdio: "ignore" },
-        );
-        rmSync(bundle, { recursive: true, force: true });
-      }
+      const { removal } = nuked;
+      if (removal !== null && !input.keepApp) yield* removal.remove;
       yield* out(
-        `nuked ${names.appName}${bundle === null || input.keepApp ? "" : `, ${bundle} with it`}`,
+        `nuked ${names.appName}${removal === null || input.keepApp ? "" : `, ${removal.place} with it`}`,
       );
       if (left) {
         yield* note(
