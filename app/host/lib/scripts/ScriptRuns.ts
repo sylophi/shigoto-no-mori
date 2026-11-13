@@ -114,7 +114,6 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
   stopping: () => Stopping,
 ) {
   const { program, args } = opts.shell;
-  const shells = yield* Shells.Shells;
   // node-pty's helper does the chdir and execs the shell in the child,
   // and exits 1 without a word if either fails, which would show as a
   // bare "exit 1".
@@ -164,7 +163,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
           program,
           opts.command === null
             ? [...args]
-            : [...args, ...shells.shArgs(opts.command, [])],
+            : [...args, ...Shells.shArgs(opts.command, [])],
           {
             name: "xterm-256color",
             cols: opts.cols,
@@ -264,7 +263,6 @@ export class ScriptRuns extends Context.Service<
 
 const make = Effect.gen(function* () {
   const trees = yield* ProcessTrees.ProcessTrees;
-  const shells = yield* Shells.Shells;
   const fs = yield* FileSystem.FileSystem;
   const scope = yield* Effect.scope;
   const open = Effect.fn("ScriptRuns.open")(function* (opts: SpawnOptions) {
@@ -276,7 +274,6 @@ const make = Effect.gen(function* () {
       Scope.provide(run),
       Effect.provideService(ProcessTrees.ProcessTrees, trees),
       Effect.provideService(FileSystem.FileSystem, fs),
-      Effect.provideService(Shells.Shells, shells),
       Effect.onError(() => Scope.close(run, Exit.void)),
     );
     // The stopping is taken when close is called, not when its effect

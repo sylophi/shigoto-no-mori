@@ -44,10 +44,5 @@ export const makeLogin = Effect.gen(function* () {
     script: loginShell,
     interactive: loginShell,
     sh: Effect.succeed("/bin/sh"),
-    shArgs: (script: string, args: ReadonlyArray<string>) => [
-      "-c",
-      script,
-      ...args,
-    ],
   };
 });

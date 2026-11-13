@@ -79,7 +79,6 @@ export const makeWindows = Effect.gen(function* () {
     }),
     interactive: powerShell,
     sh: Effect.map(gitBash, ({ usrBin }) => path.join(usrBin, "sh.exe")),
-    shArgs: gitBashShArgs,
   };
 });
 
@@ -91,7 +90,7 @@ export const makeWindows = Effect.gen(function* () {
 // bash's BASH_ARGV0), each quoted for sh. Inside quotes sh reads two
 // backslashes as one where Node writes them as they are, except before
 // a quote or at the end, so those runs go doubled.
-const gitBashShArgs = (
+export const gitBashShArgs = (
   script: string,
   args: ReadonlyArray<string>,
 ): ReadonlyArray<string> => {

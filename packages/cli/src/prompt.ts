@@ -25,7 +25,7 @@ export const runEditor = (editor: string, file: string) =>
     const shells = yield* Shells.Shells;
     const ran = spawnSync(
       yield* shells.sh,
-      shells.shArgs(`${editor} "$0"`, [file]),
+      Shells.shArgs(`${editor} "$0"`, [file]),
       { stdio: "inherit", env: childEnv(process.env) },
     );
     return ran.status === 0

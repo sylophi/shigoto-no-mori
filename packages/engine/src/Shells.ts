@@ -6,7 +6,7 @@ import * as Layer from "effect/Layer";
 import { byPlatform } from "./platform.ts";
 import type { NoScriptShell } from "./shells/documents.ts";
 import { makeLogin } from "./shells/login.ts";
-import { makeWindows } from "./shells/windows.ts";
+import { gitBashShArgs, makeWindows } from "./shells/windows.ts";
 
 export { NoScriptShell } from "./shells/documents.ts";
 
@@ -30,12 +30,6 @@ export class Shells extends Context.Service<
     readonly interactive: Effect.Effect<Shell>;
     // A POSIX sh, for the engine's own plumbing written in sh.
     readonly sh: Effect.Effect<string, NoScriptShell>;
-    // What sh, or the script shell, takes to run `script` with `args`
-    // as its $0, $1 and on.
-    readonly shArgs: (
-      script: string,
-      args: ReadonlyArray<string>,
-    ) => ReadonlyArray<string>;
   }
 >()("sm/engine/Shells") {}
 
@@ -50,3 +44,12 @@ const make = Effect.gen(function* () {
 });
 
 export const layer = Layer.effect(Shells, make);
+
+// What sh, or the script shell, takes to run `script` with `args` as
+// its $0, $1 and on.
+export const shArgs = (script: string, args: ReadonlyArray<string>) =>
+  byPlatform({
+    darwin: () => ["-c", script, ...args],
+    linux: () => ["-c", script, ...args],
+    win32: () => gitBashShArgs(script, args),
+  })();

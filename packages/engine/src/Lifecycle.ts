@@ -134,7 +134,7 @@ const make = Effect.gen(function* () {
         // with it as stdout and stderr, whatever shell that is.
         ChildProcess.make(
           yield* shells.sh,
-          shells.shArgs('exec "$@" >>"$0" 2>&1', [
+          Shells.shArgs('exec "$@" >>"$0" 2>&1', [
             output,
             program,
             ...args,

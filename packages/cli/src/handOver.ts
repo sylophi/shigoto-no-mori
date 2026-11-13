@@ -3,8 +3,7 @@
 // passes signals on to it without being ended by them, and ends as it
 // ended, killed by its signal included.
 import { spawn } from "node:child_process";
-import { basename } from "node:path";
-import { startable } from "@shigomori/engine/batchFiles";
+import { startable, startOnWindows } from "@shigomori/engine/batchFiles";
 import { findOn } from "@shigomori/engine/executables";
 import { byPlatform } from "@shigomori/engine/platform";
 import { errnoWords } from "@shigomori/engine/platformErrors";
@@ -94,26 +93,13 @@ const startOf = (
   byPlatform({
     darwin: Effect.succeed({ command: program, args, shell: false }),
     linux: Effect.succeed({ command: program, args, shell: false }),
-    win32: Effect.gen(function* () {
-      const found =
-        basename(program) === program
-          ? yield* findOn(searched, program)
-          : Option.none<string>();
-      return startable(
-        Option.getOrElse(found, () => program),
-        args,
-      );
-    }),
+    win32: startOnWindows((name) => findOn(searched, name), program, args),
   });
 
 const handedOver = (
   kind: StartFailed["kind"],
   program: string,
-  start: {
-    readonly command: string;
-    readonly args: ReadonlyArray<string>;
-    readonly shell: boolean;
-  },
+  start: ReturnType<typeof startable>,
   options: Options,
 ) =>
   Effect.callback<

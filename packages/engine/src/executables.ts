@@ -18,18 +18,24 @@ const pathSeparator = () => byPlatform({ darwin: ":", linux: ":", win32: ";" });
 export const joinSearchPath = (dirs: ReadonlyArray<string>) =>
   dirs.join(pathSeparator());
 
-// The extensions Windows runs a file by, lower-cased.
-const pathExtensions = Effect.map(envVar("PATHEXT"), (exts) =>
+const noExtensions = Effect.succeed<ReadonlyArray<string>>([]);
+const windowsExtensions = Effect.map(envVar("PATHEXT"), (exts) =>
   exts
     .toLowerCase()
     .split(";")
     .filter((ext) => ext !== ""),
 );
 
-const hasRunnableExtension = (file: string) =>
-  Effect.map(pathExtensions, (exts) =>
-    exts.some((ext) => file.toLowerCase().endsWith(ext)),
-  );
+// The extensions Windows runs a file by, lower-cased. None elsewhere.
+const pathExtensions = () =>
+  byPlatform({
+    darwin: noExtensions,
+    linux: noExtensions,
+    win32: windowsExtensions,
+  });
+
+const hasExtension = (exts: ReadonlyArray<string>, file: string) =>
+  exts.some((ext) => file.toLowerCase().endsWith(ext));
 
 // Where a program could be under each of PATH's directories, in the
 // order they're tried. An empty entry is the working directory. Windows
@@ -39,12 +45,10 @@ export const candidatesOnPath = Effect.fnUntraced(function* (
   searched: string,
   name: string,
 ) {
-  const exts = yield* pathExtensions;
-  const fileNames = byPlatform({
-    darwin: [name],
-    linux: [name],
-    win32: [name, ...exts.map((ext) => `${name}${ext}`)],
-  });
+  const fileNames = [
+    name,
+    ...(yield* pathExtensions()).map((ext) => `${name}${ext}`),
+  ];
   return searched
     .split(pathSeparator())
     .flatMap((dir) =>
@@ -54,12 +58,13 @@ export const candidatesOnPath = Effect.fnUntraced(function* (
 
 // Whether the OS would run the file: by its execute bits, and on
 // Windows by its extension.
-export const isRunnable = (file: string, mode: number) =>
-  byPlatform({
-    darwin: Effect.succeed((mode & 0o111) !== 0),
-    linux: Effect.succeed((mode & 0o111) !== 0),
-    win32: hasRunnableExtension(file),
-  });
+export const isRunnable = (file: string, mode: number) => {
+  const byMode = Effect.succeed((mode & 0o111) !== 0);
+  const byExtension = Effect.map(windowsExtensions, (exts) =>
+    hasExtension(exts, file),
+  );
+  return byPlatform({ darwin: byMode, linux: byMode, win32: byExtension });
+};
 
 // The program's full path on `searched`, none when it has no such
 // program.
@@ -69,6 +74,7 @@ export const findOn = Effect.fn("findOn")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const exts = yield* pathExtensions();
   const isFile = (candidate: string) =>
     fs.stat(candidate).pipe(
       Effect.map((info) => info.type === "File"),
@@ -77,11 +83,12 @@ export const findOn = Effect.fn("findOn")(function* (
   for (const candidate of yield* candidatesOnPath(path, searched, name)) {
     // Windows can't stat an app execution alias (a Store app's
     // WindowsApps entry), which still runs.
+    const byExtension = Effect.succeed(hasExtension(exts, candidate));
     const runnable =
       (yield* byPlatform({
         darwin: isFile(candidate),
         linux: isFile(candidate),
-        win32: hasRunnableExtension(candidate),
+        win32: byExtension,
       })) &&
       (yield* Effect.tryPromise(() => access(candidate, constants.X_OK)).pipe(
         Effect.isSuccess,

@@ -59,11 +59,11 @@ export const makeHook = Effect.gen(function* () {
     const dir = yield* fs
       .realPath(worktree)
       .pipe(Effect.orElseSucceed(() => worktree));
-    const shell = yield* Effect.result(shells.script);
-    if (Result.isFailure(shell)) {
-      return yield* new HookFailed({ cause: shell.failure });
-    }
-    const { env: shellEnv } = shell.success;
+    const noShell = Effect.mapError(
+      (cause: Shells.NoScriptShell) => new HookFailed({ cause }),
+    );
+    const { env: shellEnv } = yield* noShell(shells.script);
+    const sh = yield* noShell(shells.sh);
     const searched = shellEnv["PATH"] ?? (yield* envVar("PATH"));
     // The environment git gives its hooks: the script shell's, its exec
     // path exported and first on PATH, no prefix.
@@ -116,14 +116,7 @@ export const makeHook = Effect.gen(function* () {
         if (Option.isNone(commands)) continue;
         const values = splitZ(commands.value);
         const command = values.at(-1) ?? "";
-        failed = yield* shells.sh.pipe(
-          Effect.flatMap((sh) =>
-            run(sh, ["-c", `${command} "$@"`, command, ...args]),
-          ),
-          Effect.catchTag("NoScriptShell", (cause) =>
-            Effect.succeedSome(new HookFailed({ cause })),
-          ),
-        );
+        failed = yield* run(sh, ["-c", `${command} "$@"`, command, ...args]);
       }
       if (first === undefined && Option.isSome(failed)) first = failed.value;
     }

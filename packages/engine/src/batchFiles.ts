@@ -3,6 +3,10 @@
 // cmd.exe, which Node starts as `cmd /d /s /c "<line>"` with the line
 // as given, so the line is written here, the one place that quotes for
 // cmd.
+import { basename } from "node:path";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+
 const BATCH_FILE = /\.(?:bat|cmd)$/i;
 
 // What cmd reads as its own. Each is read as itself after a ^.
@@ -42,3 +46,21 @@ export const startable = (
         shell: true,
       }
     : { command: program, args, shell: false };
+
+// How Windows starts `program`: a bare name as cmd finds it with
+// `find`, since Node's spawn finds no batch file, then as startable.
+export const startOnWindows = <E, R>(
+  find: (name: string) => Effect.Effect<Option.Option<string>, E, R>,
+  program: string,
+  args: ReadonlyArray<string>,
+) =>
+  Effect.map(
+    basename(program) === program
+      ? find(program)
+      : Effect.succeed(Option.none<string>()),
+    (found) =>
+      startable(
+        Option.getOrElse(found, () => program),
+        args,
+      ),
+  );

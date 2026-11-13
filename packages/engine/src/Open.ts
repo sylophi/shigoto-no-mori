@@ -257,7 +257,7 @@ const make = Effect.gen(function* () {
               const handle = yield* spawner.spawn(
                 ChildProcess.make(
                   yield* shells.sh,
-                  shells.shArgs(`"$0" "$@" </dev/null >/dev/null 2>&1 &`, [
+                  Shells.shArgs(`"$0" "$@" </dev/null >/dev/null 2>&1 &`, [
                     program,
                     ...args,
                     "-c",
