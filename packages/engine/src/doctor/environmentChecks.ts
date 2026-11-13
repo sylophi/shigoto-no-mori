@@ -7,7 +7,11 @@ import * as Path from "effect/Path";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { belowGitFloor, fields, parseGitVersion } from "../doctorParse.ts";
 import { envVar } from "../environment.ts";
-import { findExecutable } from "../executables.ts";
+import {
+  candidatesOnPath,
+  findExecutable,
+  isRunnableMode,
+} from "../executables.ts";
 import { flavorNames } from "../flavor.ts";
 import * as Git from "../Git.ts";
 import { unitState } from "../hostUnit.ts";
@@ -273,15 +277,15 @@ export const makeEnvironmentChecks = ({
     // to, so a symlink and its target don't read as a conflict.
     const binariesOnPath = Effect.gen(function* () {
       const searched = yield* envVar("PATH");
+      if (searched === "") return [];
       const found: string[] = [];
       const seen = new Set<string>();
-      for (const dir of searched === "" ? [] : searched.split(":")) {
-        const candidate = path.join(dir === "" ? "." : dir, binaryName);
+      for (const candidate of candidatesOnPath(path, searched, binaryName)) {
         const info = yield* statOf(candidate);
         if (
           Option.isNone(info) ||
           info.value.type === "Directory" ||
-          (info.value.mode & 0o111) === 0
+          !isRunnableMode(info.value.mode)
         ) {
           continue;
         }
