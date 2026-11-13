@@ -18,12 +18,16 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
-  realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import {
+  dirname,
+  join,
+  realpath,
+  resolve,
+} from "../../../test/canonicalPaths.mts";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -391,7 +395,7 @@ const deadRecord = (
 
 // A checkout's entry of git's, as a move records it.
 const linkOf = (dir: string) =>
-  realpathSync(
+  realpath(
     resolve(
       dir,
       readFileSync(join(dir, ".git"), "utf8")

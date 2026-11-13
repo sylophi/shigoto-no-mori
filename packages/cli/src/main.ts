@@ -2,6 +2,7 @@
 // with `bun build --compile`, its flavor from the build (build.ts).
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
+import { canonicalPlatform } from "@shigomori/engine/canonicalPlatform";
 import { flavorNames } from "@shigomori/engine/flavor";
 import * as Paths from "@shigomori/engine/Paths";
 import { childDefaults } from "@shigomori/engine/processes";
@@ -165,6 +166,8 @@ const sm = Command.make("sm").pipe(
   ]),
 );
 
+const platform = canonicalPlatform(BunServices.layer);
+
 const program = commandLine(sm, canonical(rest, worktreesCommand)).pipe(
   Effect.flatMap(Command.runWith(sm, { version, renderErrors: false })),
   // None of effect/cli's built-in flags: the help is the catalog's
@@ -174,11 +177,8 @@ const program = commandLine(sm, canonical(rest, worktreesCommand)).pipe(
   Effect.provide(
     Layer.mergeAll(
       verbose
-        ? Layer.merge(
-            BunServices.layer,
-            verboseSpawner.pipe(Layer.provide(BunServices.layer)),
-          )
-        : BunServices.layer,
+        ? Layer.merge(platform, verboseSpawner.pipe(Layer.provide(platform)))
+        : platform,
       CliConfig.layer({ builtIns: [] }),
       Here.layer,
     ),

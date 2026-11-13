@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join } from "../../../test/canonicalPaths.mts";
 import * as Effect from "effect/Effect";
 import { it } from "vitest";
 import * as MirrorHistory from "../src/MirrorHistory.ts";

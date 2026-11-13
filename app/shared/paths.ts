@@ -157,7 +157,8 @@ export function legacyDataDirPointerPath(): string | null {
 }
 
 // The home folder as the OS gives it, which is the account's home where
-// HOME is unset. Paths.home reads HOME alone.
+// HOME is unset. Paths.home reads the variable alone (HOME, or
+// USERPROFILE on Windows).
 export function home(): string {
   return canonicalPath(homedir());
 }

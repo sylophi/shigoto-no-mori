@@ -3,7 +3,7 @@
 // never taken for merged.
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join } from "../../../test/canonicalPaths.mts";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Hygiene from "../src/Hygiene.ts";

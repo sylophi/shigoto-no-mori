@@ -15,8 +15,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import { basename, dirname, join } from "../../../test/canonicalPaths.mts";
+import * as NodeServices from "./lib/nodeServices.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -125,7 +125,9 @@ const lockAtHome = (home: string) =>
     Layer.provideMerge(Paths.layer("dev")),
     Layer.provide(NodeServices.layer),
     Layer.provide(
-      ConfigProvider.layer(ConfigProvider.fromEnv({ env: { HOME: home } })),
+      ConfigProvider.layer(
+        ConfigProvider.fromEnv({ env: { HOME: home, USERPROFILE: home } }),
+      ),
     ),
   );
 

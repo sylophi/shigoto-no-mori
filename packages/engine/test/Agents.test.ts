@@ -13,7 +13,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join } from "../../../test/canonicalPaths.mts";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Agents from "../src/Agents.ts";

@@ -31,14 +31,18 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
-  realpathSync,
   renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { basename, dirname, join } from "node:path";
+import {
+  basename,
+  dirname,
+  join,
+  realpath,
+} from "../../test/canonicalPaths.mts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -52,7 +56,7 @@ import {
   rekeyForward,
   resumeDataDirMove,
 } from "@shigomori/engine/dataDirMove";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeServices from "@shared/nodeServices";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import {
   JOURNAL,
@@ -747,7 +751,7 @@ it.each([
   const parent = join(elsewhere, `captures-${String(own)}`);
   mkdirSync(parent);
   const newId = worktreeIdFromPath(
-    join(realpathSync(parent), "moved", "wt", "repo", "fox"),
+    join(realpath(parent), "moved", "wt", "repo", "fox"),
   );
   const head = git(repo, "rev-parse", "HEAD").trim();
   git(repo, "update-ref", ref(own ? identity.id : newId), head);
@@ -802,7 +806,7 @@ it("a capture made while a move kills the scripts comes back with its undo", asy
   const parent = join(elsewhere, "captures-late");
   mkdirSync(parent);
   const newId = worktreeIdFromPath(
-    join(realpathSync(parent), "moved", "wt", "repo", "fox"),
+    join(realpath(parent), "moved", "wt", "repo", "fox"),
   );
   const head = git(repo, "rev-parse", "HEAD").trim();
   const failed = await runHost(

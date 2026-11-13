@@ -16,7 +16,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, join } from "../../test/canonicalPaths.mts";
 import * as Effect from "effect/Effect";
 import { afterAll, beforeAll, it } from "vitest";
 import { runHost } from "./lib/hostRuntime.mts";
