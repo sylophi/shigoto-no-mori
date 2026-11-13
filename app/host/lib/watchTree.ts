@@ -1,6 +1,7 @@
 // A folder's whole tree watched, its events as a recursive `fs.watch`
-// gives them: each path relative to the root. On a Mac that is the one
-// recursive watch, since FSEvents watches a tree as one stream. Linux's
+// gives them: each path relative to the root, `/`-separated. On a Mac
+// that is the one recursive watch, since FSEvents watches a tree as one
+// stream, and on Windows too, which watches a tree whole. Linux's
 // inotify watches a folder at a time, and Node's recursive watch there
 // puts a watch on every file of the tree as well, which one worktree's
 // dependencies take past the user's limit on watches. So there the tree
@@ -35,6 +36,13 @@ export const watchTree = (
   byPlatform({
     darwin: () => watchPath(fs, root, { recursive: true }),
     linux: () => watchFolders(fs, root, leaveOut),
+    win32: () =>
+      watchPath(fs, root, { recursive: true }).pipe(
+        Stream.map((event) => ({
+          ...event,
+          path: event.path.replaceAll("\\", "/"),
+        })),
+      ),
   })();
 
 const under = (folder: string, name: string) =>
