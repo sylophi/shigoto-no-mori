@@ -325,7 +325,6 @@ export class AppStillRunning extends Schema.TaggedError<AppStillRunning>()(
   }
 }
 
-// What runs the host: the app, or the host alone.
 const theApp = () => byHostKind({ app: "the app", headless: "the host" });
 
 export class RelaunchFailed extends Schema.TaggedError<RelaunchFailed>()(

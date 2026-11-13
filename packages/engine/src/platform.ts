@@ -25,7 +25,7 @@ export const byPlatform = <Cases extends { readonly [P in Platform]: unknown }>(
 // What hosts this machine: the desktop app, or a host run headless as a
 // service. Code that differs by that, not by the OS itself, picks its
 // case by host kind (byHostKind).
-export type HostKind = "app" | "headless";
+type HostKind = "app" | "headless";
 
 const HOST_KINDS: { readonly [P in Platform]: HostKind } = {
   darwin: "app",

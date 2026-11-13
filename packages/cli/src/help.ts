@@ -548,7 +548,6 @@ const namespacesOf = (bin: string, items: Catalog) => [
     items: items.shell,
     canon: (name: string) => name,
   },
-  // A Mac's app is its host, so only Linux has one to run as a service.
   ...byHostKind({
     app: [],
     headless: [
