@@ -277,11 +277,10 @@ export const makeEnvironmentChecks = ({
     // to, so a symlink and its target don't read as a conflict.
     const binariesOnPath = Effect.gen(function* () {
       const searched = yield* envVar("PATH");
+      if (searched === "") return [];
       const found: string[] = [];
       const seen = new Set<string>();
-      for (const candidate of searched === ""
-        ? []
-        : candidatesOnPath(path, searched, binaryName)) {
+      for (const candidate of candidatesOnPath(path, searched, binaryName)) {
         const info = yield* statOf(candidate);
         if (
           Option.isNone(info) ||

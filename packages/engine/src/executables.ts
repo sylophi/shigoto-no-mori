@@ -11,7 +11,6 @@ import { byPlatform } from "./platform.ts";
 
 const pathSeparator = () => byPlatform({ darwin: ":", linux: ":" });
 
-// A PATH value listing these directories in order.
 export const joinSearchPath = (dirs: ReadonlyArray<string>) =>
   dirs.join(pathSeparator());
 
@@ -32,7 +31,6 @@ export const candidatesOnPath = (
 
 const hasExecuteBit = (mode: number) => (mode & 0o111) !== 0;
 
-// Whether a file with this stat mode counts as a program.
 export const isRunnableMode = (mode: number) =>
   byPlatform({ darwin: hasExecuteBit, linux: hasExecuteBit })(mode);
 
