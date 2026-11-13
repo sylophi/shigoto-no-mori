@@ -246,7 +246,7 @@ const scriptsAndFoundation = (options: {
     // already closed or shortened.
     Layer.provideMerge(ScriptRuns.layer),
     // How the scripts, the terminals and the sweep end a process tree.
-    Layer.provideMerge(ProcessTrees.layer),
+    Layer.provideMerge(ProcessTrees.layer(options.engine.nativefs)),
     Layer.provideMerge(foundation(options.engine, options.migration)),
   );
 

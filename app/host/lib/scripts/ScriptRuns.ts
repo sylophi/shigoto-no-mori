@@ -188,8 +188,12 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
       Effect.gen(function* () {
         if (yield* Deferred.isDone(exited)) return;
         const { graceMs, wait, how = "stop" } = stopping();
-        if (!wait) return yield* trees.askNow(spawned.pid);
-        const tree = { pid: spawned.pid, ownGroup: true };
+        const tree = {
+          pid: spawned.pid,
+          ownGroup: true,
+          closeTerminal: () => spawned.kill(),
+        };
+        if (!wait) return yield* trees.askNow(tree);
         yield* trees.ask(tree, how);
         if (yield* waitExit(graceMs)) return;
         yield* trees.end(tree);

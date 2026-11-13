@@ -425,7 +425,9 @@ const make = <R, E>(options: {
       [...sessions.values()].filter((session) => Option.isNone(session.exited));
 
     // The folder a shell is in now, read off the process: by lsof on a
-    // Mac, and on Linux by the link the kernel keeps in /proc.
+    // Mac, and on Linux by the link the kernel keeps in /proc. Windows
+    // gives no way to read it from outside, so there it stays the one
+    // the shell started in.
     const folderOf = (session: Session) => {
       const read: Effect.Effect<Option.Option<string>, unknown> = byPlatform({
         darwin: Processes.exec("lsof", [
@@ -450,6 +452,7 @@ const make = <R, E>(options: {
           ),
         ),
         linux: fs.readLink(`/proc/${session.pty.pid}/cwd`).pipe(Effect.asSome),
+        win32: Effect.succeedNone,
       });
       return read.pipe(
         Effect.timeout(Duration.seconds(2)),

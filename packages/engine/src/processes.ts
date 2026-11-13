@@ -16,6 +16,7 @@ import * as Schema from "effect/Schema";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
+import { byPlatform } from "./platform.ts";
 import { isMissingProgram } from "./platformErrors.ts";
 import * as Shells from "./Shells.ts";
 import { CD_FILE_ENV } from "./shellHook.ts";
@@ -220,8 +221,17 @@ export const readToExit = <A, E, R>(
       handle.exitCode,
       Effect.andThen(Fiber.join(reading), Effect.never),
     );
-    // Nothing left to end is no failure.
-    yield* handle.kill({ forceKillAfter: KILL_GRACE }).pipe(Effect.ignore);
+    // Nothing left to end is no failure. Windows keeps no group to end
+    // once the command is gone, whose pid may be another process's by
+    // then, which the spawner's taskkill would end with its tree.
+    const endGroup = handle
+      .kill({ forceKillAfter: KILL_GRACE })
+      .pipe(Effect.ignore);
+    yield* byPlatform({
+      darwin: endGroup,
+      linux: endGroup,
+      win32: Effect.void,
+    });
     return { read: yield* Fiber.join(reading), code: Number(code) };
   });
 

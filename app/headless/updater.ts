@@ -16,6 +16,10 @@ import { hostBusy } from "@host/lib/sync/MoveQueue";
 import type { HostFacts } from "@shared/hostFacts";
 import { bundledBinaryPath } from "@shared/packaging/bundledBinary.mts";
 import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
+import {
+  NATIVEFS_BINARY_NAME,
+  NATIVEFS_DIST_DIR,
+} from "@shared/packaging/goHelpersDist.mts";
 import { makeUpdater } from "@shared/updater/machine";
 
 export const makeHeadlessUpdater = (
@@ -50,7 +54,11 @@ export const makeHeadlessUpdater = (
         Updater.layer(facts.flavor).pipe(
           Layer.provide(FetchHttpClient.layer),
           Layer.provide(Paths.layer(facts.flavor)),
-          Layer.provide(ProcessTable.layer),
+          Layer.provide(
+            ProcessTable.layer(
+              bundledBinaryPath(facts, NATIVEFS_DIST_DIR, NATIVEFS_BINARY_NAME),
+            ),
+          ),
         ),
       ),
     ),
