@@ -8,6 +8,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { expandHome as expandHomeIn } from "@shigomori/contracts/projectPaths";
+import { canonicalPath } from "./canonicalPath.ts";
 import { type Flavor, flavorNames } from "./flavor.ts";
 import { rescueStrandedMove } from "./dataDirMoveJournal.ts";
 import { isAbsent, isNotFound } from "./platformErrors.ts";
@@ -104,8 +105,11 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
   const path = yield* Path.Path;
   const names = flavorNames(flavor);
   // Unset reads as the working directory.
-  const home = yield* Config.String("HOME").pipe(Config.withDefault("."));
-  const expandHome = (target: string) => expandHomeIn(home, target);
+  const home = canonicalPath(
+    yield* Config.String("HOME").pipe(Config.withDefault(".")),
+  );
+  const expandHome = (target: string) =>
+    expandHomeIn(home, canonicalPath(target));
 
   // A directory a pointer may aim at: one that doesn't exist yet, is
   // empty, or already holds sm's state, so a pointer at ~/Documents
@@ -121,14 +125,17 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
       Effect.orElseSucceed(() => false),
     );
 
-  const configHome = Option.getOrElse(yield* env("XDG_CONFIG_HOME"), () =>
-    path.join(home, ".config"),
+  const configHome = Option.getOrElse(
+    Option.map(yield* env("XDG_CONFIG_HOME"), canonicalPath),
+    () => path.join(home, ".config"),
   );
-  const dataHome = Option.getOrElse(yield* env("XDG_DATA_HOME"), () =>
-    path.join(home, ".local", "share"),
+  const dataHome = Option.getOrElse(
+    Option.map(yield* env("XDG_DATA_HOME"), canonicalPath),
+    () => path.join(home, ".local", "share"),
   );
-  const stateHome = Option.getOrElse(yield* env("XDG_STATE_HOME"), () =>
-    path.join(home, ".local", "state"),
+  const stateHome = Option.getOrElse(
+    Option.map(yield* env("XDG_STATE_HOME"), canonicalPath),
+    () => path.join(home, ".local", "state"),
   );
   const pointerFile = path.join(configHome, names.configDir, names.pointer);
   const legacyPointerFile =

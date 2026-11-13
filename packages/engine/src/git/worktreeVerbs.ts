@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import { canonicalPath } from "../canonicalPath.ts";
 import { parseWorktreeList, splitLines, splitRemoteRef } from "../gitParse.ts";
 import type { RunningArea } from "./running.ts";
 
@@ -20,7 +21,7 @@ export const makeWorktreeVerbs = ({
         Effect.map((text) => {
           const trimmed = text.trim();
           if (!trimmed.startsWith("gitdir: ")) return Option.none<string>();
-          const dir = trimmed.slice("gitdir: ".length);
+          const dir = canonicalPath(trimmed.slice("gitdir: ".length));
           return Option.some(
             path.isAbsolute(dir) ? dir : path.join(worktreePath, dir),
           );
@@ -34,7 +35,7 @@ export const makeWorktreeVerbs = ({
     ) {
       return parseWorktreeList(
         yield* run(repo, ["worktree", "list", "--porcelain", "-z"]),
-      );
+      ).map((entry) => ({ ...entry, path: canonicalPath(entry.path) }));
     });
 
     const addWorktree = Effect.fn("Git.addWorktree")(function* (input: {

@@ -50,6 +50,7 @@ import {
   applyAgentEvent,
   parseAgentEvent,
 } from "./agentSessions.ts";
+import { canonicalPath } from "./canonicalPath.ts";
 import { envVar } from "./environment.ts";
 import { installedVersionOf, linuxInstall } from "./linuxInstall.ts";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
@@ -662,7 +663,9 @@ const make = (binary: string) =>
             now,
           );
           if (next === undefined || next === "unbind") return;
-          const at = yield* worktrees.here(event.cwd === "" ? cwd : event.cwd);
+          const at = yield* worktrees.here(
+            event.cwd === "" ? cwd : canonicalPath(event.cwd),
+          );
           const current = at.current?.worktree;
           if (current === undefined || !Worktrees.isShelfable(current)) return;
           const { at: _at, ...session } = next;

@@ -3,6 +3,7 @@
 // the listing it explains is about to be used.
 import { isAbsolute, resolve } from "node:path";
 import * as Agents from "@shigomori/engine/Agents";
+import { canonicalPath } from "@shigomori/engine/canonicalPath";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Terrier from "@shigomori/engine/Terrier";
 import { isSameOrInside } from "@shigomori/contracts/projectPaths";
@@ -30,6 +31,7 @@ const warning = Effect.gen(function* () {
 // A folder removed under the shell has no cwd, which reads as ".".
 export const cwd = Effect.try(() => process.cwd()).pipe(
   Effect.orElseSucceed(() => "."),
+  Effect.map(canonicalPath),
 );
 
 const where = Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
@@ -216,7 +218,7 @@ export const absolute = (raw: string) =>
     const expanded = expandHome(raw);
     if (isAbsolute(expanded)) return expanded;
     try {
-      return resolve(process.cwd(), expanded);
+      return canonicalPath(resolve(process.cwd(), expanded));
     } catch {
       return expanded;
     }
@@ -227,10 +229,10 @@ export const absolute = (raw: string) =>
 // counts too: through a symlinked folder it names the path the shell
 // sees.
 export const cwdInside = (path: string) => {
-  const pwd = process.env.PWD ?? "";
+  const pwd = canonicalPath(process.env.PWD ?? "");
   if (pwd !== "" && isSameOrInside(pwd, path)) return true;
   try {
-    return isSameOrInside(process.cwd(), path);
+    return isSameOrInside(canonicalPath(process.cwd()), path);
   } catch {
     return false;
   }
