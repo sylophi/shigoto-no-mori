@@ -182,7 +182,7 @@ var verbs = map[string]verb{
 }
 
 const usage = "usage: nativefs clone|exchange|clear-flags|xattrs|cloneable|lstat [-stdin] [-strip|-private] <root> [<dst>]\n" +
-	"       nativefs processes [<pid>...] | end [<pid>:<birth>...] (Windows)"
+	"       nativefs processes [<pid>...] | end [<pid>:<birth>...] | job <program> [<arg>...] (Windows)"
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {

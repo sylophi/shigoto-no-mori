@@ -1,10 +1,11 @@
 package main
 
 // The process calls Node has no binding for on Windows, where no ps
-// tells a process's parent, birth or command line. Two verbs:
+// tells a process's parent, birth or command line. Three verbs:
 //
 //	nativefs processes [<pid>...]         every process, those named with their command lines
 //	nativefs end [<pid>:<birth>...]       each process still the one born then, and all it started, ended
+//	nativefs job <program> [<arg>...]     the program run to its exit in a job of its own, its exit code the helper's
 //
 // processes prints one NDJSON line per process, in no particular order:
 //
@@ -31,6 +32,7 @@ import (
 var processVerbs = map[string]func(args []string, stdout, stderr io.Writer) int{
 	"processes": listProcesses,
 	"end":       endProcesses,
+	"job":       runInJob,
 }
 
 type process struct {
@@ -236,4 +238,76 @@ func endProcesses(args []string, _, stderr io.Writer) int {
 		windows.CloseHandle(h)
 	}
 	return 0
+}
+
+// Runs the program in a job of its own, which holds everything the
+// program starts, whatever its parent (Git Bash's forked commands run
+// with theirs gone). The job has no name and its handle isn't
+// inherited, so the helper holds its one handle, and it ends what is
+// in it as that handle closes: the helper's end, however it comes,
+// ends the whole tree and nothing outside it. The program's own exit
+// lets the job go first, so what it left running outlives it, as a
+// script's background process outlives the script elsewhere.
+func runInJob(args []string, _, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "nativefs job: no program")
+		return 2
+	}
+	fail := func(err error) int {
+		fmt.Fprintf(stderr, "nativefs job: %v\n", err)
+		return 1
+	}
+	job, err := windows.CreateJobObject(nil, nil)
+	if err != nil {
+		return fail(err)
+	}
+	if err := limitJob(job, windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE); err != nil {
+		return fail(err)
+	}
+	program, err := windows.UTF16PtrFromString(args[0])
+	if err != nil {
+		return fail(err)
+	}
+	line, err := windows.UTF16PtrFromString(windows.ComposeCommandLine(args))
+	if err != nil {
+		return fail(err)
+	}
+	si := windows.StartupInfo{Cb: uint32(unsafe.Sizeof(windows.StartupInfo{})), Flags: windows.STARTF_USESTDHANDLES}
+	si.StdInput, _ = windows.GetStdHandle(windows.STD_INPUT_HANDLE)
+	si.StdOutput, _ = windows.GetStdHandle(windows.STD_OUTPUT_HANDLE)
+	si.StdErr, _ = windows.GetStdHandle(windows.STD_ERROR_HANDLE)
+	var pi windows.ProcessInformation
+	// Suspended until it is in the job, so nothing it starts is born
+	// outside. It inherits the standard handles, the environment and the
+	// working folder the helper was given, and the helper's console.
+	if err := windows.CreateProcess(program, line, nil, nil, true, windows.CREATE_SUSPENDED, nil, nil, &si, &pi); err != nil {
+		return fail(err)
+	}
+	if err := windows.AssignProcessToJobObject(job, pi.Process); err != nil {
+		_ = windows.TerminateProcess(pi.Process, 1)
+		return fail(err)
+	}
+	if _, err := windows.ResumeThread(pi.Thread); err != nil {
+		_ = windows.TerminateProcess(pi.Process, 1)
+		return fail(err)
+	}
+	windows.CloseHandle(pi.Thread)
+	if _, err := windows.WaitForSingleObject(pi.Process, windows.INFINITE); err != nil {
+		return fail(err)
+	}
+	var code uint32
+	if err := windows.GetExitCodeProcess(pi.Process, &code); err != nil {
+		return fail(err)
+	}
+	if err := limitJob(job, 0); err != nil {
+		fmt.Fprintf(stderr, "nativefs job: %v\n", err)
+	}
+	return int(code)
+}
+
+func limitJob(job windows.Handle, flags uint32) error {
+	var info windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+	info.BasicLimitInformation.LimitFlags = flags
+	_, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)))
+	return err
 }
