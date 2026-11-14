@@ -203,6 +203,9 @@ const ControlAccessSchema = strict(
 );
 export type ControlAccess = typeof ControlAccessSchema.Type;
 
+// Which of the app's terminals a process runs in, in its environment.
+export const TERMINAL_ID_ENV = "SHIGOMORI_TERMINAL_ID";
+
 const ControlMirrorTargetSchema = Schema.Struct({
   projectId: Schema.NonEmptyString,
   worktreeId: WorktreeIdSchema,
@@ -302,6 +305,22 @@ export const controlContract = defineContract(
   invoke(
     "mirrorDeleteStoppedShort",
     strict(ControlMirrorTargetSchema),
+    VoidSchema,
+    { gated: true },
+  ),
+  // A delete or a move from the terminal: what the app runs in the
+  // worktree, or without `worktreeId` in the whole project, lets go
+  // first (the engine's Holders), but for the app's terminal `spare`,
+  // the one the caller runs in (TERMINAL_ID_ENV).
+  invoke(
+    "releaseHolders",
+    strict(
+      Schema.Struct({
+        projectId: Schema.NonEmptyString,
+        worktreeId: Schema.optional(WorktreeIdSchema),
+        spare: Schema.optional(Schema.String),
+      }),
+    ),
     VoidSchema,
     { gated: true },
   ),

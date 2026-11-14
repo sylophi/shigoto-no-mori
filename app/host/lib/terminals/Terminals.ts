@@ -27,6 +27,7 @@ import type {
   TerminalEvent,
 } from "@shigomori/contracts/schemas";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
+import { TERMINAL_ID_ENV } from "@shigomori/contracts/modules/control";
 import * as SavedTerminals from "@shigomori/engine/SavedTerminals";
 import * as Terrier from "@shigomori/engine/Terrier";
 import { elapsedMillis } from "@shigomori/engine/elapsed";
@@ -329,10 +330,12 @@ export class Terminals extends Context.Service<
       gone: (projectId: string) => boolean,
     ) => Effect.Effect<void>;
     // Closes the terminals of a worktree, or of every worktree of a
-    // project, none saved for the next start: what its delete takes.
+    // project, none saved for the next start: what its delete or move
+    // takes. `spare` is the one an `sm` asking for it runs in, kept.
     readonly closeOf: (owner: {
       readonly projectId: string;
       readonly worktreeId?: string;
+      readonly spare?: string;
     }) => Effect.Effect<void>;
     // Closes every terminal, none saved for the next start (a nuke).
     readonly closeEvery: Effect.Effect<void>;
@@ -634,7 +637,7 @@ const make = <R, E>(options: {
             shell: yield* interactive,
             command: null,
             cwd,
-            env,
+            env: { ...env, [TERMINAL_ID_ENV]: terminal.terminalId },
             ...size,
           },
           () => STOPPING,
@@ -1022,11 +1025,13 @@ const make = <R, E>(options: {
       closeOf: Effect.fn("Terminals.closeOf")(function* ({
         projectId,
         worktreeId,
+        spare,
       }) {
         yield* closeAll(
           ({ terminal }) =>
             terminal.projectId === projectId &&
-            (worktreeId === undefined || terminal.worktreeId === worktreeId),
+            (worktreeId === undefined || terminal.worktreeId === worktreeId) &&
+            terminal.terminalId !== spare,
         );
       }),
       closeEvery: closeAll(() => true),

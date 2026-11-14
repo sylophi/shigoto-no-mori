@@ -23,7 +23,7 @@ import type { MovedSource } from "@shigomori/contracts/schemas";
 import * as Config from "../Config.ts";
 import * as Dirty from "../Dirty.ts";
 import * as Git from "../Git.ts";
-import { releaseHolders } from "../HoldersOnDelete.ts";
+import { releaseHolders } from "../Holders.ts";
 import {
   type DeleteEnd,
   MirrorsOnDelete,
