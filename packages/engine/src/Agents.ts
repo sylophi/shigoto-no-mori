@@ -647,7 +647,7 @@ const make = (binary: string) =>
             force: true,
           });
         }
-        return `${cloneSourceCommand(syntax, tag)}; `;
+        return `${cloneSourceCommand(syntax, tag, folder)}; `;
       }).pipe(
         Effect.mapError(
           (cause) => new GuideFolderFailed({ path: folder, cause }),

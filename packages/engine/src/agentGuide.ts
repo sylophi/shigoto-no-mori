@@ -103,15 +103,22 @@ export const guideCommand = (
   }
 };
 
-// Clones the release's source into `source` unless it is there, in the
-// terminal where its progress shows. The agent starts either way.
-// Windows PowerShell has no `&&`, so for PowerShell the engine looks for
-// `source` and clears `source.partial` before it types this.
-export const cloneSourceCommand = (syntax: ShellSyntax, tag: string) => {
-  const clone = `git -c advice.detachedHead=false clone --quiet --depth 1 --branch ${typedLines[syntax].quote(tag)} ${SOURCE_URL}.git source.partial`;
+// Clones the release's source into `source` in `folder` unless it is
+// there, in the terminal where its progress shows. The agent starts
+// either way. Windows PowerShell has no `&&`, so for PowerShell the
+// engine looks for `source` and clears `source.partial` before it types
+// this, and the rename names its folder, since Windows PowerShell finds
+// no relative path under a folder whose name has brackets.
+export const cloneSourceCommand = (
+  syntax: ShellSyntax,
+  tag: string,
+  folder: string,
+) => {
+  const lines = typedLines[syntax];
+  const clone = `git -c advice.detachedHead=false clone --quiet --depth 1 --branch ${lines.quote(tag)} ${SOURCE_URL}.git source.partial`;
   return syntax === "posix"
     ? `[ -d source ] || { rm -rf source.partial && ${clone} && mv source.partial source; }`
-    : `${clone}; Rename-Item -LiteralPath source.partial -NewName source -ErrorAction Ignore`;
+    : `${clone}; Rename-Item -LiteralPath ${lines.path(`${folder}/source.partial`)} -NewName source -ErrorAction Ignore`;
 };
 
 // The guide folder's AGENTS.md (Codex reads it, and Claude Code through
