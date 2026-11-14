@@ -715,7 +715,9 @@ describe("cancelMove", () => {
       ...targetConfigBefore,
       defaultBranch: "main",
       scripts: {
-        setup: `echo ${SCRIPT_PID} > '${setupPidPath}'; exec sleep 600`,
+        // Waited on, as bash execs a last command, which takes another
+        // pid under Git Bash.
+        setup: `echo ${SCRIPT_PID} > '${setupPidPath}'; sleep 600 & wait`,
       },
     });
     // Branches kept on removal, so the rollback has to take the one
