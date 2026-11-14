@@ -170,8 +170,16 @@ export function home(): string {
   return canonicalPath(homedir());
 }
 
+// On Windows a path rooted without a drive (`/Users/me`) is on the
+// current drive, and spelled with it.
 export function expandHome(path: string): string {
-  return expandHomeIn(home(), canonicalPath(path));
+  const onDrive = byPlatform({
+    darwin: (target: string) => target,
+    linux: (target: string) => target,
+    win32: (target: string) =>
+      /^\/(?!\/)/.test(target) ? canonicalPath(resolve(target)) : target,
+  });
+  return onDrive(expandHomeIn(home(), canonicalPath(path)));
 }
 
 export function toAbsolute(path: string): string {

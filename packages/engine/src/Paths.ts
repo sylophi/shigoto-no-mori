@@ -112,8 +112,16 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
       byPlatform({ darwin: "HOME", linux: "HOME", win32: "USERPROFILE" }),
     ).pipe(Config.withDefault(".")),
   );
+  // On Windows a path rooted without a drive (`/Users/me`) is on the
+  // current drive, and spelled with it.
+  const onDrive = byPlatform({
+    darwin: (target: string) => target,
+    linux: (target: string) => target,
+    win32: (target: string) =>
+      /^\/(?!\/)/.test(target) ? path.resolve(target) : target,
+  });
   const expandHome = (target: string) =>
-    expandHomeIn(home, canonicalPath(target));
+    onDrive(expandHomeIn(home, canonicalPath(target)));
 
   // A directory a pointer may aim at: one that doesn't exist yet, is
   // empty, or already holds sm's state, so a pointer at ~/Documents
