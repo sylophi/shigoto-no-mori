@@ -86,7 +86,7 @@ import {
   tempDir,
   waitFor,
 } from "./lib/checkKit.mts";
-import { pidIn } from "../../test/testProcesses.mts";
+import { pidIn, SCRIPT_PID, scriptAlive } from "../../test/testProcesses.mts";
 
 // The host's git runs in this process: a commit hook's GIT_* would point
 // it at the repository being committed.
@@ -141,7 +141,8 @@ const create = async (
   ).worktree;
 
 // A script that records its pid and runs until stopped, the way a dev
-// server holds its worktree, running `onStop` in it as it goes.
+// server holds its worktree, running `onStop` in it as it goes: on its
+// way out, which a stop reaches on every OS (Windows sends no SIGTERM).
 const runIn = (
   project: Project,
   worktree: Worktree,
@@ -151,7 +152,7 @@ const runIn = (
   runHost(
     Effect.flatMap(Scripts.Scripts, (scripts) =>
       scripts.start({
-        command: `trap '${onStop} exit 0' TERM; echo $$ > '${pidFile}'; while :; do sleep 0.1; done`,
+        command: `trap '${onStop}' EXIT; echo ${SCRIPT_PID} > '${pidFile}'; while :; do sleep 0.1; done`,
         slot: { kind: "package", name: "serve" },
         worktree: {
           id: worktree.id,
@@ -265,7 +266,7 @@ const stackOf = async (
     Fixtures.writeProjectConfig(project.id, {
       defaultBranch: "main",
       scripts: {
-        teardown: `n=$(basename "$PWD"); if kill -0 "$(cat '${run}'/$n.pid)" 2>/dev/null; then echo "$n running"; else echo "$n stopped"; fi >> '${teardowns}'; ${options.teardown ?? "true"}`,
+        teardown: `n=$(basename "$PWD"); if ${scriptAlive(`"$(cat '${run}'/$n.pid)"`)}; then echo "$n running"; else echo "$n stopped"; fi >> '${teardowns}'; ${options.teardown ?? "true"}`,
       },
     }),
   );

@@ -20,7 +20,7 @@ import * as Scripts from "@host/lib/Scripts";
 import * as Engine from "@host/lib/Engine";
 import * as StoreChanges from "@host/lib/storeChanges";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
-import { HoldersOnDelete } from "@shigomori/engine/HoldersOnDelete";
+import { Holders } from "@shigomori/engine/Holders";
 import { MirrorsOnDelete } from "@shigomori/engine/MirrorsOnDelete";
 import { mirrorsOnDelete } from "@host/mirror/onDelete";
 import * as Shell from "@host/lib/Shell";
@@ -221,12 +221,13 @@ const scriptsAndFoundation = (options: {
     // last run left running is reaped here. It claims the records before
     // any script can spawn, and kills in the background.
     Layer.provideMerge(OrphanSweep.layer),
-    // The engine's deletes close the terminals in what they take first.
+    // The engine's deletes and moves close the terminals in what they
+    // take or move first.
     Layer.provideMerge(
       Layer.effect(
-        HoldersOnDelete,
+        Holders,
         Effect.map(Terminals.Terminals, (terminals) =>
-          HoldersOnDelete.of({ release: terminals.closeOf }),
+          Holders.of({ release: terminals.closeOf }),
         ),
       ),
     ),

@@ -62,7 +62,7 @@ import {
 import { cliSandbox } from "./lib/cliSandbox.mts";
 import { bootDirectWire, DIALER, LISTENER } from "./lib/directBoot.mts";
 import type { ShigomoriConfig } from "@shigomori/contracts/schemas";
-import { pidIn } from "../../test/testProcesses.mts";
+import { pidIn, SCRIPT_PID } from "../../test/testProcesses.mts";
 
 // The host's engine reads and moves as Promises, on the sandbox's
 // engine (runHost).
@@ -715,7 +715,9 @@ describe("cancelMove", () => {
       ...targetConfigBefore,
       defaultBranch: "main",
       scripts: {
-        setup: `echo $$ > '${setupPidPath}'; exec sleep 600`,
+        // Waited on, as bash execs a last command, which takes another
+        // pid under Git Bash.
+        setup: `echo ${SCRIPT_PID} > '${setupPidPath}'; sleep 600 & wait`,
       },
     });
     // Branches kept on removal, so the rollback has to take the one

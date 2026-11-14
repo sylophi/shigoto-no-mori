@@ -1,3 +1,6 @@
+// check:knip sets CI: otherwise knip counts lefthook as used only by
+// finding its installed git hook, which a linked worktree keeps in the
+// main checkout.
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {

@@ -169,6 +169,12 @@ catalog:
 # sonner measures a toast that changes behind the front one through
 # the stack's scale, so it shrank on hover. The patch measures it
 # unscaled.
+# node-pty's close on Windows lists the console's processes from a
+# helper that attaches only once the console is gone, then kills the
+# shell's pid 5 s later, by which time another process may hold it. The
+# patch leaves the close to close the console, and the host ends what
+# is left of the tree (host/lib/scripts/processTrees/consoles.ts).
 patchedDependencies:
+  node-pty@1.1.0: patches/node-pty@1.1.0.patch
   react-grab@0.2.0: patches/react-grab@0.2.0.patch
   sonner@2.0.7: patches/sonner@2.0.7.patch

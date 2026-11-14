@@ -44,8 +44,12 @@ pre-commit:
             run: pnpm run format:check
           # The proofs (app/test/README.md), whole, for a change to what
           # they run: the host, the shell, the shared code, the engine,
-          # the terminal, the contracts and the Go helpers.
+          # the terminal, the contracts and the Go helpers. On Windows CI
+          # runs them: beside the other suites there they take minutes
+          # longer than alone and come out unreliable.
           - name: proofs
+            skip:
+              - run: test "$OS" = Windows_NT
             glob: "{app/host/**,app/main/**,app/shared/**,app/test/**,app/vitest.config.ts,packages/engine/**,packages/cli/**,packages/contracts/**,file-sync/**,nativefs/**,test/**,pnpm-lock.yaml}"
             run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm -C app test
           # The contracts' golden fixtures (packages/contracts/README.md).

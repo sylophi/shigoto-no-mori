@@ -75,5 +75,7 @@ export const makeSignals = Effect.gen(function* () {
       Effect.sync(() => safeKill(-tree.pid, "SIGTERM")),
     ),
     end: Effect.fn("ProcessTrees.end")((tree: Tree) => send(tree, "SIGKILL")),
+    // node-pty closes the PTY once the shell's output has drained.
+    release: () => Effect.void,
   };
 });
