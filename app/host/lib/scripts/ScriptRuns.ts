@@ -189,15 +189,21 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
           cause,
         }),
     }),
-    (spawned) =>
-      Effect.gen(function* () {
+    (spawned) => {
+      // Once only: a pseudoconsole closed twice is freed twice.
+      let open = true;
+      const tree = {
+        pid: spawned.pid,
+        ownGroup: true,
+        closeTerminal: () => {
+          if (open) spawned.kill();
+          open = false;
+        },
+        interrupt: () => spawned.write("\x03"),
+      };
+      return Effect.gen(function* () {
         if (yield* Deferred.isDone(exited)) return;
         const { graceMs, wait, how = "stop" } = stopping();
-        const tree = {
-          pid: spawned.pid,
-          ownGroup: true,
-          closeTerminal: () => spawned.kill(),
-        };
         if (!wait) return yield* trees.askNow(tree);
         yield* trees.ask(tree, how);
         if (yield* waitExit(graceMs)) return;
@@ -206,7 +212,8 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
         yield* Effect.logWarning(
           `[scripts] "${opts.command ?? program}" (pid ${spawned.pid}) survived SIGKILL, giving up on it`,
         );
-      }),
+      }).pipe(Effect.ensuring(trees.release(tree)));
+    },
   );
   // node-pty reports exit only after the terminal stream has drained
   // (or a short grace period when a backgrounded grandchild still holds

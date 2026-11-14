@@ -16,6 +16,8 @@ type Tree = {
   // Closes the PTY a run's tree is attached to, while the host holds
   // it: the hangup where no signal is one.
   readonly closeTerminal?: () => void;
+  // Types Ctrl+C into that PTY: the stop where no signal is one.
+  readonly interrupt?: () => void;
 };
 
 export class ProcessTrees extends Context.Service<
@@ -29,6 +31,10 @@ export class ProcessTrees extends Context.Service<
     readonly askNow: (tree: Tree) => Effect.Effect<void>;
     // Ends the tree, whether or not it listens.
     readonly end: (tree: Tree) => Effect.Effect<void>;
+    // Lets go of a PTY run's terminal once the run is over. Where the
+    // terminal is a pseudoconsole that closes it, which ends what is
+    // still attached, as a session's end hangs up its group elsewhere.
+    readonly release: (tree: Tree) => Effect.Effect<void>;
   }
 >()("sm/host/ProcessTrees") {}
 

@@ -315,6 +315,7 @@ overrides:
   undici@>=7.0.0 <7.30.1: 7.30.1
 
 patchedDependencies:
+  node-pty@1.1.0: 908e7a6a44c0bda09f024626095b676df2c50435c952eb0da0c6ae0c35dedf0c
   react-grab@0.2.0: 5b181239b3224dc270abd8ee8a987199f3f9df83cb885cc2f3f05762970beb68
   sonner@2.0.7: 2afe964a3e3e4c4eeac59ebc36efe9ec792e84a5a66a1d5dbf29bf7a34a9c032
 
@@ -453,7 +454,7 @@ importers:
         version: 5.36.1
       node-pty:
         specifier: 1.1.0
-        version: 1.1.0
+        version: 1.1.0(patch_hash=908e7a6a44c0bda09f024626095b676df2c50435c952eb0da0c6ae0c35dedf0c)
       react:
         specifier: 'catalog:'
         version: 19.2.7
@@ -12067,7 +12068,7 @@ snapshots:
 
   node-mock-http@1.0.5: {}
 
-  node-pty@1.1.0:
+  node-pty@1.1.0(patch_hash=908e7a6a44c0bda09f024626095b676df2c50435c952eb0da0c6ae0c35dedf0c):
     dependencies:
       node-addon-api: 7.1.1
 
