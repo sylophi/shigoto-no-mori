@@ -86,11 +86,7 @@ import {
   tempDir,
   waitFor,
 } from "./lib/checkKit.mts";
-import {
-  pidIn,
-  SCRIPT_PID,
-  scriptAlive,
-} from "../../test/testProcesses.mts";
+import { pidIn, SCRIPT_PID, scriptAlive } from "../../test/testProcesses.mts";
 
 // The host's git runs in this process: a commit hook's GIT_* would point
 // it at the repository being committed.

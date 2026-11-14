@@ -111,14 +111,14 @@ export const makeNativefs = (helper: string) =>
         const host = table.get(pid)?.console;
         if (host !== undefined) onConsole.set(host, pid);
       }
-      const held = new Set<number>();
+      const busy = new Set<number>();
       for (const row of table.values()) {
-        if (shells.has(row.parent)) held.add(row.parent);
+        if (shells.has(row.parent)) busy.add(row.parent);
         const shell =
           row.console === undefined ? undefined : onConsole.get(row.console);
-        if (shell !== undefined && shell !== row.pid) held.add(shell);
+        if (shell !== undefined && shell !== row.pid) busy.add(shell);
       }
-      return held;
+      return busy;
     }, withSpawner);
 
     return { startedAt, listed, identify, held };

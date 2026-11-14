@@ -94,7 +94,11 @@ exit $code
 
 // node:fs/promises with the armed stop's cp and rmdir steps held.
 export const holdingFs = (real: typeof FsPromises): typeof FsPromises => {
-  const hold = async (tool: Stop["tool"], when: Stop["when"], path: unknown) => {
+  const hold = async (
+    tool: Stop["tool"],
+    when: Stop["when"],
+    path: unknown,
+  ) => {
     const stop = armed?.stop;
     if (
       armed === undefined ||
