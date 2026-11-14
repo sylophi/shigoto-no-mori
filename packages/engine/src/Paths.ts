@@ -228,7 +228,7 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
   // pointer moved committed first, and the data dir found again where the
   // move left it, before any process can make a fresh store at the folder
   // that left.
-  const find = Effect.gen(function* () {
+  const locate = Effect.gen(function* () {
     const found = yield* resolve;
     if (
       found.source === "env" ||
@@ -245,20 +245,6 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
     // Found again either way: another process may have made the same
     // rescue first.
     return yield* resolve;
-  });
-  // On Windows the data dir as git spells the folder, once it is there:
-  // the variable, the pointer or the home folder may name it in another
-  // case, by a short name or through a junction.
-  const locate = Effect.gen(function* () {
-    const found = yield* find;
-    const dataDir = yield* byPlatform({
-      darwin: Effect.succeed(found.dataDir),
-      linux: Effect.succeed(found.dataDir),
-      win32: fs
-        .realPath(found.dataDir)
-        .pipe(Effect.orElseSucceed(() => found.dataDir)),
-    });
-    return { ...found, dataDir };
   });
   const resolved = yield* locate;
 
