@@ -23,6 +23,7 @@ import * as Result from "effect/Result";
 import * as SqlClient from "effect/sql/SqlClient";
 import { findExecutable } from "../executables.ts";
 import * as Git from "../Git.ts";
+import { releaseHolders } from "../Holders.ts";
 import { copyTree } from "../entries.ts";
 import { byPlatform } from "../platform.ts";
 import * as ProcessTable from "../ProcessTable.ts";
@@ -377,6 +378,11 @@ export const makeMoving = ({
             yield* fs
               .makeDirectory(path.dirname(to), { recursive: true })
               .pipe(Effect.orDie);
+            // What the app runs there lets go first, as for a delete.
+            yield* releaseHolders({
+              projectId: project.id,
+              worktreeId: worktree.id,
+            });
             const moved = yield* git
               .run(project.path, ["worktree", "move", "--", worktree.path, to])
               .pipe(

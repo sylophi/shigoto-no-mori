@@ -9,12 +9,23 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, realpath } from "../../../test/canonicalPaths.mts";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
-import { afterEach, beforeEach, it, onTestFinished } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  it,
+  onTestFinished,
+  type TestContext,
+} from "vitest";
 import * as Doctor from "../src/Doctor.ts";
 import * as Registry from "../src/Registry.ts";
 import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
 import * as WtFolder from "../src/WtFolder.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
+
+// v2 never ran on Windows, so no v2 worktree is there to move, and the
+// move asks lsof, which Windows lacks, what runs in one.
+const whereV2Ran = ({ skip }: TestContext) =>
+  skip(process.platform === "win32", "v2 never ran on Windows");
 
 let box: Sandbox;
 beforeEach(() => {
@@ -66,7 +77,8 @@ const listed = (repo: string) =>
     .filter((line) => line.startsWith("worktree "))
     .map((line) => line.slice("worktree ".length));
 
-it("moves v2 worktrees into wt at the first start, and keeps a locked one where it is", async () => {
+it("moves v2 worktrees into wt at the first start, and keeps a locked one where it is", async (ctx) => {
+  whereV2Ran(ctx);
   const { repo, v2, wt } = v2Project();
   const { autoPull, unmoved } = await state();
   for (const name of ["a", "b"]) {
@@ -104,7 +116,8 @@ const namesakes = () => {
   };
 };
 
-it("moves the v2 worktrees of two projects of one folder name, each by its own git", async () => {
+it("moves the v2 worktrees of two projects of one folder name, each by its own git", async (ctx) => {
+  whereV2Ran(ctx);
   const { work, personal, v2, wt } = namesakes();
   box.git(work, "worktree", "add", "-q", "-b", "a", join(v2, "a"));
   box.git(personal, "worktree", "add", "-q", "-b", "b", join(v2, "b"));
@@ -115,7 +128,8 @@ it("moves the v2 worktrees of two projects of one folder name, each by its own g
   assert.ok(!existsSync(v2), "the shared v2 root is gone");
 });
 
-it("hands a v2 worktree an earlier scan left under its namesake to its own project", async () => {
+it("hands a v2 worktree an earlier scan left under its namesake to its own project", async (ctx) => {
+  whereV2Ran(ctx);
   const { personal, v2, wt } = namesakes();
   await state();
   box.git(personal, "worktree", "add", "-q", "-b", "b", join(v2, "b"));
@@ -138,7 +152,8 @@ it("hands a v2 worktree an earlier scan left under its namesake to its own proje
   assert.deepEqual((await state()).unmoved, []);
 });
 
-it("keeps a worktree something runs in where it is, naming what to close", async () => {
+it("keeps a worktree something runs in where it is, naming what to close", async (ctx) => {
+  whereV2Ran(ctx);
   const { repo, v2, wt } = v2Project();
   box.git(repo, "worktree", "unlock", join(v2, "c"));
   // A shell or a dev server: a process working in a folder of b's.
@@ -183,7 +198,8 @@ it("keeps every worktree where it is when lsof can't say what runs in them", asy
   assert.ok(existsSync(join(v2, "a")));
 });
 
-it("carries the id of a worktree git moved before a crash, by the move's record", async () => {
+it("carries the id of a worktree git moved before a crash, by the move's record", async (ctx) => {
+  whereV2Ran(ctx);
   const { repo, v2, wt } = v2Project();
   await state();
   const oldId = worktreeIdFromPath(join(v2, "c"));
@@ -232,7 +248,8 @@ it("never carries a v2 worktree's marks onto another checkout at its wt/ path", 
   assert.ok(!after.includes(worktreeIdFromPath(join(wt, "c"))));
 });
 
-it("sweeps an emptied v2 root that holds only Finder's .DS_Store", async () => {
+it("sweeps an emptied v2 root that holds only Finder's .DS_Store", async (ctx) => {
+  whereV2Ran(ctx);
   const repo = box.repo("repo", { "README.md": "hi\n" });
   const dataDir = join(box.home, "engine");
   const v2 = join(dataDir, "worktrees", "repo");

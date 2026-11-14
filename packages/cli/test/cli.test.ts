@@ -132,7 +132,12 @@ describe("the v3 migration", () => {
     assert.ok(!existsSync(join(box.side("cli"), "store.db")));
   });
 
-  it("is made by doctor --fix, which leaves a worktree something runs in", async () => {
+  it("is made by doctor --fix, which leaves a worktree something runs in", async ({
+    skip,
+  }) => {
+    // v2 never ran on Windows, so no v2 worktree is there to move, and the
+    // move asks lsof, which Windows lacks, what runs in one.
+    skip(process.platform === "win32", "v2 never ran on Windows");
     const { dataDir, a, b } = v2();
     const doctor = async (...args: string[]) =>
       (await runAt(box.home, "--json", "doctor", ...args)).doc as {

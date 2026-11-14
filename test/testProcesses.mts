@@ -70,6 +70,16 @@ export function pidIn(text: string): number | undefined {
   return Number.isInteger(pid) && pid > 1 ? pid : undefined;
 }
 
+// What a shell script writes for its own pid, for a test to read with
+// pidIn: the number this process names it by. Git Bash's `$$` is its own
+// numbering, and the Windows pid is in /proc.
+export const SCRIPT_PID = "$(cat /proc/$$/winpid 2>/dev/null || echo $$)";
+
+// A shell command that succeeds while `pid`, as SCRIPT_PID wrote it,
+// still runs.
+export const scriptAlive = (pid: string) =>
+  `{ if [ -e /proc/$$/winpid ]; then /usr/bin/kill -W -0 ${pid}; else kill -0 ${pid}; fi; } 2>/dev/null`;
+
 // A signal to `pid` that may have gone already.
 export function signalIfAlive(pid: number, name: NodeJS.Signals | 0): boolean {
   try {

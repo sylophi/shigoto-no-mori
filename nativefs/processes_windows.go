@@ -13,7 +13,9 @@ package main
 // birth is when it started, in epoch milliseconds. parent is 0 once the
 // process that started it is gone: Windows keeps a dead parent's pid,
 // which another process may hold by then, and a parent is born before
-// its child. command is absent where it can't be read.
+// its child. console is the pid of the console host (conhost.exe, or
+// OpenConsole.exe) of the console it is attached to, absent for none.
+// command is absent where it can't be read.
 
 import (
 	"errors"
@@ -36,6 +38,7 @@ type process struct {
 	Parent  uint32  `json:"parent"`
 	Birth   int64   `json:"birth"`
 	Name    string  `json:"name"`
+	Console uint32  `json:"console,omitempty"`
 	Command *string `json:"command,omitempty"`
 	// The birth as Windows keeps it, to 100 ns, which tells a parent
 	// from a child born the same millisecond.
@@ -82,8 +85,29 @@ func snapshot() (map[uint32]*process, error) {
 		if parent, ok := table[p.Parent]; !ok || parent.created.Nanoseconds() >= p.created.Nanoseconds() {
 			p.Parent = 0
 		}
+		if host, ok := table[consoleHostOf(p)]; ok && consoleHosts[strings.ToLower(host.Name)] {
+			p.Console = host.Pid
+		}
 	}
 	return table, nil
+}
+
+var consoleHosts = map[string]bool{"conhost.exe": true, "openconsole.exe": true}
+
+// The pid Windows keeps as the host of p's console, its low two bits
+// flags. A process with no console may name another process there,
+// which is no console host.
+func consoleHostOf(p *process) uint32 {
+	h, ok := open(p, 0)
+	if !ok {
+		return 0
+	}
+	defer windows.CloseHandle(h)
+	var host uintptr
+	if windows.NtQueryInformationProcess(h, windows.ProcessConsoleHostProcess, unsafe.Pointer(&host), uint32(unsafe.Sizeof(host)), nil) != nil {
+		return 0
+	}
+	return uint32(host &^ 3)
 }
 
 // A handle to p with `access`, while its pid still names p.

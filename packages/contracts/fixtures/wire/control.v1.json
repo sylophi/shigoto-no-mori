@@ -108,6 +108,11 @@
       "unreachable": ["#s"]
     }
   },
+  "control:releaseHolders": {
+    "payload": {
+      "projectId": "u"
+    }
+  },
   "control:send": {
     "payload": {
       "projectId": "ER",

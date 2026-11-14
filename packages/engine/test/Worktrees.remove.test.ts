@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "../../../test/canonicalPaths.mts";
 import * as Effect from "effect/Effect";
@@ -7,7 +8,7 @@ import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import { afterEach, beforeEach, it, onTestFinished } from "vitest";
 import * as Git from "../src/Git.ts";
-import { HoldersOnDelete } from "../src/HoldersOnDelete.ts";
+import { Holders } from "../src/Holders.ts";
 import { MirrorsOnDelete } from "../src/MirrorsOnDelete.ts";
 import * as Registry from "../src/Registry.ts";
 import * as Worktrees from "../src/Worktrees.ts";
@@ -227,7 +228,7 @@ it("a delete its checks refuse never stops the worktree's mirror", async () => {
 });
 
 // A process working in the worktree, and the app's side of
-// HoldersOnDelete, which ends it and notes whom it was asked for and
+// Holders, which ends it and notes whom it was asked for and
 // whether the worktree's files were there then.
 const removingHeld = async (
   located: Worktrees.Located,
@@ -250,8 +251,8 @@ const removingHeld = async (
       ),
     ).pipe(
       Effect.provideService(
-        HoldersOnDelete,
-        HoldersOnDelete.of({
+        Holders,
+        Holders.of({
           release: (owner) =>
             Effect.promise(
               () =>
@@ -268,6 +269,12 @@ const removingHeld = async (
       ),
     ),
   );
+  // Ended before the sandbox goes, as Windows deletes no folder it works
+  // in.
+  if (held.exitCode === null && held.signalCode === null) {
+    held.kill();
+    await once(held, "exit");
+  }
   return { removed, told };
 };
 

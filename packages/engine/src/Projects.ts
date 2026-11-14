@@ -14,7 +14,7 @@ import type * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as Config from "./Config.ts";
 import * as Git from "./Git.ts";
-import { releaseHolders } from "./HoldersOnDelete.ts";
+import { releaseHolders } from "./Holders.ts";
 import * as Paths from "./Paths.ts";
 import * as Registry from "./Registry.ts";
 import * as Scripts from "./Scripts.ts";
