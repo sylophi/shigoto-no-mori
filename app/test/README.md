@@ -26,7 +26,7 @@ They run one file at a time, each in a process of its own
 (`../vitest.config.ts`), since they spawn real git, the real `sm` and
 file-sync binaries and sockets. `pnpm test` runs them all, and
 `pnpm test <name>` the files whose name holds it. lefthook runs them
-for a change to what they run (`../../lefthook.yml`), but on Windows,
+for a change to what they run (`../../lefthook.yml`), except on Windows,
 and CI on each pull request.
 
 No proof's git can reach this repository: the vitest config removes

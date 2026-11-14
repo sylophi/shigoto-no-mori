@@ -13,6 +13,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Git's bash on Windows too, rather than PowerShell, so a step reads the
+# same on every OS.
+defaults:
+  run:
+    shell: bash
+
 # Each job runs one piece of the root `pnpm check` (package.json), by
 # its script name, so CI and a local run mean the same thing.
 jobs:
@@ -140,11 +146,6 @@ jobs:
   windows-static:
     runs-on: windows-latest
     timeout-minutes: 15
-    # Git's bash rather than PowerShell, so a step reads as it does in the
-    # jobs above.
-    defaults:
-      run:
-        shell: bash
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -152,8 +153,6 @@ jobs:
 
       - uses: ./.github/actions/install-workspace
         id: install
-        with:
-          store-cache: false
 
       - name: Typecheck
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
@@ -190,9 +189,6 @@ jobs:
   windows-engine:
     runs-on: windows-latest
     timeout-minutes: 20
-    defaults:
-      run:
-        shell: bash
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -200,8 +196,6 @@ jobs:
 
       - uses: ./.github/actions/install-workspace
         id: install
-        with:
-          store-cache: false
 
       - name: Engine
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
@@ -220,9 +214,6 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3]
-    defaults:
-      run:
-        shell: bash
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -231,8 +222,6 @@ jobs:
       # The app's postinstall checks node-pty's prebuilt ConPTY addon is
       # there.
       - uses: ./.github/actions/install-workspace
-        with:
-          store-cache: false
 
       - name: App postinstall
         run: pnpm -C app run postinstall

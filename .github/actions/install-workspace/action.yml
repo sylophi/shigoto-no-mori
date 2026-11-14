@@ -1,13 +1,6 @@
 name: Install workspace
 description: Sets up pnpm and Node, then installs the lockfile without running install scripts.
 
-inputs:
-  # On Windows restoring the store takes longer than the downloads it
-  # saves, which overlap the lockfile's verification.
-  store-cache:
-    description: Whether to restore and save pnpm's store.
-    default: "true"
-
 runs:
   using: composite
   steps:
@@ -18,7 +11,9 @@ runs:
     - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
       with:
         node-version: "22"
-        cache: ${{ inputs.store-cache == 'true' && 'pnpm' || '' }}
+        # On Windows restoring the store takes longer than the downloads it
+        # saves, which overlap the lockfile's verification.
+        cache: ${{ runner.os != 'Windows' && 'pnpm' || '' }}
         cache-dependency-path: pnpm-lock.yaml
 
     - name: Install dependencies

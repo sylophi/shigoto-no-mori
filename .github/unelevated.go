@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
+	"strings"
 	"syscall"
 	"unsafe"
 )
@@ -30,8 +32,12 @@ func main() {
 	}
 	cmd := exec.Command(os.Args[1], os.Args[2:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	// With a token and no environment, Go gives the account's default one.
-	cmd.Env = os.Environ()
+	// With a token and no environment, Go gives the account's default
+	// one. The runner's step summary is its administrators' alone, so
+	// vitest is not told of it.
+	cmd.Env = slices.DeleteFunc(os.Environ(), func(v string) bool {
+		return strings.HasPrefix(v, "GITHUB_STEP_SUMMARY=")
+	})
 	cmd.SysProcAttr = &syscall.SysProcAttr{Token: token}
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "unelevated:", err)
