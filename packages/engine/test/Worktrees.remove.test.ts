@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "../../../test/canonicalPaths.mts";
 import * as Effect from "effect/Effect";
@@ -268,6 +269,12 @@ const removingHeld = async (
       ),
     ),
   );
+  // Ended before the sandbox goes, as Windows deletes no folder it works
+  // in.
+  if (held.exitCode === null && held.signalCode === null) {
+    held.kill();
+    await once(held, "exit");
+  }
   return { removed, told };
 };
 
