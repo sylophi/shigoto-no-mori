@@ -41,10 +41,11 @@ import type { AgentHarnessStatus } from "@shigomori/contracts/schemas/agents";
 import {
   cloneSourceCommand,
   GUIDE_LAUNCHERS,
-  GUIDE_MCP_CONFIG,
+  GUIDE_MCP_CONFIG_FILE,
   guideCommand,
   guideInstructions,
   guideMcpConfig,
+  guideMcpConfigFile,
   SOURCE_URL,
 } from "./agentGuide.ts";
 import {
@@ -232,6 +233,8 @@ export class Agents extends Context.Service<
     >;
   }
 >()("sm/engine/Agents") {}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const find = (bound: Registry.BoundSessions, ref: SessionRef) => {
   for (const [id, list] of bound) {
@@ -572,6 +575,12 @@ const make = (binary: string) =>
       if (harness === undefined || harness.resume === "") {
         return yield* new CantResume({ harness: ref.harness });
       }
+      yield* open.typable(
+        harness.label,
+        "the session's id",
+        harness.resume.split(" ")[0] ?? "",
+        [ref.session],
+      );
       const { syntax } = yield* shells.interactive;
       yield* open.inTerminal(
         located,
@@ -584,17 +593,24 @@ const make = (binary: string) =>
     // runs from, or a release's tag, cloned again once the app updates
     // (`source-tag` names the tag it holds).
     const guide = Effect.fn("Agents.guide")(function* (input: GuideLaunch) {
+      const label = harnessById(input.harness)?.label ?? input.harness;
       if (
         (yield* launchers.installed(GUIDE_LAUNCHERS[input.harness])) ===
         undefined
       ) {
-        const harness = harnessById(input.harness);
         return yield* new GuideHarnessMissing({
-          label: harness?.label ?? input.harness,
+          label,
           command: input.harness,
         });
       }
       const { syntax } = yield* shells.interactive;
+      const harnessLine = guideCommand(syntax, { ...input, sm, dataDir });
+      yield* open.typable(
+        label,
+        "the app's paths",
+        harnessLine.program,
+        harnessLine.args,
+      );
       const folder = path.join(dataDir, "guide");
       const source = path.join(folder, "source");
       // What the folder's `source` is to hold, where the agent reads it
@@ -634,8 +650,19 @@ const make = (binary: string) =>
           yield* fs.writeFileString(tagFile, `${wanted}\n`);
         }
         if (syntax === "powershell" && input.harness === "claude") {
+          // A day is long past any claude's start, and leaves the
+          // folder a day's configs at most.
+          const now = yield* Clock.currentTimeMillis;
+          for (const name of yield* fs.readDirectory(folder)) {
+            if (!GUIDE_MCP_CONFIG_FILE.test(name)) continue;
+            const file = path.join(folder, name);
+            const { mtime } = yield* fs.stat(file);
+            if (Option.exists(mtime, (at) => now - at.getTime() > DAY_MS)) {
+              yield* fs.remove(file, { force: true });
+            }
+          }
           yield* fs.writeFileString(
-            path.join(folder, GUIDE_MCP_CONFIG),
+            path.join(folder, guideMcpConfigFile(input.session)),
             guideMcpConfig({ ...input, sm, dataDir }),
           );
         }
@@ -655,7 +682,7 @@ const make = (binary: string) =>
       );
       yield* open.inTerminal(
         folder,
-        `${before}${guideCommand(syntax, { ...input, sm, dataDir })}`,
+        `${before}${harnessLine.line}`,
         input.terminal,
       );
     });

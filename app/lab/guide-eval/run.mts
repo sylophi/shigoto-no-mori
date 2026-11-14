@@ -286,7 +286,7 @@ function quitTerminal(): void {
 // role, server and tools, with each harness's flags for a run with no
 // one at it.
 function headless(harness: Harness, session: string, question: string): string {
-  const line = guideCommand("posix", {
+  const { line } = guideCommand("posix", {
     harness,
     sm: smd,
     dataDir: app.dataDir,

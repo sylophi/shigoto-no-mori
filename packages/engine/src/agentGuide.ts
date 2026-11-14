@@ -31,8 +31,11 @@ const tomlLiteral = (text: string) =>
   text.includes("'") ? `'''${text}'''` : `'${text}'`;
 
 // The file in the guide's folder that PowerShell's line gives claude
-// its MCP config in (guideCommand), read as claude starts.
-export const GUIDE_MCP_CONFIG = "mcp.json";
+// its MCP config in (guideCommand), read as claude starts. One per
+// session, so two guides started together each read their own.
+export const guideMcpConfigFile = (session: string) => `mcp-${session}.json`;
+
+export const GUIDE_MCP_CONFIG_FILE = /^mcp-.+\.json$/;
 
 // The agent's role, as each harness's system-level instructions: it
 // starts idle, and the person types their question.
@@ -67,40 +70,49 @@ export const guideMcpConfig = ({ sm, dataDir, session }: GuideServer) =>
 // batch file, drops the `"` inside a program's argument, so PowerShell's
 // line names claude's config by its file and gives codex its strings in
 // TOML's single quotes.
+const guideArgs = (
+  syntax: ShellSyntax,
+  input: GuideServer & { readonly harness: GuideHarness },
+) => {
+  const { sm, dataDir, session } = input;
+  const string = syntax === "posix" ? toml : tomlLiteral;
+  switch (input.harness) {
+    case "claude":
+      return [
+        "--mcp-config",
+        syntax === "posix"
+          ? guideMcpConfig(input)
+          : guideMcpConfigFile(session),
+        "--append-system-prompt",
+        GUIDE_SYSTEM_PROMPT,
+        "--allowedTools",
+        `mcp__${SERVER}`,
+      ];
+    case "codex":
+      return [
+        `developer_instructions=${string(GUIDE_SYSTEM_PROMPT)}`,
+        `mcp_servers.${SERVER}.command=${string(sm)}`,
+        `mcp_servers.${SERVER}.args=[${serverArgs(session).map(string).join(", ")}]`,
+        `mcp_servers.${SERVER}.env={ ${DATA_DIR_ENV} = ${string(dataDir)} }`,
+        `mcp_servers.${SERVER}.default_tools_approval_mode=${string("approve")}`,
+      ].flatMap((item) => ["-c", item]);
+  }
+};
+
+// The harness's program, its arguments, and the line typing them, a
+// word of letters, digits, `_` and `-` left bare.
 export const guideCommand = (
   syntax: ShellSyntax,
   input: GuideServer & { readonly harness: GuideHarness },
 ) => {
-  const { harness, sm, dataDir, session } = input;
+  const args = guideArgs(syntax, input);
   const { quote } = typedLines[syntax];
-  const string = syntax === "posix" ? toml : tomlLiteral;
-  switch (harness) {
-    case "claude": {
-      const config =
-        syntax === "posix" ? guideMcpConfig(input) : GUIDE_MCP_CONFIG;
-      return `claude --mcp-config ${quote(config)} --append-system-prompt ${quote(GUIDE_SYSTEM_PROMPT)} --allowedTools mcp__${SERVER}`;
-    }
-    case "codex":
-      return [
-        "codex",
-        "-c",
-        quote(`developer_instructions=${string(GUIDE_SYSTEM_PROMPT)}`),
-        "-c",
-        quote(`mcp_servers.${SERVER}.command=${string(sm)}`),
-        "-c",
-        quote(
-          `mcp_servers.${SERVER}.args=[${serverArgs(session).map(string).join(", ")}]`,
-        ),
-        "-c",
-        quote(
-          `mcp_servers.${SERVER}.env={ ${DATA_DIR_ENV} = ${string(dataDir)} }`,
-        ),
-        "-c",
-        quote(
-          `mcp_servers.${SERVER}.default_tools_approval_mode=${string("approve")}`,
-        ),
-      ].join(" ");
-  }
+  const words = args.map((arg) => (/^[\w-]+$/.test(arg) ? arg : quote(arg)));
+  return {
+    program: input.harness,
+    args,
+    line: [input.harness, ...words].join(" "),
+  };
 };
 
 // Clones the release's source into `source` in `folder` unless it is

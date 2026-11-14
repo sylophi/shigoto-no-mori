@@ -9,6 +9,15 @@ import * as Option from "effect/Option";
 
 const BATCH_FILE = /\.(?:bat|cmd)$/i;
 
+export const isBatchFile = (file: string) => BATCH_FILE.test(file);
+
+// What cmd reads in an argument PowerShell hands a batch file: its
+// operators, its escape, its quote, its variables and a line's end.
+// PowerShell quotes an argument only around a space, and a file that
+// reads one itself (`%~1`) drops those quotes, so a space keeps none of
+// them out.
+export const cmdReadsIn = (arg: string) => /[&|<>^"%!\r\n]/.exec(arg)?.[0];
+
 // What cmd reads as its own. Each is read as itself after a ^.
 const CMD_META = /[()[\]%!^"`<>&|;, *?]/g;
 
@@ -36,7 +45,7 @@ export const startable = (
   readonly args: ReadonlyArray<string>;
   readonly shell: boolean;
 } =>
-  BATCH_FILE.test(program)
+  isBatchFile(program)
     ? {
         command: [
           escaped(program),

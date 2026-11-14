@@ -19,7 +19,8 @@ import { flavorNames } from "./flavor.ts";
 import * as Paths from "./Paths.ts";
 import { openEnvArgs } from "./relaunchEnv.ts";
 import { errnoText, isAbsent } from "./platformErrors.ts";
-import { isRunnable } from "./executables.ts";
+import { cmdReadsIn, isBatchFile } from "./batchFiles.ts";
+import { findForPowerShell, isRunnable } from "./executables.ts";
 import { byPlatform } from "./platform.ts";
 import * as Shells from "./Shells.ts";
 import { typedLines } from "@shigomori/contracts/typedLines";
@@ -157,6 +158,17 @@ export class Open extends Context.Service<
       where: string | Worktrees.Located,
       command: string,
       terminal?: TerminalId,
+    ) => Effect.Effect<void, LaunchFailed>;
+    // Fails when the terminal's shell would hand `program` `args` in a
+    // way that lets one run a command: PowerShell hands a batch file
+    // each argument for cmd to read, quoted only around a space, so one
+    // with a character cmd reads (cmdReadsIn) can't go to one. `what`
+    // names the arguments in the message.
+    readonly typable: (
+      label: string,
+      what: string,
+      program: string,
+      args: ReadonlyArray<string>,
     ) => Effect.Effect<void, LaunchFailed>;
     // Opens a worktree's file, absolute or relative to its root, in the
     // editor the device settings name, or with its default app while
@@ -355,6 +367,27 @@ const make = Effect.gen(function* () {
     yield* inTerminal("the terminal", command, where, undefined, terminal);
   });
 
+  const typable = Effect.fn("Open.typable")(function* (
+    label: string,
+    what: string,
+    program: string,
+    args: ReadonlyArray<string>,
+  ) {
+    if ((yield* shells.interactive).syntax !== "powershell") return;
+    const read = args.map(cmdReadsIn).find((c) => c !== undefined);
+    if (read === undefined) return;
+    const found = yield* findForPowerShell(program).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
+    );
+    if (Option.isSome(found) && isBatchFile(found.value)) {
+      return yield* new LaunchFailed({
+        label,
+        said: `${program} is a batch file (${found.value}), and ${what} can't be passed to it, since cmd would read its ${JSON.stringify(read)}.`,
+      });
+    }
+  });
+
   const edit = Effect.fn("Open.edit")(function* (
     located: Worktrees.Located,
     file: string,
@@ -391,6 +424,7 @@ const make = Effect.gen(function* () {
     const { app } = entry;
     if (app.inTerminal !== undefined) {
       const program = app.inTerminal.trim().split(/\s+/)[0] ?? "";
+      yield* typable(label, "the file's name", program, [absolute]);
       const { syntax } = yield* shells.interactive;
       yield* inTerminal(
         label,
@@ -459,7 +493,7 @@ const make = Effect.gen(function* () {
     });
   }).pipe(Effect.withSpan("Open.app"));
 
-  return Open.of({ open, inTerminal: inTerminalAt, edit, app });
+  return Open.of({ open, inTerminal: inTerminalAt, typable, edit, app });
 });
 
 export const layer = Layer.effect(Open, make);

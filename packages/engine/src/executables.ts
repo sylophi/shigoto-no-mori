@@ -101,3 +101,21 @@ export const findOn = Effect.fn("findOn")(function* (
 // The program's full path, none when PATH has no such program.
 export const findExecutable = (name: string) =>
   Effect.flatMap(envVar("PATH"), (searched) => findOn(searched, name));
+
+// The file PowerShell runs for a bare name: PATH's directories in order,
+// and in each a script before PATHEXT's extensions in their order.
+export const findForPowerShell = Effect.fnUntraced(function* (name: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const exts = [".ps1", ...(yield* windowsExtensions)];
+  for (const dir of (yield* envVar("PATH")).split(";")) {
+    if (dir === "") continue;
+    for (const ext of exts) {
+      const candidate = path.join(dir, `${name}${ext}`);
+      if (yield* fs.exists(candidate).pipe(Effect.orElseSucceed(() => false))) {
+        return Option.some(candidate);
+      }
+    }
+  }
+  return Option.none<string>();
+});
