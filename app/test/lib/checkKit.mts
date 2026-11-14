@@ -3,13 +3,11 @@
 import { execFileSync, spawn } from "node:child_process";
 import { type AddressInfo } from "node:net";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
-  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import {
@@ -28,6 +26,7 @@ import {
   isolateGit,
 } from "../../../test/gitIsolation.ts";
 import { own, SYNC_SPAWN } from "../../../test/testProcesses.mts";
+import { writeStub } from "../../../packages/engine/test/lib/stubs.ts";
 
 // The app root (app/ in the repo), resolved from this file's location
 // under test/lib/.
@@ -211,8 +210,7 @@ export function installFakeGh(
 ): void {
   const bin = join(root, "bin");
   mkdirSync(bin);
-  writeFileSync(join(bin, "gh"), script);
-  chmodSync(join(bin, "gh"), 0o755);
+  writeStub(bin, "gh", script);
   const path = process.env["PATH"];
   const ghConfig = process.env["GH_CONFIG_DIR"];
   process.env["PATH"] = `${bin}${delimiter}${path ?? ""}`;
