@@ -16,6 +16,8 @@ const Process = Schema.Struct({
   // Epoch ms.
   birth: Schema.Int,
   name: Schema.String,
+  // The pid of its console's host. Absent for none.
+  console: Schema.optionalKey(Schema.Int),
   // Only for the pids asked about, and only where it can be read.
   command: Schema.optionalKey(Schema.String),
 });
@@ -95,18 +97,28 @@ export const makeNativefs = (helper: string) =>
       );
     }, withSpawner);
 
-    // Windows has no foreground, so a shell is held while it has a
-    // child: a command it runs, or one it left in the background.
-    // Untraced, as the terminals ask every two seconds.
+    // Windows has no foreground, so a shell is held while a command it
+    // started runs: its child, or another process on its console, where
+    // what Git Bash forks and execs runs once its parent is gone. One it
+    // left in the background holds it too. Untraced, as the terminals ask
+    // every two seconds.
     const held = Effect.fnUntraced(function* (pids: ReadonlyArray<number>) {
       if (pids.length === 0) return new Set<number>();
       const shells = new Set(pids);
       const table = yield* readProcesses(helper);
-      return new Set(
-        [...table.values()]
-          .map(({ parent }) => parent)
-          .filter((parent) => shells.has(parent)),
-      );
+      const onConsole = new Map<number, number>();
+      for (const pid of shells) {
+        const host = table.get(pid)?.console;
+        if (host !== undefined) onConsole.set(host, pid);
+      }
+      const held = new Set<number>();
+      for (const row of table.values()) {
+        if (shells.has(row.parent)) held.add(row.parent);
+        const shell =
+          row.console === undefined ? undefined : onConsole.get(row.console);
+        if (shell !== undefined && shell !== row.pid) held.add(shell);
+      }
+      return held;
     }, withSpawner);
 
     return { startedAt, listed, identify, held };
