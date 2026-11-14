@@ -23,9 +23,10 @@ export const screenOpener = Effect.gen(function* () {
       display === ""
         ? Option.none<Opener>()
         : Option.some<Opener>({ program: "xdg-open", args: [] }),
-    // rundll32 hands the rest of its command line to the handler as the
-    // one target, read by no shell, so a link's & % # and a path's
-    // spaces arrive as they are.
+    // rundll32 hands the rest of its command line, read by no shell, to
+    // the handler as the one target, so a link's & % # and a path's
+    // spaces arrive as they are. It exits 0 whatever the handler does,
+    // which shows its own dialog when it fails.
     win32: Option.some<Opener>({
       program: "rundll32.exe",
       args: ["url.dll,FileProtocolHandler"],

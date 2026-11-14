@@ -25,7 +25,8 @@ const forTerminal = (arg: string) =>
 
 // Text as PowerShell reads it literally: in single quotes, each quote it
 // takes for one (the curly ones too) doubled.
-const quoted = (text: string) => `'${text.replaceAll(/['‘-‛]/g, "$&$&")}'`;
+export const powerShellQuoted = (text: string) =>
+  `'${text.replaceAll(/['‘-‛]/g, "$&$&")}'`;
 
 // A script as -EncodedCommand takes it, which no command line parser
 // reads into.
@@ -36,7 +37,7 @@ const encoded = (script: string) =>
 // location, since Windows PowerShell can't start in a folder whose name
 // has brackets.
 const inFolder = (folder: string, command: string) =>
-  `Set-Location -LiteralPath ${quoted(native(folder))}\n${command}`;
+  `Set-Location -LiteralPath ${powerShellQuoted(native(folder))}\n${command}`;
 
 export const makeWindowsShell = ({ run, onScreen }: CommandsArea) =>
   Effect.gen(function* () {
@@ -96,7 +97,7 @@ export const makeWindowsShell = ({ run, onScreen }: CommandsArea) =>
         "-NonInteractive",
         "-EncodedCommand",
         encoded(
-          `Start-Process -FilePath ${quoted(program)} -ArgumentList ${args.map(quoted).join(",")}`,
+          `Start-Process -FilePath ${powerShellQuoted(program)} -ArgumentList ${args.map(powerShellQuoted).join(",")}`,
         ),
       ]);
     });

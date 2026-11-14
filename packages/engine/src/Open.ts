@@ -29,7 +29,7 @@ import { makeCommands } from "./open/commands.ts";
 import type { Desktop } from "./open/desktop.ts";
 import { LaunchFailed } from "./open/documents.ts";
 import { makeLaunchServices } from "./open/launchServices.ts";
-import { makeWindowsShell } from "./open/windowsShell.ts";
+import { makeWindowsShell, powerShellQuoted } from "./open/windowsShell.ts";
 import { makeXdg } from "./open/xdg.ts";
 export { LaunchFailed } from "./open/documents.ts";
 
@@ -388,7 +388,13 @@ const make = Effect.gen(function* () {
     const { app } = entry;
     if (app.inTerminal !== undefined) {
       const program = app.inTerminal.trim().split(/\s+/)[0] ?? "";
-      yield* inTerminal(label, `${program} ${shellQuote(absolute)}`, located);
+      // Typed into the terminal's shell, PowerShell on Windows.
+      const quote = byPlatform({
+        darwin: shellQuote,
+        linux: shellQuote,
+        win32: powerShellQuoted,
+      });
+      yield* inTerminal(label, `${program} ${quote(absolute)}`, located);
       return absolute;
     }
     // The worktree goes along, so the file opens in the window that has

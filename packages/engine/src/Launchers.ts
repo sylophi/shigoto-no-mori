@@ -245,14 +245,7 @@ const make = Effect.gen(function* () {
     return tool === undefined ? Effect.succeed(false) : onPath(tool);
   };
 
-  const available = (app: CatalogApp) =>
-    Effect.gen(function* () {
-      if ((yield* bundleOf(app)) !== undefined) return true;
-      if (app.cli !== undefined && (yield* onPath(app.cli))) return true;
-      return yield* toolOnPath(app);
-    });
-
-  // What an installed app was found by, each looked up once.
+  // What an installed app was found by.
   const foundBy = (app: CatalogApp) =>
     Effect.gen(function* () {
       const bundle = yield* bundleOf(app);
@@ -261,6 +254,9 @@ const make = Effect.gen(function* () {
         ? { app, bundle, cliOnPath }
         : undefined;
     });
+
+  const available = (app: CatalogApp) =>
+    Effect.map(foundBy(app), (found) => found !== undefined);
 
   const listCatalog = Effect.forEach(
     apps,
