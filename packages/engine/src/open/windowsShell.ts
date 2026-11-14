@@ -1,6 +1,7 @@
 // Windows' desktop to Open (desktop.ts): files go to the shell's default
 // handlers through the screen opener, programs start on their own, and
 // a command line runs in Windows Terminal, else in a PowerShell window.
+import { typedLines } from "@shigomori/contracts/typedLines";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
@@ -23,10 +24,7 @@ const native = (path: string) => path.replaceAll("/", "\\");
 const forTerminal = (arg: string) =>
   arg.replaceAll("\\", "/").replaceAll(";", "\\;");
 
-// Text as PowerShell reads it literally: in single quotes, each quote it
-// takes for one (the curly ones too) doubled.
-export const powerShellQuoted = (text: string) =>
-  `'${text.replaceAll(/['‘-‛]/g, "$&$&")}'`;
+const { quote, cd } = typedLines.powershell;
 
 // A script as -EncodedCommand takes it, which no command line parser
 // reads into.
@@ -37,7 +35,7 @@ const encoded = (script: string) =>
 // location, since Windows PowerShell can't start in a folder whose name
 // has brackets.
 const inFolder = (folder: string, command: string) =>
-  `Set-Location -LiteralPath ${powerShellQuoted(native(folder))}\n${command}`;
+  `${cd(folder)}\n${command}`;
 
 export const makeWindowsShell = ({ run, onScreen }: CommandsArea) =>
   Effect.gen(function* () {
@@ -97,7 +95,7 @@ export const makeWindowsShell = ({ run, onScreen }: CommandsArea) =>
         "-NonInteractive",
         "-EncodedCommand",
         encoded(
-          `Start-Process -FilePath ${powerShellQuoted(program)} -ArgumentList ${args.map(powerShellQuoted).join(",")}`,
+          `Start-Process -FilePath ${quote(program)} -ArgumentList ${args.map(quote).join(",")}`,
         ),
       ]);
     });

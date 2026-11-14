@@ -16,6 +16,12 @@ export type GridSize = typeof GridSizeSchema.Type;
 // host's copy of the screen that a client starting over is sent.
 export const TERMINAL_SCROLLBACK = 5_000;
 
+// The syntax a terminal's shell reads, which every line typed into it
+// is written in (typedLines.ts): a Mac's and Linux's login shell reads
+// POSIX sh, and Windows' terminal runs PowerShell.
+const ShellSyntaxSchema = Schema.Literals(["posix", "powershell"]);
+export type ShellSyntax = typeof ShellSyntaxSchema.Type;
+
 // A terminal belongs to the worktree it starts in, or was moved to, and
 // closes with it.
 const TerminalSchema = Schema.Struct({

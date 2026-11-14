@@ -42,7 +42,10 @@ export const makeLogin = Effect.gen(function* () {
 
   return {
     script: loginShell,
-    interactive: loginShell,
+    interactive: Effect.map(loginShell, (shell) => ({
+      ...shell,
+      syntax: "posix" as const,
+    })),
     sh: Effect.succeed("/bin/sh"),
   };
 });

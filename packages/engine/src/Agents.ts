@@ -41,8 +41,10 @@ import type { AgentHarnessStatus } from "@shigomori/contracts/schemas/agents";
 import {
   cloneSourceCommand,
   GUIDE_LAUNCHERS,
+  GUIDE_MCP_CONFIG,
   guideCommand,
   guideInstructions,
+  guideMcpConfig,
   SOURCE_URL,
 } from "./agentGuide.ts";
 import {
@@ -53,12 +55,13 @@ import {
 import { canonicalPath } from "./canonicalPath.ts";
 import { envVar } from "./environment.ts";
 import { installedVersionOf, linuxInstall } from "./linuxInstall.ts";
-import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
+import { typedLines } from "@shigomori/contracts/typedLines";
 import * as Launchers from "./Launchers.ts";
 import * as Open from "./Open.ts";
 import * as Paths from "./Paths.ts";
 import { errnoText, isNotFound } from "./platformErrors.ts";
 import * as Registry from "./Registry.ts";
+import * as Shells from "./Shells.ts";
 import * as Worktrees from "./Worktrees.ts";
 import { isDirectory, linkFolder } from "./entries.ts";
 
@@ -253,6 +256,7 @@ const make = (binary: string) =>
     const worktrees = yield* Worktrees.Worktrees;
     const open = yield* Open.Open;
     const launchers = yield* Launchers.Launchers;
+    const shells = yield* Shells.Shells;
     // By its real path, so the app (its bundled copy) and a terminal
     // (through the linked command) write the same entry and agree on
     // whether it is current. One not built yet (a dev run) keeps the
@@ -568,9 +572,10 @@ const make = (binary: string) =>
       if (harness === undefined || harness.resume === "") {
         return yield* new CantResume({ harness: ref.harness });
       }
+      const { syntax } = yield* shells.interactive;
       yield* open.inTerminal(
         located,
-        `${harness.resume} ${shellQuote(ref.session)}`,
+        `${harness.resume} ${typedLines[syntax].quote(ref.session)}`,
       );
     });
 
@@ -589,25 +594,27 @@ const make = (binary: string) =>
           command: input.harness,
         });
       }
+      const { syntax } = yield* shells.interactive;
       const folder = path.join(dataDir, "guide");
       const source = path.join(folder, "source");
       // What the folder's `source` is to hold, where the agent reads it
-      // when it doesn't, and what the terminal runs first.
-      const { wanted, sourceUrl, link, before } =
+      // when it doesn't, and the release the terminal clones it from.
+      const { wanted, sourceUrl, link, tag } =
         "tag" in input.source
           ? {
               wanted: input.source.tag,
               sourceUrl: `${SOURCE_URL}/tree/${input.source.tag}`,
               link: undefined,
-              before: `${cloneSourceCommand(input.source.tag)}; `,
+              tag: input.source.tag,
             }
           : {
               wanted: input.source.checkout,
               sourceUrl: input.source.checkout,
               link: input.source.checkout,
-              before: "",
+              tag: undefined,
             };
-      yield* Effect.gen(function* () {
+      // What the terminal runs first.
+      const before = yield* Effect.gen(function* () {
         yield* fs.makeDirectory(folder, { recursive: true });
         yield* fs.writeFileString(
           path.join(folder, "AGENTS.md"),
@@ -626,6 +633,21 @@ const make = (binary: string) =>
           if (link !== undefined) yield* linkFolder(link, source);
           yield* fs.writeFileString(tagFile, `${wanted}\n`);
         }
+        if (syntax === "powershell" && input.harness === "claude") {
+          yield* fs.writeFileString(
+            path.join(folder, GUIDE_MCP_CONFIG),
+            guideMcpConfig({ ...input, sm, dataDir }),
+          );
+        }
+        if (tag === undefined) return "";
+        if (syntax === "powershell") {
+          if (yield* fs.exists(source)) return "";
+          yield* fs.remove(path.join(folder, "source.partial"), {
+            recursive: true,
+            force: true,
+          });
+        }
+        return `${cloneSourceCommand(syntax, tag)}; `;
       }).pipe(
         Effect.mapError(
           (cause) => new GuideFolderFailed({ path: folder, cause }),
@@ -633,7 +655,7 @@ const make = (binary: string) =>
       );
       yield* open.inTerminal(
         folder,
-        `${before}${guideCommand({ ...input, sm, dataDir })}`,
+        `${before}${guideCommand(syntax, { ...input, sm, dataDir })}`,
         input.terminal,
       );
     });
