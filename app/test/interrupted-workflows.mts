@@ -29,6 +29,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "../../test/canonicalPaths.mts";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { afterAll, it } from "vitest";
 import {
@@ -47,7 +48,9 @@ import {
 import { nativefs } from "../../packages/engine/test/lib/nativefs.ts";
 import { addProject, builtSm, hostEngine } from "./lib/smBinary.mts";
 import { own, pidIn } from "../../test/testProcesses.mts";
+import { readProcesses } from "@shigomori/engine/processTable/nativefs";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
+import * as NodeServices from "@shared/nodeServices";
 
 const gitEnv = scrubbedGitEnv();
 scrubProcessGitEnv();
@@ -141,19 +144,15 @@ const decodeReport = Schema.decodeUnknownSync(
 // Every process on `pid`'s console, ended. On Windows the engine runs
 // each command on a console of its own, which the held wrapper and the
 // sleep it runs share: Git Bash runs the sleep with its parent gone.
-function endConsoleOf(pid: number | undefined) {
-  const rows = execFileSync(nativefs(), ["processes"], { encoding: "utf8" })
-    .trim()
-    .split("\n")
-    .map(
-      (line) =>
-        JSON.parse(line) as { pid: number; birth: number; console?: number },
-    );
-  const host = rows.find((row) => row.pid === pid)?.console;
+async function endConsoleOf(pid: number | undefined) {
+  const rows = await Effect.runPromise(
+    readProcesses(nativefs()).pipe(Effect.provide(NodeServices.layer)),
+  );
+  const host = pid === undefined ? undefined : rows.get(pid)?.console;
   assert.ok(host !== undefined, "the held wrapper has no console");
   execFileSync(nativefs(), [
     "end",
-    ...rows
+    ...[...rows.values()]
       .filter((row) => row.console === host)
       .map((row) => `${row.pid}:${row.birth}`),
   ]);
@@ -201,7 +200,7 @@ function dataDirFor(label: string) {
     );
     if (process.platform === "win32") {
       if (child.pid !== undefined) process.kill(child.pid, "SIGKILL");
-      endConsoleOf(held());
+      await endConsoleOf(held());
     } else {
       if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
       // The engine runs each command in a process group of its own,
