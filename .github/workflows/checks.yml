@@ -211,7 +211,7 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: go run .github/unelevated.go pnpm run check:cli
 
-  # The proofs in two halves, each on a runner of its own, so a fixed
+  # The proofs in three parts, each on a runner of its own, so a fixed
   # port is still one proof's at a time.
   windows-proofs:
     runs-on: windows-latest
@@ -219,7 +219,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     defaults:
       run:
         shell: bash
@@ -238,4 +238,4 @@ jobs:
         run: pnpm -C app run postinstall
 
       - name: Proofs
-        run: go run .github/unelevated.go pnpm run check:proofs --shard=${{ matrix.shard }}/2
+        run: go run .github/unelevated.go pnpm run check:proofs --shard=${{ matrix.shard }}/3
