@@ -245,9 +245,12 @@ func endProcesses(args []string, _, stderr io.Writer) int {
 // with theirs gone). The job has no name and its handle isn't
 // inherited, so the helper holds its one handle, and it ends what is
 // in it as that handle closes: the helper's end, however it comes,
-// ends the whole tree and nothing outside it. The program's own exit
+// ends the whole tree and nothing outside it. The program's success
 // lets the job go first, so what it left running outlives it, as a
-// script's background process outlives the script elsewhere.
+// script's background process outlives the script elsewhere. Any other
+// end takes what is left with the helper: a kill never ends it with 0,
+// and taskkill /T ends the program before the helper. No program may
+// leave the job, as Git Bash's leave any job that lets them.
 func runInJob(args []string, _, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "nativefs job: no program")
@@ -298,8 +301,10 @@ func runInJob(args []string, _, stderr io.Writer) int {
 	if err := windows.GetExitCodeProcess(pi.Process, &code); err != nil {
 		return fail(err)
 	}
-	if err := limitJob(job, 0); err != nil {
-		fmt.Fprintf(stderr, "nativefs job: %v\n", err)
+	if code == 0 {
+		if err := limitJob(job, 0); err != nil {
+			fmt.Fprintf(stderr, "nativefs job: %v\n", err)
+		}
 	}
 	return int(code)
 }

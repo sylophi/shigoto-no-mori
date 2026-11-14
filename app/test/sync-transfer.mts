@@ -732,7 +732,7 @@ describe("cancelMove", () => {
     // cancel.
     writeFileSync(
       leftScript,
-      `import { writeFileSync } from "node:fs";\nwriteFileSync(process.argv[2], process.cwd());\nsetTimeout(() => {}, 600_000);\n`,
+      `import { writeFileSync } from "node:fs";\nwriteFileSync(process.argv[2], process.cwd());\nsetTimeout(() => {}, 60_000);\n`,
     );
     writeFileSync(leftShell, `node '${leftScript}' '${leftRunning}'\n`);
     targetConfigBefore = await readShigomoriConfig(targetProjectId);

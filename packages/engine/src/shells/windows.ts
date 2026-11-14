@@ -63,6 +63,8 @@ export const makeWindows = Effect.fnUntraced(function* (nativefs: string) {
     }),
   );
 
+  const sh = Effect.map(gitBash, ({ usrBin }) => path.join(usrBin, "sh.exe"));
+
   return {
     // Not a login shell: a Mac's reads its profile for the PATH there,
     // and on Windows a process already has the user's. What Git Bash's
@@ -84,15 +86,11 @@ export const makeWindows = Effect.fnUntraced(function* (nativefs: string) {
       };
     }),
     interactive: powerShell,
-    sh: Effect.map(gitBash, ({ usrBin }) => path.join(usrBin, "sh.exe")),
+    sh,
     containedSh: (script: string, args: ReadonlyArray<string>) =>
-      Effect.map(gitBash, ({ usrBin }) => ({
+      Effect.map(sh, (program) => ({
         program: nativefs,
-        args: [
-          "job",
-          path.join(usrBin, "sh.exe"),
-          ...gitBashShArgs(script, args),
-        ],
+        args: ["job", program, ...gitBashShArgs(script, args)],
       })),
   };
 });

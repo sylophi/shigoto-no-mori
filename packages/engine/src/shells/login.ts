@@ -40,15 +40,16 @@ export const makeLogin = Effect.gen(function* () {
     }),
   );
 
+  const sh = "/bin/sh";
   return {
     script: loginShell,
     interactive: Effect.map(loginShell, (shell) => ({
       ...shell,
       syntax: "posix" as const,
     })),
-    sh: Effect.succeed("/bin/sh"),
+    sh: Effect.succeed(sh),
     // Signals reach the tree here (ProcessTrees), so sh runs as it is.
     containedSh: (script: string, args: ReadonlyArray<string>) =>
-      Effect.succeed({ program: "/bin/sh", args: ["-c", script, ...args] }),
+      Effect.succeed({ program: sh, args: ["-c", script, ...args] }),
   };
 });

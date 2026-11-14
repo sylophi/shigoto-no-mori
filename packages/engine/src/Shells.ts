@@ -38,7 +38,7 @@ export class Shells extends Context.Service<
     // run to its end with no terminal that may leave something running
     // (a lifecycle script, git running the person's hooks). Windows
     // starts it in a job (nativefs job), so ending the process started
-    // ends all it started, Git Bash's orphans too, and its clean exit
+    // ends all it started, Git Bash's orphans too, and its success
     // leaves what it left running.
     readonly containedSh: (
       script: string,
