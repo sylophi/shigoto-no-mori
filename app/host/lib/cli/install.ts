@@ -6,7 +6,13 @@
 // behavior is repairCliLinks: silently repointing a link the user
 // already installed when its target moved, so an existing install
 // keeps working across app updates and relocations.
+import { join } from "node:path";
 import { byPlatform } from "@shigomori/engine/platform";
+import {
+  cliAliasName,
+  cliBinaryName,
+  cliUserBinDir,
+} from "@shared/packaging/cliDist.mts";
 import { cliBinaryOf } from "./binary";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
@@ -14,9 +20,30 @@ import * as Exit from "effect/Exit";
 import { uninstallShellIntegration } from "./shell";
 import * as HostFacts from "@host/lib/HostFacts";
 import { links } from "./links";
-import type { Facts } from "./placement";
+import type { CliPlacement, Facts } from "./placement";
 
-const placement = () => byPlatform({ darwin: links, linux: links });
+// Nothing puts the command on PATH on Windows yet.
+const unplaced: CliPlacement = {
+  status: async (facts) => ({
+    name: cliBinaryName(facts.flavor),
+    aliasName: cliAliasName(facts.flavor),
+    binDir: cliUserBinDir(),
+    linkPath: join(cliUserBinDir(), cliBinaryName(facts.flavor)),
+    state: "missing",
+    foreignPaths: [],
+    onPath: false,
+  }),
+  install: async () => {
+    throw new Error(
+      "Installing the command line tool isn't available on Windows yet.",
+    );
+  },
+  remove: async () => {},
+  repair: async () => {},
+};
+
+const placement = () =>
+  byPlatform({ darwin: links, linux: links, win32: unplaced });
 
 // The links' state, and their install, for the handlers. A refusal
 // crosses the wire in its own words.

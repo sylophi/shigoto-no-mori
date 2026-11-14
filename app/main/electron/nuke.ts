@@ -38,7 +38,7 @@ export async function nukeShell(): Promise<NukeReport> {
       why: errorMessageOf(error),
     });
   }
-  if (currentPlatform() === "darwin" && setsLoginItem()) {
+  if (currentPlatform() !== "linux" && setsLoginItem()) {
     app.setLoginItemSettings({ openAtLogin: false });
   }
   writeNukeMarker(app.getPath("userData"), nukedPaths(app.getPath("logs")));

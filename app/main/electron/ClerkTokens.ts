@@ -23,7 +23,7 @@ import { byPlatform } from "@shigomori/engine/platform";
 
 const ENCRYPTED_PREFIX = "enc:";
 const RAW_PREFIX = "raw:";
-const keptRaw = byPlatform({ darwin: false, linux: true });
+const keptRaw = byPlatform({ darwin: false, linux: true, win32: false });
 
 type Cipher = {
   readonly encrypt: (value: string) => Promise<string>;

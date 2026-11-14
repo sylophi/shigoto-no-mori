@@ -21,7 +21,7 @@ import { confirm, interactive } from "../prompt.ts";
 const headlessOnly = byHostKind({
   app: Effect.fail(
     new UsageError({
-      problem: "On a Mac you sign in from the app's account page.",
+      problem: "On this machine you sign in from the app's account page.",
     }),
   ),
   headless: Effect.void,
