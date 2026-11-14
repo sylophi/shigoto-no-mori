@@ -1,0 +1,36 @@
+name: Probe
+on: pull_request
+jobs:
+  probe:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - run: whoami; whoami /priv; whoami /groups | head -40
+      - run: |
+          cat > "$RUNNER_TEMP/p.js" <<'JS'
+          const fs = require("fs"), cp = require("child_process"), path = require("path");
+          const dir = path.join(process.env.RUNNER_TEMP, "probe"); fs.mkdirSync(dir, {recursive: true});
+          const f = path.join(dir, "f"); fs.writeFileSync(f, "x");
+          cp.execFileSync("icacls", [f, "/deny", "*S-1-1-0:(R)"]);
+          try { fs.readFileSync(f); console.log("node read: allowed"); } catch (e) { console.log("node read:", e.code); }
+          try { cp.execFileSync("powershell", ["-NoProfile","-Command",`Get-Content '${f}'`], {stdio:"pipe"}); console.log("ps read: allowed"); } catch (e) { console.log("ps read: denied", String(e.stderr).slice(0,200)); }
+          try { cp.execFileSync("cmd", ["/c","type",f], {stdio:"pipe"}); console.log("cmd type: allowed"); } catch (e) { console.log("cmd type: denied"); }
+          cp.execFileSync("icacls", [f, "/remove:d", "*S-1-1-0"]);
+          const d = path.join(dir, "ro"); fs.mkdirSync(d);
+          cp.execFileSync("icacls", [d, "/deny", "*S-1-1-0:(WD,AD,DC)"]);
+          try { fs.writeFileSync(path.join(d, "new"), "x"); console.log("node create in denied dir: allowed"); } catch (e) { console.log("node create:", e.code); }
+          try { cp.execFileSync("cmd", ["/c", `echo x> "${path.join(d,"new2")}"`], {stdio:"pipe"}); console.log("cmd create: allowed"); } catch (e) { console.log("cmd create: denied"); }
+          console.log(cp.execFileSync("icacls", [d]).toString());
+          JS
+          node "$RUNNER_TEMP/p.js"
+      - shell: pwsh
+        run: |
+          Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, AntivirusEnabled, BehaviorMonitorEnabled | Format-List
+          (Get-MpPreference).ExclusionPath
+          Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version
+          (Get-Process -Id $PID).Parent.Name
+          Get-CimInstance Win32_Process -Filter "Name='Runner.Worker.exe'" | Select-Object ProcessId, CommandLine
+          fsutil 8dot3name query C:
+          echo $env:TEMP
