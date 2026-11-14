@@ -1,13 +1,17 @@
 // Unicode passes through. Only what breaks a single path segment goes
-// (separators, `:` which Finder treats as one, control characters).
-// `root`/`primary` are the CLI's address keywords. An empty result means
-// fall back to a picked name.
+// (separators, `:` which Finder treats as one, control characters),
+// and what Windows can't hold in a name, on every OS, so a branch gets
+// the same folder everywhere. `root`/`primary` are the CLI's address
+// keywords. An empty result means fall back to a picked name.
 
-const PATH_SEPARATOR = /[/:]/g;
+const PATH_SEPARATOR = /[/\\:<>"|?*]/g;
 // oxlint-disable-next-line no-control-regex -- intentional: strips control bytes
 const CONTROL_CHARS = /[\x00-\x1f\x7f]/g;
 // The CLI matches its keywords case-insensitively.
 const RESERVED_NAMES = new Set([".", "..", "root", "primary"]);
+// A name Windows reads as a device, whatever its case or extension.
+const DEVICE_NAME =
+  /^(con|prn|aux|nul|conin\$|conout\$|com[0-9¹²³]|lpt[0-9¹²³]) *(\.|$)/i;
 
 export function sanitizeBranchForPath(branch: string): string {
   const slashed = branch
@@ -15,9 +19,16 @@ export function sanitizeBranchForPath(branch: string): string {
     .replace(CONTROL_CHARS, "");
   // The space, not JS's `\s`, which would trim Unicode spaces too (the
   // control characters are gone already): a branch keeps the folder
-  // name its existing worktrees have.
+  // name its existing worktrees have. A trailing dot or space goes too,
+  // which Windows drops.
   const trimmed = slashed.replace(/^[.\t\n\f\r -]+|[.\t\n\f\r -]+$/g, "");
-  if (!trimmed || RESERVED_NAMES.has(trimmed.toLowerCase())) return "";
+  if (
+    !trimmed ||
+    RESERVED_NAMES.has(trimmed.toLowerCase()) ||
+    DEVICE_NAME.test(trimmed)
+  ) {
+    return "";
+  }
   return trimmed;
 }
 
