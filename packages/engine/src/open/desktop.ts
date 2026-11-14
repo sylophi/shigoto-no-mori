@@ -1,6 +1,7 @@
 // What the desktop does for Open, each OS its own way: a Mac's through
 // Launch Services and AppleScript (launchServices.ts), Linux's through
-// its screen opener (xdg.ts).
+// its screen opener (xdg.ts), Windows' through its shell, Windows
+// Terminal and PowerShell (windowsShell.ts).
 import type * as Effect from "effect/Effect";
 import type * as Launchers from "../Launchers.ts";
 import type { LaunchFailed } from "./documents.ts";

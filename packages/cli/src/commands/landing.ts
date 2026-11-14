@@ -194,8 +194,8 @@ export const pr = Command.make("pr", target, (input) =>
     if (Option.isSome(opener)) {
       yield* Effect.callback<void, OpenFailed>((resume) => {
         execFile(
-          opener.value,
-          [url],
+          opener.value.program,
+          [...opener.value.args, url],
           { env: childEnv(process.env) },
           (error) => {
             resume(

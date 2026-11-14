@@ -40,7 +40,8 @@ export const makeCommands = Effect.gen(function* () {
       screenOpener,
       Option.match({
         onNone: () => Effect.fail(new LaunchFailed({ label, said: NO_SCREEN })),
-        onSome: (opener) => run(label, opener, args),
+        onSome: (opener) =>
+          run(label, opener.program, [...opener.args, ...args]),
       }),
     );
 
