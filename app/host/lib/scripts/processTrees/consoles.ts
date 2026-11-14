@@ -74,7 +74,7 @@ export const makeConsoles = (nativefs: string) =>
     return {
       ask: Effect.fn("ProcessTrees.ask")((tree: Tree, how: "stop" | "hangup") =>
         how === "stop" && tree.interrupt !== undefined
-          ? Effect.sync(tree.interrupt)
+          ? Effect.try(tree.interrupt).pipe(Effect.ignore)
           : endTree(tree),
       ),
       // What escaped the console goes on, as a process that left its

@@ -150,6 +150,11 @@ async function endConsoleOf(pid: number | undefined) {
   );
   const host = pid === undefined ? undefined : rows.get(pid)?.console;
   assert.ok(host !== undefined, "the held wrapper has no console");
+  assert.notEqual(
+    host,
+    rows.get(process.pid)?.console,
+    "the wrapper is on ours",
+  );
   execFileSync(nativefs(), [
     "end",
     ...[...rows.values()]
