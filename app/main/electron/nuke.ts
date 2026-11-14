@@ -20,7 +20,7 @@ import { NUKE_MARKER, nukedPaths, writeNukeMarker } from "@shared/nuke";
 import { names } from "../flavor";
 import { signOutForNuke } from "./account";
 import { setsLoginItem } from "./liveness";
-import { current as currentPlatform } from "@shigomori/engine/platform";
+import { hostKind } from "@shigomori/engine/platform";
 
 export async function nukeShell(): Promise<NukeReport> {
   const left: NukeReport["left"][number][] = [];
@@ -38,7 +38,7 @@ export async function nukeShell(): Promise<NukeReport> {
       why: errorMessageOf(error),
     });
   }
-  if (currentPlatform() === "darwin" && setsLoginItem()) {
+  if (hostKind() === "app" && setsLoginItem()) {
     app.setLoginItemSettings({ openAtLogin: false });
   }
   writeNukeMarker(app.getPath("userData"), nukedPaths(app.getPath("logs")));

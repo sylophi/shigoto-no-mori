@@ -72,7 +72,7 @@ let revokeWarned = false;
 // ssh keys and gh's tokens are on a server: with no keyring there,
 // safeStorage encrypts with a key Chromium hardcodes.
 function buildCipher(): StoreCipher {
-  const keychain = byPlatform({ darwin: true, linux: false });
+  const keychain = byPlatform({ darwin: true, linux: false, win32: true });
   const available = keychain && safeStorage.isEncryptionAvailable();
   if (keychain && !available && !cipherWarned) {
     cipherWarned = true;

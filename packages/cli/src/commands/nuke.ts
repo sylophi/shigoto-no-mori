@@ -162,6 +162,8 @@ export const nuke = Command.make(
       const nuked = byPlatform({
         darwin: () => macApp(names.appName),
         linux: () => linuxApp(paths.flavor, paths),
+        // Nothing installs the app on Windows yet.
+        win32: () => null,
       })();
       if (nuked === null) {
         return yield* new UsageError({

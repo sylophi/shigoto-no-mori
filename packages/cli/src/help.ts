@@ -112,7 +112,7 @@ const catalog = (names: Names) => {
         "Show or move the data folder",
         `Prints where it is. move puts it inside <folder> under its own name, and reset puts it back where it starts, as Settings' Data location does. Either stops every running script and restarts the ${byHostKind({ app: "app", headless: "host" })} into the new place. Refused while SHIGOMORI_DATA_DIR sets it. --json prints {ok, dataDir, dataDirSource, atDefaultDataDir}, and after a move {ok, dataDir}, null for a reset.`,
       ],
-      byPlatform<{ darwin: Item; linux: Item }>({
+      byPlatform<{ darwin: Item; linux: Item; win32: Item }>({
         darwin: [
           "nuke --yes [--keep-app]",
           "Take everything of this build off the machine",
@@ -122,6 +122,11 @@ const catalog = (names: Names) => {
           "nuke --yes",
           "Take everything of this build off the machine",
           "The host's service is stopped and taken out, then the host is started to remove its worktrees, this command's links and the shell and agent hooks, then its data folder, logs and install. Runs only from an installed build's command. Exits non-zero when something stayed, saying what.",
+        ],
+        win32: [
+          "nuke --yes",
+          "Take everything of this build off the machine",
+          "Runs only from an installed build's command, and nothing installs the app on Windows yet. Settings' Danger zone does it from the app.",
         ],
       }),
       [
@@ -253,7 +258,7 @@ const catalog = (names: Names) => {
       [
         "worktrees open [<tool>] [<name>]",
         "Launch a launcher-row tool in a worktree",
-        "Finder, editors, custom commands. <tool> is a label, a bare catalog id (finder) or a full launcher id (app:vscode, custom:<id>), case-insensitive. With no tool, shows the row as a menu. " +
+        "The file manager, editors, custom commands. <tool> is a label, a bare catalog id (vscode) or a full launcher id (app:vscode, custom:<id>), case-insensitive. With no tool, shows the row as a menu. " +
           "--project-id <id> --worktree-id <id> address the worktree exactly (the primary included), with the tool after --. --json prints {ok, launcher, worktree}, and an unknown tool fails with code unknown-launcher.",
       ],
       [

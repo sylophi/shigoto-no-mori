@@ -133,15 +133,31 @@ export class Updater extends Context.Service<
   }
 >()("sm/engine/Updater") {}
 
+// Nothing installs the app on Windows yet, so nothing updates it.
+const unavailableOn = (method: string) =>
+  Effect.fn(method)(() =>
+    Effect.fail(new UpdatesUnavailable({ reason: "windows" })),
+  );
+const unavailable = Updater.of({
+  check: unavailableOn("Updater.check"),
+  stage: unavailableOn("Updater.stage"),
+  update: unavailableOn("Updater.update"),
+  finishInstall: unavailableOn("Updater.finishInstall"),
+  staged: Effect.fn("Updater.staged")(() => Effect.succeedNone),
+  install: Effect.fn("Updater.install")(() => Effect.fail(new NotInBundle())),
+});
+
 const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
   const files = yield* makeFiles({ flavor });
   const feeds = yield* makeFeeds({ flavor, files });
-  const installation: Installation = yield* byPlatform({
+  const installation: Installation | null = yield* byPlatform({
     darwin: Effect.flatMap(makeSignatures({ files }), (signatures) =>
       makeBundle({ files, signatures }),
     ),
     linux: makeVersions({ flavor, files }),
+    win32: Effect.succeed(null),
   });
+  if (installation === null) return unavailable;
   const staging = yield* makeStaging({ files, feeds, installation });
   const swap = yield* makeSwap({ files, staging, installation });
   const restart = yield* makeRestart({ files });

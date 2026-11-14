@@ -252,7 +252,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
             volume !== ""
               ? dataDirLine.fail(
                   `the pointer file names ${dataDir}, on ${volume}, which isn't connected`,
-                  `Connect the drive. To start over on this Mac instead, delete ${file}.`,
+                  `Connect the drive. To start over on this machine instead, delete ${file}.`,
                 )
               : dataDirLine.warn(
                   `${tildify(dataDir, home)} doesn't exist yet (${sourceText}), so nothing is registered`,

@@ -25,12 +25,14 @@ export type FootprintPlace = {
 // The app's own folders outside the data dir: its userData (the
 // single-instance lock, the hub credential, the Clerk tokens) and its
 // logs, where each OS keeps an app's, and on a Mac its preferences.
+// Electron keeps a Windows app's logs in its userData.
 export const appFolders = (
   flavor: Flavor,
   place: Pick<FootprintPlace, "home" | "dataHome" | "stateHome">,
 ) => {
   const names = flavorNames(flavor);
   const library = join(place.home, "Library");
+  const roaming = join(place.home, "AppData", "Roaming");
   return byPlatform({
     darwin: {
       userData: join(library, "Application Support", names.userDataDir),
@@ -40,6 +42,11 @@ export const appFolders = (
     linux: {
       userData: join(place.dataHome, names.configDir),
       logs: join(place.stateHome, names.configDir),
+      preferences: null,
+    },
+    win32: {
+      userData: join(roaming, names.userDataDir),
+      logs: join(roaming, names.userDataDir, "logs"),
       preferences: null,
     },
   });

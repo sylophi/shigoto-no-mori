@@ -86,16 +86,19 @@ export const ReleaseListCache = Schema.Struct({
 // archive's ending: a Mac's the zip maker's, the product name's spaces
 // turned into dots by GitHub on upload, and Linux's the tarball
 // app/scripts/package-linux.mts makes (linuxInstall.ts linuxPackageName).
-const ARCHIVE = { darwin: ".zip", linux: ".tar.gz" } as const;
+// Windows has none until it has an installer.
+const ARCHIVE = { darwin: ".zip", linux: ".tar.gz", win32: null } as const;
 
-const assetOf = (release: GitHubRelease, arch: string) =>
-  (release?.assets ?? []).find((asset) => {
+const assetOf = (release: GitHubRelease, arch: string) => {
+  const archive = byPlatform(ARCHIVE);
+  if (archive === null) return undefined;
+  return (release?.assets ?? []).find((asset) => {
     const name = asset?.name ?? "";
     return (
-      name.endsWith(byPlatform(ARCHIVE)) &&
-      name.includes(`-${currentPlatform()}-${arch}-`)
+      name.endsWith(archive) && name.includes(`-${currentPlatform()}-${arch}-`)
     );
   });
+};
 
 // The release a build moves to, or undefined when none is ahead. Only a
 // release above the build in semver's order is offered, which ranks
