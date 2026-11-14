@@ -1,18 +1,35 @@
 // The program that opens a file, a folder or a link on this machine's
-// screen: `open` on a Mac, and xdg-open on a Linux desktop. None on a
-// Linux machine with no display (a server reached over SSH), where the
-// text browser xdg-open falls back to would run in no terminal.
+// screen, with the arguments it takes before that: `open` on a Mac,
+// the shell's default handler on Windows, and xdg-open on a Linux
+// desktop. None on a Linux machine with no display (a server reached
+// over SSH), where the text browser xdg-open falls back to would run in
+// no terminal.
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { envVar } from "./environment.ts";
 import { byPlatform } from "./platform.ts";
 
+type Opener = {
+  readonly program: string;
+  readonly args: ReadonlyArray<string>;
+};
+
 export const screenOpener = Effect.gen(function* () {
   const display =
     (yield* envVar("DISPLAY")) + (yield* envVar("WAYLAND_DISPLAY"));
   return byPlatform({
-    darwin: Option.some("open"),
-    linux: display === "" ? Option.none<string>() : Option.some("xdg-open"),
+    darwin: Option.some<Opener>({ program: "open", args: [] }),
+    linux:
+      display === ""
+        ? Option.none<Opener>()
+        : Option.some<Opener>({ program: "xdg-open", args: [] }),
+    // rundll32 hands the rest of its command line to the handler as the
+    // one target, read by no shell, so a link's & % # and a path's
+    // spaces arrive as they are.
+    win32: Option.some<Opener>({
+      program: "rundll32.exe",
+      args: ["url.dll,FileProtocolHandler"],
+    }),
   });
 });
 
