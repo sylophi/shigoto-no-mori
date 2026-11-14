@@ -127,10 +127,13 @@ jobs:
       - name: Proofs
         run: pnpm run check:proofs
 
-  # What passes on Windows so far: the static checks, the contracts'
-  # fixtures and the Go helpers. The engine's, the terminal's and the
-  # proofs join as the port lands.
-  windows:
+  # The Windows jobs run what can come out otherwise on Windows, split
+  # like the jobs above so the slowest one alone sets the wait. Format
+  # is left to Linux: the checkout is LF on every OS (.gitattributes), so
+  # oxfmt reads the same bytes.
+  #
+  # The engine job's checks, and the Go helpers as Windows builds them.
+  windows-engine:
     runs-on: windows-latest
     timeout-minutes: 20
     # Git's bash rather than PowerShell, so a step reads as it does in the
@@ -146,29 +149,17 @@ jobs:
       - uses: ./.github/actions/install-workspace
         id: install
 
-      - name: Lint
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: pnpm run check:lint
-
-      - name: Format
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: pnpm run check:format
-
-      - name: Typecheck
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: pnpm run check:typecheck
-
-      - name: Knip
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: pnpm run check:knip
-
-      - name: Contract fixtures
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: pnpm run check:contracts
-
       - name: Third-party notices have license metadata
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm -C app run licenses --out "$RUNNER_TEMP/licenses"
+
+      - name: Engine
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:engine
+
+      - name: Terminal
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:cli
 
       - name: Go helpers build
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
@@ -181,3 +172,55 @@ jobs:
       - name: Go tests
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm run check:go
+
+  windows-proofs:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: ./.github/actions/setup-toolchains
+
+      # The app's postinstall checks node-pty's prebuilt ConPTY addon is
+      # there.
+      - uses: ./.github/actions/install-workspace
+
+      - name: App postinstall
+        run: pnpm -C app run postinstall
+
+      - name: Proofs
+        run: pnpm run check:proofs
+
+  # The static checks with an input of the OS's: the typecheck's script
+  # runs through pnpm's shell emulator, lint's rules and knip read file
+  # paths, and knip loads each package's configs.
+  windows-static:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: ./.github/actions/install-workspace
+        id: install
+
+      - name: Typecheck
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:typecheck
+
+      - name: Contract fixtures
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:contracts
+
+      - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:lint
+
+      - name: Knip
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:knip
