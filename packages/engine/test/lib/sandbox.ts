@@ -11,8 +11,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, realpath } from "../../../../test/canonicalPaths.mts";
+import {
+  delimiter,
+  dirname,
+  join,
+  realpath,
+} from "../../../../test/canonicalPaths.mts";
 import * as NodeServices from "./nodeServices.ts";
+import { writeStub } from "./stubs.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
 import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
 import * as Deferred from "effect/Deferred";
@@ -107,6 +113,24 @@ Object.assign(process.env, {
 });
 
 const childEnv = (): NodeJS.ProcessEnv => ({ ...process.env, LC_ALL: "C" });
+
+// What Windows runs nothing without, beside PATH: its system folder,
+// its temp folder, and the extensions it runs a program by. Its names
+// come in any case.
+const WINDOWS_ENV = ["SYSTEMROOT", "TEMP", "TMP", "PATHEXT"];
+const passedEnv =
+  process.platform === "win32"
+    ? (name: string) =>
+        ["PATH", "TMPDIR", "LC_ALL", ...WINDOWS_ENV].includes(
+          name.toUpperCase(),
+        )
+    : (name: string) => ["PATH", "TMPDIR", "LC_ALL"].includes(name);
+const WINDOWS_ENGINE_ENV: Record<string, string> =
+  process.platform === "win32"
+    ? Object.fromEntries(
+        WINDOWS_ENV.map((name) => [name, process.env[name] ?? ""]),
+      )
+    : {};
 
 // What a binary did: its exit code, its last JSON document, its output.
 type Run = {
@@ -209,6 +233,7 @@ export function sandbox(
             HOME: root,
             USERPROFILE: root,
             PATH: process.env.PATH ?? "",
+            ...WINDOWS_ENGINE_ENV,
             SHIGOMORI_DATA_DIR: sideDir(side),
             ...options.env,
           },
@@ -277,9 +302,7 @@ export function sandbox(
   const sideEnv = (): NodeJS.ProcessEnv =>
     Object.fromEntries(
       Object.entries(gitEnv()).filter(
-        ([name]) =>
-          ["PATH", "TMPDIR", "LC_ALL"].includes(name) ||
-          name.startsWith("GIT_"),
+        ([name]) => passedEnv(name) || name.startsWith("GIT_"),
       ),
     );
 
@@ -413,11 +436,9 @@ export function sandbox(
     fakeBin: (name, script) => {
       const bin = join(root, "bin");
       mkdirSync(bin, { recursive: true });
-      writeFileSync(join(bin, name), `#!/bin/sh\n${script}\n`, {
-        mode: 0o755,
-      });
-      if (!process.env.PATH?.startsWith(`${bin}:`)) {
-        process.env.PATH = `${bin}:${originalPath}`;
+      writeStub(bin, name, `#!/bin/sh\n${script}\n`);
+      if (!process.env.PATH?.startsWith(`${bin}${delimiter}`)) {
+        process.env.PATH = `${bin}${delimiter}${originalPath}`;
       }
     },
     remove: async () => {

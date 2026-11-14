@@ -317,7 +317,7 @@ export const makeRunning = Effect.gen(function* () {
             read: [stdout, stderr],
             code,
           } = yield* ran.pipe(
-            Effect.catchTag("PlatformError", (cause) =>
+            Effect.catchTag(["PlatformError", "NoScriptShell"], (cause) =>
               Effect.fail(failed(null)(cause)),
             ),
           );

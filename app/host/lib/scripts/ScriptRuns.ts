@@ -20,7 +20,7 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import { type IPty, spawn as spawnPty } from "node-pty";
 import { messageOf } from "@shigomori/engine/errorDocument";
-import type { Shell } from "@shigomori/engine/Shells";
+import * as Shells from "@shigomori/engine/Shells";
 import * as ProcessTrees from "./ProcessTrees";
 
 // No process could be started: a missing folder to start in or login
@@ -48,7 +48,7 @@ export class PtySpawnError extends Schema.TaggedError<PtySpawnError>()(
 }
 
 export interface SpawnOptions {
-  readonly shell: Shell;
+  readonly shell: Shells.Shell;
   // What the shell runs, or null for the shell itself, interactive (a
   // terminal's).
   readonly command: string | null;
@@ -136,7 +136,10 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
   // node-pty's env is a plain string map, so the undefined entries
   // NodeJS.ProcessEnv allows are dropped.
   const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(opts.env)) {
+  for (const [key, value] of Object.entries({
+    ...opts.env,
+    ...opts.shell.env,
+  })) {
     if (value !== undefined && !STALE_TERMINAL_ENV.has(key)) {
       env[key] = value;
     }
@@ -158,7 +161,9 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
       try: (): IPty => {
         const spawned = spawnPty(
           program,
-          opts.command === null ? [...args] : [...args, "-c", opts.command],
+          opts.command === null
+            ? [...args]
+            : [...args, ...Shells.shArgs(opts.command, [])],
           {
             name: "xterm-256color",
             cols: opts.cols,

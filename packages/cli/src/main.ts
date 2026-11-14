@@ -59,6 +59,9 @@ import {
   untilReaderGone,
   watchStreams,
 } from "./output.ts";
+import { uppercasePath } from "@shigomori/engine/environment";
+
+uppercasePath();
 
 // --json, --verbose and --version are global wherever they sit, up to
 // a `--`, past which everything is the command's.

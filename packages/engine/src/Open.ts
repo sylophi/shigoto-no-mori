@@ -19,7 +19,7 @@ import { flavorNames } from "./flavor.ts";
 import * as Paths from "./Paths.ts";
 import { openEnvArgs } from "./relaunchEnv.ts";
 import { errnoText, isAbsent } from "./platformErrors.ts";
-import { isRunnableMode } from "./executables.ts";
+import { isRunnable } from "./executables.ts";
 import { byPlatform } from "./platform.ts";
 import * as Shells from "./Shells.ts";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
@@ -250,26 +250,25 @@ const make = Effect.gen(function* () {
         case "custom": {
           // Started in its own session and left running, the worktree's
           // script variables set.
-          const { program, args } = yield* shells.script;
           const context = yield* worktrees.scriptContext(located);
           return yield* Effect.scoped(
             Effect.gen(function* () {
+              const { program, args, env: shellEnv } = yield* shells.script;
               const handle = yield* spawner.spawn(
                 ChildProcess.make(
                   yield* shells.sh,
-                  [
-                    "-c",
-                    `"$0" "$@" </dev/null >/dev/null 2>&1 &`,
+                  Shells.shArgs(`"$0" "$@" </dev/null >/dev/null 2>&1 &`, [
                     program,
                     ...args,
                     "-c",
                     entry.command,
-                  ],
+                  ]),
                   {
                     cwd: where,
                     detached: true,
                     extendEnv: true,
                     env: {
+                      ...shellEnv,
                       ...scriptEnvOf(context, entry.label),
                       SHIGOMORI_WORKSPACE_PATH: where,
                     },
@@ -382,7 +381,11 @@ const make = Effect.gen(function* () {
         candidate.app.editor === true,
     );
     if (entry?.kind !== "detected") {
-      yield* desktop.openFile(label, absolute, isRunnableMode(info.mode));
+      yield* desktop.openFile(
+        label,
+        absolute,
+        yield* isRunnable(absolute, info.mode),
+      );
       return absolute;
     }
     const { app } = entry;

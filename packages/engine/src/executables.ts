@@ -13,44 +13,83 @@ import { byPlatform } from "./platform.ts";
 export const programFile = (name: string) =>
   name + byPlatform({ darwin: "", linux: "", win32: ".exe" });
 
-const pathSeparator = () => byPlatform({ darwin: ":", linux: ":" });
+const pathSeparator = () => byPlatform({ darwin: ":", linux: ":", win32: ";" });
 
 export const joinSearchPath = (dirs: ReadonlyArray<string>) =>
   dirs.join(pathSeparator());
 
+const noExtensions = Effect.succeed<ReadonlyArray<string>>([]);
+const windowsExtensions = Effect.map(envVar("PATHEXT"), (exts) =>
+  exts
+    .toLowerCase()
+    .split(";")
+    .filter((ext) => ext !== ""),
+);
+
+// The extensions Windows runs a file by, lower-cased. None elsewhere.
+const pathExtensions = () =>
+  byPlatform({
+    darwin: noExtensions,
+    linux: noExtensions,
+    win32: windowsExtensions,
+  });
+
+const hasExtension = (exts: ReadonlyArray<string>, file: string) =>
+  exts.some((ext) => file.toLowerCase().endsWith(ext));
+
 // Where a program could be under each of PATH's directories, in the
-// order they're tried. An empty entry is the working directory.
-export const candidatesOnPath = (
+// order they're tried. An empty entry is the working directory. Windows
+// tries the name as given, then with each of PATHEXT's extensions.
+export const candidatesOnPath = Effect.fnUntraced(function* (
   path: Path.Path,
   searched: string,
   name: string,
-) => {
-  const fileNames = byPlatform({ darwin: [name], linux: [name] });
+) {
+  const fileNames = [
+    name,
+    ...(yield* pathExtensions()).map((ext) => `${name}${ext}`),
+  ];
   return searched
     .split(pathSeparator())
     .flatMap((dir) =>
       fileNames.map((fileName) => path.join(dir === "" ? "." : dir, fileName)),
     );
+});
+
+// Whether the OS would run the file: by its execute bits, and on
+// Windows by its extension.
+export const isRunnable = (file: string, mode: number) => {
+  const byMode = Effect.succeed((mode & 0o111) !== 0);
+  const byExtension = Effect.map(windowsExtensions, (exts) =>
+    hasExtension(exts, file),
+  );
+  return byPlatform({ darwin: byMode, linux: byMode, win32: byExtension });
 };
 
-const hasExecuteBit = (mode: number) => (mode & 0o111) !== 0;
-
-export const isRunnableMode = (mode: number) =>
-  byPlatform({ darwin: hasExecuteBit, linux: hasExecuteBit })(mode);
-
-// The program's full path, none when PATH has no such program.
-export const findExecutable = Effect.fn("findExecutable")(function* (
+// The program's full path on `searched`, none when it has no such
+// program.
+export const findOn = Effect.fn("findOn")(function* (
+  searched: string,
   name: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const searched = yield* envVar("PATH");
-  for (const candidate of candidatesOnPath(path, searched, name)) {
+  const exts = yield* pathExtensions();
+  const isFile = (candidate: string) =>
+    fs.stat(candidate).pipe(
+      Effect.map((info) => info.type === "File"),
+      Effect.orElseSucceed(() => false),
+    );
+  for (const candidate of yield* candidatesOnPath(path, searched, name)) {
+    // Windows can't stat an app execution alias (a Store app's
+    // WindowsApps entry), which still runs.
+    const byExtension = Effect.succeed(hasExtension(exts, candidate));
     const runnable =
-      (yield* fs.stat(candidate).pipe(
-        Effect.map((info) => info.type === "File"),
-        Effect.orElseSucceed(() => false),
-      )) &&
+      (yield* byPlatform({
+        darwin: isFile(candidate),
+        linux: isFile(candidate),
+        win32: byExtension,
+      })) &&
       (yield* Effect.tryPromise(() => access(candidate, constants.X_OK)).pipe(
         Effect.isSuccess,
       ));
@@ -58,3 +97,7 @@ export const findExecutable = Effect.fn("findExecutable")(function* (
   }
   return Option.none<string>();
 });
+
+// The program's full path, none when PATH has no such program.
+export const findExecutable = (name: string) =>
+  Effect.flatMap(envVar("PATH"), (searched) => findOn(searched, name));

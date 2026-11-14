@@ -10,7 +10,7 @@ import { envVar } from "../environment.ts";
 import {
   candidatesOnPath,
   findExecutable,
-  isRunnableMode,
+  isRunnable,
 } from "../executables.ts";
 import { flavorNames } from "../flavor.ts";
 import * as Git from "../Git.ts";
@@ -19,6 +19,7 @@ import { installedVersionOf, linuxInstall } from "../linuxInstall.ts";
 import { appFoldersOf } from "../Launchers.ts";
 import * as Paths from "../Paths.ts";
 import { byPlatform } from "../platform.ts";
+import * as Shells from "../Shells.ts";
 import {
   CD_FILE_ENV,
   hookPlace,
@@ -55,6 +56,7 @@ export const makeEnvironmentChecks = ({
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
     const git = yield* Git.Git;
+    const shells = yield* Shells.Shells;
     const fs = yield* FileSystem.FileSystem;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const { home, binaryName, flavor } = paths;
@@ -73,6 +75,13 @@ export const makeEnvironmentChecks = ({
         return line.fail(
           "not runnable (every command in sm shells out to it)",
           `Install git (${INSTALL_HINTS.git}) and make sure it's on PATH.`,
+        );
+      }
+      const noShell = yield* Effect.option(Effect.flip(shells.sh));
+      if (Option.isSome(noShell)) {
+        return line.fail(
+          noShell.value.message,
+          "Reinstall Git for Windows, which comes with Git Bash.",
         );
       }
       const trimmed = version.value.trim();
@@ -280,12 +289,16 @@ export const makeEnvironmentChecks = ({
       if (searched === "") return [];
       const found: string[] = [];
       const seen = new Set<string>();
-      for (const candidate of candidatesOnPath(path, searched, binaryName)) {
+      for (const candidate of yield* candidatesOnPath(
+        path,
+        searched,
+        binaryName,
+      )) {
         const info = yield* statOf(candidate);
         if (
           Option.isNone(info) ||
           info.value.type === "Directory" ||
-          !isRunnableMode(info.value.mode)
+          !(yield* isRunnable(candidate, info.value.mode))
         ) {
           continue;
         }

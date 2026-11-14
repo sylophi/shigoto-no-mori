@@ -7,7 +7,6 @@ import { flavorNames } from "@shigomori/engine/flavor";
 import * as Open from "@shigomori/engine/Open";
 import * as Paths from "@shigomori/engine/Paths";
 import { NO_SCREEN } from "@shigomori/engine/screen";
-import * as Shells from "@shigomori/engine/Shells";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -146,8 +145,7 @@ export const edit = Command.make(
                 said: `${NO_SCREEN}. Set $EDITOR to edit it at this terminal.`,
               });
             }
-            const failed = runEditor(
-              yield* (yield* Shells.Shells).sh,
+            const failed = yield* runEditor(
               editor,
               resolve(located.worktree.path, target),
             );

@@ -16,6 +16,9 @@
 // node running this when it has them (an official build does). It is a
 // Node-API addon, so the one build loads under node and Electron alike.
 // That takes python3, make and a C++ compiler.
+//
+// On Windows node-pty ships prebuilt ConPTY addons with nothing to
+// restore, so only the one for this machine is checked for.
 
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -23,6 +26,7 @@ import { chmod, readdir, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import {
   NODE_PTY_BUILT_ADDON,
+  NODE_PTY_CONPTY_ADDON,
   NODE_PTY_PACKAGE,
   NODE_PTY_PREBUILDS,
   NODE_PTY_SPAWN_HELPER,
@@ -81,6 +85,14 @@ if (process.platform === "darwin") {
       process.exit(1);
     }
     console.log(`[prepare-node-pty] built ${NODE_PTY_BUILT_ADDON}`);
+  }
+} else if (process.platform === "win32") {
+  const host = nodePtyPrebuildDir(process.platform, process.arch);
+  if (!existsSync(join(ROOT, host, NODE_PTY_CONPTY_ADDON))) {
+    console.error(
+      `[prepare-node-pty] no node-pty prebuild for this machine at ${host}; the script console cannot start processes`,
+    );
+    process.exit(1);
   }
 } else {
   console.warn(

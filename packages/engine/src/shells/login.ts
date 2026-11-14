@@ -35,8 +35,8 @@ export const makeLogin = Effect.gen(function* () {
         account: accountShell,
       });
       return found === ""
-        ? { program: "/bin/sh", args: [] }
-        : { program: found, args: ["-l"] };
+        ? { program: "/bin/sh", args: [], env: {} }
+        : { program: found, args: ["-l"], env: {} };
     }),
   );
 
