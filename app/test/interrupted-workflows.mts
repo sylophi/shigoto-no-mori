@@ -44,6 +44,7 @@ import {
   tempDir,
   waitFor,
 } from "./lib/checkKit.mts";
+import { nativefs } from "../../packages/engine/test/lib/nativefs.ts";
 import { addProject, builtSm, hostEngine } from "./lib/smBinary.mts";
 import { own, pidIn } from "../../test/testProcesses.mts";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
@@ -113,6 +114,15 @@ const MOVES: ReadonlyArray<Case> = [
   },
 ];
 
+// The steps cut here. sm on Windows copies a tree and removes a folder
+// in its own process, with no cp or rmdir to hold, so there only the
+// steps at git are (the engine's Worktrees.interrupt holds the others in
+// its process).
+const CUT =
+  process.platform === "win32"
+    ? MOVES.filter((cut) => cut.stop("", "").tool === "git")
+    : MOVES;
+
 const decodeRows = Schema.decodeUnknownSync(
   Schema.Array(
     Schema.Struct({
@@ -127,6 +137,27 @@ const decodeRows = Schema.decodeUnknownSync(
 const decodeReport = Schema.decodeUnknownSync(
   Schema.Struct({ checks: Schema.Array(Schema.Struct({ id: Schema.String })) }),
 );
+
+// Every process on `pid`'s console, ended. On Windows the engine runs
+// each command on a console of its own, which the held wrapper and the
+// sleep it runs share: Git Bash runs the sleep with its parent gone.
+function endConsoleOf(pid: number | undefined) {
+  const rows = execFileSync(nativefs(), ["processes"], { encoding: "utf8" })
+    .trim()
+    .split("\n")
+    .map(
+      (line) =>
+        JSON.parse(line) as { pid: number; birth: number; console?: number },
+    );
+  const host = rows.find((row) => row.pid === pid)?.console;
+  assert.ok(host !== undefined, "the held wrapper has no console");
+  execFileSync(nativefs(), [
+    "end",
+    ...rows
+      .filter((row) => row.console === host)
+      .map((row) => `${row.pid}:${row.birth}`),
+  ]);
+}
 
 // A data dir for one recovery path, the terminal sm on it.
 function dataDirFor(label: string) {
@@ -168,16 +199,21 @@ function dataDirFor(label: string) {
       `sm ${args.join(" ")} held at ${stop.tool} ${stop.when} ${stop.match}`,
       30_000,
     );
-    if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
-    // The engine runs each command in a process group of its own, which
-    // the held wrapper is in.
-    const group = pidIn(
-      execFileSync("ps", ["-o", "pgid=", "-p", String(held())], {
-        encoding: "utf8",
-      }),
-    );
-    assert.ok(group !== undefined, "the held wrapper has no group");
-    process.kill(-group, "SIGKILL");
+    if (process.platform === "win32") {
+      if (child.pid !== undefined) process.kill(child.pid, "SIGKILL");
+      endConsoleOf(held());
+    } else {
+      if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
+      // The engine runs each command in a process group of its own,
+      // which the held wrapper is in.
+      const group = pidIn(
+        execFileSync("ps", ["-o", "pgid=", "-p", String(held())], {
+          encoding: "utf8",
+        }),
+      );
+      assert.ok(group !== undefined, "the held wrapper has no group");
+      process.kill(-group, "SIGKILL");
+    }
     await exited;
   };
   return { root, dataDir, sm, runCli, rows, killedAt };
@@ -222,7 +258,7 @@ type Cut = { project: string; from: string; to: string; ends: "from" | "to" };
 
 async function cutMoves(place: ReturnType<typeof dataDirFor>): Promise<Cut[]> {
   const cuts: Cut[] = [];
-  for (const [index, cut] of MOVES.entries()) {
+  for (const [index, cut] of CUT.entries()) {
     const project = `p${index}`;
     const { fox } = await projectWithFox(place, project);
     // A rename, so the worktree stays managed, which an external one's
@@ -243,7 +279,7 @@ async function assertRecovered(
   cuts: Cut[],
 ) {
   for (const [index, cut] of cuts.entries()) {
-    const what = `${MOVES[index]?.name} (${cut.project})`;
+    const what = `${CUT[index]?.name} (${cut.project})`;
     const rows = (await place.rows(cut.project)).filter(
       (row) => row.path === cut.from || row.path === cut.to,
     );
@@ -316,7 +352,7 @@ it("the app's start finishes or undoes each move a crash cut short", async () =>
   assert.equal(
     report.checks.filter((check) => check.id === "project-interrupted-moves")
       .length,
-    MOVES.filter((cut) => cut.committed !== true).length,
+    CUT.filter((cut) => cut.committed !== true).length,
     "the doctor reports each cut-short move",
   );
   const engine = await hostEngine(
@@ -367,7 +403,12 @@ async function v2DataDir(place: ReturnType<typeof dataDirFor>) {
   return { v2, wt: join(place.dataDir, "wt", "repo") };
 }
 
-it("the migration's move into wt/ killed at each step is finished by the next run", async () => {
+it("the migration's move into wt/ killed at each step is finished by the next run", async ({
+  skip,
+}) => {
+  // v2 never ran on Windows, so no v2 worktree is there to move, and the
+  // move asks lsof, which Windows lacks, what runs in one.
+  skip(process.platform === "win32", "v2 never ran on Windows");
   const stops: ReadonlyArray<(v2: string) => Stop> = [
     () => ({ tool: "git", when: "before", match: "worktree move" }),
     () => ({ tool: "git", when: "after", match: "worktree move" }),
