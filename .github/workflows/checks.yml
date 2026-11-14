@@ -142,7 +142,8 @@ jobs:
   # The static checks with an input of the OS's: the typecheck's script
   # runs through pnpm's shell emulator, lint's rules and knip read file
   # paths, and knip loads each package's configs. Then the Go helpers as
-  # Windows builds them, and their licenses.
+  # Windows builds them, and their licenses. Then the terminal's suite,
+  # which beside the engine's would make that job the slowest.
   windows-static:
     runs-on: windows-latest
     timeout-minutes: 15
@@ -186,6 +187,10 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: go run .github/unelevated.go pnpm run check:go
 
+      - name: Terminal
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: go run .github/unelevated.go pnpm run check:cli
+
   windows-engine:
     runs-on: windows-latest
     timeout-minutes: 20
@@ -195,15 +200,9 @@ jobs:
       - uses: ./.github/actions/setup-toolchains
 
       - uses: ./.github/actions/install-workspace
-        id: install
 
       - name: Engine
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: go run .github/unelevated.go pnpm run check:engine
-
-      - name: Terminal
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: go run .github/unelevated.go pnpm run check:cli
 
   # The proofs in three parts, each on a runner of its own, so a fixed
   # port is still one proof's at a time.
