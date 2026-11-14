@@ -679,8 +679,8 @@ describe("cancelMove", () => {
       ? pidIn(readFileSync(setupPidPath, "utf8"))
       : undefined;
   // What the setup leaves running in the background: a node under a sh,
-  // whose parent is gone under Git Bash, that writes this file once it
-  // runs. A node working in the worktree keeps Windows from deleting it,
+  // whose parent is gone under Git Bash, that writes the folder it works
+  // in to this file once it runs. A node working in the worktree keeps Windows from deleting it,
   // where an MSYS program working there doesn't.
   const leftScript = join(sandbox, "setup-left.mjs");
   const leftShell = join(sandbox, "setup-left.sh");
@@ -696,17 +696,7 @@ describe("cancelMove", () => {
     );
     const pid = setupPid();
     assert.ok(pid !== undefined, "no setup pid");
-    return pid;
-  };
-  // Where the move is landing `branch`, while its setup runs.
-  const landing = async (branch: string) => {
-    const list = await gitOut(targetRepo, "worktree", "list", "--porcelain");
-    const entry = list
-      .split("\n\n")
-      .find((block) => block.includes(`branch refs/heads/${branch}`));
-    const path = entry?.match(/^worktree (.+)$/m)?.[1];
-    assert.ok(path !== undefined, `no worktree landing ${branch}`);
-    return path;
+    return { pid, landedAt: readFileSync(leftRunning, "utf8") };
   };
   // Its folder gone too: what its setup left running held none of it.
   const landedNothing = async (
@@ -742,7 +732,7 @@ describe("cancelMove", () => {
     // cancel.
     writeFileSync(
       leftScript,
-      `import { writeFileSync } from "node:fs";\nwriteFileSync(process.argv[2], "");\nsetTimeout(() => {}, 600_000);\n`,
+      `import { writeFileSync } from "node:fs";\nwriteFileSync(process.argv[2], process.cwd());\nsetTimeout(() => {}, 600_000);\n`,
     );
     writeFileSync(leftShell, `node '${leftScript}' '${leftRunning}'\n`);
     targetConfigBefore = await readShigomoriConfig(targetProjectId);
@@ -785,8 +775,7 @@ describe("cancelMove", () => {
       ),
     );
     cancelledPull.catch(() => {});
-    const pullSetupPid = await setupStarted();
-    const pullLanded = await landing("cancel1");
+    const { pid: pullSetupPid, landedAt: pullLanded } = await setupStarted();
     assert.equal(processAlive(pullSetupPid), true);
     const cancelledAt = Date.now();
     assert.deepEqual(
@@ -844,8 +833,7 @@ describe("cancelMove", () => {
       ),
     );
     cancelledSend.catch(() => {});
-    const sendSetupPid = await setupStarted();
-    const sendLanded = await landing("cancel2");
+    const { pid: sendSetupPid, landedAt: sendLanded } = await setupStarted();
     assert.deepEqual(
       await runHost(
         syncHandlers.cancelMove({ sourceWorktreeId: wtCancel2Id }, pullCtx),

@@ -35,7 +35,7 @@ export const makeWindows = Effect.fnUntraced(function* (nativefs: string) {
         .exists(path.join(usrBin, "bash.exe"))
         .pipe(Effect.orElseSucceed(() => false));
       if (!found) return yield* new NoScriptShell({ gitRoot });
-      return { environment, gitRoot, usrBin };
+      return { environment, usrBin };
     }),
   );
 
@@ -85,16 +85,15 @@ export const makeWindows = Effect.fnUntraced(function* (nativefs: string) {
     }),
     interactive: powerShell,
     sh: Effect.map(gitBash, ({ usrBin }) => path.join(usrBin, "sh.exe")),
-    // A sh gone since it was found is no shell, as when its spawn fails,
-    // not an exit of the helper.
-    containedSh: Effect.gen(function* () {
-      const { gitRoot, usrBin } = yield* gitBash;
-      const sh = path.join(usrBin, "sh.exe");
-      if (!(yield* fs.exists(sh).pipe(Effect.orElseSucceed(() => false)))) {
-        return yield* new NoScriptShell({ gitRoot });
-      }
-      return { program: nativefs, args: ["job", sh] };
-    }),
+    containedSh: (script: string, args: ReadonlyArray<string>) =>
+      Effect.map(gitBash, ({ usrBin }) => ({
+        program: nativefs,
+        args: [
+          "job",
+          path.join(usrBin, "sh.exe"),
+          ...gitBashShArgs(script, args),
+        ],
+      })),
   };
 });
 

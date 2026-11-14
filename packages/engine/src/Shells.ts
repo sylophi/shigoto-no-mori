@@ -34,13 +34,16 @@ export class Shells extends Context.Service<
     >;
     // A POSIX sh, for the engine's own plumbing written in sh.
     readonly sh: Effect.Effect<string, NoScriptShell>;
-    // That sh as the program to start, and the arguments before its own,
-    // for a command line run to its end with no terminal that may leave
-    // something running (a lifecycle script, git running the person's
-    // hooks). Windows starts it in a job (nativefs job), so ending the
-    // process started ends all it started, Git Bash's orphans too, and
-    // its clean exit leaves what it left running.
-    readonly containedSh: Effect.Effect<
+    // That sh running `script` with `args` (shArgs), for a command line
+    // run to its end with no terminal that may leave something running
+    // (a lifecycle script, git running the person's hooks). Windows
+    // starts it in a job (nativefs job), so ending the process started
+    // ends all it started, Git Bash's orphans too, and its clean exit
+    // leaves what it left running.
+    readonly containedSh: (
+      script: string,
+      args: ReadonlyArray<string>,
+    ) => Effect.Effect<
       { readonly program: string; readonly args: ReadonlyArray<string> },
       NoScriptShell
     >;

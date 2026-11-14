@@ -121,7 +121,15 @@ const make = Effect.gen(function* () {
     );
     const spawned = Effect.gen(function* () {
       const { program, args, env: shellEnv } = yield* shells.script;
-      const sh = yield* shells.containedSh;
+      // A POSIX shell opens the file and becomes the script shell with
+      // it as stdout and stderr, whatever shell that is.
+      const sh = yield* shells.containedSh('exec "$@" >>"$0" 2>&1', [
+        output,
+        program,
+        ...args,
+        "-c",
+        input.command,
+      ]);
       yield* fs.makeDirectory(
         scriptOutputDir(paths.dataDir, context.worktree.id),
         { recursive: true },
@@ -131,39 +139,24 @@ const make = Effect.gen(function* () {
       yield* fs.remove(output, { force: true });
       yield* fs.writeFileString(output, "");
       return yield* spawner.spawn(
-        // A POSIX shell opens the file and becomes the script shell
-        // with it as stdout and stderr, whatever shell that is.
-        ChildProcess.make(
-          sh.program,
-          [
-            ...sh.args,
-            ...Shells.shArgs('exec "$@" >>"$0" 2>&1', [
-              output,
-              program,
-              ...args,
-              "-c",
-              input.command,
-            ]),
-          ],
-          {
-            cwd: context.worktree.path,
-            // In this process's group, as a terminal runs it: Ctrl-C
-            // reaches the whole tree, and what the script leaves running
-            // in the background (a dev database) outlives it.
-            detached: false,
-            extendEnv: true,
-            env: {
-              ...shellEnv,
-              ...scriptEnvOf(context, lifecycleScriptName(slot)),
-              ...UNATTENDED_ENV,
-              COLUMNS: "120",
-              ...(input.color ? { COLORTERM: "truecolor" } : {}),
-            },
-            stdin: "ignore",
-            stdout: "ignore",
-            stderr: "ignore",
+        ChildProcess.make(sh.program, sh.args, {
+          cwd: context.worktree.path,
+          // In this process's group, as a terminal runs it: Ctrl-C
+          // reaches the whole tree, and what the script leaves running
+          // in the background (a dev database) outlives it.
+          detached: false,
+          extendEnv: true,
+          env: {
+            ...shellEnv,
+            ...scriptEnvOf(context, lifecycleScriptName(slot)),
+            ...UNATTENDED_ENV,
+            COLUMNS: "120",
+            ...(input.color ? { COLORTERM: "truecolor" } : {}),
           },
-        ),
+          stdin: "ignore",
+          stdout: "ignore",
+          stderr: "ignore",
+        }),
       );
     }).pipe(Effect.result);
     return yield* Effect.scoped(

@@ -288,7 +288,6 @@ func runInJob(args []string, _, stderr io.Writer) int {
 		return fail(err)
 	}
 	if _, err := windows.ResumeThread(pi.Thread); err != nil {
-		_ = windows.TerminateProcess(pi.Process, 1)
 		return fail(err)
 	}
 	windows.CloseHandle(pi.Thread)

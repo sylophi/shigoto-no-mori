@@ -48,6 +48,7 @@ export const makeLogin = Effect.gen(function* () {
     })),
     sh: Effect.succeed("/bin/sh"),
     // Signals reach the tree here (ProcessTrees), so sh runs as it is.
-    containedSh: Effect.succeed({ program: "/bin/sh", args: [] }),
+    containedSh: (script: string, args: ReadonlyArray<string>) =>
+      Effect.succeed({ program: "/bin/sh", args: ["-c", script, ...args] }),
   };
 });

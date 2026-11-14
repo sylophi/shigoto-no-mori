@@ -137,13 +137,16 @@ const repoAt = async (name: string) => {
 const create = async (
   project: Project,
   input: { worktreeName: string; branchName?: string; base?: string },
+  notifyScript: Scripts.NotifyScriptEvent = () => {},
 ): Promise<Worktree> =>
   (
     await runHost(
       Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
-        worktrees.create({ projectId: project.id, ...input }, quiet, {
-          resolveOn: "exit",
-        }),
+        worktrees.create(
+          { projectId: project.id, ...input },
+          { ...quiet, notifyScript },
+          { resolveOn: "exit" },
+        ),
       ),
     )
   ).worktree;
@@ -350,20 +353,9 @@ it("a setup script stopped from the app leaves nothing running in its worktree, 
     }),
   );
   let runId: string | undefined;
-  const created = runHost(
-    Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
-      worktrees.create(
-        { projectId: project.id, worktreeName: "busy" },
-        {
-          ...quiet,
-          notifyScript: (event) => {
-            if (event.kind === "started") runId = event.runId;
-          },
-        },
-        { resolveOn: "exit" },
-      ),
-    ),
-  );
+  const created = create(project, { worktreeName: "busy" }, (event) => {
+    if (event.kind === "started") runId = event.runId;
+  });
   const child = () =>
     existsSync(childPid) ? pidIn(readFileSync(childPid, "utf8")) : undefined;
   await waitFor(
@@ -376,7 +368,7 @@ it("a setup script stopped from the app leaves nothing running in its worktree, 
       scripts.cancel(runId as string),
     ),
   );
-  const { worktree } = await created;
+  const worktree = await created;
   await waitFor(() => !isAlive(pid), "the setup's child to end");
   const removed = await runHost(
     worktreesHandlers.delete(
