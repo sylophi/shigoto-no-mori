@@ -23,10 +23,13 @@ export const terminalEditor = () =>
 export const runEditor = (editor: string, file: string) =>
   Effect.gen(function* () {
     const shells = yield* Shells.Shells;
+    // In the script shell's environment, which has the tools an editor's
+    // launcher script calls.
+    const { env } = yield* shells.script;
     const ran = spawnSync(
       yield* shells.sh,
       Shells.shArgs(`${editor} "$0"`, [file]),
-      { stdio: "inherit", env: childEnv(process.env) },
+      { stdio: "inherit", env: { ...childEnv(process.env), ...env } },
     );
     return ran.status === 0
       ? undefined

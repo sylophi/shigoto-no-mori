@@ -83,9 +83,9 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isInstallingUpdate } from "./electron/updater";
 import { takeUpdateEndpointOverrides } from "@shared/updater/endpoints";
 import { current as currentPlatform } from "@shigomori/engine/platform";
-import { uppercaseEnvNames } from "@shigomori/engine/environment";
+import { uppercasePath } from "@shigomori/engine/environment";
 
-uppercaseEnvNames();
+uppercasePath();
 
 if (
   app.isPackaged &&

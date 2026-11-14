@@ -123,8 +123,9 @@ export const FILES_SCRIPT = 'err=$1; shift; "$@" >>"$0" 2>>"$err"; echo $?';
 
 // Git Bash's sh rewrites an argument that reads as a POSIX path (a
 // commit message `/fix the docs`) for a program not its own, as git is.
-// One named in MSYS2_ARG_CONV_EXCL stays as it is, and the hooks the
-// command runs, which inherit it, still have their own rewritten.
+// One named in MSYS2_ARG_CONV_EXCL, a list of prefixes, stays as it is.
+// The hooks the command runs inherit it, and still have their own
+// rewritten unless one starts as one of these.
 const keptArguments = (args: ReadonlyArray<string>) =>
   byPlatform({
     darwin: {},
