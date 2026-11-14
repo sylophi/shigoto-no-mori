@@ -16,7 +16,11 @@ import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
-import { TERMINAL_SCROLLBACK } from "@shigomori/contracts/schemas";
+import {
+  type ShellSyntax,
+  TERMINAL_SCROLLBACK,
+} from "@shigomori/contracts/schemas";
+import { typedLines } from "@shigomori/contracts/typedLines";
 import { Check, Copy } from "lucide-react";
 import { useCopied } from "../../primitives/copy-button.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
@@ -60,17 +64,6 @@ const SETTLE_MS = 150;
 // DECTCEM: terminal cursor visibility.
 const SHOW_CURSOR = "\x1b[?25h";
 const HIDE_CURSOR = "\x1b[?25l";
-
-// A Mac's ⌘ and ⌥ edits as the line editing keys every shell and TUI
-// reads: to the line's start and end, deleting to its start, and a word
-// back and forward.
-const MAC_EDIT_KEYS: Readonly<Record<string, string>> = {
-  "Meta+ArrowLeft": "\x01",
-  "Meta+ArrowRight": "\x05",
-  "Meta+Backspace": "\x15",
-  "Alt+ArrowLeft": "\x1bb",
-  "Alt+ArrowRight": "\x1bf",
-};
 
 // Everything it shows, scrollback and all, as plain text: a line the
 // grid wrapped joins the one before it, and the blank rows under the
@@ -148,21 +141,21 @@ const scrollByLine = (
   return () => steps !== undefined;
 };
 
-// A dropped path as a shell word, escaped the way a Mac terminal drops
-// one, which a TUI that takes a dropped image (Claude Code) reads back.
-const escapedPath = (path: string): string =>
-  path.replace(/[\s\\'"`$!#&;|*?()[\]{}<>^]/g, "\\$&");
-
 const holdsFiles = (e: DragEvent): boolean =>
   e.dataTransfer.types.includes("Files");
 
-const macEditKey = (e: KeyboardEvent): string | undefined =>
+// A Mac's ⌘ and ⌥ edits, as the line editing keys the shell reads.
+const macEditKey = (
+  e: KeyboardEvent,
+  keys: Readonly<Record<string, string>>,
+): string | undefined =>
   e.ctrlKey || e.shiftKey || e.metaKey === e.altKey
     ? undefined
-    : MAC_EDIT_KEYS[`${e.metaKey ? "Meta" : "Alt"}+${e.key}`];
+    : keys[`${e.metaKey ? "Meta" : "Alt"}+${e.key}`];
 
 export function TerminalView({
   feed,
+  syntax,
   live,
   onInput,
   onFit,
@@ -171,6 +164,8 @@ export function TerminalView({
 }: {
   // Null where nothing feeds it (a scene).
   feed: TerminalFeed | null;
+  // What its shell reads, which keys and dropped files are typed in.
+  syntax: ShellSyntax;
   // Whether keystrokes reach a shell: false once it has exited.
   live: boolean;
   onInput: (data: string) => void;
@@ -185,6 +180,7 @@ export function TerminalView({
   const termRef = useRef<Terminal | null>(null);
   // Proposes the host's size to the process (`claim`: even unchanged).
   const proposeRef = useRef<((claim: boolean) => void) | null>(null);
+  const lines = typedLines[syntax];
   // The latest callbacks, so a new closure from the container does not
   // build a new terminal.
   const input = useEffectEvent(onInput);
@@ -243,7 +239,7 @@ export function TerminalView({
     // select all.
     if (isMac) {
       term.attachCustomKeyEventHandler((e) => {
-        const key = macEditKey(e);
+        const key = macEditKey(e, lines.macEditKeys);
         if (key === undefined && !e.metaKey) return true;
         if (e.type === "keydown") {
           if (key !== undefined) {
@@ -376,7 +372,7 @@ export function TerminalView({
       termRef.current = null;
       proposeRef.current = null;
     };
-  }, [feed, fontsIn]);
+  }, [feed, fontsIn, lines]);
 
   // An exited shell takes no keystrokes: the cursor goes, and focus is
   // handed back, so Tab and the app's bare-key shortcuts work again. One
@@ -420,7 +416,7 @@ export function TerminalView({
       .filter((path) => path !== "");
     if (paths.length === 0) return;
     term.focus();
-    term.paste(`${paths.map(escapedPath).join(" ")} `);
+    term.paste(`${paths.map(lines.dropped).join(" ")} `);
   };
 
   // Padding lives on the wrapper: the fit addon sizes the grid from the

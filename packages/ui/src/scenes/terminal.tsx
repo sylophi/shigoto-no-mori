@@ -23,6 +23,7 @@ const prompt: TerminalFeed = (screen) => {
 const shell = (
   <TerminalView
     feed={prompt}
+    syntax="posix"
     live
     onInput={() => {}}
     onFit={() => {}}

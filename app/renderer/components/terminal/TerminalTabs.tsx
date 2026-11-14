@@ -92,6 +92,9 @@ function AttachedTerminalTabs({
     ? picked
     : (terminals?.at(-1)?.terminalId ?? tabs.at(-1)?.id ?? null);
   const pickedSlot = slots.find((slot) => scriptTabId(slot) === selectedId);
+  const pickedTerminal = terminals?.find(
+    (terminal) => terminal.terminalId === selectedId,
+  );
 
   const open = () =>
     void api
@@ -148,16 +151,22 @@ function AttachedTerminalTabs({
       {pickedSlot !== undefined ? (
         <ScriptConsole worktree={worktree} slot={pickedSlot} />
       ) : (
-        selectedId !== null && (
+        pickedTerminal !== undefined && (
           <>
             {onMoved && (
               <TerminalMove
                 worktree={worktree}
-                terminalId={selectedId}
-                onMoved={(worktreeId) => onMoved(worktreeId, selectedId)}
+                terminalId={pickedTerminal.terminalId}
+                onMoved={(worktreeId) =>
+                  onMoved(worktreeId, pickedTerminal.terminalId)
+                }
               />
             )}
-            <Terminal key={selectedId} terminalId={selectedId} />
+            <Terminal
+              key={pickedTerminal.terminalId}
+              terminalId={pickedTerminal.terminalId}
+              syntax={pickedTerminal.syntax}
+            />
           </>
         )
       )}

@@ -26,7 +26,8 @@
           "projectId": "Wv",
           "worktreeId": "D",
           "openedAt": -5.2161211745009093e-73,
-          "busy": false
+          "busy": false,
+          "syntax": "powershell"
         }
       ]
     }

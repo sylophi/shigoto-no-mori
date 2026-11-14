@@ -32,6 +32,7 @@ const TerminalSchema = Schema.Struct({
   // Whether a command its shell started holds the terminal (a dev
   // server, a build), as the host last looked.
   busy: Schema.Boolean,
+  syntax: ShellSyntaxSchema,
 });
 export type Terminal = typeof TerminalSchema.Type;
 

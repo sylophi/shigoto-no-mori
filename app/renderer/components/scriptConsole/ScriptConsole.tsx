@@ -66,6 +66,8 @@ export function ScriptConsole({
           // the old run's tail could otherwise paint over the new one.
           key={`${key}:${state.startedAt ?? 0}`}
           feed={feed}
+          // A script runs in POSIX sh on every OS.
+          syntax="posix"
           live={state.status === "running" && state.interactive}
           onInput={(data) => scriptRuns.write(key, data)}
           onFit={(cols, rows) => {
