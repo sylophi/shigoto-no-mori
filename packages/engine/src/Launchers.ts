@@ -214,12 +214,11 @@ const make = Effect.gen(function* () {
     return undefined;
   });
 
-  const foundAt = (place: string) =>
-    byPlatform({
-      darwin: inAppFolders,
-      linux: inAppFolders,
-      win32: (name: string) => Effect.map(pathTo(name), Option.getOrUndefined),
-    })(place);
+  const foundAt = byPlatform({
+    darwin: inAppFolders,
+    linux: inAppFolders,
+    win32: (name: string) => Effect.map(pathTo(name), Option.getOrUndefined),
+  });
 
   // The catalog's apps this OS can have: those with a place to look for
   // them here, a command line tool or a terminal tool.
@@ -241,12 +240,26 @@ const make = Effect.gen(function* () {
       return undefined;
     });
 
+  const toolOnPath = (app: CatalogApp) => {
+    const tool = app.inTerminal?.trim().split(/\s+/)[0];
+    return tool === undefined ? Effect.succeed(false) : onPath(tool);
+  };
+
   const available = (app: CatalogApp) =>
     Effect.gen(function* () {
       if ((yield* bundleOf(app)) !== undefined) return true;
       if (app.cli !== undefined && (yield* onPath(app.cli))) return true;
-      const tool = app.inTerminal?.trim().split(/\s+/)[0];
-      return tool !== undefined && (yield* onPath(tool));
+      return yield* toolOnPath(app);
+    });
+
+  // What an installed app was found by, each looked up once.
+  const foundBy = (app: CatalogApp) =>
+    Effect.gen(function* () {
+      const bundle = yield* bundleOf(app);
+      const cliOnPath = app.cli !== undefined && (yield* onPath(app.cli));
+      return bundle !== undefined || cliOnPath || (yield* toolOnPath(app))
+        ? { app, bundle, cliOnPath }
+        : undefined;
     });
 
   const listCatalog = Effect.forEach(
@@ -332,25 +345,23 @@ const make = Effect.gen(function* () {
           projectId: project.id,
           path: project.path,
         }),
-        // In the catalog's order, which Effect.filter doesn't keep.
-        Effect.forEach(apps, available, { concurrency: "unbounded" }).pipe(
-          Effect.map((found) => apps.filter((_, index) => found[index])),
-        ),
+        Effect.forEach(apps, foundBy, { concurrency: "unbounded" }),
       ],
       { concurrency: "unbounded" },
     );
-    const detected = yield* Effect.forEach(installed, (app) =>
-      Effect.gen(function* () {
-        return {
-          kind: "detected" as const,
-          id: `app:${app.id}`,
-          label: app.label,
-          available: true as const,
-          app,
-          bundle: yield* bundleOf(app),
-          cliOnPath: app.cli !== undefined && (yield* onPath(app.cli)),
-        };
-      }),
+    // In the catalog's order.
+    const detected = installed.flatMap((found) =>
+      found === undefined
+        ? []
+        : [
+            {
+              kind: "detected" as const,
+              id: `app:${found.app.id}`,
+              label: found.app.label,
+              available: true as const,
+              ...found,
+            },
+          ],
     );
     const configured =
       typeof stored?.defaultBranch === "string" &&

@@ -70,6 +70,19 @@ export const makeWindowsShell = ({ run, onScreen }: CommandsArea) =>
         ),
       );
 
+    // The terminal's shell, left open after it runs the command line in
+    // the folder.
+    const shellIn = (folder: string, command: string) =>
+      Effect.map(shells.interactive, ({ program, args }) => ({
+        program,
+        args: [
+          ...args,
+          "-NoExit",
+          "-EncodedCommand",
+          encoded(inFolder(folder, command)),
+        ],
+      }));
+
     // A new PowerShell window: a console of its own comes only with the
     // shell's start (Start-Process), asked of a PowerShell no one sees.
     const powerShellWindow = Effect.fnUntraced(function* (
@@ -77,19 +90,13 @@ export const makeWindowsShell = ({ run, onScreen }: CommandsArea) =>
       folder: string,
       command: string,
     ) {
-      const { program, args } = yield* shells.interactive;
-      const window = [
-        ...args,
-        "-NoExit",
-        "-EncodedCommand",
-        encoded(inFolder(folder, command)),
-      ];
+      const { program, args } = yield* shellIn(folder, command);
       yield* run(label, program, [
         "-NoProfile",
         "-NonInteractive",
         "-EncodedCommand",
         encoded(
-          `Start-Process -FilePath ${quoted(program)} -ArgumentList ${window.map(quoted).join(",")}`,
+          `Start-Process -FilePath ${quoted(program)} -ArgumentList ${args.map(quoted).join(",")}`,
         ),
       ]);
     });
@@ -132,19 +139,11 @@ export const makeWindowsShell = ({ run, onScreen }: CommandsArea) =>
           if (terminal === undefined) {
             return yield* powerShellWindow(label, folder, command);
           }
-          const { program, args } = yield* shells.interactive;
+          const { program, args } = yield* shellIn(folder, command);
           return yield* start(
             label,
             "wt.exe",
-            [
-              "-d",
-              folder,
-              program,
-              ...args,
-              "-NoExit",
-              "-EncodedCommand",
-              encoded(inFolder(folder, command)),
-            ].map(forTerminal),
+            [program, ...args].map(forTerminal),
           );
         },
       ),
