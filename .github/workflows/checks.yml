@@ -133,6 +133,7 @@ jobs:
   # oxfmt reads the same bytes.
   #
   # The engine job's checks, and the Go helpers as Windows builds them.
+  # The suites run as a desktop user does (.github/unelevated.go).
   windows-engine:
     runs-on: windows-latest
     timeout-minutes: 20
@@ -155,11 +156,11 @@ jobs:
 
       - name: Engine
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: pnpm run check:engine
+        run: go run .github/unelevated.go pnpm run check:engine
 
       - name: Terminal
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: pnpm run check:cli
+        run: go run .github/unelevated.go pnpm run check:cli
 
       - name: Go helpers build
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
@@ -171,7 +172,7 @@ jobs:
 
       - name: Go tests
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: pnpm run check:go
+        run: go run .github/unelevated.go pnpm run check:go
 
   windows-proofs:
     runs-on: windows-latest
@@ -192,7 +193,7 @@ jobs:
         run: pnpm -C app run postinstall
 
       - name: Proofs
-        run: pnpm run check:proofs
+        run: go run .github/unelevated.go pnpm run check:proofs
 
   # The static checks with an input of the OS's: the typecheck's script
   # runs through pnpm's shell emulator, lint's rules and knip read file
