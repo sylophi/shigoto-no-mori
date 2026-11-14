@@ -7,7 +7,8 @@
 // ref the crash left behind. The removal's tail, git's remove,
 // the forget and the branch, runs whole too, and a removal whose git was
 // killed mid-delete is finished by a forced one. Each step is held by the
-// wrappers in lib/stopAt.ts. The same steps killed outright are the app's
+// wrappers in lib/stopAt.ts, or in node:fs/promises where the engine
+// copies and removes in process. The same steps killed outright are the app's
 // proof `interrupted-workflows`.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -33,7 +34,7 @@ import * as Fiber from "effect/Fiber";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as SqlClient from "effect/sql/SqlClient";
-import { afterEach, beforeEach, it, onTestFinished } from "vitest";
+import { afterEach, beforeEach, it, onTestFinished, vi } from "vitest";
 import * as Config from "../src/Config.ts";
 import { errorDocument } from "../src/errorDocument.ts";
 import * as Registry from "../src/Registry.ts";
@@ -42,6 +43,10 @@ import * as Worktrees from "../src/Worktrees.ts";
 import { readOnly } from "./lib/holds.ts";
 import { type Engine, type Sandbox, sandbox } from "./lib/sandbox.ts";
 import { type Stop, stopWrappers } from "./lib/stopAt.ts";
+
+vi.mock("node:fs/promises", async (actual) =>
+  (await import("./lib/stopAt.ts")).holdingFs(await actual()),
+);
 
 let box: Sandbox;
 let path: string | undefined;
