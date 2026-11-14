@@ -41,8 +41,11 @@ function listed(command: string, args: string[], env?: NodeJS.ProcessEnv) {
     maxBuffer: 64 * 1024 * 1024,
     env,
   });
-  if (run.error !== undefined) {
-    throw new Error(`${command} didn't run: ${run.error.message}`);
+  // An empty table would read as every process gone.
+  if (run.error !== undefined || run.status !== 0) {
+    throw new Error(
+      `${command} failed: ${run.error?.message ?? run.stderr.trim()}`,
+    );
   }
   return { lines: run.stdout.split("\n"), self: run.pid };
 }

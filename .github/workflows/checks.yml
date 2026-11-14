@@ -219,10 +219,9 @@ jobs:
 
       - uses: ./.github/actions/setup-toolchains
 
-      # The app's postinstall checks node-pty's prebuilt ConPTY addon is
-      # there.
       - uses: ./.github/actions/install-workspace
 
+      # Checks node-pty's prebuilt ConPTY addon is there.
       - name: App postinstall
         run: pnpm -C app run postinstall
 
