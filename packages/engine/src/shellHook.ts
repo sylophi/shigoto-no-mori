@@ -207,11 +207,11 @@ const hookPath = (place: HookPlace, kind: ShellKind) =>
       );
     }
     if (kind === "bash") {
-      return yield* byPlatform({
-        // macOS terminals start bash as a login shell, which never reads
-        // .bashrc, so the first login file that exists, never creating
-        // one that would shadow another.
-        darwin: Effect.gen(function* () {
+      // macOS terminals and Git Bash start bash as a login shell, which
+      // never reads .bashrc, so the first login file that exists, never
+      // creating one that would shadow another.
+      const loginFile = (none: string) =>
+        Effect.gen(function* () {
           for (const name of [".bash_profile", ".bash_login", ".profile"]) {
             const candidate = path.join(place.home, name);
             const isFile = yield* fs.stat(candidate).pipe(
@@ -220,11 +220,16 @@ const hookPath = (place: HookPlace, kind: ShellKind) =>
             );
             if (isFile) return candidate;
           }
-          return path.join(place.home, ".bash_profile");
-        }),
+          return path.join(place.home, none);
+        });
+      return yield* byPlatform({
+        darwin: loginFile(".bash_profile"),
         // Linux reads .bashrc in every interactive shell, and its login
         // files source it.
         linux: Effect.succeed(path.join(place.home, ".bashrc")),
+        // With no login file, Git Bash makes a .bash_profile that loads
+        // .bashrc.
+        win32: loginFile(".bashrc"),
       });
     }
     return path.join(

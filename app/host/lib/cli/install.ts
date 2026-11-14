@@ -14,9 +14,21 @@ import * as Exit from "effect/Exit";
 import { uninstallShellIntegration } from "./shell";
 import * as HostFacts from "@host/lib/HostFacts";
 import { links } from "./links";
-import type { Facts } from "./placement";
+import type { CliPlacement, Facts } from "./placement";
 
-const placement = () => byPlatform({ darwin: links, linux: links });
+// Nothing puts the command on PATH on Windows yet, so it never has links
+// to show, take off or repair.
+const unplaced: CliPlacement = {
+  ...links,
+  install: async () => {
+    throw new Error(
+      "Installing the command line tool isn't available on Windows yet.",
+    );
+  },
+};
+
+const placement = () =>
+  byPlatform({ darwin: links, linux: links, win32: unplaced });
 
 // The links' state, and their install, for the handlers. A refusal
 // crosses the wire in its own words.

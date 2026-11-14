@@ -40,7 +40,8 @@ const place = Effect.gen(function* () {
   return yield* byHostKind({
     app: Effect.fail(
       new UsageError({
-        problem: "On a Mac the app runs the host, so there's no service.",
+        problem:
+          "On this machine the app runs the host, so there's no service.",
       }),
     ),
     headless: Effect.succeed(linuxInstall(flavor, paths)),

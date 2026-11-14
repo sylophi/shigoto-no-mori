@@ -9,6 +9,7 @@
 // judgment.
 import { type Flavor, flavorNames } from "@shigomori/engine/flavor";
 import { currentOf } from "@shigomori/engine/linuxInstall";
+import { programFile } from "@shigomori/engine/executables";
 import { byPlatform } from "@shigomori/engine/platform";
 import { lstat, readlink, rm } from "node:fs/promises";
 import { delimiter, join } from "node:path";
@@ -44,6 +45,7 @@ function linkTarget(facts: Facts): string | null {
   return byPlatform({
     darwin: binary,
     linux: join(currentOf(facts.resourcesPath), cliBinaryName(facts.flavor)),
+    win32: binary,
   });
 }
 
@@ -52,6 +54,7 @@ const installedEnding = (flavor: Flavor) =>
   byPlatform({
     darwin: `/Contents/Resources/${cliBinaryName(flavor)}`,
     linux: `/${flavorNames(flavor).configDir}/current/${cliBinaryName(flavor)}`,
+    win32: `\\resources\\${programFile(cliBinaryName(flavor))}`,
   });
 
 // What a link path points at, in decreasing closeness to "the binary
