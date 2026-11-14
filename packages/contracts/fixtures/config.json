@@ -609,6 +609,12 @@
       {
         "editor": null,
         "autoShelveDays": null
+      },
+      {
+        "terminal": "windows-terminal"
+      },
+      {
+        "terminal": "powershell"
       }
     ],
     "rejects": [

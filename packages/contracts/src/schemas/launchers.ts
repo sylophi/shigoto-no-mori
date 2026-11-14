@@ -41,7 +41,14 @@ export function parseLauncherId(
 
 // The terminal apps terminal tools can open in, as launcher catalog ids,
 // in the order Settings lists them.
-const TERMINAL_IDS = ["terminal", "iterm", "ghostty", "cmux"] as const;
+const TERMINAL_IDS = [
+  "terminal",
+  "iterm",
+  "ghostty",
+  "cmux",
+  "windows-terminal",
+  "powershell",
+] as const;
 
 // The device setting `terminal`: the worktree's terminal drawer in the
 // app, or one of the terminal apps.
