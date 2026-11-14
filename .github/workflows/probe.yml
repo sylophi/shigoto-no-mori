@@ -12,19 +12,22 @@ jobs:
           bun-version: 1.4.0
       - continue-on-error: true
         run: |
-          echo "bash:"; whoami.exe //priv | grep -E "Backup|Restore"
           node -v
           cat > "$RUNNER_TEMP/p.js" <<'JS'
           const fs = require("fs"), cp = require("child_process"), path = require("path");
-          console.log("node child whoami:", cp.execFileSync("whoami.exe", ["/priv"]).toString().split("\n").filter(l => /Backup|Restore/.test(l)).join(" | "));
           const dir = path.join(process.env.RUNNER_TEMP, "probe" + Math.random()); fs.mkdirSync(dir, {recursive: true});
           const f = path.join(dir, "f"); fs.writeFileSync(f, "x");
+          console.log(cp.execFileSync("icacls", [f]).toString());
           cp.execFileSync("icacls", [f, "/deny", "*S-1-1-0:(R)"]);
+          console.log(cp.execFileSync("icacls", [f]).toString());
           try { fs.readFileSync(f); console.log("node read: allowed"); } catch (e) { console.log("node read:", e.code); }
-          try { fs.openSync(f, "r"); console.log("node open r: allowed"); } catch (e) { console.log("node open:", e.code); }
           try { const out = cp.execFileSync("bun", ["-e", `require("fs").readFileSync(${JSON.stringify(f)}); console.log("ok")`], {stdio:"pipe"}).toString(); console.log("bun read:", out.trim()); } catch (e) { console.log("bun read: denied", String(e.stderr).slice(0,200)); }
           try { cp.execFileSync("git", ["hash-object", f], {stdio:"pipe"}); console.log("git read: allowed"); } catch (e) { console.log("git read: denied"); }
           try { cp.execFileSync("cat", [f], {stdio:"pipe"}); console.log("msys cat: allowed"); } catch (e) { console.log("msys cat: denied"); }
+          const ps = (cmd) => { try { console.log(cmd.slice(0,60), "=>", cp.execFileSync("pwsh", ["-NoProfile", "-Command", cmd], {stdio:"pipe"}).toString().trim()); } catch (e) { console.log(cmd.slice(0,60), "=> denied", String(e.stderr).split("\n")[0].slice(0,150)); } };
+          ps(`[IO.File]::ReadAllText('${f}')`);
+          ps(`$s = New-Object IO.FileStream('${f}', [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite, 4096, [IO.FileOptions]0x02000000); 'backup-semantics open ok'`);
+          ps(`(Get-Acl '${f}').Owner`);
           cp.execFileSync("icacls", [f, "/remove:d", "*S-1-1-0"]);
           const d = path.join(dir, "ro"); fs.mkdirSync(d); fs.writeFileSync(path.join(d, "old"), "x");
           cp.execFileSync("icacls", [d, "/deny", "*S-1-1-0:(WD,AD,DC)"]);
@@ -34,10 +37,3 @@ jobs:
           try { cp.execFileSync("bun", ["-e", `require("fs").writeFileSync(${JSON.stringify(path.join(d, "bun"))}, "x"); console.log("ok")`], {stdio:"pipe"}); console.log("bun create: allowed"); } catch (e) { console.log("bun create: denied"); }
           JS
           node "$RUNNER_TEMP/p.js"
-      - shell: pwsh
-        continue-on-error: true
-        run: |
-          whoami.exe /priv | Select-String "Backup|Restore"
-          node -e "console.log(require('child_process').execFileSync('whoami.exe',['/priv']).toString().split('\n').filter(l=>/Backup|Restore/.test(l)).join(' | '))"
-          Get-ChildItem C:\hostedtoolcache\windows\node | Select-Object Name
-          (Get-Command node).Source
