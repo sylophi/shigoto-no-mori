@@ -7,33 +7,37 @@ jobs:
       run:
         shell: bash
     steps:
-      - shell: pwsh
-        continue-on-error: true
-        run: whoami.exe; whoami.exe /priv; whoami.exe /groups
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
       - continue-on-error: true
         run: |
+          echo "bash:"; whoami.exe //priv | grep -E "Backup|Restore"
+          node -v
           cat > "$RUNNER_TEMP/p.js" <<'JS'
           const fs = require("fs"), cp = require("child_process"), path = require("path");
-          const dir = path.join(process.env.RUNNER_TEMP, "probe"); fs.mkdirSync(dir, {recursive: true});
+          console.log("node child whoami:", cp.execFileSync("whoami.exe", ["/priv"]).toString().split("\n").filter(l => /Backup|Restore/.test(l)).join(" | "));
+          const dir = path.join(process.env.RUNNER_TEMP, "probe" + Math.random()); fs.mkdirSync(dir, {recursive: true});
           const f = path.join(dir, "f"); fs.writeFileSync(f, "x");
           cp.execFileSync("icacls", [f, "/deny", "*S-1-1-0:(R)"]);
           try { fs.readFileSync(f); console.log("node read: allowed"); } catch (e) { console.log("node read:", e.code); }
-          try { cp.execFileSync("powershell", ["-NoProfile","-Command",`Get-Content '${f}'`], {stdio:"pipe"}); console.log("ps read: allowed"); } catch (e) { console.log("ps read: denied", String(e.stderr).slice(0,200)); }
-          try { cp.execFileSync("cmd", ["/c","type",f], {stdio:"pipe"}); console.log("cmd type: allowed"); } catch (e) { console.log("cmd type: denied"); }
+          try { fs.openSync(f, "r"); console.log("node open r: allowed"); } catch (e) { console.log("node open:", e.code); }
+          try { const out = cp.execFileSync("bun", ["-e", `require("fs").readFileSync(${JSON.stringify(f)}); console.log("ok")`], {stdio:"pipe"}).toString(); console.log("bun read:", out.trim()); } catch (e) { console.log("bun read: denied", String(e.stderr).slice(0,200)); }
+          try { cp.execFileSync("git", ["hash-object", f], {stdio:"pipe"}); console.log("git read: allowed"); } catch (e) { console.log("git read: denied"); }
+          try { cp.execFileSync("cat", [f], {stdio:"pipe"}); console.log("msys cat: allowed"); } catch (e) { console.log("msys cat: denied"); }
           cp.execFileSync("icacls", [f, "/remove:d", "*S-1-1-0"]);
-          const d = path.join(dir, "ro"); fs.mkdirSync(d);
+          const d = path.join(dir, "ro"); fs.mkdirSync(d); fs.writeFileSync(path.join(d, "old"), "x");
           cp.execFileSync("icacls", [d, "/deny", "*S-1-1-0:(WD,AD,DC)"]);
-          try { fs.writeFileSync(path.join(d, "new"), "x"); console.log("node create in denied dir: allowed"); } catch (e) { console.log("node create:", e.code); }
-          try { cp.execFileSync("cmd", ["/c", `echo x> "${path.join(d,"new2")}"`], {stdio:"pipe"}); console.log("cmd create: allowed"); } catch (e) { console.log("cmd create: denied"); }
-          console.log(cp.execFileSync("icacls", [d]).toString());
+          cp.execFileSync("icacls", [d, "/deny", "*S-1-1-0:(OI)(CI)(IO)(DE)"]);
+          try { fs.writeFileSync(path.join(d, "new"), "x"); console.log("node create: allowed"); } catch (e) { console.log("node create:", e.code); }
+          try { fs.unlinkSync(path.join(d, "old")); console.log("node unlink: allowed"); } catch (e) { console.log("node unlink:", e.code); }
+          try { cp.execFileSync("bun", ["-e", `require("fs").writeFileSync(${JSON.stringify(path.join(d, "bun"))}, "x"); console.log("ok")`], {stdio:"pipe"}); console.log("bun create: allowed"); } catch (e) { console.log("bun create: denied"); }
           JS
           node "$RUNNER_TEMP/p.js"
       - shell: pwsh
+        continue-on-error: true
         run: |
-          Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, AntivirusEnabled, BehaviorMonitorEnabled | Format-List
-          (Get-MpPreference).ExclusionPath
-          Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version
-          (Get-Process -Id $PID).Parent.Name
-          Get-CimInstance Win32_Process -Filter "Name='Runner.Worker.exe'" | Select-Object ProcessId, CommandLine
-          fsutil 8dot3name query C:
-          echo $env:TEMP
+          whoami.exe /priv | Select-String "Backup|Restore"
+          node -e "console.log(require('child_process').execFileSync('whoami.exe',['/priv']).toString().split('\n').filter(l=>/Backup|Restore/.test(l)).join(' | '))"
+          Get-ChildItem C:\hostedtoolcache\windows\node | Select-Object Name
+          (Get-Command node).Source
