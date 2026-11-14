@@ -60,7 +60,10 @@ export const typedLines: Readonly<Record<ShellSyntax, Lines>> = {
   // As PSReadLine's default (Windows) mode reads them. Ctrl+End and
   // Ctrl+Home delete what is after and before the cursor. Escape would
   // clear the line too, but read with the keys after it, it is Alt. No
-  // key keeps a line out of PSReadLine's history.
+  // key keeps a line out of PSReadLine's history. Emacs or Vi mode binds
+  // them otherwise and goes unmet, as a fish login shell does. Windows
+  // PowerShell's PSReadLine (2.0) drops curly quotes and emoji typed in,
+  // and a quoted word stays one word without them.
   powershell: {
     quote: powerShellQuote,
     path: powerShellPath,
