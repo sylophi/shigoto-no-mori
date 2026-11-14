@@ -15,7 +15,7 @@ it("keeps the folder a branch already had", () => {
     ["feature/con", "feature-con"],
     ["console", "console"],
     ["com10", "com10"],
-  ]) {
+  ] as const) {
     assert.equal(sanitizeBranchForPath(branch), folder);
   }
 });
