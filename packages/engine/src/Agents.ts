@@ -648,14 +648,20 @@ const make = (binary: string) =>
         const { configFile } = harnessLine;
         if (configFile !== undefined) {
           // A day is long past any claude's start, and leaves the
-          // folder a day's configs at most.
+          // folder a day's configs at most. A guide started alongside
+          // may remove one first.
           const now = yield* Clock.currentTimeMillis;
           for (const name of yield* fs.readDirectory(folder)) {
             if (!GUIDE_MCP_CONFIG_FILE.test(name)) continue;
             const file = path.join(folder, name);
-            if (now - mtimeOf(yield* fs.stat(file)) > DAY_MS) {
-              yield* fs.remove(file, { force: true });
-            }
+            yield* fs.stat(file).pipe(
+              Effect.flatMap((info) =>
+                now - mtimeOf(info) > DAY_MS
+                  ? fs.remove(file, { force: true })
+                  : Effect.void,
+              ),
+              Effect.ignore,
+            );
           }
           yield* fs.writeFileString(
             path.join(folder, configFile.name),
