@@ -53,7 +53,12 @@ export const makeWindows = Effect.gen(function* () {
             "v1.0",
             "powershell.exe",
           );
-      return { program, args: ["-NoLogo"], env: {} };
+      return {
+        program,
+        args: ["-NoLogo"],
+        env: {},
+        syntax: "powershell" as const,
+      };
     }),
   );
 

@@ -733,6 +733,7 @@ export const fakeOpenTerminals: Record<string, Terminal[]> = {
       worktreeId: "a10000000003",
       openedAt: minutesAgo(240),
       busy: true,
+      syntax: "posix",
     },
     {
       terminalId: "t-sm-hum-1",
@@ -740,6 +741,7 @@ export const fakeOpenTerminals: Record<string, Terminal[]> = {
       worktreeId: "a10000000002",
       openedAt: minutesAgo(35),
       busy: false,
+      syntax: "posix",
     },
     {
       terminalId: "t-sm-badger-2",
@@ -747,6 +749,7 @@ export const fakeOpenTerminals: Record<string, Terminal[]> = {
       worktreeId: "a10000000003",
       openedAt: minutesAgo(12),
       busy: false,
+      syntax: "posix",
     },
   ],
   [MACBOOK_ID]: [
@@ -756,6 +759,7 @@ export const fakeOpenTerminals: Record<string, Terminal[]> = {
       worktreeId: "a1b2c3d4e5f6",
       openedAt: minutesAgo(95),
       busy: false,
+      syntax: "posix",
     },
   ],
 };

@@ -2,7 +2,8 @@
 // told, and the command line that opens it on a guide session with
 // `sm guide mcp` as its tools.
 import type { GuideHarness } from "@shigomori/contracts/modules/guide";
-import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
+import type { ShellSyntax } from "@shigomori/contracts/schemas";
+import { typedLines } from "@shigomori/contracts/typedLines";
 import { APP_REPO } from "./flavor.ts";
 
 // Each harness's tool in the launcher catalog, which says whether its
@@ -24,57 +25,127 @@ const DATA_DIR_ENV = "SHIGOMORI_DATA_DIR";
 // A TOML basic string, which a JSON string is.
 const toml = (text: string) => JSON.stringify(text);
 
+// A TOML literal string, which takes no escapes. Text with three quotes
+// in a row has no such form.
+const tomlLiteral = (text: string) =>
+  text.includes("'") ? `'''${text}'''` : `'${text}'`;
+
+// The files in the guide's folder that PowerShell's line gives claude
+// its MCP config in (guideCommand), read as claude starts. One per
+// session, so two guides started together each read their own.
+export const GUIDE_MCP_CONFIG_FILE = /^mcp-.+\.json$/;
+
 // The agent's role, as each harness's system-level instructions: it
 // starts idle, and the person types their question.
 const GUIDE_SYSTEM_PROMPT =
   "You are helping someone with a question about Shigoto no Mori, the app whose source and documentation are in `source/` here. Answer from the source, `skills/` and the READMEs, and say when the answer is not there. Offer a walkthrough only if asked.";
 
-// The harness with the guide's role, its tools `sm guide mcp` on
-// `session`, allowed without asking each time: the app turns away what
-// the user must do themselves. The server is told the app's data dir,
-// where it finds the app, whatever the terminal's environment says.
-export const guideCommand = (input: {
-  readonly harness: GuideHarness;
+type GuideServer = {
   readonly sm: string;
   readonly dataDir: string;
   readonly session: string;
-}) => {
-  const { harness, sm, dataDir, session } = input;
-  const args = ["guide", "mcp", "--session", session];
-  switch (harness) {
+};
+
+const serverArgs = (session: string) => ["guide", "mcp", "--session", session];
+
+// claude's MCP config: the server `sm guide mcp` on `session`, told the
+// app's data dir, where it finds the app, whatever the terminal's
+// environment says.
+const guideMcpConfig = ({ sm, dataDir, session }: GuideServer) =>
+  JSON.stringify({
+    mcpServers: {
+      [SERVER]: {
+        command: sm,
+        args: serverArgs(session),
+        env: { [DATA_DIR_ENV]: dataDir },
+      },
+    },
+  });
+
+// The harness with the guide's role, its tools `sm guide mcp` on
+// `session`, allowed without asking each time: the app turns away what
+// the user must do themselves. PowerShell before 7.3, and any through a
+// batch file, drops the `"` inside a program's argument, so PowerShell's
+// line names claude's config by its file and gives codex its strings in
+// TOML's single quotes. `configFile` is the file in the guide's folder
+// the line reads.
+const guideArgs = (
+  syntax: ShellSyntax,
+  input: GuideServer & { readonly harness: GuideHarness },
+): {
+  readonly args: ReadonlyArray<string>;
+  readonly configFile:
+    | { readonly name: string; readonly content: string }
+    | undefined;
+} => {
+  const { sm, dataDir, session } = input;
+  const string = syntax === "posix" ? toml : tomlLiteral;
+  switch (input.harness) {
     case "claude": {
-      const config = JSON.stringify({
-        mcpServers: {
-          [SERVER]: { command: sm, args, env: { [DATA_DIR_ENV]: dataDir } },
-        },
-      });
-      return `claude --mcp-config ${shellQuote(config)} --append-system-prompt ${shellQuote(GUIDE_SYSTEM_PROMPT)} --allowedTools mcp__${SERVER}`;
+      const config = guideMcpConfig(input);
+      const configFile =
+        syntax === "posix"
+          ? undefined
+          : { name: `mcp-${session}.json`, content: config };
+      return {
+        args: [
+          "--mcp-config",
+          configFile?.name ?? config,
+          "--append-system-prompt",
+          GUIDE_SYSTEM_PROMPT,
+          "--allowedTools",
+          `mcp__${SERVER}`,
+        ],
+        configFile,
+      };
     }
     case "codex":
-      return [
-        "codex",
-        "-c",
-        shellQuote(`developer_instructions=${toml(GUIDE_SYSTEM_PROMPT)}`),
-        "-c",
-        shellQuote(`mcp_servers.${SERVER}.command=${toml(sm)}`),
-        "-c",
-        shellQuote(`mcp_servers.${SERVER}.args=[${args.map(toml).join(", ")}]`),
-        "-c",
-        shellQuote(
-          `mcp_servers.${SERVER}.env={ ${DATA_DIR_ENV} = ${toml(dataDir)} }`,
-        ),
-        "-c",
-        shellQuote(
-          `mcp_servers.${SERVER}.default_tools_approval_mode="approve"`,
-        ),
-      ].join(" ");
+      return {
+        args: [
+          `developer_instructions=${string(GUIDE_SYSTEM_PROMPT)}`,
+          `mcp_servers.${SERVER}.command=${string(sm)}`,
+          `mcp_servers.${SERVER}.args=[${serverArgs(session).map(string).join(", ")}]`,
+          `mcp_servers.${SERVER}.env={ ${DATA_DIR_ENV} = ${string(dataDir)} }`,
+          `mcp_servers.${SERVER}.default_tools_approval_mode=${string("approve")}`,
+        ].flatMap((item) => ["-c", item]),
+        configFile: undefined,
+      };
   }
 };
 
-// Clones the release's source into `source` unless it is there, in the
-// terminal where its progress shows. The agent starts either way.
-export const cloneSourceCommand = (tag: string) =>
-  `[ -d source ] || { rm -rf source.partial && git -c advice.detachedHead=false clone --quiet --depth 1 --branch ${shellQuote(tag)} ${SOURCE_URL}.git source.partial && mv source.partial source; }`;
+// The harness's arguments, the line typing them (a word of letters,
+// digits, `_` and `-` left bare), and the file it reads, if any.
+export const guideCommand = (
+  syntax: ShellSyntax,
+  input: GuideServer & { readonly harness: GuideHarness },
+) => {
+  const { args, configFile } = guideArgs(syntax, input);
+  const { quote } = typedLines[syntax];
+  const words = args.map((arg) => (/^[\w-]+$/.test(arg) ? arg : quote(arg)));
+  return {
+    args,
+    line: [input.harness, ...words].join(" "),
+    configFile,
+  };
+};
+
+// Clones the release's source into `source` in `folder` unless it is
+// there, in the terminal where its progress shows. The agent starts
+// either way. Windows PowerShell has no `&&`, so for PowerShell the
+// engine looks for `source` and clears `source.partial` before it types
+// this, and the rename names its folder, since Windows PowerShell finds
+// no relative path under a folder whose name has brackets.
+export const cloneSourceCommand = (
+  syntax: ShellSyntax,
+  tag: string,
+  folder: string,
+) => {
+  const lines = typedLines[syntax];
+  const clone = `git -c advice.detachedHead=false clone --quiet --depth 1 --branch ${lines.quote(tag)} ${SOURCE_URL}.git source.partial`;
+  return syntax === "posix"
+    ? `[ -d source ] || { rm -rf source.partial && ${clone} && mv source.partial source; }`
+    : `${clone}; Rename-Item -LiteralPath ${lines.path(`${folder}/source.partial`)} -NewName source -ErrorAction Ignore`;
+};
 
 // The guide folder's AGENTS.md (Codex reads it, and Claude Code through
 // a CLAUDE.md naming it).

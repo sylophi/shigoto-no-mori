@@ -26,8 +26,8 @@ import type {
   Terminal,
   TerminalEvent,
 } from "@shigomori/contracts/schemas";
-import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import { TERMINAL_ID_ENV } from "@shigomori/contracts/modules/control";
+import { typedLines } from "@shigomori/contracts/typedLines";
 import * as SavedTerminals from "@shigomori/engine/SavedTerminals";
 import * as Terrier from "@shigomori/engine/Terrier";
 import { elapsedMillis } from "@shigomori/engine/elapsed";
@@ -625,16 +625,18 @@ const make = <R, E>(options: {
       );
 
     const begin = Effect.fnUntraced(function* (
-      terminal: Terminal,
+      opened: Omit<Terminal, "syntax">,
       { cwd, env }: Start,
       size: GridSize,
       restored?: { readonly seq: number; readonly history: string },
     ) {
       const scope = yield* Scope.fork(layerScope);
       return yield* Effect.gen(function* () {
+        const shell = yield* interactive;
+        const terminal: Terminal = { ...opened, syntax: shell.syntax };
         const pty = yield* spawn(
           {
-            shell: yield* interactive,
+            shell,
             command: null,
             cwd,
             env: { ...env, [TERMINAL_ID_ENV]: terminal.terminalId },
@@ -719,7 +721,7 @@ const make = <R, E>(options: {
 
     const open = Effect.fn("Terminals.open")(function* (input: OpenInput) {
       const start = yield* startOf(input);
-      const terminal: Terminal = {
+      const terminal = {
         terminalId: yield* mintId,
         projectId: input.projectId,
         worktreeId: input.worktreeId,
@@ -941,10 +943,8 @@ const make = <R, E>(options: {
           Effect.orElseSucceed(() => true),
         );
         if (!isHeld) {
-          // Over whatever is half typed (^U clears the line), and kept
-          // out of a history that ignores a leading space.
           yield* Effect.sync(() =>
-            session.pty.write(`\x15 cd ${shellQuote(cwd)}\r`),
+            session.pty.write(typedLines[session.terminal.syntax].goTo(cwd)),
           ).pipe(Effect.ignore);
           session.cwd = cwd;
         }

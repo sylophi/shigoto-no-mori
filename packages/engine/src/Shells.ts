@@ -1,5 +1,6 @@
 // Which shell runs what: a project's command lines, a terminal's
 // prompt, and the engine's own sh. Each OS picks its own (shells/).
+import type { ShellSyntax } from "@shigomori/contracts/schemas";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -26,8 +27,11 @@ export class Shells extends Context.Service<
     // teardown, port-pool, the console's scripts, custom launchers. It
     // reads POSIX sh syntax and takes a command line after `-c`.
     readonly script: Effect.Effect<Shell, NoScriptShell>;
-    // The shell a terminal runs at its prompt, and `sm cd`'s subshell.
-    readonly interactive: Effect.Effect<Shell>;
+    // The shell a terminal runs at its prompt, and `sm cd`'s subshell,
+    // and the syntax of what is typed into it (contracts' typedLines).
+    readonly interactive: Effect.Effect<
+      Shell & { readonly syntax: ShellSyntax }
+    >;
     // A POSIX sh, for the engine's own plumbing written in sh.
     readonly sh: Effect.Effect<string, NoScriptShell>;
   }
