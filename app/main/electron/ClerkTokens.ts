@@ -5,7 +5,7 @@
 // and the base64 ciphertext. On Linux a value is `raw:` and the token,
 // in a file only its owner can read, for the reason account.ts gives.
 // The dev launchers clone a sign-in by copying the file
-// (scripts/lib/devProfile.mts). When macOS offers no encryption a token
+// (scripts/lib/devProfile.mts). When the OS offers no encryption a token
 // is not persisted, and the user signs in again on the next launch.
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";

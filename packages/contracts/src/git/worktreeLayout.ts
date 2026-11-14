@@ -16,8 +16,8 @@ import { PROJECT_CONFIG_DEFAULTS } from "../schemas/projectConfigDefaults.ts";
 // people read and type these paths all day.
 export const WORKTREES_DIR = "wt";
 
-// None for the mount point itself, and for a Windows path, as every
-// drive there is one the data dir may be on too.
+// None for the mount point itself, and for a Windows path, whose
+// worktrees stay where the setting's other choices put them.
 export function externalVolumeRoot(path: string): string | undefined {
   return /^(\/Volumes\/[^/]+)\/+[^/]/.exec(path)?.[1];
 }
