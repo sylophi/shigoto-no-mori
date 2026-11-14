@@ -8,6 +8,16 @@ export const canonicalPath = (raw: string): string =>
 
 const asIs = (raw: string) => raw;
 
+// A canonical path as typed. On Windows one rooted without a drive
+// (`/Users/me`) is on the current drive, and `resolve` spells it with
+// that drive.
+export const onDrive = (path: string, resolve: (path: string) => string) =>
+  byPlatform({
+    darwin: () => path,
+    linux: () => path,
+    win32: () => (/^\/(?!\/)/.test(path) ? canonicalPath(resolve(path)) : path),
+  })();
+
 // Git for Windows' spelling: `/` separated, an upper-case drive letter,
 // no `\\?\` or `\\.\` prefix before a drive or a share, and a trailing
 // slash only on a root. A share's root is `//server/share`. Case is kept.

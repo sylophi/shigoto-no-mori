@@ -8,7 +8,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { expandHome as expandHomeIn } from "@shigomori/contracts/projectPaths";
-import { canonicalPath } from "./canonicalPath.ts";
+import { canonicalPath, onDrive } from "./canonicalPath.ts";
 import { type Flavor, flavorNames } from "./flavor.ts";
 import { rescueStrandedMove } from "./dataDirMoveJournal.ts";
 import { isAbsent, isNotFound } from "./platformErrors.ts";
@@ -112,16 +112,8 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
       byPlatform({ darwin: "HOME", linux: "HOME", win32: "USERPROFILE" }),
     ).pipe(Config.withDefault(".")),
   );
-  // On Windows a path rooted without a drive (`/Users/me`) is on the
-  // current drive, and spelled with it.
-  const onDrive = byPlatform({
-    darwin: (target: string) => target,
-    linux: (target: string) => target,
-    win32: (target: string) =>
-      /^\/(?!\/)/.test(target) ? path.resolve(target) : target,
-  });
   const expandHome = (target: string) =>
-    onDrive(expandHomeIn(home, canonicalPath(target)));
+    onDrive(expandHomeIn(home, canonicalPath(target)), path.resolve);
 
   // A directory a pointer may aim at: one that doesn't exist yet, is
   // empty, or already holds sm's state, so a pointer at ~/Documents
@@ -257,18 +249,17 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
   // On Windows the data dir as git spells the folder, once it is there:
   // the variable, the pointer or the home folder may name it in another
   // case, by a short name or through a junction.
-  const locate = Effect.flatMap(find, (found) =>
-    Effect.map(
-      byPlatform({
-        darwin: Effect.succeed(found.dataDir),
-        linux: Effect.succeed(found.dataDir),
-        win32: fs
-          .realPath(found.dataDir)
-          .pipe(Effect.orElseSucceed(() => found.dataDir)),
-      }),
-      (dataDir) => ({ ...found, dataDir }),
-    ),
-  );
+  const locate = Effect.gen(function* () {
+    const found = yield* find;
+    const dataDir = yield* byPlatform({
+      darwin: Effect.succeed(found.dataDir),
+      linux: Effect.succeed(found.dataDir),
+      win32: fs
+        .realPath(found.dataDir)
+        .pipe(Effect.orElseSucceed(() => found.dataDir)),
+    });
+    return { ...found, dataDir };
+  });
   const resolved = yield* locate;
 
   return Paths.of({

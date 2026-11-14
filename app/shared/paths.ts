@@ -18,7 +18,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import * as NodeServices from "@shared/nodeServices";
 import type { DataDirSource } from "@shigomori/engine/Paths";
 import { expandHome as expandHomeIn } from "@shigomori/contracts/projectPaths";
-import { canonicalPath } from "@shigomori/engine/canonicalPath";
+import { canonicalPath, onDrive } from "@shigomori/engine/canonicalPath";
 import * as Paths from "@shigomori/engine/Paths";
 import { byPlatform } from "@shigomori/engine/platform";
 import type { Flavor } from "@shigomori/engine/flavor";
@@ -170,16 +170,8 @@ export function home(): string {
   return canonicalPath(homedir());
 }
 
-// On Windows a path rooted without a drive (`/Users/me`) is on the
-// current drive, and spelled with it.
 export function expandHome(path: string): string {
-  const onDrive = byPlatform({
-    darwin: (target: string) => target,
-    linux: (target: string) => target,
-    win32: (target: string) =>
-      /^\/(?!\/)/.test(target) ? canonicalPath(resolve(target)) : target,
-  });
-  return onDrive(expandHomeIn(home(), canonicalPath(path)));
+  return onDrive(expandHomeIn(home(), canonicalPath(path)), resolve);
 }
 
 export function toAbsolute(path: string): string {
