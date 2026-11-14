@@ -235,7 +235,9 @@ beforeAll(async () => {
   // ---- Fixtures: build the CLI, seed the listener's repo and worktree, the dialer's dir ----
   await Promise.all([
     fixture.buildSm(),
-    execFileP("go", ["build", "-o", fileSyncBinary, "."], {
+    // No VCS stamp, whose git would refuse a checkout another account
+    // owns.
+    execFileP("go", ["build", "-buildvcs=false", "-o", fileSyncBinary, "."], {
       cwd: fileSyncDir,
       env: smEnv,
     }),

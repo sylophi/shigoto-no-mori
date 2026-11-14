@@ -19,7 +19,7 @@
 import { dirname } from "node:path";
 
 // The one place a test's git still finds this repository from.
-export const repositoryRoot = dirname(import.meta.dirname);
+const repositoryRoot = dirname(import.meta.dirname);
 
 // What isolation sets, which a test's own scrub must keep.
 const ISOLATING = {
