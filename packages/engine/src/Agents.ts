@@ -44,8 +44,6 @@ import {
   GUIDE_MCP_CONFIG_FILE,
   guideCommand,
   guideInstructions,
-  guideMcpConfig,
-  guideMcpConfigFile,
   SOURCE_URL,
 } from "./agentGuide.ts";
 import {
@@ -64,7 +62,7 @@ import { errnoText, isNotFound } from "./platformErrors.ts";
 import * as Registry from "./Registry.ts";
 import * as Shells from "./Shells.ts";
 import * as Worktrees from "./Worktrees.ts";
-import { isDirectory, linkFolder } from "./entries.ts";
+import { isDirectory, linkFolder, mtimeOf } from "./entries.ts";
 
 // A session as its harness and id name it.
 export type SessionRef = {
@@ -608,26 +606,24 @@ const make = (binary: string) =>
       yield* open.typable(
         label,
         "the app's paths",
-        harnessLine.program,
+        input.harness,
         harnessLine.args,
       );
       const folder = path.join(dataDir, "guide");
       const source = path.join(folder, "source");
-      // What the folder's `source` is to hold, where the agent reads it
-      // when it doesn't, and the release the terminal clones it from.
-      const { wanted, sourceUrl, link, tag } =
+      // What the folder's `source` is to hold, and where the agent reads
+      // it when it doesn't.
+      const { wanted, sourceUrl, link } =
         "tag" in input.source
           ? {
               wanted: input.source.tag,
               sourceUrl: `${SOURCE_URL}/tree/${input.source.tag}`,
               link: undefined,
-              tag: input.source.tag,
             }
           : {
               wanted: input.source.checkout,
               sourceUrl: input.source.checkout,
               link: input.source.checkout,
-              tag: undefined,
             };
       // What the terminal runs first.
       const before = yield* Effect.gen(function* () {
@@ -649,24 +645,25 @@ const make = (binary: string) =>
           if (link !== undefined) yield* linkFolder(link, source);
           yield* fs.writeFileString(tagFile, `${wanted}\n`);
         }
-        if (syntax === "powershell" && input.harness === "claude") {
+        const { configFile } = harnessLine;
+        if (configFile !== undefined) {
           // A day is long past any claude's start, and leaves the
           // folder a day's configs at most.
           const now = yield* Clock.currentTimeMillis;
           for (const name of yield* fs.readDirectory(folder)) {
             if (!GUIDE_MCP_CONFIG_FILE.test(name)) continue;
             const file = path.join(folder, name);
-            const { mtime } = yield* fs.stat(file);
-            if (Option.exists(mtime, (at) => now - at.getTime() > DAY_MS)) {
+            if (now - mtimeOf(yield* fs.stat(file)) > DAY_MS) {
               yield* fs.remove(file, { force: true });
             }
           }
           yield* fs.writeFileString(
-            path.join(folder, guideMcpConfigFile(input.session)),
-            guideMcpConfig({ ...input, sm, dataDir }),
+            path.join(folder, configFile.name),
+            configFile.content,
           );
         }
-        if (tag === undefined) return "";
+        // The release the terminal clones `source` from.
+        if (!("tag" in input.source)) return "";
         if (syntax === "powershell") {
           if (yield* fs.exists(source)) return "";
           yield* fs.remove(path.join(folder, "source.partial"), {
@@ -674,7 +671,7 @@ const make = (binary: string) =>
             force: true,
           });
         }
-        return `${cloneSourceCommand(syntax, tag, folder)}; `;
+        return `${cloneSourceCommand(syntax, input.source.tag, folder)}; `;
       }).pipe(
         Effect.mapError(
           (cause) => new GuideFolderFailed({ path: folder, cause }),

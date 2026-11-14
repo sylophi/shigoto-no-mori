@@ -30,11 +30,9 @@ const toml = (text: string) => JSON.stringify(text);
 const tomlLiteral = (text: string) =>
   text.includes("'") ? `'''${text}'''` : `'${text}'`;
 
-// The file in the guide's folder that PowerShell's line gives claude
+// The files in the guide's folder that PowerShell's line gives claude
 // its MCP config in (guideCommand), read as claude starts. One per
 // session, so two guides started together each read their own.
-export const guideMcpConfigFile = (session: string) => `mcp-${session}.json`;
-
 export const GUIDE_MCP_CONFIG_FILE = /^mcp-.+\.json$/;
 
 // The agent's role, as each harness's system-level instructions: it
@@ -53,7 +51,7 @@ const serverArgs = (session: string) => ["guide", "mcp", "--session", session];
 // claude's MCP config: the server `sm guide mcp` on `session`, told the
 // app's data dir, where it finds the app, whatever the terminal's
 // environment says.
-export const guideMcpConfig = ({ sm, dataDir, session }: GuideServer) =>
+const guideMcpConfig = ({ sm, dataDir, session }: GuideServer) =>
   JSON.stringify({
     mcpServers: {
       [SERVER]: {
@@ -69,49 +67,65 @@ export const guideMcpConfig = ({ sm, dataDir, session }: GuideServer) =>
 // the user must do themselves. PowerShell before 7.3, and any through a
 // batch file, drops the `"` inside a program's argument, so PowerShell's
 // line names claude's config by its file and gives codex its strings in
-// TOML's single quotes.
+// TOML's single quotes. `configFile` is the file in the guide's folder
+// the line reads.
 const guideArgs = (
   syntax: ShellSyntax,
   input: GuideServer & { readonly harness: GuideHarness },
-) => {
+): {
+  readonly args: ReadonlyArray<string>;
+  readonly configFile:
+    | { readonly name: string; readonly content: string }
+    | undefined;
+} => {
   const { sm, dataDir, session } = input;
   const string = syntax === "posix" ? toml : tomlLiteral;
   switch (input.harness) {
-    case "claude":
-      return [
-        "--mcp-config",
+    case "claude": {
+      const config = guideMcpConfig(input);
+      const configFile =
         syntax === "posix"
-          ? guideMcpConfig(input)
-          : guideMcpConfigFile(session),
-        "--append-system-prompt",
-        GUIDE_SYSTEM_PROMPT,
-        "--allowedTools",
-        `mcp__${SERVER}`,
-      ];
+          ? undefined
+          : { name: `mcp-${session}.json`, content: config };
+      return {
+        args: [
+          "--mcp-config",
+          configFile?.name ?? config,
+          "--append-system-prompt",
+          GUIDE_SYSTEM_PROMPT,
+          "--allowedTools",
+          `mcp__${SERVER}`,
+        ],
+        configFile,
+      };
+    }
     case "codex":
-      return [
-        `developer_instructions=${string(GUIDE_SYSTEM_PROMPT)}`,
-        `mcp_servers.${SERVER}.command=${string(sm)}`,
-        `mcp_servers.${SERVER}.args=[${serverArgs(session).map(string).join(", ")}]`,
-        `mcp_servers.${SERVER}.env={ ${DATA_DIR_ENV} = ${string(dataDir)} }`,
-        `mcp_servers.${SERVER}.default_tools_approval_mode=${string("approve")}`,
-      ].flatMap((item) => ["-c", item]);
+      return {
+        args: [
+          `developer_instructions=${string(GUIDE_SYSTEM_PROMPT)}`,
+          `mcp_servers.${SERVER}.command=${string(sm)}`,
+          `mcp_servers.${SERVER}.args=[${serverArgs(session).map(string).join(", ")}]`,
+          `mcp_servers.${SERVER}.env={ ${DATA_DIR_ENV} = ${string(dataDir)} }`,
+          `mcp_servers.${SERVER}.default_tools_approval_mode=${string("approve")}`,
+        ].flatMap((item) => ["-c", item]),
+        configFile: undefined,
+      };
   }
 };
 
-// The harness's program, its arguments, and the line typing them, a
-// word of letters, digits, `_` and `-` left bare.
+// The harness's arguments, the line typing them (a word of letters,
+// digits, `_` and `-` left bare), and the file it reads, if any.
 export const guideCommand = (
   syntax: ShellSyntax,
   input: GuideServer & { readonly harness: GuideHarness },
 ) => {
-  const args = guideArgs(syntax, input);
+  const { args, configFile } = guideArgs(syntax, input);
   const { quote } = typedLines[syntax];
   const words = args.map((arg) => (/^[\w-]+$/.test(arg) ? arg : quote(arg)));
   return {
-    program: input.harness,
     args,
     line: [input.harness, ...words].join(" "),
+    configFile,
   };
 };
 

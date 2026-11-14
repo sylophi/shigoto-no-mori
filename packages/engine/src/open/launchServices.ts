@@ -1,6 +1,6 @@
 // A Mac's desktop to Open (desktop.ts): Launch Services through `open`,
 // and terminal apps driven by AppleScript.
-import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
+import { typedLines } from "@shigomori/contracts/typedLines";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Launchers from "../Launchers.ts";
@@ -109,7 +109,7 @@ export const makeLaunchServices = ({ ran, run }: CommandsArea) =>
           const { code, output } = yield* ran("osascript", [
             "-e",
             TERMINAL_SCRIPTS[id] ?? "",
-            `cd ${shellQuote(folder)}\n${command}`,
+            `${typedLines.posix.cd(folder)}\n${command}`,
           ]);
           if (code === 0) return;
           const said = output.includes("(-1743)")
