@@ -121,6 +121,7 @@ const make = Effect.gen(function* () {
     );
     const spawned = Effect.gen(function* () {
       const { program, args, env: shellEnv } = yield* shells.script;
+      const sh = yield* shells.containedSh;
       yield* fs.makeDirectory(
         scriptOutputDir(paths.dataDir, context.worktree.id),
         { recursive: true },
@@ -133,14 +134,17 @@ const make = Effect.gen(function* () {
         // A POSIX shell opens the file and becomes the script shell
         // with it as stdout and stderr, whatever shell that is.
         ChildProcess.make(
-          yield* shells.sh,
-          Shells.shArgs('exec "$@" >>"$0" 2>&1', [
-            output,
-            program,
-            ...args,
-            "-c",
-            input.command,
-          ]),
+          sh.program,
+          [
+            ...sh.args,
+            ...Shells.shArgs('exec "$@" >>"$0" 2>&1', [
+              output,
+              program,
+              ...args,
+              "-c",
+              input.command,
+            ]),
+          ],
           {
             cwd: context.worktree.path,
             // In this process's group, as a terminal runs it: Ctrl-C

@@ -13,7 +13,8 @@ import { envVar } from "../environment.ts";
 import { findExecutable, joinSearchPath } from "../executables.ts";
 import { NoScriptShell } from "./documents.ts";
 
-export const makeWindows = Effect.gen(function* () {
+// `nativefs` is the helper a contained sh runs under.
+export const makeWindows = Effect.fnUntraced(function* (nativefs: string) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -34,7 +35,7 @@ export const makeWindows = Effect.gen(function* () {
         .exists(path.join(usrBin, "bash.exe"))
         .pipe(Effect.orElseSucceed(() => false));
       if (!found) return yield* new NoScriptShell({ gitRoot });
-      return { environment, usrBin };
+      return { environment, gitRoot, usrBin };
     }),
   );
 
@@ -84,6 +85,16 @@ export const makeWindows = Effect.gen(function* () {
     }),
     interactive: powerShell,
     sh: Effect.map(gitBash, ({ usrBin }) => path.join(usrBin, "sh.exe")),
+    // A sh gone since it was found is no shell, as when its spawn fails,
+    // not an exit of the helper.
+    containedSh: Effect.gen(function* () {
+      const { gitRoot, usrBin } = yield* gitBash;
+      const sh = path.join(usrBin, "sh.exe");
+      if (!(yield* fs.exists(sh).pipe(Effect.orElseSucceed(() => false)))) {
+        return yield* new NoScriptShell({ gitRoot });
+      }
+      return { program: nativefs, args: ["job", sh] };
+    }),
   };
 });
 

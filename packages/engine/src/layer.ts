@@ -126,7 +126,10 @@ const services = (options: EngineOptions) =>
       ),
     ),
     Layer.provideMerge(
-      Layer.mergeAll(ProcessTable.layer(options.nativefs), Shells.layer),
+      Layer.mergeAll(
+        ProcessTable.layer(options.nativefs),
+        Shells.layer(options.nativefs),
+      ),
     ),
     Layer.provideMerge(childDefaults),
   );
@@ -174,7 +177,10 @@ export const doctorLayer = (options: {
     Layer.merge(DataDirLock.layer(options.open)),
     Layer.provideMerge(Paths.layer(options.flavor)),
     Layer.provideMerge(
-      Layer.mergeAll(ProcessTable.layer(options.nativefs), Shells.layer),
+      Layer.mergeAll(
+        ProcessTable.layer(options.nativefs),
+        Shells.layer(options.nativefs),
+      ),
     ),
     Layer.provideMerge(childDefaults),
   );

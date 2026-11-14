@@ -11,6 +11,8 @@ import * as ProcessTable from "./ProcessTable.ts";
 export type RunningScript = {
   readonly runId: string;
   readonly ownerPid: number;
+  // What a stop ends: the script's shell, or on Windows the helper that
+  // holds a lifecycle script in a job (Shells.containedSh).
   readonly pid: number;
   // Whether `pid` leads the script's process group: a PTY run's does,
   // while a lifecycle script runs in the app's group.

@@ -34,20 +34,32 @@ export class Shells extends Context.Service<
     >;
     // A POSIX sh, for the engine's own plumbing written in sh.
     readonly sh: Effect.Effect<string, NoScriptShell>;
+    // That sh as the program to start, and the arguments before its own,
+    // for a command line run to its end with no terminal that may leave
+    // something running (a lifecycle script, git running the person's
+    // hooks). Windows starts it in a job (nativefs job), so ending the
+    // process started ends all it started, Git Bash's orphans too, and
+    // its clean exit leaves what it left running.
+    readonly containedSh: Effect.Effect<
+      { readonly program: string; readonly args: ReadonlyArray<string> },
+      NoScriptShell
+    >;
   }
 >()("sm/engine/Shells") {}
 
-const make = Effect.gen(function* () {
-  return Shells.of(
-    yield* byPlatform({
-      darwin: makeLogin,
-      linux: makeLogin,
-      win32: makeWindows,
-    }),
-  );
-});
+// `nativefs` is the helper that holds a contained sh on Windows.
+const make = (nativefs: string) =>
+  Effect.gen(function* () {
+    return Shells.of(
+      yield* byPlatform({
+        darwin: makeLogin,
+        linux: makeLogin,
+        win32: makeWindows(nativefs),
+      }),
+    );
+  });
 
-export const layer = Layer.effect(Shells, make);
+export const layer = (nativefs: string) => Layer.effect(Shells, make(nativefs));
 
 // What sh, or the script shell, takes to run `script` with `args` as
 // its $0, $1 and on.

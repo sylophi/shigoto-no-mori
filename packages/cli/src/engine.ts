@@ -23,7 +23,8 @@ import * as Transfer from "./Transfer.ts";
 
 const open: Store.OpenDatabase = (filename, options) =>
   SqliteClient.make({ filename, ...options });
-const nativefs = () => join(dirname(process.execPath), programFile("nativefs"));
+export const nativefs = () =>
+  join(dirname(process.execPath), programFile("nativefs"));
 // What the agent hooks run: this binary (Agents names it by a path
 // that outlasts an update).
 const sm = process.execPath;

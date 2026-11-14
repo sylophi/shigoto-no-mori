@@ -169,10 +169,14 @@ export const captureToFiles = (
       const { onStderr } = options;
       // There before the shell opens it, for the tail to open first.
       if (onStderr !== undefined) yield* fs.writeFile(err, new Uint8Array());
+      const sh = yield* shells.containedSh;
       const handle = yield* spawner.spawn(
         ChildProcess.make(
-          yield* shells.sh,
-          Shells.shArgs(FILES_SCRIPT, [out, err, command, ...args]),
+          sh.program,
+          [
+            ...sh.args,
+            ...Shells.shArgs(FILES_SCRIPT, [out, err, command, ...args]),
+          ],
           {
             stdin: options.stdin ?? "ignore",
             stderr: "ignore",

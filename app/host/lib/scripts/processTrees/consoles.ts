@@ -4,11 +4,12 @@
 // on the console hears, and closing it is the hangup, which ends what is
 // still attached. A tree is its root and everything on the root's
 // console, with all they started: what Git Bash forks and execs runs
-// with its parent gone, on the console all the same. A lifecycle script
-// has a console of its own as well, as a hidden child is given one. One
-// on the host's own console is only its root and what that started.
-// What escaped the console, and a tree with none (a lifecycle script, or
-// an orphan whose PTY went with its host), is ended through the helper.
+// with its parent gone, on the console all the same. A lifecycle script's
+// root is the helper that holds it in a job (nativefs job), whose end
+// ends everything in the job. One on the host's own console is only its
+// root and what that started. What escaped the console, and a tree with
+// none (an orphan whose PTY went with its host), is ended through the
+// helper.
 import * as Effect from "effect/Effect";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { readProcesses } from "@shigomori/engine/processTable/nativefs";
