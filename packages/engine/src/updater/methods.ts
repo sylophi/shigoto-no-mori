@@ -62,7 +62,9 @@ export const makeMethods = ({
       readonly feedUrl?: string;
       readonly releasesUrl?: string;
     }) =>
-      updates(endpoints) ? Effect.void : Effect.fail(new UpdatesUnavailable());
+      updates(endpoints)
+        ? Effect.void
+        : Effect.fail(new UpdatesUnavailable({ reason: "dev" }));
 
     const check = Effect.fn("Updater.check")(function* (input: UpdateInput) {
       yield* available(input);

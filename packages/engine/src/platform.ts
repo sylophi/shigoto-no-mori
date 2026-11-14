@@ -5,14 +5,16 @@
 // no-process-platform lint rule keeps process.platform and
 // os.platform() out of everywhere else. The Go
 // helpers pick theirs by file name (nativefs/sys_<os>.go).
-export type Platform = "darwin" | "linux";
+export type Platform = "darwin" | "linux" | "win32";
 
 // Read when first asked, so a module that only imports this loads in a
 // browser too.
 export const current = (): Platform => {
   const os = process.platform;
-  if (os !== "darwin" && os !== "linux") {
-    throw new Error(`Shigoto no Mori runs on macOS and Linux, not ${os}.`);
+  if (os !== "darwin" && os !== "linux" && os !== "win32") {
+    throw new Error(
+      `Shigoto no Mori runs on macOS, Linux and Windows, not ${os}.`,
+    );
   }
   return os;
 };
@@ -30,6 +32,7 @@ type HostKind = "app" | "headless";
 const HOST_KINDS: { readonly [P in Platform]: HostKind } = {
   darwin: "app",
   linux: "headless",
+  win32: "app",
 };
 
 export const hostKind = (): HostKind => HOST_KINDS[current()];

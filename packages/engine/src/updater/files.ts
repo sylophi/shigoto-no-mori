@@ -150,7 +150,8 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
     // the install to a recycled one would wait on a process that never
     // restarts. On a Mac the executable's name has to match too, and ps
     // fails for a pid that is gone. On Linux it has to be the pid the
-    // host's unit runs.
+    // host's unit runs. Nothing installs the app on Windows yet, so no
+    // process there is the installed app.
     const appAlive = (pid: number) =>
       byPlatform({
         darwin: run("ps", ["-o", "comm=", "-p", String(pid)], "stdout").pipe(
@@ -160,6 +161,7 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
           unit,
           (state) => Option.isSome(state) && state.value.pid === pid,
         ),
+        win32: Effect.succeed(false),
       });
 
     // The app running, even one that hasn't published updater.json yet:
@@ -174,6 +176,7 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
         unit,
         (state) => Option.isSome(state) && state.value.running,
       ),
+      win32: Effect.succeed(false),
     });
 
     // The app's updater.json, none when it is missing or malformed.

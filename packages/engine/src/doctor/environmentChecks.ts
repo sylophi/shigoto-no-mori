@@ -45,6 +45,12 @@ const INSTALL_HINTS = byPlatform({
     gh: "https://cli.github.com",
     path: "Add ~/.local/bin, where the install links it, to PATH.",
   },
+  win32: {
+    git: "`winget install Git.Git`",
+    gitUpgrade: "`winget upgrade Git.Git`",
+    gh: "`winget install GitHub.cli`",
+    path: "Add its directory to PATH.",
+  },
 });
 
 export const makeEnvironmentChecks = ({
@@ -280,7 +286,20 @@ export const makeEnvironmentChecks = ({
         return line.ok(`${installed}, its host running`);
       });
 
-    const checkApp = byPlatform({ darwin: checkBundle, linux: checkInstall });
+    // Nothing installs the app on Windows yet, so there is no install to
+    // check.
+    const checkWindows = ({ version }: RunInput) =>
+      Effect.succeed(
+        check("Environment", "app", "app").ok(
+          `${binaryName} ${version}, with no install on Windows yet`,
+        ),
+      );
+
+    const checkApp = byPlatform({
+      darwin: checkBundle,
+      linux: checkInstall,
+      win32: checkWindows,
+    });
 
     // The binary in PATH order, deduped by the file each entry resolves
     // to, so a symlink and its target don't read as a conflict.

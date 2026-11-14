@@ -41,10 +41,15 @@ export const causeText = (cause: unknown): string => {
 
 export class UpdatesUnavailable extends Schema.TaggedError<UpdatesUnavailable>()(
   "UpdatesUnavailable",
-  {},
+  { reason: Schema.Literals(["dev", "windows"]) },
 ) {
   override get message(): string {
-    return "This is the dev CLI. Dev builds have no update channel. Pull the checkout instead.";
+    switch (this.reason) {
+      case "dev":
+        return "This is the dev CLI. Dev builds have no update channel. Pull the checkout instead.";
+      case "windows":
+        return "Nothing installs the app on Windows yet, so there are no updates for it.";
+    }
   }
 }
 
@@ -612,6 +617,7 @@ export const updateServerUrl = (input: UpdateInput) =>
     : byPlatform({
         darwin: `https://update.electronjs.org/${APP_REPO}/darwin-${input.running.arch}/${input.running.version}`,
         linux: "",
+        win32: "",
       });
 
 export const releaseListUrl = (input: UpdateInput) =>

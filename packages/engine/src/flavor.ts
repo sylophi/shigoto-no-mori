@@ -21,8 +21,8 @@ export type Flavor = "prod" | "dev" | (string & {});
 export type FlavorNames = {
   // What the OS shows: the bundle's name, the dock and the menu bar.
   readonly appName: string;
-  // Under ~/Library/Application Support (on Linux the configDir names
-  // the app's own folders).
+  // Under ~/Library/Application Support, or AppData/Roaming on Windows
+  // (on Linux the configDir names the app's own folders).
   readonly userDataDir: string;
   // A dev run's bundle adds the worktree to it, so each checkout owns
   // the scheme in turn (app/scripts/lib/devBundle.mts).
