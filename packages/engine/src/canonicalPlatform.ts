@@ -3,16 +3,48 @@
 // they answer is canonical (canonicalPath.ts), since Node's and Bun's
 // answer with backslashes. On macOS and Linux they are the platform's
 // own.
+import { realpath } from "node:fs/promises";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { canonicalPath } from "./canonicalPath.ts";
 import { byPlatform } from "./platform.ts";
 
 const canonicalPaths = (paths: ReadonlyArray<string>) =>
   paths.map(canonicalPath);
+
+// The reasons Effect's own realPath gives these errnos.
+const REASONS: Record<string, PlatformError.SystemErrorTag> = {
+  ENOENT: "NotFound",
+  EACCES: "PermissionDenied",
+  ENOTDIR: "BadResource",
+  ELOOP: "BadResource",
+  EBUSY: "Busy",
+};
+
+// The OS's own real path, the folder's true spelling as git prints it:
+// its letter case, long names for 8.3 short ones, junctions resolved.
+// Node's and Bun's realPath work it out a part at a time, keeping the
+// case and short names they were given.
+const trueRealPath = (path: string) =>
+  Effect.tryPromise({
+    try: () => realpath(path),
+    catch: (cause) =>
+      PlatformError.systemError({
+        _tag:
+          REASONS[
+            Predicate.hasProperty(cause, "code") ? String(cause.code) : ""
+          ] ?? "Unknown",
+        module: "FileSystem",
+        method: "realPath",
+        pathOrDescriptor: path,
+        cause,
+      }),
+  }).pipe(Effect.map(canonicalPath));
 
 const windowsPath = (path: Path.Path): Path.Path => ({
   ...path,
@@ -51,7 +83,7 @@ const windowsFileSystem = (
   readDirectory: (path, options) =>
     Effect.map(fs.readDirectory(path, options), canonicalPaths),
   readLink: (path) => Effect.map(fs.readLink(path), canonicalPath),
-  realPath: (path) => Effect.map(fs.realPath(path), canonicalPath),
+  realPath: trueRealPath,
   watch: (path, options) =>
     Stream.map(fs.watch(path, options), (event) => ({
       ...event,

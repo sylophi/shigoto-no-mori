@@ -20,6 +20,7 @@ import type { DataDirSource } from "@shigomori/engine/Paths";
 import { expandHome as expandHomeIn } from "@shigomori/contracts/projectPaths";
 import { canonicalPath } from "@shigomori/engine/canonicalPath";
 import * as Paths from "@shigomori/engine/Paths";
+import { byPlatform } from "@shigomori/engine/platform";
 import type { Flavor } from "@shigomori/engine/flavor";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -105,11 +106,17 @@ export function dataDir(): string {
 }
 
 // The data dir with its links resolved, none where that spells it the
-// same or it can't be read.
+// same or it can't be read. On Windows the OS's own call, which spells
+// it as git does (canonicalPlatform.ts).
 export function dataDirReal(): string | undefined {
   const dir = dataDir();
+  const realpath = byPlatform({
+    darwin: realpathSync,
+    linux: realpathSync,
+    win32: realpathSync.native,
+  });
   try {
-    const real = canonicalPath(realpathSync(dir));
+    const real = canonicalPath(realpath(dir));
     return real === canonicalPath(resolve(dir)) ? undefined : real;
   } catch {
     return undefined;
