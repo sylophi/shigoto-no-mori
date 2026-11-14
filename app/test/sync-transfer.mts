@@ -16,10 +16,10 @@
 //   - a teardown with no receipt is refused, and a source that changed
 //     after the move, or while its cleanup runs, is kept, for a pull
 //     and for a send alike;
-//   - a pull cancelled mid-create takes what it made and leaves the
-//     source as it was, so the same pull lands after, and a send
-//     cancelled on the peer leaves no receipt, so its teardown is
-//     refused.
+//   - a pull cancelled mid-create takes what it made, its folder too,
+//     whatever its setup left running there, and leaves the source as
+//     it was, so the same pull lands after, and a send cancelled on the
+//     peer leaves no receipt, so its teardown is refused.
 //
 // Both "devices" share one node process and one sandboxed
 // SHIGOMORI_DATA_DIR holding two projects (source and target repos);
@@ -673,24 +673,37 @@ it("sendWorktree: a dirty worktree lands on the peer with its commit and its unc
 describe("cancelMove", () => {
   let targetConfigBefore: ShigomoriConfig | null;
   const setupPidPath = join(sandbox, "setup.pid");
-  // The setup script has started: its pid is in the file, and it is
-  // the sleep (exec'd, so the pid is the one process to watch).
+  // The setup script's pid, once it has started.
   const setupPid = () =>
     existsSync(setupPidPath)
       ? pidIn(readFileSync(setupPidPath, "utf8"))
       : undefined;
+  // What the setup leaves running in the background: a node under a sh,
+  // whose parent is gone under Git Bash, that writes the folder it works
+  // in to this file once it runs. A node working in the worktree keeps Windows from deleting it,
+  // where an MSYS program working there doesn't.
+  const leftScript = join(sandbox, "setup-left.mjs");
+  const leftShell = join(sandbox, "setup-left.sh");
+  const leftRunning = join(sandbox, "setup-left.running");
   const setupStarted = async () => {
-    if (existsSync(setupPidPath)) rmSync(setupPidPath);
+    for (const file of [setupPidPath, leftRunning]) {
+      if (existsSync(file)) rmSync(file);
+    }
     await waitFor(
-      () => setupPid() !== undefined,
+      () => setupPid() !== undefined && existsSync(leftRunning),
       "the target's setup script to start",
       60_000,
     );
     const pid = setupPid();
     assert.ok(pid !== undefined, "no setup pid");
-    return pid;
+    return { pid, landedAt: readFileSync(leftRunning, "utf8") };
   };
-  const landedNothing = async (branch: string, sourcePath: string) => {
+  // Its folder gone too: what its setup left running held none of it.
+  const landedNothing = async (
+    branch: string,
+    sourcePath: string,
+    landedAt: string,
+  ) => {
     assert.equal(
       await refExists(targetRepo, `refs/heads/${branch}`),
       false,
@@ -708,8 +721,20 @@ describe("cancelMove", () => {
       `the cancelled move left a worktree on ${branch}`,
     );
     assert.equal(existsSync(sourcePath), true, "the source must survive");
+    assert.equal(
+      existsSync(landedAt),
+      false,
+      "the cancelled move left its folder",
+    );
   };
   beforeAll(async () => {
+    // Gone on its own in time, as macOS and Linux don't end it with the
+    // cancel.
+    writeFileSync(
+      leftScript,
+      `import { writeFileSync } from "node:fs";\nwriteFileSync(process.argv[2], process.cwd());\nsetTimeout(() => {}, 60_000);\n`,
+    );
+    writeFileSync(leftShell, `node '${leftScript}' '${leftRunning}'\n`);
     targetConfigBefore = await readShigomoriConfig(targetProjectId);
     await writeProjectConfig(targetProjectId, {
       ...targetConfigBefore,
@@ -717,7 +742,7 @@ describe("cancelMove", () => {
       scripts: {
         // Waited on, as bash execs a last command, which takes another
         // pid under Git Bash.
-        setup: `echo ${SCRIPT_PID} > '${setupPidPath}'; sleep 600 & wait`,
+        setup: `sh '${leftShell}' & echo ${SCRIPT_PID} > '${setupPidPath}'; wait`,
       },
     });
     // Branches kept on removal, so the rollback has to take the one
@@ -750,7 +775,7 @@ describe("cancelMove", () => {
       ),
     );
     cancelledPull.catch(() => {});
-    const pullSetupPid = await setupStarted();
+    const { pid: pullSetupPid, landedAt: pullLanded } = await setupStarted();
     assert.equal(processAlive(pullSetupPid), true);
     const cancelledAt = Date.now();
     assert.deepEqual(
@@ -765,7 +790,7 @@ describe("cancelMove", () => {
       "the cancel took longer than the rollback should",
     );
     await waitFor(() => !processAlive(pullSetupPid), "the setup script to die");
-    await landedNothing("cancel1", wtCancelPath);
+    await landedNothing("cancel1", wtCancelPath, pullLanded);
     assert.deepEqual(
       await runHost(
         syncHandlers.cancelMove({ sourceWorktreeId: wtCancelId }, pullCtx),
@@ -808,7 +833,7 @@ describe("cancelMove", () => {
       ),
     );
     cancelledSend.catch(() => {});
-    const sendSetupPid = await setupStarted();
+    const { pid: sendSetupPid, landedAt: sendLanded } = await setupStarted();
     assert.deepEqual(
       await runHost(
         syncHandlers.cancelMove({ sourceWorktreeId: wtCancel2Id }, pullCtx),
@@ -829,7 +854,7 @@ describe("cancelMove", () => {
       "the peer to remove the cancelled copy",
       20_000,
     );
-    await landedNothing("cancel2", wtCancel2Path);
+    await landedNothing("cancel2", wtCancel2Path, sendLanded);
     await assert.rejects(
       async () =>
         runHost(

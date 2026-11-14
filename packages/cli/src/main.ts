@@ -44,7 +44,7 @@ import { autopull, shelve, unshelve } from "./commands/marks.ts";
 import { agentsCommand } from "./commands/agents.ts";
 import { guideCommand } from "./commands/guide.ts";
 import { status } from "./commands/status.ts";
-import { changingWithFix, doctor, engine } from "./engine.ts";
+import { changingWithFix, doctor, engine, nativefs } from "./engine.ts";
 import { canonical } from "./aliases.ts";
 import * as Here from "./here.ts";
 import { commandLine, splitAtDashes } from "./argv.ts";
@@ -119,7 +119,7 @@ const sm = Command.make("sm").pipe(
     loaded(launchersCommand),
     shellCommand.pipe(
       Command.provide(
-        Layer.mergeAll(ShellIntegration.layer, Shells.layer).pipe(
+        Layer.mergeAll(ShellIntegration.layer, Shells.layer(nativefs())).pipe(
           Layer.provide(childDefaults),
           Layer.provideMerge(Paths.layer(flavor)),
         ),

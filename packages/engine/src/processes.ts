@@ -169,18 +169,20 @@ export const captureToFiles = (
       const { onStderr } = options;
       // There before the shell opens it, for the tail to open first.
       if (onStderr !== undefined) yield* fs.writeFile(err, new Uint8Array());
+      const sh = yield* shells.containedSh(FILES_SCRIPT, [
+        out,
+        err,
+        command,
+        ...args,
+      ]);
       const handle = yield* spawner.spawn(
-        ChildProcess.make(
-          yield* shells.sh,
-          Shells.shArgs(FILES_SCRIPT, [out, err, command, ...args]),
-          {
-            stdin: options.stdin ?? "ignore",
-            stderr: "ignore",
-            ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-            env: { ...options.env, ...keptArguments([command, ...args]) },
-            extendEnv: true,
-          },
-        ),
+        ChildProcess.make(sh.program, sh.args, {
+          stdin: options.stdin ?? "ignore",
+          stderr: "ignore",
+          ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+          env: { ...options.env, ...keptArguments([command, ...args]) },
+          extendEnv: true,
+        }),
       );
       const exited = Effect.gen(function* () {
         const said = yield* text(handle.stdout);

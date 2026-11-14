@@ -9,6 +9,9 @@
 //   - a worktree its script dirtied as it stopped is refused, after the
 //     stop and before any teardown,
 //   - a refusal at the plan stops nothing and leaves no marks,
+//   - a setup script stopped from the app leaves nothing running in its
+//     worktree, what it left in the background included, and the
+//     worktree goes,
 //   - deleting a mirrored worktree pauses its mirror before its cleanup,
 //     then ends the mirror and deletes the copy on its device,
 //     expecting what that device read of it when the two were in step,
@@ -86,7 +89,12 @@ import {
   tempDir,
   waitFor,
 } from "./lib/checkKit.mts";
-import { pidIn, SCRIPT_PID, scriptAlive } from "../../test/testProcesses.mts";
+import {
+  isAlive,
+  pidIn,
+  SCRIPT_PID,
+  scriptAlive,
+} from "../../test/testProcesses.mts";
 
 // The host's git runs in this process: a commit hook's GIT_* would point
 // it at the repository being committed.
@@ -129,13 +137,16 @@ const repoAt = async (name: string) => {
 const create = async (
   project: Project,
   input: { worktreeName: string; branchName?: string; base?: string },
+  notifyScript: Scripts.NotifyScriptEvent = () => {},
 ): Promise<Worktree> =>
   (
     await runHost(
       Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
-        worktrees.create({ projectId: project.id, ...input }, quiet, {
-          resolveOn: "exit",
-        }),
+        worktrees.create(
+          { projectId: project.id, ...input },
+          { ...quiet, notifyScript },
+          { resolveOn: "exit" },
+        ),
       ),
     )
   ).worktree;
@@ -322,6 +333,56 @@ it("a refusal at the plan marks nothing and stops nothing", async () => {
   assert.ok(pid !== undefined, "bear's script wrote no pid");
   assert.doesNotThrow(() => process.kill(pid, 0), "bear's script still runs");
   assert.ok((await listed()).includes(bear.id));
+});
+
+it("a setup script stopped from the app leaves nothing running in its worktree, so the worktree goes", async () => {
+  const { project } = await repoAt("stopped-setup");
+  const run = join(root, "stopped-setup-run");
+  mkdirSync(run);
+  const childPid = join(run, "child.pid");
+  const childScript = join(run, "child.sh");
+  writeFileSync(
+    childScript,
+    `echo ${SCRIPT_PID} > '${childPid}'\nwhile :; do sleep 0.1; done\n`,
+  );
+  // What it starts in the background has its parent gone under Git Bash.
+  await runHost(
+    Fixtures.writeProjectConfig(project.id, {
+      defaultBranch: "main",
+      scripts: { setup: `sh '${childScript}' & wait` },
+    }),
+  );
+  let runId: string | undefined;
+  const created = create(project, { worktreeName: "busy" }, (event) => {
+    if (event.kind === "started") runId = event.runId;
+  });
+  const child = () =>
+    existsSync(childPid) ? pidIn(readFileSync(childPid, "utf8")) : undefined;
+  await waitFor(
+    () => runId !== undefined && child() !== undefined,
+    "the setup's child to start",
+  );
+  const pid = child() as number;
+  await runHost(
+    Effect.flatMap(Scripts.Scripts, (scripts) =>
+      scripts.cancel(runId as string),
+    ),
+  );
+  const worktree = await created;
+  await waitFor(() => !isAlive(pid), "the setup's child to end");
+  const removed = await runHost(
+    worktreesHandlers.delete(
+      {
+        projectId: project.id,
+        worktreeId: worktree.id,
+        force: true,
+        skipCleanup: true,
+      },
+      here,
+    ),
+  );
+  assert.equal(removed.ok, true);
+  assert.equal(existsSync(worktree.path), false);
 });
 
 // What a worktree on the peer holds as its source link answers it: a

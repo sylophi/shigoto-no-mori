@@ -13,7 +13,8 @@ import { envVar } from "../environment.ts";
 import { findExecutable, joinSearchPath } from "../executables.ts";
 import { NoScriptShell } from "./documents.ts";
 
-export const makeWindows = Effect.gen(function* () {
+// `nativefs` is the helper a contained sh runs under.
+export const makeWindows = Effect.fnUntraced(function* (nativefs: string) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -62,6 +63,8 @@ export const makeWindows = Effect.gen(function* () {
     }),
   );
 
+  const sh = Effect.map(gitBash, ({ usrBin }) => path.join(usrBin, "sh.exe"));
+
   return {
     // Not a login shell: a Mac's reads its profile for the PATH there,
     // and on Windows a process already has the user's. What Git Bash's
@@ -83,7 +86,12 @@ export const makeWindows = Effect.gen(function* () {
       };
     }),
     interactive: powerShell,
-    sh: Effect.map(gitBash, ({ usrBin }) => path.join(usrBin, "sh.exe")),
+    sh,
+    containedSh: (script: string, args: ReadonlyArray<string>) =>
+      Effect.map(sh, (program) => ({
+        program: nativefs,
+        args: ["job", program, ...gitBashShArgs(script, args)],
+      })),
   };
 });
 
