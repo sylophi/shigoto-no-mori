@@ -6,13 +6,7 @@
 // behavior is repairCliLinks: silently repointing a link the user
 // already installed when its target moved, so an existing install
 // keeps working across app updates and relocations.
-import { join } from "node:path";
 import { byPlatform } from "@shigomori/engine/platform";
-import {
-  cliAliasName,
-  cliBinaryName,
-  cliUserBinDir,
-} from "@shared/packaging/cliDist.mts";
 import { cliBinaryOf } from "./binary";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
@@ -22,24 +16,15 @@ import * as HostFacts from "@host/lib/HostFacts";
 import { links } from "./links";
 import type { CliPlacement, Facts } from "./placement";
 
-// Nothing puts the command on PATH on Windows yet.
+// Nothing puts the command on PATH on Windows yet, so it never has links
+// to show, take off or repair.
 const unplaced: CliPlacement = {
-  status: async (facts) => ({
-    name: cliBinaryName(facts.flavor),
-    aliasName: cliAliasName(facts.flavor),
-    binDir: cliUserBinDir(),
-    linkPath: join(cliUserBinDir(), cliBinaryName(facts.flavor)),
-    state: "missing",
-    foreignPaths: [],
-    onPath: false,
-  }),
+  ...links,
   install: async () => {
     throw new Error(
       "Installing the command line tool isn't available on Windows yet.",
     );
   },
-  remove: async () => {},
-  repair: async () => {},
 };
 
 const placement = () =>
