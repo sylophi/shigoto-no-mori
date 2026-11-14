@@ -29,6 +29,7 @@ import { makeCommands } from "./open/commands.ts";
 import type { Desktop } from "./open/desktop.ts";
 import { LaunchFailed } from "./open/documents.ts";
 import { makeLaunchServices } from "./open/launchServices.ts";
+import { makeWindowsShell } from "./open/windowsShell.ts";
 import { makeXdg } from "./open/xdg.ts";
 export { LaunchFailed } from "./open/documents.ts";
 
@@ -96,6 +97,16 @@ export class NoAppWindow extends Schema.TaggedError<NoAppWindow>()(
   }
 }
 
+// Where the installed app is on Windows comes with its installer.
+export class NoWindowsApp extends Schema.TaggedError<NoWindowsApp>()(
+  "NoWindowsApp",
+  {},
+) {
+  override get message(): string {
+    return "sm can't open the app on Windows yet. Open it from the Start menu.";
+  }
+}
+
 // A path as Go's url.QueryEscape writes it into a deep link.
 const queryEscape = (text: string) =>
   encodeURIComponent(text)
@@ -155,7 +166,10 @@ export class Open extends Context.Service<
       file: string,
     ) => Effect.Effect<string, MissingFile | NotAFile | LaunchFailed>;
     // Opens (or brings forward) the installed app.
-    readonly app: Effect.Effect<void, AppNotOpened | NoDevApp | NoAppWindow>;
+    readonly app: Effect.Effect<
+      void,
+      AppNotOpened | NoDevApp | NoAppWindow | NoWindowsApp
+    >;
   }
 >()("sm/engine/Open") {}
 
@@ -175,6 +189,7 @@ const make = Effect.gen(function* () {
   const desktop: Desktop = yield* byPlatform({
     darwin: makeLaunchServices(commands),
     linux: makeXdg(commands),
+    win32: makeWindowsShell(commands),
   });
 
   // A terminal tool's command line, run in a folder or a worktree in
@@ -198,6 +213,7 @@ const make = Effect.gen(function* () {
         (yield* byPlatform({
           darwin: config.device("terminal"),
           linux: Effect.succeed("app" as const),
+          win32: config.device("terminal"),
         }));
       const appTerminal = yield* Effect.serviceOption(AppTerminal);
       if (
@@ -293,7 +309,7 @@ const make = Effect.gen(function* () {
             if (code === 0) return;
           }
           const bundle = entry.bundle;
-          if (bundle === "__finder__") {
+          if (bundle === Launchers.FILE_MANAGER) {
             return yield* onScreen(entry.label, [where]);
           }
           if (bundle === undefined) {
@@ -381,7 +397,7 @@ const make = Effect.gen(function* () {
       if ((yield* ran(app.cli, [where, absolute])).code === 0) return absolute;
     }
     const bundle = entry.bundle;
-    if (bundle === undefined || bundle === "__finder__") {
+    if (bundle === undefined || bundle === Launchers.FILE_MANAGER) {
       return yield* new LaunchFailed({
         label,
         said: `No installed app found for ${app.label}.`,
@@ -431,6 +447,7 @@ const make = Effect.gen(function* () {
     return yield* byPlatform({
       darwin: openBundle,
       linux: Effect.fail(new NoAppWindow()),
+      win32: Effect.fail(new NoWindowsApp()),
     });
   }).pipe(Effect.withSpan("Open.app"));
 
