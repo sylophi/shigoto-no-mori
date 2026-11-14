@@ -30,6 +30,8 @@ func main() {
 	}
 	cmd := exec.Command(os.Args[1], os.Args[2:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	// With a token and no environment, Go gives the account's default one.
+	cmd.Env = os.Environ()
 	cmd.SysProcAttr = &syscall.SysProcAttr{Token: token}
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "unelevated:", err)
