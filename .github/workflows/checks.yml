@@ -130,13 +130,16 @@ jobs:
   # The Windows jobs run what can come out otherwise on Windows, split
   # like the jobs above so the slowest one alone sets the wait. Format
   # is left to Linux: the checkout is LF on every OS (.gitattributes), so
-  # oxfmt reads the same bytes.
+  # oxfmt reads the same bytes. The suites run as a desktop user does
+  # (.github/unelevated.go).
   #
-  # The engine job's checks, and the Go helpers as Windows builds them.
-  # The suites run as a desktop user does (.github/unelevated.go).
-  windows-engine:
+  # The static checks with an input of the OS's: the typecheck's script
+  # runs through pnpm's shell emulator, lint's rules and knip read file
+  # paths, and knip loads each package's configs. Then the Go helpers as
+  # Windows builds them, and their licenses.
+  windows-static:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     # Git's bash rather than PowerShell, so a step reads as it does in the
     # jobs above.
     defaults:
@@ -149,66 +152,8 @@ jobs:
 
       - uses: ./.github/actions/install-workspace
         id: install
-
-      - name: Third-party notices have license metadata
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: pnpm -C app run licenses --out "$RUNNER_TEMP/licenses"
-
-      - name: Engine
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: go run .github/unelevated.go pnpm run check:engine
-
-      - name: Terminal
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: go run .github/unelevated.go pnpm run check:cli
-
-      - name: Go helpers build
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: pnpm -C app run file-sync:build && pnpm -C app run nativefs:build
-
-      - name: Go vet
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: go vet -C file-sync ./... && go vet -C nativefs ./...
-
-      - name: Go tests
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: go run .github/unelevated.go pnpm run check:go
-
-  windows-proofs:
-    runs-on: windows-latest
-    timeout-minutes: 20
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-
-      - uses: ./.github/actions/setup-toolchains
-
-      # The app's postinstall checks node-pty's prebuilt ConPTY addon is
-      # there.
-      - uses: ./.github/actions/install-workspace
-
-      - name: App postinstall
-        run: pnpm -C app run postinstall
-
-      - name: Proofs
-        run: go run .github/unelevated.go pnpm run check:proofs
-
-  # The static checks with an input of the OS's: the typecheck's script
-  # runs through pnpm's shell emulator, lint's rules and knip read file
-  # paths, and knip loads each package's configs.
-  windows-static:
-    runs-on: windows-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-
-      - uses: ./.github/actions/install-workspace
-        id: install
+        with:
+          store-cache: false
 
       - name: Typecheck
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
@@ -225,3 +170,72 @@ jobs:
       - name: Knip
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm run check:knip
+
+      - name: Third-party notices have license metadata
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm -C app run licenses --out "$RUNNER_TEMP/licenses"
+
+      - name: Go helpers build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm -C app run file-sync:build && pnpm -C app run nativefs:build
+
+      - name: Go vet
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: go vet -C file-sync ./... && go vet -C nativefs ./...
+
+      - name: Go tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: go run .github/unelevated.go pnpm run check:go
+
+  windows-engine:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: ./.github/actions/setup-toolchains
+
+      - uses: ./.github/actions/install-workspace
+        id: install
+        with:
+          store-cache: false
+
+      - name: Engine
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: go run .github/unelevated.go pnpm run check:engine
+
+      - name: Terminal
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: go run .github/unelevated.go pnpm run check:cli
+
+  # The proofs in two halves, each on a runner of its own, so a fixed
+  # port is still one proof's at a time.
+  windows-proofs:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: ./.github/actions/setup-toolchains
+
+      # The app's postinstall checks node-pty's prebuilt ConPTY addon is
+      # there.
+      - uses: ./.github/actions/install-workspace
+        with:
+          store-cache: false
+
+      - name: App postinstall
+        run: pnpm -C app run postinstall
+
+      - name: Proofs
+        run: go run .github/unelevated.go pnpm run check:proofs --shard=${{ matrix.shard }}/2

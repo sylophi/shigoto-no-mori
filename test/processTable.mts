@@ -1,22 +1,28 @@
 // The machine's processes as testProcesses.mts reads them, and the
 // signal to a process group: ps and kill(-pgid) where there are such,
-// and on Windows, which has neither, CIM's list read through the
-// PowerShell every Windows has. Windows has no process groups, so there
-// each process is a group of its own, which its own signal reaches.
+// and on Windows, which has neither, the table the filesystem helper
+// reads (nativefs/processes_windows.go). Windows has no process groups,
+// so there each process is a group of its own, which its own signal
+// reaches.
 import { spawnSync } from "node:child_process";
+import { nativefs } from "../packages/engine/test/lib/nativefs.ts";
 
 export type Row = {
   ppid: number;
   pgid: number;
   zombie: boolean;
-  // When it started: to the second from ps, to the millisecond from CIM.
+  // When it started: to the second from ps, to the millisecond on
+  // Windows.
   start: number;
+  // On Windows the image's name, and the command line only for the
+  // pids a table was asked to name.
   command: string;
 };
 
 const windows = process.platform === "win32";
 
-export const processTable = windows ? cimTable : psTable;
+export const processTable: (named?: ReadonlyArray<number>) => Map<number, Row> =
+  windows ? nativefsTable : psTable;
 
 export function signalGroup(pgid: number, name: NodeJS.Signals): void {
   if (windows) return;
@@ -63,37 +69,32 @@ function psTable(): Map<number, Row> {
   return rows;
 }
 
-const CIM = [
-  "[Console]::OutputEncoding = [Text.Encoding]::UTF8",
-  // A command line can span lines, so its whitespace is flattened: one
-  // process, one line.
-  `Get-CimInstance Win32_Process | Where-Object CreationDate | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId) $(([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds()) $($_.CommandLine -replace '\\s+', ' ')" }`,
-].join("; ");
+type Listed = {
+  pid: number;
+  // 0 once the process that started it is gone.
+  parent: number;
+  birth: number;
+  name: string;
+  command?: string;
+};
 
-function cimTable(): Map<number, Row> {
-  const { lines, self } = listed("powershell.exe", [
-    "-NoProfile",
-    "-NonInteractive",
-    "-Command",
-    CIM,
+function nativefsTable(named: ReadonlyArray<number> = []): Map<number, Row> {
+  const { lines, self } = listed(nativefs(), [
+    "processes",
+    ...named.map(String),
   ]);
   const rows = new Map<number, Row>();
   for (const line of lines) {
-    const [pid, ppid, start, ...command] = line.trim().split(/\s+/);
-    if (start === undefined || Number(pid) === self) continue;
-    rows.set(Number(pid), {
-      ppid: Number(ppid),
-      pgid: Number(pid),
+    if (line.trim() === "") continue;
+    const { pid, parent, birth, name, command } = JSON.parse(line) as Listed;
+    if (pid === self) continue;
+    rows.set(pid, {
+      ppid: parent,
+      pgid: pid,
       zombie: false,
-      start: Number(start),
-      command: command.join(" "),
+      start: birth,
+      command: command ?? name,
     });
-  }
-  // A process whose parent has gone still names the parent's pid, which
-  // another may have taken since: a child starts no sooner than its
-  // parent.
-  for (const row of rows.values()) {
-    if ((rows.get(row.ppid)?.start ?? 0) > row.start) row.ppid = 0;
   }
   return rows;
 }

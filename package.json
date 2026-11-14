@@ -26,7 +26,7 @@
     "check:typecheck": "pnpm run typecheck",
     "check:lint": "pnpm run lint",
     "check:format": "pnpm run format:check",
-    "check:knip": "knip",
+    "check:knip": "CI=1 knip",
     "check:contracts": "pnpm -F @shigomori/contracts test",
     "check:engine": "pnpm -F @shigomori/engine test",
     "check:cli": "pnpm -F @shigomori/cli test",

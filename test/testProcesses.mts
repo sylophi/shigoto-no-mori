@@ -236,7 +236,8 @@ function endTrees(roots: ReadonlyMap<number, number>): void {
   waitGone(KILLED_WITHIN_MS);
   const left = alive();
   if (left.length > 0) {
-    const named = left.map((pid) => `${pid} ${rows.get(pid)?.command}`);
+    const commands = processTable(left);
+    const named = left.map((pid) => `${pid} ${commands.get(pid)?.command}`);
     throw new Error(`still running after SIGKILL: ${named.join("; ")}`);
   }
 }

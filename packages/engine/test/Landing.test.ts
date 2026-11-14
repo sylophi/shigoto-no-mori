@@ -98,11 +98,10 @@ esac`,
 // Where the fakes read the commit PR #5's head is at on GitHub.
 const headFile = () => join(box.home, "pr-5-head");
 
-// A project cloned from an upstream holding this repository, with a
-// worktree `fox` a commit ahead on its own branch, pushed: PR #5's head
-// is that commit.
+// A project cloned from an upstream, with a worktree `fox` a commit
+// ahead on its own branch, pushed: PR #5's head is that commit.
 async function landFixture() {
-  const upstream = box.realRepo("upstream");
+  const upstream = box.repo("upstream", { "README.md": "hi\n" });
   const repo = join(box.home, "repo");
   execFileSync("git", ["clone", "-q", upstream, repo]);
   const located = await box.engine(
@@ -123,6 +122,8 @@ async function landFixture() {
       });
     }),
   );
+  const { ok, error } = located as { ok?: boolean; error?: string };
+  assert.notEqual(ok, false, error);
   const { worktree } = located as Worktrees.Located;
   box.git(worktree.path, "commit", "-q", "--allow-empty", "-m", "fox");
   writeFileSync(headFile(), box.git(worktree.path, "rev-parse", "HEAD").trim());
