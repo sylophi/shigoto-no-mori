@@ -287,6 +287,29 @@ up smaller and larger:
 - **Up to a full display.** More room at the same density, and a page
   runs the pane's whole width, running text included.
 
+## Window chrome: the sidebar holds the window's buttons
+
+A desktop window has no title bar. Its own buttons sit in the top strip
+of the sidebar, so the sidebar goes on the side they are on. On a Mac
+that is the left, with the traffic lights. On Windows it is the right,
+with the caption buttons Windows draws over the window's top right
+corner (`main/electron/windows.ts`). The page is the same on both. A
+browser tab has no window buttons and keeps the sidebar on the left.
+
+- **One notion of the side.** The theme root's `data-sidebar-side`
+  says it (`packages/ui/src/lib/platform.ts`). Markup lays out from it
+  with the `sidebar-right:` variant, and code reads it with
+  `useSidebarSide()`. Anything that sits beside the sidebar or away
+  from it, such as the resize handle and the toasts, follows it.
+- **Room for the buttons.** The strip under the caption buttons is
+  `--caption-room` wide, and a header that shares a row with them pads
+  past it. In the plain theme the sidebar's title truncates to make
+  room. In doubutsu the buttons sit above the logo card.
+- **Something to drag by.** The top strips of the sidebar and the page
+  drag the window, as they do on a Mac. A window without a sidebar,
+  such as the terminals window, keeps a top strip that holds the
+  buttons and drags.
+
 ## Devices: one identity, drawn one way
 
 A device is its name and its icon. The icon is one of the closed catalog

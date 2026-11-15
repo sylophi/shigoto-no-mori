@@ -7,7 +7,8 @@
 //                            cream and charcoal)
 //   ?updatedFrom=<version>   the build the window last ran (below)
 // The other params are read where they are answered: ?peers by the
-// fixture bridge, ?to by the desktop entry's memory router.
+// fixture bridge, ?to by the desktop entry's memory router, ?sidebar by
+// the desktop entry.
 //
 // Theme must be seeded BEFORE index.css/providers evaluate, mirroring
 // what boot-theme.js does for the persisted keys, so each entry calls

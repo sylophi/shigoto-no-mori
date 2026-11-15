@@ -1,7 +1,10 @@
 // The app's root layout, drawn (AppShell feeds it the sidebar, the
 // routed page and the layout): the sidebar beside the page in a
-// doubutsu "main" zone on a wide viewport, and on a phone the page over
-// a bottom tab bar, with a back bar over a page stacked on the forest.
+// doubutsu "main" zone on a wide viewport, on the side of the window's
+// own buttons (lib/platform.ts), and on a phone the page over a bottom
+// tab bar, with a back bar over a page stacked on the forest. The
+// sidebar comes first in the document on either side, so keyboard
+// focus starts in it.
 import type { MouseEvent, ReactNode } from "react";
 import { BackButton } from "../primitives/back-button.tsx";
 import { cn, dragRegion } from "../lib/utils.ts";
@@ -65,7 +68,7 @@ export function AppShellView({
   return (
     <div
       className={cn(
-        "relative flex h-full overflow-hidden text-foreground",
+        "relative flex h-full overflow-hidden text-foreground sidebar-right:flex-row-reverse",
         // The desktop window is transparent so the sidebar's vibrancy
         // material shows through, and the main pane paints its own
         // background. A browser tab has no material, so the root paints.

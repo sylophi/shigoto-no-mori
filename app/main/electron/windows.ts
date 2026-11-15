@@ -17,8 +17,10 @@ import {
   BrowserWindow,
   type BrowserWindowConstructorOptions,
   dialog,
+  nativeTheme,
   type Rectangle,
   screen,
+  type TitleBarOverlayOptions,
   type WebContents,
 } from "electron";
 import * as Schema from "effect/Schema";
@@ -37,6 +39,7 @@ import {
   DEV_BUILD_FLAG,
   LAB_FLAG,
   ROUTE_FLAG,
+  SIDEBAR_RIGHT_FLAG,
   startedForLab,
 } from "../argFlags";
 import { names } from "../flavor";
@@ -222,12 +225,48 @@ const INSET_TRAFFIC_LIGHTS: BrowserWindowConstructorOptions = {
   visualEffectState: "active",
 };
 
-// Windows keeps the system frame, and Mica shows through the transparent
-// shell where vibrancy would.
-const MICA: BrowserWindowConstructorOptions = {
-  backgroundColor: "#00000000",
-  backgroundMaterial: "mica",
+// A window's frame on each system: its options, the flags its page lays
+// out by (argFlags.ts), and what follows the app's light or dark.
+type Frame = {
+  readonly options: () => BrowserWindowConstructorOptions;
+  readonly flags: readonly string[];
+  readonly recolor: (window: BrowserWindow) => void;
 };
+
+const TRAFFIC_LIGHTS: Frame = {
+  options: () => INSET_TRAFFIC_LIGHTS,
+  flags: [],
+  recolor: () => {},
+};
+
+// Windows draws its own caption buttons over the window's top right
+// corner, so the page puts its sidebar on the right to hold them in its
+// top strip, as a Mac's holds the traffic lights. Their strip is
+// transparent so the sidebar shows through, and its hue still picks the
+// hover's shade, dark on a light sidebar and light on a dark one. Mica
+// shows through the transparent shell where vibrancy would.
+const CAPTION_BUTTONS: Frame = {
+  options: () => ({
+    titleBarStyle: "hidden",
+    titleBarOverlay: { height: 32, ...captionColors() },
+    backgroundColor: "#00000000",
+    backgroundMaterial: "mica",
+  }),
+  flags: [SIDEBAR_RIGHT_FLAG],
+  recolor: (window) => window.setTitleBarOverlay(captionColors()),
+};
+
+function captionColors(): TitleBarOverlayOptions {
+  return nativeTheme.shouldUseDarkColors
+    ? { color: "#00000000", symbolColor: "#ffffff" }
+    : { color: "#ffffff00", symbolColor: "#000000" };
+}
+
+const FRAME = byPlatform({
+  darwin: TRAFFIC_LIGHTS,
+  linux: TRAFFIC_LIGHTS,
+  win32: CAPTION_BUTTONS,
+});
 
 function create(
   route: string,
@@ -249,11 +288,7 @@ function create(
     minWidth: 640,
     minHeight: 420,
     show: options.restart === undefined,
-    ...byPlatform({
-      darwin: INSET_TRAFFIC_LIGHTS,
-      linux: INSET_TRAFFIC_LIGHTS,
-      win32: MICA,
-    }),
+    ...FRAME.options(),
     webPreferences: {
       preload: join(__dirname, "preload.js"),
       sandbox: true,
@@ -273,6 +308,7 @@ function create(
         `${CLERK_PK_FLAG}${clerkPublishableKey()}`,
         // The page the window opens on.
         `${ROUTE_FLAG}${route}`,
+        ...FRAME.flags,
         ...(app.isPackaged ? [] : [DEV_BUILD_FLAG]),
         ...(startedForLab(process.argv, {
           packaged: app.isPackaged,
@@ -448,6 +484,9 @@ export function openWindowsAtStart(options: {
 }): void {
   isShuttingDown = options.isShuttingDown;
   started = true;
+  nativeTheme.on("updated", () => {
+    for (const entry of held) FRAME.recolor(entry.window);
+  });
   let remembered: readonly Remembered[] = [];
   try {
     remembered = readJsonOrNullSync(rememberedPath(), RememberedSchema) ?? [];
