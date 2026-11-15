@@ -6,6 +6,7 @@ import { type ToastClassnames, Toaster } from "sonner";
 import { ErrorFallbackView } from "@shigomori/ui/views/ErrorFallbackView.tsx";
 import { VillageToaster } from "@/components/villagers/toasts";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
+import { useSidebarSide } from "@/lib/themeRoot";
 import { useApi } from "@/lib/runtime/pageApi";
 
 export function AppErrorFallback({ error }: FallbackProps) {
@@ -28,20 +29,22 @@ export function AppToaster() {
   // from the top there, below the status bar (the page draws under it:
   // viewport-fit=cover).
   const phone = usePhoneLayout();
+  // Elsewhere they take the page's corners away from the sidebar.
+  const corner = useSidebarSide() === "left" ? "right" : "left";
   return (
     <>
       <Toaster
-        position={phone ? "top-center" : "bottom-right"}
+        position={phone ? "top-center" : `bottom-${corner}`}
         offset={
           phone
             ? { top: "calc(env(safe-area-inset-top) + 12px)" }
-            : { bottom: 16, right: 16 }
+            : { bottom: 16, [corner]: 16 }
         }
         closeButton
         toastOptions={{ classNames: TOAST_CLASSES }}
       />
       {/* Only a desktop window has Village life. */}
-      {!phone && <VillageToaster classNames={TOAST_CLASSES} />}
+      {!phone && <VillageToaster classNames={TOAST_CLASSES} corner={corner} />}
     </>
   );
 }

@@ -1,12 +1,14 @@
+import { sidebarSideOf } from "@shigomori/ui/lib/platform.ts";
+import { pageRoot } from "@/lib/themeRoot";
 import { setSidebarWidth } from "@/store/layout";
 
-// The sidebar starts at the window's left edge, so its width is the
-// pointer's x.
-const onMove = (ev: MouseEvent) => setSidebarWidth(ev.clientX);
-
-// The sidebar's separator dragged: its width follows the pointer.
+// The sidebar's separator dragged: the sidebar runs from its edge of the
+// window to the pointer.
 export function startSidebarResize(e: React.MouseEvent): void {
   e.preventDefault();
+  const left = sidebarSideOf(pageRoot()) === "left";
+  const onMove = (ev: MouseEvent) =>
+    setSidebarWidth(left ? ev.clientX : window.innerWidth - ev.clientX);
   Object.assign(document.body.style, {
     cursor: "col-resize",
     userSelect: "none",

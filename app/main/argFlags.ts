@@ -25,6 +25,11 @@ export const ROUTE_FLAG = "--sm-route=";
 // light them up in a shipped build.
 export const DEV_BUILD_FLAG = "--sm-dev-build";
 
+// A presence flag, appended where the window's own buttons are at its
+// top right (Windows, main/electron/windows.ts), so the page puts its
+// sidebar on the right to hold them.
+export const SIDEBAR_RIGHT_FLAG = "--sm-sidebar-right";
+
 // A presence flag, passed on to each window when the app itself was
 // started for the lab (startedForLab): the window then hands the lab's
 // tools its api (renderer/lib/runtime/labHandle.ts), as a dev build's

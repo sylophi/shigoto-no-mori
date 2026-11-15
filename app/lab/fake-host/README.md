@@ -130,7 +130,7 @@ Poses ride the URL:
   their paths on drive `C:`, Windows launchers and the command line
   tool not yet installable. The folder picker browses up from a drive
   to the drives. With `sm`, this window poses a Windows viewer too
-  (its keys and its file manager).
+  (its keys, its file manager and its sidebar on the right).
 - `?notSharing=mb,mini`: the devices with sharing off, by the same
   keys, which then serve this page nothing.
 - `?outdated=mb:terminals.scripts,mini:core`: the devices on another

@@ -4,6 +4,7 @@
 // #root, which the boot scripts stamp before the first paint. A frame
 // on the marketing site is one element of many on its page.
 import { useThemeRoot } from "@shigomori/ui/root.tsx";
+import { type SidebarSide, sidebarSideOf } from "@shigomori/ui/lib/platform.ts";
 
 // The page's #root, for the entries that mount their one window there.
 export function pageRoot(): HTMLElement {
@@ -17,4 +18,9 @@ export function useWindowRoot(): HTMLElement {
   const root = useThemeRoot();
   if (!root) throw new Error("rendered outside a mounted window");
   return root;
+}
+
+// The side of this window its sidebar is on, fixed for its life.
+export function useSidebarSide(): SidebarSide {
+  return sidebarSideOf(useWindowRoot());
 }

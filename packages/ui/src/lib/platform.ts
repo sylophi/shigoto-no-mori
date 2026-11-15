@@ -12,3 +12,14 @@ export const viewerOs: "mac" | "windows" | "other" =
 
 // ⌘ or Ctrl: which key `Mod` is here.
 export const isMac = viewerOs === "mac";
+
+// The side of a window its sidebar is on: the side the window's own
+// buttons are, which sit in the sidebar's top strip, on the right on
+// Windows and on the left on a Mac. The window's theme root says which
+// (data-sidebar-side, from the desktop entry), and the stylesheet reads
+// the same attribute (index.css's `sidebar-right:`). A root that says
+// nothing, a browser tab's or a picture's, keeps the sidebar on the left.
+export type SidebarSide = "left" | "right";
+
+export const sidebarSideOf = (root: HTMLElement): SidebarSide =>
+  root.dataset["sidebarSide"] === "right" ? "right" : "left";

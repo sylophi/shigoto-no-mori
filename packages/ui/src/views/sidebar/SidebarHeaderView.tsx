@@ -15,10 +15,12 @@ type ThemeHeaderProps = DevAffordance & {
   badge: string | undefined;
 };
 
-// The desktop window has a title-bar drag region and traffic lights to
-// clear. A browser tab has neither, and wears a static "web" marker in
-// the corner slot beside the dev sticker (a dev web build carries both:
-// they answer different questions, "which shell" vs "which build").
+// The desktop window has a title-bar drag region and its own buttons to
+// clear: the traffic lights on a Mac, the caption buttons at the top
+// right on Windows (lib/platform.ts). A browser tab has neither, and
+// wears a static "web" marker in the corner slot beside the dev sticker
+// (a dev web build carries both: they answer different questions,
+// "which shell" vs "which build").
 
 // Both headers always render, and `doubutsu-only` / `v1-only` pick which
 // shows. A JS branch on the theme would fork this component per theme.
@@ -58,10 +60,11 @@ function DoubutsuBrandHeader({
 }: ThemeHeaderProps) {
   return (
     <>
-      {/* Draggable spacer reserves the macOS traffic-light area so the
-          pill below doesn't get overlapped by the window controls. The
-          lights end at y=30 (main/index.ts), so the pill sits 8px under
-          them, the gap it leaves beneath itself. */}
+      {/* Draggable spacer reserves the window's buttons' strip so the
+          pill below doesn't get overlapped by them. The traffic lights
+          end at y=30 (main/electron/windows.ts), so the pill sits 8px
+          under them, the gap it leaves beneath itself. Windows' 32px
+          caption buttons sit in it too. */}
       {hasLocalHost && (
         <div
           className="doubutsu-only h-9.5 shrink-0"
@@ -152,11 +155,14 @@ function DefaultSidebarHeader({
     <div
       // Title-bar drag region on the desktop, with the left inset
       // clearing the traffic lights and the height centering the title
-      // on them (y=23, main/index.ts). The web bar has no lights to
+      // on them (y=23, main/electron/windows.ts), or the right inset
+      // clearing the caption buttons. The web bar has no buttons to
       // clear or line up with, and drops all three.
       className={cn(
         "v1-only flex items-center gap-2",
-        hasLocalHost ? "h-11.5 px-3 pl-[92px]" : "h-13 px-4",
+        hasLocalHost
+          ? "h-11.5 px-3 pl-[92px] sidebar-right:pr-[calc(var(--caption-room)+--spacing(2))] sidebar-right:pl-4"
+          : "h-13 px-4",
       )}
       style={hasLocalHost ? dragRegion("drag") : undefined}
     >

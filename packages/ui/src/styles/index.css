@@ -39,6 +39,11 @@
    the traffic lights, which a browser tab has none of. */
 @custom-variant desktop (&:is([data-shell="desktop"] *));
 
+/* A window with its sidebar on the right (lib/platform.ts): `sidebar-right:`
+   utilities lay out from that side and keep clear of the window's caption
+   buttons at its top right, which take --caption-room. */
+@custom-variant sidebar-right (&:is([data-sidebar-side="right"] *));
+
 /* Disabled controls keep pointer events so the not-allowed cursor and
    title tooltips work (see the base-layer cursor rule below). In turn,
    `hover:` must never style a disabled element, or dead controls light
@@ -183,6 +188,15 @@
      The main detail pane paints its own opaque `bg-background`. */
   [data-shell="desktop"] {
     background: transparent;
+  }
+  /* The width the caption buttons take, from the title-bar overlay
+     Electron reports, or the 138px Windows draws them at in a picture
+     of the window, which has no overlay. */
+  [data-sidebar-side="right"] {
+    --caption-room: calc(
+      100vw - env(titlebar-area-x, 0px) -
+        env(titlebar-area-width, calc(100vw - 138px))
+    );
   }
   [data-theme-scope] {
     @apply font-sans text-foreground antialiased;
