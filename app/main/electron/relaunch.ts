@@ -12,9 +12,15 @@ import { writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { app } from "electron";
 import { DEV_RELAUNCH_FILE_ENV } from "@shared/packaging/appName.mts";
-import { openEnvArgs } from "@shigomori/engine/relaunchEnv";
+import {
+  openEnvArgs,
+  relaunchEnvVars,
+  type Relaunched,
+} from "@shigomori/engine/relaunchEnv";
+import { byPlatform } from "@shigomori/engine/platform";
 import { dataDir, dataDirSource } from "@shared/paths";
 import { debugPortOpened } from "./devCdp";
+import { deepLinkRoute } from "./deepLink";
 import { updateEndpoints } from "@shared/updater/endpoints";
 import { log } from "@shared/log";
 import { envSetting } from "@shared/config";
@@ -39,17 +45,13 @@ const devRelaunchMarker = envSetting(DEV_RELAUNCH_FILE_ENV);
 // second or so later. Every child of the new instance (its window's
 // renderer, the GPU, the host) would be killed with them, leaving a
 // dead window after a restart.
-function relaunchThroughLaunchServices(): void {
+function relaunchThroughLaunchServices(carried: Relaunched): void {
   // <bundle>/Contents/MacOS/<executable>
   const bundle = dirname(dirname(dirname(app.getPath("exe"))));
   const args = process.argv.slice(1);
   const open = [
     "-n",
-    ...openEnvArgs({
-      ...updateEndpoints(),
-      dataDir: dataDirSource() === "env" ? dataDir() : undefined,
-      debugPort: debugPortOpened(),
-    }),
+    ...openEnvArgs(carried),
     "-a",
     bundle,
     ...(args.length > 0 ? ["--args", ...args] : []),
@@ -64,6 +66,17 @@ function relaunchThroughLaunchServices(): void {
     ],
     { detached: true, stdio: "ignore" },
   ).unref();
+}
+
+// Elsewhere nothing ends the new instance with this one, so Electron's
+// relauncher starts it once this process has exited, in this process's
+// environment with what is carried put back. A link the app was
+// launched with has been opened, and is left out.
+function relaunchThroughElectron(carried: Relaunched): void {
+  Object.assign(process.env, relaunchEnvVars(carried));
+  app.relaunch({
+    args: process.argv.slice(1).filter((arg) => deepLinkRoute(arg) === null),
+  });
 }
 
 // Arrange for the app to start again once this process is gone, by
@@ -85,7 +98,15 @@ export function scheduleRelaunch(): void {
       log.warn(`[relaunch] could not write the dev marker: ${error}`);
     }
   }
-  relaunchThroughLaunchServices();
+  byPlatform({
+    darwin: relaunchThroughLaunchServices,
+    linux: relaunchThroughElectron,
+    win32: relaunchThroughElectron,
+  })({
+    ...updateEndpoints(),
+    dataDir: dataDirSource() === "env" ? dataDir() : undefined,
+    debugPort: debugPortOpened(),
+  });
 }
 
 export function relaunchApp(): void {
