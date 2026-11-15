@@ -30,6 +30,7 @@ import {
 } from "../../shared/packaging/appName.mts";
 import { cliDataDirName } from "../../shared/packaging/cliDist.mts";
 import { flavorNames } from "@shigomori/engine/flavor";
+import { byPlatform } from "@shigomori/engine/platform";
 
 const PROFILES_DIR = join(homedir(), `${cliDataDirName("dev")}-profiles`);
 
@@ -53,14 +54,14 @@ export function devProfilePaths(name: string): DevProfile {
   };
 }
 
-// Electron's userData for the plain dev instance: its appData (macOS's
-// Application Support, Linux's XDG config home) joined with the dev
-// flavor's folder (main/flavor.ts).
+// Electron's userData for the plain dev instance: its appData joined
+// with the dev flavor's folder (main/flavor.ts).
 function devUserDataDir(): string {
-  const appData =
-    process.platform === "darwin"
-      ? join(homedir(), "Library", "Application Support")
-      : process.env["XDG_CONFIG_HOME"] || join(homedir(), ".config");
+  const appData = byPlatform({
+    darwin: join(homedir(), "Library", "Application Support"),
+    linux: process.env["XDG_CONFIG_HOME"] || join(homedir(), ".config"),
+    win32: join(homedir(), "AppData", "Roaming"),
+  });
   return join(appData, flavorNames("dev").userDataDir);
 }
 

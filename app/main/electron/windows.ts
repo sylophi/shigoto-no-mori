@@ -15,6 +15,7 @@ import { join } from "node:path";
 import {
   app,
   BrowserWindow,
+  type BrowserWindowConstructorOptions,
   dialog,
   type Rectangle,
   screen,
@@ -51,7 +52,10 @@ import {
   applyRestartVisibility,
   type RestartVisibility,
 } from "./restartVisibility";
-import { current as currentPlatform } from "@shigomori/engine/platform";
+import {
+  byPlatform,
+  current as currentPlatform,
+} from "@shigomori/engine/platform";
 
 const HOME_ROUTE = "/";
 // The v3 migration's page (renderer/lib/routePaths.ts).
@@ -204,6 +208,27 @@ function raise(entry: Held): void {
   entry.window.focus();
 }
 
+// Inset traffic lights over a transparent shell so the
+// NSVisualEffectView material set via `vibrancy` shows through where
+// the renderer paints no background (the sidebar column). Inset as far
+// from the top as from the left, which centers the 14pt buttons on
+// y=23: the renderer's title bars line up on that (SidebarHeader,
+// PageHeader's device tabs).
+const INSET_TRAFFIC_LIGHTS: BrowserWindowConstructorOptions = {
+  titleBarStyle: "hiddenInset",
+  trafficLightPosition: { x: 16, y: 16 },
+  backgroundColor: "#00000000",
+  vibrancy: "sidebar",
+  visualEffectState: "active",
+};
+
+// Windows keeps the system frame, and Mica shows through the transparent
+// shell where vibrancy would.
+const MICA: BrowserWindowConstructorOptions = {
+  backgroundColor: "#00000000",
+  backgroundMaterial: "mica",
+};
+
 function create(
   route: string,
   options: {
@@ -224,17 +249,11 @@ function create(
     minWidth: 640,
     minHeight: 420,
     show: options.restart === undefined,
-    // Inset traffic lights over a transparent shell so the
-    // NSVisualEffectView material set via `vibrancy` shows through where
-    // the renderer paints no background (the sidebar column). Inset as
-    // far from the top as from the left, which centers the 14pt buttons
-    // on y=23: the renderer's title bars line up on that (SidebarHeader,
-    // PageHeader's device tabs).
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 16 },
-    backgroundColor: "#00000000",
-    vibrancy: "sidebar",
-    visualEffectState: "active",
+    ...byPlatform({
+      darwin: INSET_TRAFFIC_LIGHTS,
+      linux: INSET_TRAFFIC_LIGHTS,
+      win32: MICA,
+    }),
     webPreferences: {
       preload: join(__dirname, "preload.js"),
       sandbox: true,
@@ -264,6 +283,9 @@ function create(
       ],
     },
   });
+  // A menu bar in the window (Windows) stays hidden: the menu is there
+  // for its keys (menu.ts).
+  window.setMenuBarVisibility(false);
   const entry: Held = {
     window,
     id: window.webContents.id,

@@ -15,7 +15,7 @@
 import { flavor } from "../flavor";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { net, protocol } from "electron";
+import { app, net, protocol } from "electron";
 import { createClerkBridge } from "@clerk/electron";
 import type { TokenStorage } from "@clerk/electron";
 import { clerkTokenStorage } from "./clerkTokenStorage";
@@ -69,10 +69,20 @@ function memoizedTokenStorage(): TokenStorage {
 // the dev userData suffix is applied (token storage lives in userData).
 // Its open-url listener receives the OAuth deep links.
 export function createDesktopClerkBridge(): { cleanup: () => void } {
-  return createClerkBridge({
+  const bridge = createClerkBridge({
     storage: memoizedTokenStorage(),
     renderer: { scheme: rendererScheme(), host: RENDERER_SCHEME_HOST },
   });
+  // The bridge registers the scheme to this executable alone, which in
+  // a dev run on Windows is Electron's own, opening no app. Windows
+  // takes the app's folder as an argument before the link, and the
+  // other systems ignore it.
+  if (!app.isPackaged) {
+    app.setAsDefaultProtocolClient(rendererScheme(), process.execPath, [
+      app.getAppPath(),
+    ]);
+  }
+  return bridge;
 }
 
 type SchemeHandler = (request: Request) => Response | Promise<Response>;
