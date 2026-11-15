@@ -378,10 +378,9 @@ function chordAria(chord: Chord, mac: boolean): string {
     .join("+");
 }
 
-// A chord as an Electron accelerator, for the shell's menu, which is
-// macOS's alone.
+// A chord as an Electron accelerator, for the shell's menu.
 function chordAccelerator(chord: Chord): string {
-  return chordText(chord, "Cmd");
+  return chordText(chord, "CmdOrCtrl");
 }
 
 // ---- a window's keymap ----

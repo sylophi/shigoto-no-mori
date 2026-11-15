@@ -11,7 +11,7 @@ import {
   serveRendererOverScheme,
 } from "./electron/clerk";
 import { appPlace } from "./electron/appPlace";
-import { deepLinkRoute } from "./electron/deepLink";
+import { deepLinkRoute, deepLinkRouteIn } from "./electron/deepLink";
 import { clerkPublishableKey } from "./electron/account";
 import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
@@ -272,8 +272,19 @@ function isShuttingDown(): boolean {
 
 setNotificationOpener(openDeepLink);
 
-// Launching the app again while a copy runs is a request to see it.
-app.on("second-instance", () => surfaceWindow());
+// Launching the app again while a copy runs is a request to see it, or
+// the page its link names.
+app.on("second-instance", (_event, argv) => {
+  const route = deepLinkRouteIn(argv);
+  if (route === null) surfaceWindow();
+  else openDeepLink(route);
+});
+
+// A link that launched the app, which opens once the windows are up.
+{
+  const route = deepLinkRouteIn(process.argv);
+  if (route !== null) openDeepLink(route);
+}
 
 // Registered before "ready" so a link that launched the app is not
 // missed.
