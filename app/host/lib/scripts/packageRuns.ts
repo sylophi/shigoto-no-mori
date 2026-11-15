@@ -49,6 +49,7 @@ export const makePackageRuns = (runs: Runs) =>
         worktree: located.worktree,
         script: scriptName,
         extra: [],
+        inShell: true,
       });
       const context = yield* worktrees.scriptContext(located);
       yield* scripts.recordRun(located.project.id, scriptName);

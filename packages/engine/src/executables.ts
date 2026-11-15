@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import { isBatchFile } from "./batchFiles.ts";
 import { envVar } from "./environment.ts";
 import { byPlatform } from "./platform.ts";
 
@@ -119,3 +120,26 @@ export const findForPowerShell = Effect.fnUntraced(function* (name: string) {
   }
   return Option.none<string>();
 });
+
+// A package manager's batch file has an sh script beside it, which Git
+// Bash runs for the bare name, and which a Ctrl+C ends without cmd's
+// "Terminate batch job" prompt.
+const findForGitBash = Effect.fnUntraced(function* (name: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const found = yield* findExecutable(name);
+  if (Option.isNone(found) || !isBatchFile(found.value)) return found;
+  const script = found.value.slice(0, -path.extname(found.value).length);
+  const info = yield* fs.stat(script).pipe(Effect.option);
+  return Option.isSome(info) && info.value.type === "File"
+    ? Option.some(script)
+    : found;
+});
+
+// The file a line in the script shell (shells/) runs for a bare name.
+export const findForScriptShell = (name: string) =>
+  byPlatform({
+    darwin: findExecutable(name),
+    linux: findExecutable(name),
+    win32: findForGitBash(name),
+  });
