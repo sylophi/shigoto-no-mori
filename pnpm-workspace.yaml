@@ -173,7 +173,9 @@ catalog:
 # helper that attaches only once the console is gone, then kills the
 # shell's pid 5 s later, by which time another process may hold it. The
 # patch leaves the close to close the console, and the host ends what
-# is left of the tree (host/lib/scripts/processTrees/consoles.ts).
+# is left of the tree (host/lib/scripts/processTrees/consoles.ts). Once
+# the shell has exited, node-pty has dropped the console without closing
+# it, so the close also closes the console's input, which ends its host.
 patchedDependencies:
   node-pty@1.2.0-beta.18: patches/node-pty@1.2.0-beta.18.patch
   react-grab@0.2.0: patches/react-grab@0.2.0.patch
