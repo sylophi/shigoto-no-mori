@@ -155,8 +155,9 @@ const macEditKey = (
 
 // Windows Terminal's copy and paste: Ctrl+C copies a selection and
 // interrupts without one, Ctrl+V pastes, and with Shift they only ever
-// copy and paste.
+// copy and paste. Alt+F4 closes the window, as everywhere on Windows.
 const windowsEditKeys = (term: Terminal, e: KeyboardEvent): boolean => {
+  if (e.altKey && e.key === "F4") return false;
   if (!e.ctrlKey || e.altKey || e.metaKey) return true;
   const key = e.key.toLowerCase();
   // Left to the browser, whose paste event xterm takes.
@@ -179,6 +180,7 @@ export function TerminalView({
   onFit,
   onLink,
   pathOfFile,
+  lineFeedsReturn = false,
 }: {
   // Null where nothing feeds it (a scene).
   feed: TerminalFeed | null;
@@ -193,6 +195,9 @@ export function TerminalView({
   // Where a dropped file is on the shell's machine, "" where it has
   // none. Without it, a drop does nothing.
   pathOfFile?: (file: File) => string;
+  // Output written to a file rather than a terminal, whose bare line
+  // feeds no terminal turned into new lines.
+  lineFeedsReturn?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -251,6 +256,7 @@ export function TerminalView({
       // Answers the kitty keyboard query (`CSI ? u`), so a program that
       // asks (Claude Code, Codex, Neovim) can tell Shift+Enter from Enter.
       vtExtensions: { kittyKeyboard: true },
+      convertEol: lineFeedsReturn,
     });
     // Other ⌘ chords are the window's (copy, paste, the menu's), which
     // kitty mode would send to the program instead. xterm keeps ⌘A, its
@@ -392,7 +398,7 @@ export function TerminalView({
       termRef.current = null;
       proposeRef.current = null;
     };
-  }, [feed, fontsIn, lines]);
+  }, [feed, fontsIn, lines, lineFeedsReturn]);
 
   // An exited shell takes no keystrokes: the cursor goes, and focus is
   // handed back, so Tab and the app's bare-key shortcuts work again. One
