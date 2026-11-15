@@ -12,6 +12,7 @@ import {
   CLOUDFLARED_LICENSE,
   CLOUDFLARED_REPOSITORY,
   CLOUDFLARED_VERSION,
+  cloudflaredAsset,
 } from "../shared/packaging/cloudflaredDist.mts";
 
 type LicenseInfo = {
@@ -416,15 +417,20 @@ const BUNDLED_BINARIES = [
         `text: https://github.com/oven-sh/bun/blob/bun-v${BUN_VERSION}/LICENSE.md`,
     },
   ]),
-  normalizeEntry([
-    `cloudflared@${CLOUDFLARED_VERSION}`,
-    {
-      licenses: CLOUDFLARED_LICENSE,
-      repository: CLOUDFLARED_REPOSITORY,
-      publisher: "Cloudflare, Inc.",
-      licenseText: `Apache License 2.0. Full text: ${CLOUDFLARED_REPOSITORY}/blob/${CLOUDFLARED_VERSION}/LICENSE`,
-    },
-  ]),
+  // Shipped where an asset is pinned for this machine.
+  ...(cloudflaredAsset(process.platform, process.arch) === null
+    ? []
+    : [
+        normalizeEntry([
+          `cloudflared@${CLOUDFLARED_VERSION}`,
+          {
+            licenses: CLOUDFLARED_LICENSE,
+            repository: CLOUDFLARED_REPOSITORY,
+            publisher: "Cloudflare, Inc.",
+            licenseText: `Apache License 2.0. Full text: ${CLOUDFLARED_REPOSITORY}/blob/${CLOUDFLARED_VERSION}/LICENSE`,
+          },
+        ]),
+      ]),
 ];
 
 // Data the engine and the app embed: the doubutsu worktree names, taken

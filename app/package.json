@@ -44,7 +44,7 @@
     "file-sync:build": "node scripts/build-go.mts file-sync",
     "nativefs:build": "node scripts/build-go.mts nativefs",
     "cli:install": "node scripts/install-cli.mts",
-    "postinstall": "node scripts/prepare-node-pty.mts"
+    "postinstall": "node scripts/prepare-node-pty.mts && node scripts/prepare-winstaller.mts"
   },
   "dependencies": {
     "@base-ui/react": "catalog:",
@@ -98,6 +98,7 @@
     "@effect/tsgo": "catalog:",
     "@electron-forge/cli": "^7.11.2",
     "@electron-forge/maker-dmg": "^7.11.2",
+    "@electron-forge/maker-squirrel": "^7.11.2",
     "@electron-forge/maker-zip": "^7.11.2",
     "@electron-forge/plugin-fuses": "^7.11.2",
     "@electron-forge/plugin-vite": "^7.11.2",

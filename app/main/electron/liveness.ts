@@ -36,6 +36,7 @@ import {
 } from "../core/liveness/rateLimit";
 import { log } from "@shared/log";
 import { names } from "../flavor";
+import { launcherPath } from "./squirrel";
 
 // Inert on a build with no account service: the setting exists so a
 // machine stays available to the account, and its UI is unreachable
@@ -67,7 +68,10 @@ function reconcileLaunchAtLogin(): void {
     return;
   }
   try {
-    app.setLoginItemSettings({ openAtLogin: keepReachable });
+    app.setLoginItemSettings({
+      openAtLogin: keepReachable,
+      path: launcherPath(),
+    });
   } catch (error) {
     log.error(
       `[liveness] setLoginItemSettings failed: ${errorMessageOf(error)}`,

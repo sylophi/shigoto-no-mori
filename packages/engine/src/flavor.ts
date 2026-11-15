@@ -34,7 +34,8 @@ export type FlavorNames = {
   // The pre-2.0 data dir, adopted in place while it still holds state.
   readonly legacyDataDir: string | null;
   // Under XDG_CONFIG_HOME, where the data dir's pointer file lives, and
-  // on Linux under XDG_DATA_HOME and XDG_STATE_HOME too.
+  // on Linux under XDG_DATA_HOME and XDG_STATE_HOME too. The Windows
+  // install's folder is named for it (forge.config.ts).
   readonly configDir: string;
   readonly pointer: string;
   // The pointer's pre-2.0 file name, read only when `pointer` is absent.
