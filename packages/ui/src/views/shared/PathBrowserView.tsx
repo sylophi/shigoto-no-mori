@@ -2,6 +2,7 @@ import { KEYS } from "../../lib/keys.ts";
 import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { Command } from "cmdk";
 import { Folder } from "lucide-react";
+import { isAnchoredPath } from "@shigomori/contracts/projectPaths";
 import type { BrowseListing } from "../../lib/browseListing.ts";
 import { cn } from "../../lib/utils.ts";
 import { Button } from "../../primitives/button.tsx";
@@ -21,7 +22,9 @@ type BrowseEntry = BrowseListing["filtered"][number];
 // A typed path browsed as folders, for the folder picker and Add
 // Project's browse stage: the input is the path, listed live, beside the
 // button that takes it, over the `..` row and the folders, with the key
-// hints in the footer. The keys on the input are the container's.
+// hints in the footer. The keys on the input are the container's. The
+// query is spelled as the engine spells it, and the input shows and
+// reads it as the device's paths go.
 export function PathBrowserView({
   label,
   placeholder,
@@ -66,7 +69,8 @@ export function PathBrowserView({
   renderTrailing?: (entry: BrowseEntry, path: string) => ReactNode;
   footerEnd?: ReactNode;
 }) {
-  const { browseDir, leafFilter, listing, isLoading, error, filtered } = browse;
+  const { paths, browseDir, leafFilter, listing, isLoading, error, filtered } =
+    browse;
   const hasHighlighted = isBrowseRow(highlighted);
 
   return (
@@ -88,8 +92,9 @@ export function PathBrowserView({
           ref={inputRef}
           // oxlint-disable-next-line jsx-a11y/no-autofocus -- the input is the path, and the flow starts there
           autoFocus
-          value={query}
-          onValueChange={onQuery}
+          // A half-typed clone URL is no path to respell.
+          value={isAnchoredPath(query) ? paths.show(query) : query}
+          onValueChange={(typed) => onQuery(paths.read(typed))}
           onKeyDown={onInputKeyDown}
           placeholder={placeholder}
           className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"

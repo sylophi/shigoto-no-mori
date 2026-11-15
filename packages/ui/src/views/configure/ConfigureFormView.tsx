@@ -6,6 +6,7 @@ import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { FolderOpen, Plus } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
+import { FILE_MANAGER_NAME } from "../../primitives/file-manager.tsx";
 import { PathSpan } from "../../primitives/path-span.tsx";
 import {
   SectionHeading,
@@ -93,7 +94,7 @@ export function ConfigureFormView({
             {!remote && (
               <Button variant="outline" size="sm" onClick={onReveal}>
                 <FolderOpen />
-                Reveal in Finder
+                Reveal in {FILE_MANAGER_NAME}
               </Button>
             )}
           </section>

@@ -69,6 +69,9 @@ export function ScriptConsole({
           // A script runs in POSIX sh on every OS.
           syntax="posix"
           live={state.status === "running" && state.interactive}
+          // A run with no PTY (a create's setup, an rm's teardown) writes
+          // to a file.
+          lineFeedsReturn={!state.interactive}
           onInput={(data) => scriptRuns.write(key, data)}
           onFit={(cols, rows) => {
             screen.current?.resize(cols, rows);

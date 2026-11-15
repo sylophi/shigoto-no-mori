@@ -3,6 +3,7 @@
 // the other sections and states, and the health check and changelog
 // dialogs.
 import type { ReactNode } from "react";
+import { isMac } from "../lib/platform.ts";
 import { DeviceTabBarView } from "../views/shared/DeviceTabBarView.tsx";
 import { EditorFooterView } from "../views/shared/EditorFooterView.tsx";
 import { SidebarTakeoverView } from "../views/sidebar/SidebarTakeoverView.tsx";
@@ -517,9 +518,10 @@ export function SettingsDialogsScene() {
   );
 }
 
-// A Mac's keymap with `stored` over the defaults, as the section lists it.
+// This machine's keymap with `stored` over the defaults, as the section
+// lists it.
 const keymapRows = (stored?: Record<string, string>) =>
-  keymapGroups(resolveKeymap(stored, { mac: true, desktop: true }));
+  keymapGroups(resolveKeymap(stored, { mac: isMac, desktop: true }));
 
 function keyboard(
   stored: Record<string, string> | undefined,

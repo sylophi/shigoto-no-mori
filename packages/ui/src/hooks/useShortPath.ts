@@ -4,7 +4,7 @@
 // intrinsic content width) and `truncate` (as a final-floor fallback when
 // even the fully-abbreviated form doesn't fit).
 import { useEffect, useState } from "react";
-import { tildify, tildifyAndShorten } from "@shigomori/contracts/projectPaths";
+import { shownPath, shownShortPath } from "../lib/devicePaths.ts";
 
 const charWidthByFont = new Map<string, number>();
 
@@ -49,10 +49,9 @@ export function useShortPath(
     return () => observer.disconnect();
   }, [el]);
 
-  const tildified = tildify(path, home);
-  const display =
-    budget === null ? tildified : tildifyAndShorten(path, home, budget);
+  const whole = shownPath(path, home);
+  const display = budget === null ? whole : shownShortPath(path, home, budget);
   // Whether a segment was abbreviated to fit.
-  const shortened = display !== tildified;
+  const shortened = display !== whole;
   return [setEl, display, shortened] as const;
 }

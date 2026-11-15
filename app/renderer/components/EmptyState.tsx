@@ -1,5 +1,5 @@
 import { WORKTREES_DIR } from "@shigomori/contracts/git/worktreeLayout";
-import { tildify } from "@shigomori/contracts/projectPaths";
+import { shownPath } from "@shigomori/ui/lib/devicePaths.ts";
 import { FirstRunView } from "@shigomori/ui/views/FirstRunView.tsx";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useKeymap } from "@/hooks/ui/useKeymap";
@@ -25,7 +25,7 @@ export function EmptyState() {
       <FirstRunView
         worktreesDir={
           runtime
-            ? `${tildify(runtime.dataDir, runtime.homedir)}/${WORKTREES_DIR}/`
+            ? shownPath(`${runtime.dataDir}/${WORKTREES_DIR}/`, runtime.homedir)
             : null
         }
         addKeys={keys?.label ?? null}

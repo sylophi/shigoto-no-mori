@@ -473,10 +473,11 @@ export function LandingLinesView({
   landingBranch: string;
   folder: string | undefined;
   refused: boolean;
-  // Where the project's worktrees go there, null while unknown.
+  // Where the project's worktrees go there, ending in its separator,
+  // null while unknown.
   base: string | null;
 }) {
-  const path = `${base}/${folder ?? "‹new name›"}`;
+  const path = `${base}${folder ?? "‹new name›"}`;
   return (
     <>
       <BranchLine

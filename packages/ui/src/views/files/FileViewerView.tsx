@@ -4,6 +4,7 @@ import { FolderOpen, Loader2 } from "lucide-react";
 import { CODE_STYLE, CODE_THEME } from "../diff/codeTheme.ts";
 import { CenteredMessage } from "../../primitives/centered-message.tsx";
 import { CopyButton } from "../../primitives/copy-button.tsx";
+import { FILE_MANAGER_NAME } from "../../primitives/file-manager.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { Markdown } from "../../primitives/markdown.tsx";
 import { SegmentedControl } from "../../primitives/segmented-control.tsx";
@@ -48,7 +49,8 @@ export function FileViewerView({
   size: number | null;
   // The Preview / Source switch, for a file with a rendered form.
   shown: { value: FileShown; onChange: (next: FileShown) => void } | null;
-  // Reveal in Finder, this machine's alone: null on a peer's page.
+  // Reveal in the file manager, this machine's alone: null on a peer's
+  // page.
   onReveal: (() => void) | null;
   reading: boolean;
   // What stands in for a file with nothing to draw.
@@ -96,7 +98,7 @@ export function FileViewerView({
         {onReveal && (
           <IconButton
             onClick={onReveal}
-            aria-label="Reveal in Finder"
+            aria-label={`Reveal in ${FILE_MANAGER_NAME}`}
             className="shrink-0 p-0.5"
           >
             <FolderOpen aria-hidden className="size-3.5" />

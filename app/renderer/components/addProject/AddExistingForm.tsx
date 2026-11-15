@@ -8,7 +8,6 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  canNavigateUp,
   ensureTrailingSep,
   hasTrailingSlash,
   isAnchoredPath,
@@ -104,6 +103,10 @@ export function AddExistingForm({
     targetSettled,
     browseUp,
   } = browse;
+  // A folder on disk to scan: listed (it ends in a slash) and anchored,
+  // which a Windows PC's list of drives is not.
+  const scannable =
+    hasTrailingSlash(browseDir) && browse.paths.isFolder(browseDir);
   // The listed folder as the device resolved it, for matching entries
   // against registered paths: the typed one may be tildified, a
   // registered one never is.
@@ -143,8 +146,7 @@ export function AddExistingForm({
   // ---------- Scan mode ----------
 
   const scanCurrentDir = async () => {
-    // Use the directory we're currently browsing (with trailing /).
-    if (!hasTrailingSlash(browseDir)) return;
+    if (!scannable) return;
     setScanRoot(browseDir);
     setStage("scanning");
     scanRun.current += 1;
@@ -231,7 +233,7 @@ export function AddExistingForm({
   // One answer for the ← key, the `..` row and the hint. Anchored only:
   // a half-typed URL can end in a slash too (the dialog moves it to the
   // clone once it parses), and going "up" from it would eat the scheme.
-  const canBrowseUp = isAnchoredPath(query) && canNavigateUp(query);
+  const canBrowseUp = isAnchoredPath(query) && browse.canBrowseUp;
 
   const primaryAction = async () => {
     // The hint can trail the input (useBrowseState), and a path pasted
@@ -332,7 +334,7 @@ export function AddExistingForm({
       canPrimary={
         targetIsGitRepo
           ? submitTarget.length > 0
-          : hasTrailingSlash(browseDir) && !!listing && !error
+          : scannable && !!listing && !error
       }
       pending={addProject.isPending}
       onPrimary={() => void primaryAction()}

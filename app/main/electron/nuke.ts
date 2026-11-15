@@ -18,6 +18,7 @@ import type { NukeReport } from "@shigomori/contracts/schemas";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { NUKE_MARKER, nukedPaths, writeNukeMarker } from "@shared/nuke";
 import { names } from "../flavor";
+import { showInFileManager } from "./fileManager";
 import { signOutForNuke } from "./account";
 import { setsLoginItem } from "./liveness";
 import { hostKind } from "@shigomori/engine/platform";
@@ -56,7 +57,7 @@ export async function openPastStuckNuke(
     type: "warning",
     message: `${names.appName} couldn't finish erasing itself`,
     detail: `${left.map((stayed) => `${stayed.path}: ${stayed.why}`).join("\n")}\n\nDelete what's named here, then open the app again to finish.`,
-    buttons: ["Show in Finder", "Open Without Finishing", "Quit"],
+    buttons: [showInFileManager(), "Open Without Finishing", "Quit"],
     defaultId: 0,
     cancelId: 2,
   });

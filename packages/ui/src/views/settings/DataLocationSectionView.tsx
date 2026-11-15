@@ -3,12 +3,13 @@ import { FolderInput, FolderOpen, RotateCcw } from "lucide-react";
 import { BlockingOverlay } from "../../primitives/blocking-overlay.tsx";
 import { Button } from "../../primitives/button.tsx";
 import { ConfirmDestructiveButton } from "../../primitives/confirm-destructive-button.tsx";
+import { FILE_MANAGER_NAME } from "../../primitives/file-manager.tsx";
 import { PathSpan } from "../../primitives/path-span.tsx";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
 
 // Where the shigomori data dir lives, and the flow that moves it. The
-// picker (the in-app FolderPickerModal, which still offers Finder on
-// this machine) chooses the new PARENT and the folder lands under its
+// picker (the in-app FolderPickerModal, which still offers the file
+// manager on this machine) chooses the new PARENT and the folder lands under its
 // canonical name (the host owns that rule in
 // lib/dataDirMove.ts). A folder away from the default location gets a
 // Reset button, which is the same move with no parent given. On success
@@ -85,7 +86,7 @@ export function DataLocationSectionView({
         app{there}, and the CLI follows automatically.
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        {/* This machine's Finder can only show this machine's disk. */}
+        {/* This machine's file manager can only show this machine's disk. */}
         {!remote && (
           <Button
             variant="outline"
@@ -94,7 +95,7 @@ export function DataLocationSectionView({
             onClick={onReveal}
           >
             <FolderOpen />
-            Reveal in Finder
+            Reveal in {FILE_MANAGER_NAME}
           </Button>
         )}
         <Button

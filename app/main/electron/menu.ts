@@ -7,6 +7,7 @@
 // (windows.ts) and a key reaches the menu only when the page leaves it.
 import { menuAccelerators, resolveKeymap } from "@shigomori/ui/lib/keymap.ts";
 import { readClientConfigSync } from "./clientConfig";
+import { current as currentPlatform } from "@shigomori/engine/platform";
 import {
   app,
   Menu,
@@ -61,7 +62,7 @@ function shownChords(): Chords {
       : chordsByWindow.get(focusedWindowId)) ??
     menuAccelerators(
       resolveKeymap(readClientConfigSync().keybindings, {
-        mac: true,
+        mac: currentPlatform() === "darwin",
         desktop: true,
       }),
     )
