@@ -13,10 +13,14 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { envVar } from "./environment.ts";
 import * as Paths from "./Paths.ts";
 import {
+  askPowerShell,
   CD_FILE_ENV,
+  type ConfigText,
+  encodeConfig,
   fishHookContent,
   type Hook,
   hookPlace,
@@ -75,7 +79,8 @@ export type HookShell = {
   readonly zdotdir?: string | undefined;
   readonly configHome?: string | undefined;
   // The login shell's path, or "" (or `/bin/sh`, Shells' fallback) for
-  // none.
+  // none. On Windows the PowerShell a terminal runs, whose profile the
+  // hook goes in.
   readonly loginShell: string;
 };
 
@@ -123,12 +128,18 @@ const make = Effect.gen(function* () {
   const paths = yield* Paths.Paths;
   const fs = yield* FileSystem.FileSystem;
   const { basename, dirname, join } = yield* Path.Path;
-  const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+  const platform = yield* Effect.context<
+    FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+  >();
 
   // Where the hooks live, and how a path under home is shown.
   const place = (shell: HookShell) =>
     Effect.gen(function* () {
-      const at = hookPlace(paths, shell.zdotdir ?? (yield* envVar("ZDOTDIR")));
+      const at = hookPlace(
+        paths,
+        shell.zdotdir ?? (yield* envVar("ZDOTDIR")),
+        (yield* askPowerShell(shell.loginShell)).profile,
+      );
       return {
         ...at,
         configHome: shell.configHome || at.configHome,
@@ -154,7 +165,8 @@ const make = Effect.gen(function* () {
 
   const loginShell = (shell: HookShell) =>
     Effect.sync((): ShellKind | "" => {
-      const kind = basename(shell.loginShell);
+      const name = basename(shell.loginShell).replace(/\.exe$/i, "");
+      const kind = name === "pwsh" ? "powershell" : name;
       return isShellKind(kind) ? kind : "";
     });
 
@@ -181,7 +193,7 @@ const make = Effect.gen(function* () {
   // never leaves the user's config cut short. An existing file keeps
   // its permissions, and a symlinked one (a dotfiles manager's) stays a
   // link, the file it points at getting the change.
-  const writeHookFile = (at: Place, file: string, content: string) =>
+  const writeHookFile = (at: Place, file: string, content: ConfigText) =>
     Effect.gen(function* () {
       const target = yield* fs
         .realPath(file)
@@ -194,7 +206,7 @@ const make = Effect.gen(function* () {
         dirname(target),
         `.${basename(target)}.tmp-${process.pid}`,
       );
-      yield* fs.writeFileString(temp, content, { mode }).pipe(
+      yield* fs.writeFile(temp, encodeConfig(content), { mode }).pipe(
         // The mode given is masked by the umask on creation.
         Effect.andThen(fs.chmod(temp, mode)),
         Effect.andThen(fs.rename(temp, target)),
@@ -219,15 +231,21 @@ const make = Effect.gen(function* () {
         hook.path,
       );
     }
-    if (kind === "fish") {
-      const dir = dirname(hook.path);
-      yield* fs
-        .makeDirectory(dir, { recursive: true })
-        .pipe(Effect.mapError((cause) => hookError(at, "create", dir, cause)));
-      yield* writeHookFile(at, hook.path, fishHookContent(at.names));
-    } else {
-      yield* writeHookFile(at, hook.path, withHook(at.names, kind, hook.text));
-    }
+    const dir = dirname(hook.path);
+    yield* fs
+      .makeDirectory(dir, { recursive: true })
+      .pipe(Effect.mapError((cause) => hookError(at, "create", dir, cause)));
+    yield* writeHookFile(
+      at,
+      hook.path,
+      kind === "fish"
+        ? { text: fishHookContent(at.names), encoding: "bytes" }
+        : {
+            encoding: "bytes",
+            ...hook.file,
+            text: withHook(at.names, kind, hook.file?.text),
+          },
+    );
     return at.collapse(hook.path);
   }, Effect.provideContext(platform));
 
@@ -250,7 +268,10 @@ const make = Effect.gen(function* () {
                     hookError(at, "remove", hook.path, cause),
                   ),
                 )
-            : writeHookFile(at, hook.path, withoutHook(at.names, hook.text));
+            : writeHookFile(at, hook.path, {
+                ...hook.file,
+                text: withoutHook(at.names, hook.file.text),
+              });
           return Option.some(at.collapse(hook.path));
       }
     });
