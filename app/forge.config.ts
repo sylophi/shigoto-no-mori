@@ -1,5 +1,6 @@
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { MakerDMG } from "@electron-forge/maker-dmg";
+import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
 import { PublisherGithub } from "@electron-forge/publisher-github";
 import { VitePlugin } from "@electron-forge/plugin-vite";
@@ -12,6 +13,7 @@ import { config as loadEnv } from "dotenv";
 import { CLI_DIST_DIR, cliBinaryName } from "./shared/packaging/cliDist.mts";
 import { version } from "./package.json";
 import {
+  APP_REPO,
   APP_REPO_NAME,
   APP_REPO_OWNER,
   flavorNames,
@@ -323,6 +325,18 @@ const config: ForgeConfig = {
       ["darwin"],
     ),
     new MakerZIP({}, ["darwin"]),
+    // Windows installs per user into %LOCALAPPDATA%\<name>, named like
+    // the Linux install's folder, with the hyphen Squirrel refuses made
+    // an underscore. The update feed serves its .nupkg and RELEASES.
+    // Apps & features fetches its icon from iconUrl at install.
+    new MakerSquirrel(
+      {
+        name: names.configDir.replaceAll("-", "_"),
+        setupIcon: "assets/icon.ico",
+        iconUrl: `https://raw.githubusercontent.com/${APP_REPO}/main/app/assets/icon.ico`,
+      },
+      ["win32"],
+    ),
   ],
   publishers: [
     new PublisherGithub({

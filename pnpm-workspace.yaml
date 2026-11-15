@@ -66,6 +66,8 @@ allowBuilds:
   esbuild: true
   workerd: true
   lefthook: true
+  # The Squirrel maker's 7-Zip pick, app/scripts/prepare-winstaller.mts
+  # instead.
   electron-winstaller: false
   # appdmg's two native addons, pulled in by the dmg maker
   # (@electron-forge/maker-dmg -> electron-installer-dmg -> appdmg).
