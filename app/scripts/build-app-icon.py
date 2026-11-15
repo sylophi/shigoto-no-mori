@@ -10,6 +10,7 @@ Produces:
   assets/icon.png        1024x1024 master
   assets/icon.svg        vector master, same geometry
   assets/icon.iconset/   per-size PNGs for `iconutil`
+  assets/icon.ico        Windows' icon, at the sizes it shows
 
 Run `iconutil -c icns assets/icon.iconset -o assets/icon.icns` after.
 
@@ -221,6 +222,8 @@ ICONSET_SIZES: list[tuple[str, int]] = [
     ("icon_512x512@2x.png", 1024),
 ]
 
+ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
@@ -237,11 +240,12 @@ def main() -> None:
     master = build_master(theme)
     master.save(out / "icon.png", format="PNG")
     (out / "icon.svg").write_text(build_svg(theme))
+    master.save(out / "icon.ico", format="ICO", sizes=[(px, px) for px in ICO_SIZES])
 
     for name, px in ICONSET_SIZES:
         master.resize((px, px), Image.LANCZOS).save(iconset / name, format="PNG")
 
-    print(f"wrote {out / 'icon.png'}, {out / 'icon.svg'} and {len(ICONSET_SIZES)} sized PNGs")
+    print(f"wrote {out / 'icon.png'}, {out / 'icon.svg'}, {out / 'icon.ico'} and {len(ICONSET_SIZES)} sized PNGs")
     print(f"now run: iconutil -c icns {iconset} -o {out / 'icon.icns'}")
 
 
