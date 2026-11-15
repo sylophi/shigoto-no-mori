@@ -467,6 +467,7 @@ export const makeRuns = ({
       // leaves the next boot something to sweep (./OrphanSweep.ts). After
       // the listeners, since a quick command may finish while the store
       // writes, and the PTY replays nothing.
+      yield* pty.started;
       yield* sweep.record(
         {
           runId,

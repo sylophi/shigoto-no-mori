@@ -76,7 +76,12 @@ const DEFAULT_STOPPING: Stopping = { graceMs: 3_000, wait: true };
 export const UNKILLABLE_WAIT_MS = 5_000;
 
 export interface PtyHandle {
+  // 0 until the child exists.
   readonly pid: number;
+  // The child exists, or the run is over: at once where the PTY starts
+  // the child in the spawn, and at its first output on Windows, where
+  // ConPTY starts it once its output reader is up.
+  readonly started: Effect.Effect<void>;
   readonly write: (data: string) => void;
   readonly resize: (cols: number, rows: number) => void;
   // Stops and restarts reading the PTY, so a program writing faster
@@ -150,6 +155,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
     signal: number | undefined;
   }>();
   const exit = Deferred.await(exited);
+  const started = yield* Deferred.make<void>();
   const waitExit = (ms: number) =>
     exit.pipe(
       Effect.timeoutOption(Duration.millis(ms)),
@@ -190,15 +196,12 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
         }),
     }),
     (spawned) => {
-      // Once only: a pseudoconsole closed twice is freed twice.
-      let open = true;
       const tree = {
-        pid: spawned.pid,
-        ownGroup: true,
-        closeTerminal: () => {
-          if (open) spawned.kill();
-          open = false;
+        get pid() {
+          return spawned.pid;
         },
+        ownGroup: true,
+        closeTerminal: () => spawned.kill(),
         interrupt: () => spawned.write("\x03"),
       };
       return Effect.gen(function* () {
@@ -220,7 +223,15 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
   // the PTY open), so the run's last output never races its exit.
   child.onExit(({ exitCode, signal }) => {
     Deferred.doneUnsafe(exited, Exit.succeed({ exitCode, signal }));
+    Deferred.doneUnsafe(started, Exit.void);
   });
+  if (child.pid > 0) Deferred.doneUnsafe(started, Exit.void);
+  else {
+    const first = child.onData(() => {
+      first.dispose();
+      Deferred.doneUnsafe(started, Exit.void);
+    });
+  }
   const on = (child as IPty & { on: (...args: never[]) => void }).on.bind(
     child,
   ) as (
@@ -228,7 +239,10 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
     listener: (error: NodeJS.ErrnoException) => void,
   ) => void;
   return {
-    pid: child.pid,
+    get pid() {
+      return child.pid;
+    },
+    started: Deferred.await(started),
     write: (data) => child.write(data),
     resize: (cols, rows) => child.resize(cols, rows),
     pause: () => child.pause(),

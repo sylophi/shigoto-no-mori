@@ -711,6 +711,8 @@ const make = <R, E>(options: {
           }),
         );
         yield* Effect.forkIn(keepSaved(session), scope);
+        // Listed once its pid is real, which the busy checks read.
+        yield* pty.started;
         sessions.set(terminal.terminalId, session);
         yield* announce;
         return session;
