@@ -1,7 +1,7 @@
 import { adoptedDirName } from "@shigomori/contracts/predicates/worktreeDirName";
 import { useState } from "react";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
-import { tildify } from "@shigomori/contracts/projectPaths";
+import { shownPath } from "@shigomori/ui/lib/devicePaths.ts";
 import { useGoBack } from "@/hooks/ui/useGoBack";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
@@ -48,7 +48,7 @@ function ConvertExternalBody({ project }: { project: Project }) {
     // root/primary, DOS device names) gets a generated folder name at
     // convert time. Show that honestly instead of a path with an empty
     // leaf.
-    return tildify(
+    return shownPath(
       worktreePathFor(
         {
           ...device,

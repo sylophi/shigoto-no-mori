@@ -18,6 +18,7 @@ import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { unmountedVolume } from "@shared/unmountedVolume";
 import { finishPendingNuke } from "@shared/nuke";
 import { openPastStuckNuke } from "./electron/nuke";
+import { showInFileManager } from "./electron/fileManager";
 import {
   finishHeadlessNuke,
   headless as headlessNuke,
@@ -370,7 +371,7 @@ app.on("ready", async () => {
       detail:
         `${dataDirOrNone()} could not be created or accessed.\n\n${recovery}\n\n` +
         `${errorMessageOf(err)}`,
-      buttons: pointer !== null ? ["Show in Finder", "Quit"] : ["Quit"],
+      buttons: pointer !== null ? [showInFileManager(), "Quit"] : ["Quit"],
       defaultId: 0,
       cancelId: pointer !== null ? 1 : 0,
     });

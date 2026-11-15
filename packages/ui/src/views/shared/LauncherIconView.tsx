@@ -1,6 +1,7 @@
 // Maps a launcher entry to its brand asset: an icon extracted from the
-// app's bundle (scripts/extract-app-icon.sh) or, for a terminal tool,
-// one made from its project's own logo, else an SVG (mostly svgl's).
+// app's bundle (scripts/extract-app-icon.sh), a Windows app's from its
+// own package or program, or, for a terminal tool, one made from its
+// project's own logo, else an SVG (mostly svgl's).
 import type { ComponentType } from "react";
 import { Sparkles } from "lucide-react";
 import { Copilot } from "../../primitives/svgs/copilot.tsx";

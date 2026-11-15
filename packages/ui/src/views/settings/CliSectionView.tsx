@@ -3,11 +3,14 @@ import { Download, Trash2 } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
 import { SectionIntro } from "../../primitives/section-heading.tsx";
 import { StatusDot } from "../../primitives/status-dot.tsx";
-import { tildify } from "@shigomori/contracts/projectPaths";
+import { isWindowsDevice, shownPath } from "../../lib/devicePaths.ts";
 import type {
   CliStatus,
   ShellIntegrationStatus,
 } from "@shigomori/contracts/modules/cli";
+
+const CLI_ABOUT =
+  "The Shigoto no Mori CLI lets you (or a coding agent) create, list, merge, and delete this app's worktrees from any shell.";
 
 // Install/uninstall of the CLI symlink lives here, not in a launch
 // prompt: the app runs its bundled binary directly and never needs the
@@ -37,23 +40,33 @@ export function CliSectionView({
   shell: ReactNode;
 }) {
   const { name, state, onPath, foreignPaths } = status;
+  // Nothing puts the command on PATH on Windows yet.
+  if (isWindowsDevice(home, status.binDir)) {
+    return (
+      <section className="space-y-3">
+        <SectionIntro title="Command line tool">
+          {CLI_ABOUT} Installing it on PATH from here isn&apos;t available on
+          Windows yet.
+        </SectionIntro>
+      </section>
+    );
+  }
   const pathLine = `export PATH="${home && status.binDir.startsWith(home) ? `$HOME${status.binDir.slice(home.length)}` : status.binDir}:$PATH"`;
 
   return (
     <section className="space-y-3">
       <SectionIntro title="Command line tool">
-        The Shigoto no Mori CLI lets you (or a coding agent) create, list,
-        merge, and delete this app's worktrees from any shell. Installing links
-        the <span className="font-mono">{name}</span> and{" "}
+        {CLI_ABOUT} Installing links the{" "}
+        <span className="font-mono">{name}</span> and{" "}
         <span className="font-mono">{status.aliasName}</span> commands into{" "}
-        <span className="font-mono">{tildify(status.binDir, home)}</span>.
+        <span className="font-mono">{shownPath(status.binDir, home)}</span>.
       </SectionIntro>
 
       {state === "installed" && (
         <div className="flex flex-wrap items-center gap-3">
           <StatusDot tone="emerald" label="Installed" />
           <span className="font-mono text-sm text-muted-foreground select-text">
-            {tildify(status.linkPath, home)}
+            {shownPath(status.linkPath, home)}
           </span>
           <Button
             variant="outline"
@@ -102,7 +115,7 @@ export function CliSectionView({
             {foreignPaths.map((path, i) => (
               <span key={path}>
                 {i > 0 && " and "}
-                <span className="font-mono">{tildify(path, home)}</span>
+                <span className="font-mono">{shownPath(path, home)}</span>
               </span>
             ))}{" "}
             {foreignPaths.length > 1
@@ -185,7 +198,7 @@ export function ShellIntegrationView({
         <div className="flex flex-wrap items-center gap-3">
           <StatusDot tone="emerald" label={`Enabled for ${login.shell}`} />
           <span className="font-mono text-sm text-muted-foreground select-text">
-            {tildify(login.path, home)}
+            {shownPath(login.path, home)}
           </span>
           <Button
             variant="outline"
@@ -201,7 +214,7 @@ export function ShellIntegrationView({
         <p className="text-xs text-muted-foreground">
           <span className="text-amber-500">
             The integration block in{" "}
-            <span className="font-mono">{tildify(login.path, home)}</span> was
+            <span className="font-mono">{shownPath(login.path, home)}</span> was
             edited,
           </span>{" "}
           so it won&apos;t be touched from here. Restore or remove it, then

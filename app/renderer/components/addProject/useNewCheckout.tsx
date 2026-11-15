@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { defaultCloneParent } from "@shared/cloneDestination";
-import { ensureTrailingSep, tildify } from "@shigomori/contracts/projectPaths";
+import { ensureTrailingSep } from "@shigomori/contracts/projectPaths";
+import { shownPath } from "@shigomori/ui/lib/devicePaths.ts";
 import type { Project } from "@shigomori/contracts/schemas";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { useProjects } from "@/hooks/projects/useProjects";
@@ -66,9 +67,9 @@ export function useNewCheckout({
   }, []);
 
   const parent = pickedParent ?? defaultCloneParent(projects, home);
-  // Tildified here, once: a picked parent comes back as the device
-  // resolved it, absolute.
-  const dest = tildify(`${parent}${folder}`, home);
+  // Spelled for display here, once: a picked parent comes back as the
+  // device resolved it, absolute.
+  const dest = shownPath(`${parent}${folder}`, home);
 
   // Lands on the project, or, its view gone meanwhile, says it landed
   // and leaves the user where they are.

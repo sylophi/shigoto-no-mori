@@ -42,12 +42,6 @@ export function getBrowseParentPath(currentPath: string): string | null {
   return `${trimmed.slice(0, idx)}/`;
 }
 
-export function canNavigateUp(currentPath: string): boolean {
-  return (
-    hasTrailingSlash(currentPath) && getBrowseParentPath(currentPath) !== null
-  );
-}
-
 // Whether a typed path names a fixed spot on disk: absolute, or under
 // the home folder. A bare relative path would resolve against whatever
 // cwd the host process happens to have, which is never what the user
@@ -78,7 +72,7 @@ function pathRoot(path: string): string {
 }
 
 // Spelled with a drive or a share: a root longer than "/".
-const isWindowsPath = (path: string) => pathRoot(`${path}/`).length > 1;
+export const isWindowsPath = (path: string) => pathRoot(`${path}/`).length > 1;
 
 export function trimTrailingSlashes(path: string): string {
   return path.replace(TRAILING_SEPS, "");

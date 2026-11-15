@@ -10,7 +10,7 @@ import { pluralize } from "@shigomori/contracts/words";
 import { LayoutOptionItemView } from "./LayoutOptionItemView.tsx";
 import { LAYOUT_OPTIONS } from "./layoutOptions.ts";
 import { WorktreeMoveDetailsView } from "../shared/WorktreeMoveDetailsView.tsx";
-import { tildify } from "@shigomori/contracts/projectPaths";
+import { shownFullPath, shownPath } from "../../lib/devicePaths.ts";
 
 // The project's worktree layout, picked, and the worktrees the pick
 // moves (LocationForm.tsx saves it and runs the moves).
@@ -101,10 +101,10 @@ export function LocationFormView({
                   branch={wt.branch}
                   detached={wt.detached}
                   rebasing={wt.rebasing}
-                  fromPath={tildify(wt.path, home)}
-                  fromTip={wt.path}
-                  toPath={tildify(destination, home)}
-                  toTip={destination}
+                  fromPath={shownPath(wt.path, home)}
+                  fromTip={shownFullPath(wt.path, home)}
+                  toPath={shownPath(destination, home)}
+                  toTip={shownFullPath(destination, home)}
                   status={status.get(wt.id) ?? { kind: "idle" }}
                   labels={{
                     running: "Moving",

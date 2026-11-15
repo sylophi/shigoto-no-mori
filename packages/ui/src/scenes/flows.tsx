@@ -76,7 +76,7 @@ const MB_SM = projectNamed(MACBOOK_ID, "shigoto-no-mori");
 const GECKO = worktreeNamed(MB_SM, "gentle-gecko");
 const BADGER = worktreeNamed(SM, "brave-badger");
 const GECKO_TITLE = worktreeTitle(GECKO, posedPullRequestDetail(GECKO.branch));
-const WORKTREES_BASE = "~/.sm/wt/shigoto-no-mori";
+const WORKTREES_BASE = "~/.sm/wt/shigoto-no-mori/";
 
 const TRANSPLANT_STEPS = [
   "Review & destination",
