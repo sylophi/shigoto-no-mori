@@ -2,6 +2,7 @@
 // (from a pull request, and branched off a source) over shigoto-no-mori's
 // fixtures, and the Add project dialog's three tabs with the stages
 // between them.
+import { devicePaths } from "../lib/devicePaths.ts";
 import { defaultBinding } from "../lib/keymap.ts";
 import { createRef, type ReactNode } from "react";
 import { FolderGit2, FolderPlus } from "lucide-react";
@@ -222,6 +223,8 @@ export function AddProjectScene() {
                 filtered: FOLDERS,
                 browseTo: noop,
                 browseUp: noop,
+                paths: devicePaths(null),
+                canBrowseUp: true,
               }}
               registeredNames={new Set(["shigoto-no-mori"])}
               targetIsGitRepo={false}

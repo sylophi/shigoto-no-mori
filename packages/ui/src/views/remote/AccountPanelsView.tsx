@@ -5,6 +5,14 @@ import type { ReactNode } from "react";
 import { CloudOff, MonitorSmartphone, type LucideIcon } from "lucide-react";
 import { ACCOUNT_ENV } from "@shigomori/contracts/accountServiceConfig";
 import { EmptyPanel } from "../../primitives/empty-panel.tsx";
+import { viewerOs } from "../../lib/platform.ts";
+
+// Where a desktop app keeps its device credential: Electron's safe
+// storage, which on Windows encrypts it to the signed-in account.
+const CREDENTIAL_STORE =
+  viewerOs === "windows"
+    ? "Enrollment stores a device credential only your Windows account can read."
+    : "Enrollment stores a device credential in your OS keychain.";
 
 export function AccountLoadingView() {
   return <p className="text-xs text-muted-foreground/70">Loading&hellip;</p>;
@@ -29,7 +37,7 @@ export function SignedOutPanelView({
         Sign in and every device on the account shows up in your sidebar,
         worktrees and all.{" "}
         {desktop
-          ? "Enrollment stores a device credential in your OS keychain."
+          ? CREDENTIAL_STORE
           : "This browser enrolls as a device of its own."}
       </p>
     </StatePanel>

@@ -3,7 +3,10 @@ import { FolderGit2, FolderSearch } from "lucide-react";
 import type { BrowseListing } from "../../lib/browseListing.ts";
 import { Button } from "../../primitives/button.tsx";
 import { ChipButton } from "../../primitives/chip-button.tsx";
-import { FileManagerIcon } from "../../primitives/file-manager.tsx";
+import {
+  FILE_MANAGER_NAME,
+  FileManagerIcon,
+} from "../../primitives/file-manager.tsx";
 import { PathBrowserView } from "../shared/PathBrowserView.tsx";
 
 // The add-existing tab's browse stage: the path as typed, the folders
@@ -118,7 +121,7 @@ export function AddExistingFormView({
           {onPickFolder !== null && (
             <ChipButton onClick={onPickFolder}>
               <FileManagerIcon />
-              Add project from Finder
+              Add project from {FILE_MANAGER_NAME}
             </ChipButton>
           )}
         </div>

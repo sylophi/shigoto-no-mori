@@ -1,6 +1,9 @@
 import type { KeyboardEvent } from "react";
 import { ChipButton } from "../../primitives/chip-button.tsx";
-import { FileManagerIcon } from "../../primitives/file-manager.tsx";
+import {
+  FILE_MANAGER_NAME,
+  FileManagerIcon,
+} from "../../primitives/file-manager.tsx";
 import type { BrowseListing } from "../../lib/browseListing.ts";
 import { PathBrowserView } from "./PathBrowserView.tsx";
 
@@ -50,7 +53,7 @@ export function FolderPickerView({
   return (
     <PathBrowserView
       label={title}
-      placeholder="Enter a path (e.g. ~/projects/)"
+      placeholder={`Enter a path (e.g. ${browse.paths.show("~/projects/")})`}
       query={query}
       onQuery={setQuery}
       onInputKeyDown={onInputKeyDown}
@@ -70,7 +73,7 @@ export function FolderPickerView({
         onOpenFinder && (
           <ChipButton onClick={onOpenFinder}>
             <FileManagerIcon />
-            Reveal in Finder
+            Reveal in {FILE_MANAGER_NAME}
           </ChipButton>
         )
       }

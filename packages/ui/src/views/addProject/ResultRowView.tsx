@@ -5,6 +5,7 @@ import { PathSpan } from "../../primitives/path-span.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { ensureTrailingSep } from "@shigomori/contracts/projectPaths";
 import { ITEM_CLASS } from "../../primitives/cmdk-classes.ts";
+import { devicePaths } from "../../lib/devicePaths.ts";
 
 function relativeFromRoot(absolute: string, root: string): string {
   const trimmedRoot = ensureTrailingSep(root);
@@ -32,6 +33,7 @@ export function ResultRowView({
   // Result == scanRoot leaves `relative` equal to the absolute path, which
   // PathSpan tildifies and shortens. Nested results are already short.
   const showAbsolute = relative === path;
+  const paths = devicePaths(home, path);
   return (
     <Command.Item
       value={`result:${path}`}
@@ -55,8 +57,10 @@ export function ResultRowView({
           className="min-w-0 flex-1 truncate font-mono"
         />
       ) : (
-        <SimpleTooltip whenTruncated tip={path}>
-          <span className="min-w-0 flex-1 truncate font-mono">{relative}</span>
+        <SimpleTooltip whenTruncated tip={paths.show(path)}>
+          <span className="min-w-0 flex-1 truncate font-mono">
+            {paths.show(relative)}
+          </span>
         </SimpleTooltip>
       )}
     </Command.Item>

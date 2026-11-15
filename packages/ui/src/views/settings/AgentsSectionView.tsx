@@ -3,7 +3,7 @@ import { Button } from "../../primitives/button.tsx";
 import { SectionIntro } from "../../primitives/section-heading.tsx";
 import { StatusDot } from "../../primitives/status-dot.tsx";
 import type { AgentHarnessStatus } from "@shigomori/contracts/schemas";
-import { tildify } from "@shigomori/contracts/projectPaths";
+import { shownPath } from "../../lib/devicePaths.ts";
 
 // The hooks each agent harness runs to report its sessions (`sm agents
 // install`), which is what tells the app an agent is working in a
@@ -90,7 +90,7 @@ function HarnessRow({
               }
             />
             <span className="min-w-0 truncate font-mono text-xs text-muted-foreground select-text">
-              {tildify(harness.path, home)}
+              {shownPath(harness.path, home)}
             </span>
             <span className="ml-auto flex gap-2">
               {harness.hooks !== "installed" && (

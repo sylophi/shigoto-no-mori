@@ -4,7 +4,7 @@ import { Checkbox } from "../../primitives/checkbox.tsx";
 import { type RowStatus } from "../../primitives/row-status.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
-import { tildify } from "@shigomori/contracts/projectPaths";
+import { shownFullPath, shownPath } from "../../lib/devicePaths.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { ToneTag } from "../../primitives/row-tag.tsx";
 
@@ -29,7 +29,7 @@ export function ConvertRowView({
 }: ConvertRowProps) {
   const detached = worktree.detached;
   const count = worktree.changedCount;
-  const oldPath = tildify(worktree.path, home);
+  const oldPath = shownPath(worktree.path, home);
   const interactive = !disabled && status.kind !== "done";
 
   return (
@@ -51,7 +51,7 @@ export function ConvertRowView({
         detached={detached}
         rebasing={worktree.rebasing}
         fromPath={oldPath}
-        fromTip={worktree.path}
+        fromTip={shownFullPath(worktree.path, home)}
         toPath={proposedPath}
         toTip={proposedPath}
         status={status}

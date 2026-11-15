@@ -12,6 +12,8 @@ import {
 import { DeviceScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { getBrowseParentPath } from "@shigomori/contracts/projectPaths";
 import type { Project } from "@shigomori/contracts/schemas";
+import { shownFullPath } from "@shigomori/ui/lib/devicePaths.ts";
+import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import type { GroupMember } from "./ProjectGroupActions";
 
 // Locate for a project group's header, the sidebar's row and the home
@@ -90,11 +92,13 @@ function LocateProjectPicker({
   onClose: () => void;
 }) {
   const relocate = useRelocateProject(project.id);
+  const home = useRuntimeInfo().data?.homedir;
+  const gone = shownFullPath(project.path, home);
   return (
     <FolderPickerModal
       initialPath={from}
       title={`Locate ${project.name}`}
-      hint={`${project.path} is gone. Pick the folder the repo is in now. Its worktrees and settings come along.`}
+      hint={`${gone} is gone. Pick the folder the repo is in now. Its worktrees and settings come along.`}
       onPick={(path) => {
         onClose();
         relocate.mutate(path);

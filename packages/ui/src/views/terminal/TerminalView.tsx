@@ -24,7 +24,7 @@ import { typedLines } from "@shigomori/contracts/typedLines";
 import { Check, Copy } from "lucide-react";
 import { useCopied } from "../../primitives/copy-button.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
-import { isMac } from "../../lib/platform.ts";
+import { viewerOs } from "../../lib/platform.ts";
 import { usersAlone } from "../../lib/usersAlone.ts";
 import { watchTheme } from "../../root.tsx";
 import { TerminalTabToolbar } from "./TerminalTabsView.tsx";
@@ -153,6 +153,24 @@ const macEditKey = (
     ? undefined
     : keys[`${e.metaKey ? "Meta" : "Alt"}+${e.key}`];
 
+// Windows Terminal's copy and paste: Ctrl+C copies a selection and
+// interrupts without one, Ctrl+V pastes, and with Shift they only ever
+// copy and paste.
+const windowsEditKeys = (term: Terminal, e: KeyboardEvent): boolean => {
+  if (!e.ctrlKey || e.altKey || e.metaKey) return true;
+  const key = e.key.toLowerCase();
+  // Left to the browser, whose paste event xterm takes.
+  if (key === "v") return false;
+  if (key !== "c") return true;
+  if (!term.hasSelection()) return !e.shiftKey;
+  if (e.type === "keydown") {
+    e.preventDefault();
+    void navigator.clipboard.writeText(term.getSelection());
+    term.clearSelection();
+  }
+  return false;
+};
+
 export function TerminalView({
   feed,
   syntax,
@@ -237,7 +255,7 @@ export function TerminalView({
     // Other ⌘ chords are the window's (copy, paste, the menu's), which
     // kitty mode would send to the program instead. xterm keeps ⌘A, its
     // select all.
-    if (isMac) {
+    if (viewerOs === "mac") {
       term.attachCustomKeyEventHandler((e) => {
         const key = macEditKey(e, lines.macEditKeys);
         if (key === undefined && !e.metaKey) return true;
@@ -251,6 +269,8 @@ export function TerminalView({
         }
         return false;
       });
+    } else if (viewerOs === "windows") {
+      term.attachCustomKeyEventHandler((e) => windowsEditKeys(term, e));
     }
     // Unicode 15 widths with graphemes clustered, as Ghostty and Ink TUIs
     // count them: a ZWJ sequence, flag or VS16 emoji takes two cells.
