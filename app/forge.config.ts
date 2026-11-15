@@ -16,6 +16,8 @@ import {
   APP_REPO_OWNER,
   flavorNames,
 } from "@shigomori/engine/flavor";
+import { programFile } from "@shigomori/engine/executables";
+import { byPlatform } from "@shigomori/engine/platform";
 import { buildFlavor } from "./shared/packaging/buildFlavor.mts";
 import {
   CLOUDFLARED_BINARY_NAME,
@@ -37,6 +39,7 @@ import { macSigningIdentity } from "./shared/packaging/macSigning.mts";
 import { rendererSchemeName } from "./shared/packaging/rendererScheme.mts";
 import {
   NODE_PTY_ADDON,
+  NODE_PTY_CONPTY_ADDON,
   NODE_PTY_SPAWN_HELPER,
   nodePtyPrebuildDir,
 } from "./shared/packaging/nodePty.mts";
@@ -101,19 +104,40 @@ const dmgVolumeName =
     (name) => name.length <= DMG_VOLUME_NAME_MAX,
   ) ?? `v${version}`.slice(0, DMG_VOLUME_NAME_MAX);
 
+// What the package carries per OS. Windows has no pinned cloudflared,
+// so tunnels stay off there. Of node-pty's Windows prebuild it ships the
+// ConPTY addon alone: the other files beside it serve options and calls
+// the host never makes (useConptyDll, the console process list). Linux
+// is packaged by scripts/package-linux.mts, not forge.
+const macPackage = {
+  cloudflared: true,
+  ptyPrebuilds: "darwin-.*",
+  ptyFiles: [NODE_PTY_ADDON, NODE_PTY_SPAWN_HELPER],
+};
+const osPackage = byPlatform({
+  darwin: macPackage,
+  linux: macPackage,
+  win32: {
+    cloudflared: false,
+    ptyPrebuilds: "win32-[^/]+(/conpty\\.node)?",
+    ptyFiles: [NODE_PTY_CONPTY_ADDON],
+  },
+});
+
 // Forge's Vite plugin normally ships only the .vite/ bundles. node-pty
 // (the script console's PTY) is the one dependency Vite can't bundle:
-// its loader requires the native addon by path and posix_spawns the
-// spawn-helper next to it, so the package has to exist as real files:
-// its manifest, the JS in lib/, and the prebuilt darwin binaries.
-// Everything else in the package (sources, typings, tests' fixtures)
-// stays out, as do the files of every other node_modules entry (the
-// packager's pruner still creates an empty directory per production
+// its loader requires the native addon by path and, on a Mac,
+// posix_spawns the spawn-helper next to it, so the package has to exist
+// as real files: its manifest, the JS in lib/, and the OS's prebuilt
+// binaries. Everything else in the package (sources, typings, tests'
+// fixtures) stays out, as do the files of every other node_modules entry
+// (the packager's pruner still creates an empty directory per production
 // dependency, which is harmless). Paths always start with "/" and
 // directories are filtered too, so the node_modules parents have to
 // pass for their children to be visited.
-const NODE_PTY_SHIPPED =
-  /^\/node_modules(\/node-pty(\/(package\.json|lib(\/.*)?|prebuilds(\/darwin-.*)?))?)?$/;
+const NODE_PTY_SHIPPED = new RegExp(
+  `^/node_modules(/node-pty(/(package\\.json|lib(/.*)?|prebuilds(/${osPackage.ptyPrebuilds})?))?)?$`,
+);
 const packagerIgnore = (file: string): boolean => {
   if (!file) return false;
   if (file.startsWith("/.vite")) return false;
@@ -157,18 +181,20 @@ const config: ForgeConfig = {
     // into the user's bin dir.
     extraResource: [
       "resources/licenses",
-      `${CLI_DIST_DIR}/${cliBinaryName(flavor)}`,
+      `${CLI_DIST_DIR}/${programFile(cliBinaryName(flavor))}`,
       // The tunnel connector, fetched by the prePackage hook below for
       // the target platform (shared/packaging/cloudflaredDist.mts pins
       // it), so remote access needs nothing installed.
-      `${CLOUDFLARED_DIST_DIR}/${CLOUDFLARED_BINARY_NAME}`,
+      ...(osPackage.cloudflared
+        ? [`${CLOUDFLARED_DIST_DIR}/${CLOUDFLARED_BINARY_NAME}`]
+        : []),
       // The file-sync engine (continuous worktree mirroring), compiled
       // by the prePackage hook and spawned by the host
       // (host/fileSync/runner.ts).
-      `${FILE_SYNC_DIST_DIR}/${FILE_SYNC_BINARY_NAME}`,
+      `${FILE_SYNC_DIST_DIR}/${programFile(FILE_SYNC_BINARY_NAME)}`,
       // The filesystem helper (the filesystem calls Node lacks), compiled by
       // the prePackage hook the same way.
-      `${NATIVEFS_DIST_DIR}/${NATIVEFS_BINARY_NAME}`,
+      `${NATIVEFS_DIST_DIR}/${programFile(NATIVEFS_BINARY_NAME)}`,
     ],
     // The Local Network (macOS 15+) and Automation prompts' sentences,
     // shared with the dev bundle. See shared/packaging/infoPlist.mts.
@@ -216,19 +242,21 @@ const config: ForgeConfig = {
       // Fetch the pinned cloudflared for the TARGET platform, not the
       // build machine's: a cross-arch package must ship the arch it
       // runs on.
-      runScript(
-        "fetch-cloudflared.mts",
-        "--platform",
-        platform,
-        "--arch",
-        arch,
-      );
+      if (osPackage.cloudflared) {
+        runScript(
+          "fetch-cloudflared.mts",
+          "--platform",
+          platform,
+          "--arch",
+          arch,
+        );
+      }
     },
     // The ignore above spells out node-pty's layout. If a release moves
     // it, fail the build here, not the first script run of a shipped app.
     packageAfterCopy: async (_config, buildPath, _electron, platform, arch) => {
       const prebuild = path.join(buildPath, nodePtyPrebuildDir(platform, arch));
-      for (const file of [NODE_PTY_ADDON, NODE_PTY_SPAWN_HELPER]) {
+      for (const file of osPackage.ptyFiles) {
         const full = path.join(prebuild, file);
         const mode =
           file === NODE_PTY_SPAWN_HELPER ? fsConstants.X_OK : fsConstants.R_OK;
