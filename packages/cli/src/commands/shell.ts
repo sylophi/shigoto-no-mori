@@ -11,6 +11,7 @@ import {
   cdDirective,
   hookPlace,
   isShellKind,
+  SHELL_KINDS,
   wrapperSnippet,
 } from "@shigomori/engine/shellHook";
 import * as Worktrees from "@shigomori/engine/Worktrees";
@@ -35,6 +36,8 @@ const terminalShell = Effect.gen(function* () {
   return { loginShell: program };
 });
 
+const shellChoice = SHELL_KINDS.join("|");
+
 // The wrapper's names, which init prints.
 const names = Effect.gen(function* () {
   return hookPlace(yield* Paths.Paths, "").names;
@@ -48,7 +51,7 @@ const init = Command.make(
       const { binaryName } = yield* Effect.service(Output);
       if (!isShellKind(shell)) {
         return yield* new UsageError({
-          problem: `Unsupported shell ${JSON.stringify(shell)}. Usage: ${binaryName} shell init <zsh|bash|fish>`,
+          problem: `Unsupported shell ${JSON.stringify(shell)}. Usage: ${binaryName} shell init <${shellChoice}>`,
         });
       }
       // The snippet ends its own last line.
@@ -62,7 +65,7 @@ const installCommand = Command.make(
   ({ shell }) =>
     Effect.gen(function* () {
       const { binaryName, json, stderrColor } = yield* Effect.service(Output);
-      const usage = `Usage: ${binaryName} shell install [<zsh|bash|fish>]`;
+      const usage = `Usage: ${binaryName} shell install [<${shellChoice}>]`;
       const integration = yield* ShellIntegration.ShellIntegration;
       const terminal = yield* terminalShell;
       const kind = Option.isSome(shell)
@@ -72,7 +75,7 @@ const installCommand = Command.make(
         return yield* new UsageError({
           problem: Option.isSome(shell)
             ? `Unsupported shell ${JSON.stringify(kind)}. ${usage}`
-            : `Couldn't tell your login shell. Usage: ${binaryName} shell install <zsh|bash|fish>`,
+            : `Couldn't tell your login shell. Usage: ${binaryName} shell install <${shellChoice}>`,
         });
       }
       const target = yield* integration.install(kind, terminal);
@@ -83,9 +86,13 @@ const installCommand = Command.make(
       yield* note(
         `Hooked ${cyan(binaryName)} shell integration into ${cyan(target)}.`,
       );
+      const reload =
+        kind === "powershell"
+          ? ". $PROFILE.CurrentUserAllHosts"
+          : `exec ${kind}`;
       yield* note(
         dim(
-          `Takes effect in new shells. Run \`exec ${kind}\` to reload this one.`,
+          `Takes effect in new shells. Run \`${reload}\` to reload this one.`,
         ),
       );
     }),

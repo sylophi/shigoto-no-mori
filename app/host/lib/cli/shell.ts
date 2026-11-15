@@ -92,8 +92,8 @@ export const layer = Layer.effect(
       read: Effect.gen(function* () {
         const { program, args } = yield* shells.interactive;
         // Not a login shell (/bin/sh when none is named, PowerShell on
-        // Windows): none to integrate with.
-        if (!args.includes("-l")) return { zdotdir: "", loginShell: "" };
+        // Windows): no login config to probe.
+        if (!args.includes("-l")) return { zdotdir: "", loginShell: program };
         const place = yield* probes.get(program).pipe(Effect.option);
         return Option.match(place, {
           onNone: () => ({ zdotdir: "", loginShell: program }),

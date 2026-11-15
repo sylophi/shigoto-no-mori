@@ -8,8 +8,10 @@
 // parsed as shell, so nothing sm prints can inject into the caller.
 //
 // `shell install` adds one guarded eval line to the shell's config: a
-// marker-fenced block in the rc file for zsh and bash, a conf.d drop-in
-// for fish. The guard keeps the line inert when the binary is gone, and
+// marker-fenced block in the rc file for zsh and bash and in the
+// profile for PowerShell, a conf.d drop-in for fish. Only the block
+// changes: the rest of the file keeps its bytes, its encoding and its
+// line endings. The guard keeps the line inert when the binary is gone, and
 // the wrapper itself always comes fresh from `shell init`, so an upgrade
 // needs no reinstall. `shell uninstall` removes exactly what install
 // wrote, and a block whose content isn't recognizably ours is left
@@ -18,16 +20,25 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import type * as PlatformError from "effect/PlatformError";
+import * as PlatformError from "effect/PlatformError";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Result from "effect/Result";
 import { flavorNames } from "./flavor.ts";
 import { byPlatform } from "./platform.ts";
 import type { Paths } from "./Paths.ts";
 import { isNotFound } from "./platformErrors.ts";
 
-export type ShellKind = "zsh" | "bash" | "fish";
+// powershell is PowerShell 7 and Windows PowerShell 5.1 alike.
+export type ShellKind = "zsh" | "bash" | "fish" | "powershell";
 
-export const SHELL_KINDS: ReadonlyArray<ShellKind> = ["zsh", "bash", "fish"];
+const UNIX_SHELLS: ReadonlyArray<ShellKind> = ["zsh", "bash", "fish"];
+
+export const SHELL_KINDS: ReadonlyArray<ShellKind> = byPlatform({
+  darwin: UNIX_SHELLS,
+  linux: UNIX_SHELLS,
+  win32: [...UNIX_SHELLS, "powershell" as const],
+});
 
 export const isShellKind = (text: string): text is ShellKind =>
   SHELL_KINDS.some((kind) => kind === text);
@@ -107,8 +118,42 @@ ${[names.binary, names.alias]
   .join("")}`;
 };
 
-export const wrapperSnippet = (names: HookNames, kind: ShellKind) =>
-  kind === "fish" ? fishWrapper(names) : posixWrapper(names);
+// PowerShell has no environment per command, so the variable is removed
+// once the binary ends, or every later child of the shell would see it.
+// Piped input goes on to the binary only when there is some, since an
+// empty pipe would take its terminal away. Written for Windows
+// PowerShell 5.1 too.
+const powerShellWrapper = (names: HookNames) => {
+  const helper = wrapHelper(names);
+  return `${wrapperHeader(names, " powershell")}function ${helper} {
+    param([string]$Name, [object[]]$Arguments)
+    $app = Get-Command $Name -CommandType Application -TotalCount 1 -ErrorAction Stop
+    $tmp = [System.IO.Path]::GetTempFileName()
+    $env:${CD_FILE_ENV} = $tmp
+    try {
+        if ($MyInvocation.ExpectingInput) { $input | & $app @Arguments } else { & $app @Arguments }
+    } finally {
+        Remove-Item Env:${CD_FILE_ENV} -ErrorAction Ignore
+    }
+    $dir = Get-Content -LiteralPath $tmp -Encoding UTF8 -TotalCount 1 -ErrorAction Ignore
+    Remove-Item -LiteralPath $tmp -ErrorAction Ignore
+    if ($dir -and (Test-Path -LiteralPath $dir -PathType Container)) {
+        Set-Location -LiteralPath $dir
+    }
+}
+${[names.binary, names.alias]
+  .map(
+    (name) =>
+      `function ${name} { if ($MyInvocation.ExpectingInput) { $input | ${helper} ${name} $args } else { ${helper} ${name} $args } }\n`,
+  )
+  .join("")}`;
+};
+
+export const wrapperSnippet = (names: HookNames, kind: ShellKind) => {
+  if (kind === "fish") return fishWrapper(names);
+  if (kind === "powershell") return powerShellWrapper(names);
+  return posixWrapper(names);
+};
 
 // --- the hook in the shell's config ---
 
@@ -118,11 +163,16 @@ const hookBeginMarker = ({ alias }: HookNames) =>
 const hookEndMarker = ({ alias }: HookNames) =>
   `# <<< ${alias} shell integration <<<`;
 
-// The fenced block in a zsh or bash rc file. The guard keeps shell
-// startup silent when the binary is gone (the app trashed, the link
-// removed).
-const hookBlock = (names: HookNames, kind: ShellKind) =>
-  `${hookBeginMarker(names)}\ncommand -v ${names.binary} >/dev/null 2>&1 && eval "$(command ${names.binary} shell init ${kind})"\n${hookEndMarker(names)}\n`;
+// The fenced block's lines in an rc file or a profile. The guard keeps
+// shell startup silent when the binary is gone (the app trashed, the
+// link removed).
+const hookLines = (names: HookNames, kind: ShellKind) => [
+  hookBeginMarker(names),
+  kind === "powershell"
+    ? `if (Get-Command ${names.binary} -CommandType Application -ErrorAction Ignore) { ${names.binary} shell init powershell | Out-String | Invoke-Expression }`
+    : `command -v ${names.binary} >/dev/null 2>&1 && eval "$(command ${names.binary} shell init ${kind})"`,
+  hookEndMarker(names),
+];
 
 // fish's conf.d drop-in, the whole hook.
 export const fishHookContent = (names: HookNames) =>
@@ -177,23 +227,82 @@ const findHookSpan = (
   return { kind: "broken" };
 };
 
-// Where the hook lives and what it's named for.
+// Where the hook lives and what it's named for. `profile` is
+// PowerShell's, "" where there is none.
 export type HookPlace = {
   readonly names: HookNames;
   readonly home: string;
   readonly zdotdir: string;
   readonly configHome: string;
+  readonly profile: string;
 };
 
 export const hookPlace = (
   paths: Paths["Service"],
   zdotdir: string,
+  profile = "",
 ): HookPlace => ({
   names: { binary: paths.binaryName, alias: flavorNames(paths.flavor).alias },
   home: paths.home,
   configHome: paths.configHome,
   zdotdir,
+  profile,
 });
+
+const noPowerShell = { profile: "", policy: "" };
+
+// What the PowerShell a terminal runs on Windows says of itself: the
+// profile every host of it loads, asked rather than built since
+// Documents can be redirected (OneDrive), and the execution policy that
+// decides whether a profile loads at all. Both "" elsewhere, or when it
+// doesn't answer.
+export const askPowerShell = (program: string) =>
+  byPlatform({
+    darwin: Effect.succeed(noPowerShell),
+    linux: Effect.succeed(noPowerShell),
+    win32: Effect.gen(function* () {
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const output = yield* spawner.string(
+        ChildProcess.make(program, [
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          "[Console]::OutputEncoding=[Text.Encoding]::UTF8;$PROFILE.CurrentUserAllHosts;Get-ExecutionPolicy",
+        ]),
+      );
+      const [profile = "", policy = ""] = output.trim().split(/\r?\n/);
+      return { profile: profile.trim(), policy: policy.trim() };
+    }).pipe(
+      Effect.timeout("10 seconds"),
+      Effect.orElseSucceed(() => noPowerShell),
+    ),
+  });
+
+// A config file's text, and how it is stored so a write keeps it so:
+// Windows PowerShell's profiles are often UTF-16. Any other file (UTF-8
+// with or without a BOM, the system's code page) is taken a byte to a
+// character, since the hook's lines are ASCII and nothing else in the
+// file needs decoding.
+type Encoding = "utf-16le" | "bytes";
+
+export type ConfigText = {
+  readonly text: string;
+  readonly encoding: Encoding;
+};
+
+export const decodeConfig = (bytes: Uint8Array): ConfigText =>
+  bytes[0] === 0xff && bytes[1] === 0xfe
+    ? {
+        text: Buffer.from(bytes.subarray(2)).toString("utf16le"),
+        encoding: "utf-16le",
+      }
+    : { text: Buffer.from(bytes).toString("latin1"), encoding: "bytes" };
+
+export const encodeConfig = ({ text, encoding }: ConfigText): Uint8Array =>
+  encoding === "utf-16le"
+    ? new Uint8Array([0xff, 0xfe, ...Buffer.from(text, "utf16le")])
+    : new Uint8Array(Buffer.from(text, "latin1"));
 
 // The file each shell reads, where install writes the hook.
 const hookPath = (place: HookPlace, kind: ShellKind) =>
@@ -232,6 +341,7 @@ const hookPath = (place: HookPlace, kind: ShellKind) =>
         win32: loginFile(".bashrc"),
       });
     }
+    if (kind === "powershell") return place.profile;
     return path.join(
       place.configHome,
       "fish",
@@ -243,9 +353,9 @@ const hookPath = (place: HookPlace, kind: ShellKind) =>
 // A shell's hook and the file it lives in. Install and uninstall leave
 // a modified or unreadable one alone.
 export type Hook = { readonly shell: ShellKind; readonly path: string } &
-  // No hook, in a file that holds `text` or in no file at all.
+  // No hook, in `file` or in no file at all.
   (
-    | { readonly state: "missing"; readonly text: string | undefined }
+    | { readonly state: "missing"; readonly file: ConfigText | undefined }
     // Markers around content we didn't write, or a fish drop-in that
     // isn't ours.
     | { readonly state: "modified" }
@@ -256,7 +366,7 @@ export type Hook = { readonly shell: ShellKind; readonly path: string } &
     // Ours, and `current` when it is what this build writes.
     | {
         readonly state: "installed";
-        readonly text: string;
+        readonly file: ConfigText;
         readonly current: boolean;
       }
   );
@@ -265,13 +375,25 @@ export const inspectHook = (place: HookPlace, kind: ShellKind) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const at = { shell: kind, path: yield* hookPath(place, kind) };
-    const read = yield* fs.readFileString(at.path).pipe(Effect.result);
+    // A PowerShell that didn't say where its profile is.
+    const read = yield* (
+      at.path === ""
+        ? Effect.fail(
+            PlatformError.badArgument({
+              module: "shellHook",
+              method: "inspectHook",
+              description: "no PowerShell profile",
+            }),
+          )
+        : fs.readFile(at.path)
+    ).pipe(Effect.result);
     if (Result.isFailure(read)) {
       return isNotFound(read.failure)
-        ? ({ ...at, state: "missing", text: undefined } satisfies Hook)
+        ? ({ ...at, state: "missing", file: undefined } satisfies Hook)
         : ({ ...at, state: "unreadable", error: read.failure } satisfies Hook);
     }
-    const text = read.success;
+    const file = decodeConfig(read.success);
+    const { text } = file;
     if (kind === "fish") {
       // The drop-in is wholly ours (a namespaced name, an "edits are
       // overwritten" header), so our marker makes it ours, any vintage.
@@ -279,7 +401,7 @@ export const inspectHook = (place: HookPlace, kind: ShellKind) =>
         ? ({
             ...at,
             state: "installed",
-            text,
+            file,
             current: text === fishHookContent(place.names),
           } satisfies Hook)
         : ({ ...at, state: "modified" } satisfies Hook);
@@ -287,7 +409,7 @@ export const inspectHook = (place: HookPlace, kind: ShellKind) =>
     const lines = text.split("\n");
     const span = findHookSpan(place.names, lines);
     if (span.kind === "none") {
-      return { ...at, state: "missing", text } satisfies Hook;
+      return { ...at, state: "missing", file } satisfies Hook;
     }
     if (span.kind === "broken" || !span.ours) {
       return { ...at, state: "modified" } satisfies Hook;
@@ -295,29 +417,35 @@ export const inspectHook = (place: HookPlace, kind: ShellKind) =>
     return {
       ...at,
       state: "installed",
-      text,
+      file,
       current:
-        lines.slice(span.begin, span.end + 1).join("\n") ===
-        hookBlock(place.names, kind).replace(/\n+$/, ""),
+        lines
+          .slice(span.begin, span.end + 1)
+          .map((line) => line.replace(/\r$/, ""))
+          .join("\n") === hookLines(place.names, kind).join("\n"),
     } satisfies Hook;
   });
 
-// The rc file with the hook in it: appended after a blank line, or the
-// block refreshed in place, since the guard line may have a new shape.
+// The rc file with the hook in it, in the file's own line endings:
+// appended after a blank line, or the block refreshed in place, since
+// the guard line may have a new shape.
 export const withHook = (
   names: HookNames,
   kind: ShellKind,
   text: string | undefined,
 ) => {
+  const crlf = text?.includes("\r\n") ?? false;
+  const block = hookLines(names, kind);
   const lines = (text ?? "").split("\n");
   const span = findHookSpan(names, lines);
   if (span.kind !== "found") {
-    const kept = (text ?? "").replace(/\n+$/, "");
-    return `${kept === "" ? "" : `${kept}\n\n`}${hookBlock(names, kind)}`;
+    const eol = crlf ? "\r\n" : "\n";
+    const kept = (text ?? "").replace(/(\r?\n)+$/, "");
+    return `${kept === "" ? "" : `${kept}${eol}${eol}`}${block.join(eol)}${eol}`;
   }
   return [
     ...lines.slice(0, span.begin),
-    ...hookBlock(names, kind).replace(/\n+$/, "").split("\n"),
+    ...block.map((line) => (crlf ? `${line}\r` : line)),
     ...lines.slice(span.end + 1),
   ].join("\n");
 };

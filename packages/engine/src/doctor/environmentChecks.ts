@@ -21,6 +21,7 @@ import * as Paths from "../Paths.ts";
 import { byPlatform } from "../platform.ts";
 import * as Shells from "../Shells.ts";
 import {
+  askPowerShell,
   CD_FILE_ENV,
   hookPlace,
   inspectHook,
@@ -358,7 +359,19 @@ export const makeEnvironmentChecks = ({
     const checkShellHook = (input: RunInput) =>
       Effect.gen(function* () {
         const line = check("Environment", "shell-hook", "shell hook");
-        const place = hookPlace(paths, input.zdotdir ?? zdotdir);
+        const powerShell = yield* askPowerShell(
+          (yield* shells.interactive).program,
+        ).pipe(
+          Effect.provideService(
+            ChildProcessSpawner.ChildProcessSpawner,
+            spawner,
+          ),
+        );
+        const place = hookPlace(
+          paths,
+          input.zdotdir ?? zdotdir,
+          powerShell.profile,
+        );
         const installed: ShellKind[] = [];
         const edited: ShellKind[] = [];
         const stale: ShellKind[] = [];
@@ -381,6 +394,17 @@ export const makeEnvironmentChecks = ({
           return line.warn(
             `the ${stale.join(", ")} hook is an older vintage than this build writes`,
             `Run \`${binaryName} shell install\` to refresh it.`,
+          );
+        }
+        // Windows PowerShell's default policy on a desktop.
+        if (
+          installed.includes("powershell") &&
+          (powerShell.policy === "Restricted" ||
+            powerShell.policy === "AllSigned")
+        ) {
+          return line.warn(
+            `PowerShell's execution policy is ${powerShell.policy}, so it doesn't load the hook from its profile`,
+            "Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` to let it load your profile.",
           );
         }
         if (installed.length === 0) {
