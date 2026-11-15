@@ -9,7 +9,7 @@ import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
-import { findExecutable } from "./executables.ts";
+import { findExecutable, findForScriptShell } from "./executables.ts";
 import { packageScripts } from "./packageJson.ts";
 import {
   findJustfile,
@@ -137,11 +137,13 @@ export class Scripts extends Context.Service<
     // for a package.json script, just or make for a recipe or target.
     // From a terminal a recipe can be named as two words (`just build`),
     // which takes the first of `extra`, and `script` is the name it
-    // resolved to.
+    // resolved to. With `inShell` the tool is found as the script shell
+    // finds it, for a command run as a line there.
     readonly command: (input: {
       readonly worktree: { readonly path: string; readonly name: string };
       readonly script: string;
       readonly extra: ReadonlyArray<string>;
+      readonly inShell: boolean;
     }) => Effect.Effect<
       {
         readonly program: string;
@@ -457,6 +459,7 @@ const make = Effect.gen(function* () {
     readonly worktree: { readonly path: string; readonly name: string };
     readonly script: string;
     readonly extra: ReadonlyArray<string>;
+    readonly inShell: boolean;
   }) {
     const { scripts, files } = yield* readFound(input.worktree.path);
     const manager = yield* packageManager(input.worktree.path);
@@ -485,7 +488,9 @@ const make = Effect.gen(function* () {
     }
     const { script, extra } = found;
     const tool = script.runner ?? manager;
-    const program = yield* findExecutable(tool);
+    const program = yield* (
+      input.inShell ? findForScriptShell : findExecutable
+    )(tool);
     if (Option.isNone(program)) {
       return yield* refused("no-tool", {
         name: tool,
