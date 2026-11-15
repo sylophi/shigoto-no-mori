@@ -5,6 +5,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { canonicalPath } from "../canonicalPath.ts";
 import { belowGitFloor, fields, parseGitVersion } from "../doctorParse.ts";
 import { envVar } from "../environment.ts";
 import {
@@ -19,6 +20,7 @@ import { installedVersionOf, linuxInstall } from "../linuxInstall.ts";
 import { appFoldersOf } from "../Launchers.ts";
 import * as Paths from "../Paths.ts";
 import { byPlatform } from "../platform.ts";
+import { windowsCliBinDir } from "../windowsInstall.ts";
 import * as Shells from "../Shells.ts";
 import {
   askPowerShell,
@@ -50,7 +52,7 @@ const INSTALL_HINTS = byPlatform({
     git: "`winget install Git.Git`",
     gitUpgrade: "`winget upgrade Git.Git`",
     gh: "`winget install GitHub.cli`",
-    path: "Add its directory to PATH.",
+    path: "Install the CLI from the app's Settings.",
   },
 });
 
@@ -302,9 +304,27 @@ export const makeEnvironmentChecks = ({
       win32: checkWindows,
     });
 
+    // The file a PATH entry runs: on Windows, a launcher in this binary's
+    // install runs this binary.
+    const resolvedOf = (candidate: string, executable: string) => {
+      const runs = byPlatform({
+        darwin: candidate,
+        linux: candidate,
+        win32:
+          path.dirname(candidate) ===
+          canonicalPath(windowsCliBinDir(path.dirname(executable)))
+            ? executable
+            : candidate,
+      });
+      return Effect.map(realPath(runs), (found) =>
+        Option.getOrElse(found, () => runs),
+      );
+    };
+
     // The binary in PATH order, deduped by the file each entry resolves
-    // to, so a symlink and its target don't read as a conflict.
-    const binariesOnPath = Effect.gen(function* () {
+    // to, so a symlink and its target, or a launcher and the binary it
+    // runs, don't read as a conflict.
+    const binariesOnPath = Effect.fnUntraced(function* (executable: string) {
       const searched = yield* envVar("PATH");
       if (searched === "") return [];
       const found: string[] = [];
@@ -322,10 +342,7 @@ export const makeEnvironmentChecks = ({
         ) {
           continue;
         }
-        const resolved = Option.getOrElse(
-          yield* realPath(candidate),
-          () => candidate,
-        );
+        const resolved = yield* resolvedOf(candidate, executable);
         if (seen.has(resolved)) continue;
         seen.add(resolved);
         found.push(tildify(candidate, home));
@@ -336,22 +353,23 @@ export const makeEnvironmentChecks = ({
     // Two binaries on PATH is the quietest way for an install to go wrong:
     // the one that answers and the one the app updates are different
     // files, so fixes never seem to land.
-    const checkPath = Effect.gen(function* () {
-      const line = check("Environment", "path", "PATH");
-      const found = yield* binariesOnPath;
-      const [first] = found;
-      if (first === undefined) {
+    const checkPath = ({ executable }: RunInput) =>
+      Effect.gen(function* () {
+        const line = check("Environment", "path", "PATH");
+        const found = yield* binariesOnPath(executable);
+        const [first] = found;
+        if (first === undefined) {
+          return line.warn(
+            `no \`${binaryName}\` on PATH, so this run came from an explicit path`,
+            INSTALL_HINTS.path,
+          );
+        }
+        if (found.length === 1) return line.ok(first);
         return line.warn(
-          `no \`${binaryName}\` on PATH, so this run came from an explicit path`,
-          INSTALL_HINTS.path,
+          `${found.length} different \`${binaryName}\` binaries on PATH; ${first} wins`,
+          `Remove the shadowed copies (${found.slice(1).join(", ")}) or reorder PATH.`,
         );
-      }
-      if (found.length === 1) return line.ok(first);
-      return line.warn(
-        `${found.length} different \`${binaryName}\` binaries on PATH; ${first} wins`,
-        `Remove the shadowed copies (${found.slice(1).join(", ")}) or reorder PATH.`,
-      );
-    });
+      });
 
     // Installed and current: install refreshes the block in place, so one
     // from an older vintage was written by a build whose guard line has

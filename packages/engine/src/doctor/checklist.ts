@@ -64,7 +64,7 @@ export const makeChecklist = ({
           yield* checkGit,
           yield* checkGh,
           yield* checkApp(input),
-          yield* checkPath,
+          yield* checkPath(input),
           yield* checkShellHook(input),
         ];
       });

@@ -177,11 +177,11 @@ jobs:
 
       - name: Go helpers build
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: pnpm -C app run file-sync:build && pnpm -C app run nativefs:build
+        run: pnpm -C app run file-sync:build && pnpm -C app run nativefs:build && pnpm -C app run cli-launcher:build
 
       - name: Go vet
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: go vet -C file-sync ./... && go vet -C nativefs ./...
+        run: go vet -C file-sync ./... && go vet -C nativefs ./... && go vet -C cli-launcher ./...
 
       - name: Go tests
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}

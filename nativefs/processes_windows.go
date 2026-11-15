@@ -29,10 +29,11 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-var processVerbs = map[string]func(args []string, stdout, stderr io.Writer) int{
+var osVerbs = map[string]func(args []string, stdout, stderr io.Writer) int{
 	"processes": listProcesses,
 	"end":       endProcesses,
 	"job":       runInJob,
+	"user-path": userPath,
 }
 
 type process struct {

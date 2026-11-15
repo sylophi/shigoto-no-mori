@@ -63,6 +63,10 @@ dist-nativefs/
 nativefs/nativefs
 nativefs/nativefs.exe
 
+# Windows launcher of the terminal command (scripts/build-go.mts)
+dist-cli-launcher/
+cli-launcher/cli-launcher.exe
+
 # The scene comparison's report (app/lab/scene-compare)
 app/lab/scene-compare/report/
 # The reliability harness's report (app/lab/reliability)

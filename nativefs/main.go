@@ -1,7 +1,8 @@
 // nativefs: the filesystem calls Node has no binding for, for the
 // engine's NativeFs service, on macOS (sys_darwin.go), Linux
 // (sys_linux.go) and Windows (sys_windows.go), and on Windows the
-// process calls too (processes_windows.go). Six filesystem verbs:
+// process calls (processes_windows.go) and the user's PATH
+// (userpath_windows.go) too. Six filesystem verbs:
 //
 //	nativefs clone [-stdin] <src> <dst>   copy-on-write clone of a tree, mode and mtime kept
 //	nativefs exchange <a> <b>             the two swapped in one step
@@ -182,15 +183,15 @@ var verbs = map[string]verb{
 }
 
 const usage = "usage: nativefs clone|exchange|clear-flags|xattrs|cloneable|lstat [-stdin] [-strip|-private] <root> [<dst>]\n" +
-	"       nativefs processes [<pid>...] | end [<pid>:<birth>...] | job <program> [<arg>...] (Windows)"
+	"       nativefs processes [<pid>...] | end [<pid>:<birth>...] | job <program> [<arg>...] | user-path has|add|remove <dir> (Windows)"
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, usage)
 		return 2
 	}
-	if process, ok := processVerbs[args[0]]; ok {
-		return process(args[1:], stdout, stderr)
+	if osVerb, ok := osVerbs[args[0]]; ok {
+		return osVerb(args[1:], stdout, stderr)
 	}
 	v, ok := verbs[args[0]]
 	if !ok {

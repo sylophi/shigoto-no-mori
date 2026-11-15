@@ -7,8 +7,10 @@ import { spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
 import { app, shell } from "electron";
+import { removeCliLaunchers } from "@shared/cliLaunchers";
 import { rendererSchemeName } from "@shared/packaging/rendererScheme.mts";
 import { flavor, names } from "../flavor";
+import { appPlace } from "./appPlace";
 
 const root = path.dirname(path.dirname(process.execPath));
 const exe = path.basename(process.execPath);
@@ -53,6 +55,7 @@ export function handledSquirrelEvent(): boolean {
       removeNotificationShortcut();
       app.removeAsDefaultProtocolClient(scheme, launcherPath());
       app.setLoginItemSettings({ openAtLogin: false });
+      removeCliLaunchers(appPlace());
       return true;
     case "--squirrel-obsolete":
       return true;
