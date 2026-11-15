@@ -175,6 +175,6 @@ catalog:
 # patch leaves the close to close the console, and the host ends what
 # is left of the tree (host/lib/scripts/processTrees/consoles.ts).
 patchedDependencies:
-  node-pty@1.1.0: patches/node-pty@1.1.0.patch
+  node-pty@1.2.0-beta.18: patches/node-pty@1.2.0-beta.18.patch
   react-grab@0.2.0: patches/react-grab@0.2.0.patch
   sonner@2.0.7: patches/sonner@2.0.7.patch

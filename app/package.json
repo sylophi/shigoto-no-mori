@@ -84,7 +84,7 @@
     "lucide-react": "catalog:",
     "marked": "catalog:",
     "material-icon-theme": "catalog:",
-    "node-pty": "1.1.0",
+    "node-pty": "1.2.0-beta.18",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-error-boundary": "^6.1.2",
