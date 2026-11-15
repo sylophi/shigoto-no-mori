@@ -40,26 +40,31 @@ export function CliSectionView({
   shell: ReactNode;
 }) {
   const { name, state, onPath, foreignPaths } = status;
-  // Nothing puts the command on PATH on Windows yet.
-  if (isWindowsDevice(home, status.binDir)) {
-    return (
-      <section className="space-y-3">
-        <SectionIntro title="Command line tool">
-          {CLI_ABOUT} Installing it on PATH from here isn&apos;t available on
-          Windows yet.
-        </SectionIntro>
-      </section>
-    );
-  }
+  const commands = (
+    <>
+      <span className="font-mono">{name}</span> and{" "}
+      <span className="font-mono">{status.aliasName}</span>
+    </>
+  );
+  const binDir = (
+    <span className="font-mono">{shownPath(status.binDir, home)}</span>
+  );
   const pathLine = `export PATH="${home && status.binDir.startsWith(home) ? `$HOME${status.binDir.slice(home.length)}` : status.binDir}:$PATH"`;
 
   return (
     <section className="space-y-3">
       <SectionIntro title="Command line tool">
-        {CLI_ABOUT} Installing links the{" "}
-        <span className="font-mono">{name}</span> and{" "}
-        <span className="font-mono">{status.aliasName}</span> commands into{" "}
-        <span className="font-mono">{shownPath(status.binDir, home)}</span>.
+        {CLI_ABOUT}{" "}
+        {isWindowsDevice(home, status.binDir) ? (
+          <>
+            Installing puts the {commands} commands in {binDir} and adds it to
+            your PATH.
+          </>
+        ) : (
+          <>
+            Installing links the {commands} commands into {binDir}.
+          </>
+        )}
       </SectionIntro>
 
       {state === "installed" && (

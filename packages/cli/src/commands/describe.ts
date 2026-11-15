@@ -18,6 +18,7 @@ import * as Flag from "effect/cli/Flag";
 import { UsageError } from "../errors.ts";
 import { resolveWorktree, worktreeFlags } from "../here.ts";
 import { emit, note, out, Output, styles } from "../output.ts";
+import { readStdin } from "../stdin.ts";
 
 // The description file couldn't be read.
 class UnreadableDescription extends Schema.TaggedError<UnreadableDescription>()(
@@ -31,14 +32,16 @@ class UnreadableDescription extends Schema.TaggedError<UnreadableDescription>()(
 
 // The text a description file holds, stdin for "-".
 const readDescription = (file: string) =>
-  Effect.flatMap(Effect.service(FileSystem.FileSystem), (fs) =>
-    fs.readFileString(file === "-" ? "/dev/stdin" : file).pipe(
-      Effect.mapError(
-        (error) =>
-          new UnreadableDescription({
-            problem: `open ${file}: ${errnoText(error)}`,
-          }),
-      ),
+  Effect.gen(function* () {
+    if (file === "-") return yield* readStdin;
+    const fs = yield* FileSystem.FileSystem;
+    return yield* fs.readFileString(file);
+  }).pipe(
+    Effect.mapError(
+      (error) =>
+        new UnreadableDescription({
+          problem: `open ${file}: ${errnoText(error)}`,
+        }),
     ),
   );
 

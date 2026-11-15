@@ -26,6 +26,8 @@ import {
   CLOUDFLARED_DIST_DIR,
 } from "./shared/packaging/cloudflaredDist.mts";
 import {
+  CLI_LAUNCHER_BINARY_NAME,
+  CLI_LAUNCHER_DIST_DIR,
   FILE_SYNC_BINARY_NAME,
   FILE_SYNC_DIST_DIR,
   NATIVEFS_BINARY_NAME,
@@ -109,10 +111,13 @@ const dmgVolumeName =
 // What the package carries per OS. Windows has no pinned cloudflared,
 // so tunnels stay off there. Of node-pty's Windows prebuild it ships the
 // ConPTY addon alone: the other files beside it serve options and calls
-// the host never makes (useConptyDll, the console process list). Linux
-// is packaged by scripts/package-linux.mts, not forge.
+// the host never makes (useConptyDll, the console process list). Only
+// Windows needs a launcher to put the terminal command on PATH
+// (host/lib/cli/launchers.ts). Linux is packaged by
+// scripts/package-linux.mts, not forge.
 const macPackage = {
   cloudflared: true,
+  cliLauncher: false,
   ptyPrebuilds: "darwin-.*",
   ptyFiles: [NODE_PTY_ADDON, NODE_PTY_SPAWN_HELPER],
 };
@@ -121,6 +126,7 @@ const osPackage = byPlatform({
   linux: macPackage,
   win32: {
     cloudflared: false,
+    cliLauncher: true,
     ptyPrebuilds: "win32-[^/]+(/conpty\\.node)?",
     ptyFiles: [NODE_PTY_CONPTY_ADDON],
   },
@@ -197,6 +203,9 @@ const config: ForgeConfig = {
       // The filesystem helper (the filesystem calls Node lacks), compiled by
       // the prePackage hook the same way.
       `${NATIVEFS_DIST_DIR}/${programFile(NATIVEFS_BINARY_NAME)}`,
+      ...(osPackage.cliLauncher
+        ? [`${CLI_LAUNCHER_DIST_DIR}/${programFile(CLI_LAUNCHER_BINARY_NAME)}`]
+        : []),
     ],
     // The Local Network (macOS 15+) and Automation prompts' sentences,
     // shared with the dev bundle. See shared/packaging/infoPlist.mts.
@@ -240,6 +249,7 @@ const config: ForgeConfig = {
       // the terminal sm (Bun).
       runScript("build-go.mts", "file-sync");
       runScript("build-go.mts", "nativefs");
+      if (osPackage.cliLauncher) runScript("build-go.mts", "cli-launcher");
       runScript("build-cli.mts");
       // Fetch the pinned cloudflared for the TARGET platform, not the
       // build machine's: a cross-arch package must ship the arch it

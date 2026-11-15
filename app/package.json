@@ -43,6 +43,7 @@
     "cli:build": "node scripts/build-cli.mts",
     "file-sync:build": "node scripts/build-go.mts file-sync",
     "nativefs:build": "node scripts/build-go.mts nativefs",
+    "cli-launcher:build": "node scripts/build-go.mts cli-launcher",
     "cli:install": "node scripts/install-cli.mts",
     "postinstall": "node scripts/prepare-node-pty.mts && node scripts/prepare-winstaller.mts"
   },

@@ -9,8 +9,7 @@
 // judgment.
 import { type Flavor, flavorNames } from "@shigomori/engine/flavor";
 import { currentOf } from "@shigomori/engine/linuxInstall";
-import { programFile } from "@shigomori/engine/executables";
-import { byPlatform } from "@shigomori/engine/platform";
+import { current } from "@shigomori/engine/platform";
 import { lstat, readlink, rm } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import {
@@ -41,21 +40,17 @@ function linkPath(flavor: Flavor): string {
 // an update.
 function linkTarget(facts: Facts): string | null {
   const binary = cliBinaryOf(facts);
-  if (binary === null || !facts.packaged) return binary;
-  return byPlatform({
-    darwin: binary,
-    linux: join(currentOf(facts.resourcesPath), cliBinaryName(facts.flavor)),
-    win32: binary,
-  });
+  if (binary === null || !facts.packaged || current() === "darwin") {
+    return binary;
+  }
+  return join(currentOf(facts.resourcesPath), cliBinaryName(facts.flavor));
 }
 
 // The end of a link to this flavor's installed binary, wherever it is.
 const installedEnding = (flavor: Flavor) =>
-  byPlatform({
-    darwin: `/Contents/Resources/${cliBinaryName(flavor)}`,
-    linux: `/${flavorNames(flavor).configDir}/current/${cliBinaryName(flavor)}`,
-    win32: `\\resources\\${programFile(cliBinaryName(flavor))}`,
-  });
+  current() === "darwin"
+    ? `/Contents/Resources/${cliBinaryName(flavor)}`
+    : `/${flavorNames(flavor).configDir}/current/${cliBinaryName(flavor)}`;
 
 // What a link path points at, in decreasing closeness to "the binary
 // this app runs":
