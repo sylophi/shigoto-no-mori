@@ -1,7 +1,8 @@
 # Cutting a prerelease
 
-The `Release` workflow (`../.github/workflows/release.yml`) builds, signs,
-notarizes and smokes a release once it is published. These gates come
+The `Release` workflow (`../.github/workflows/release.yml`) builds and
+smokes a release for macOS, Linux and Windows once it is published,
+signing and notarizing the Mac's. These gates come
 first, on the machine that cuts, at the tip about to be tagged and in
 this order. A failure at any of them stops the cut.
 
