@@ -1,0 +1,108 @@
+<!doctype html>
+<!-- The link preview card, rendered by scripts/og.mts (`pnpm og`). -->
+<html class="doubutsu" data-theme-scope>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../../packages/ui/src/styles/doubutsu.css" />
+    <link
+      rel="stylesheet"
+      href="../../packages/ui/node_modules/@fontsource/zen-maru-gothic/700.css"
+    />
+    <link
+      rel="stylesheet"
+      href="../../packages/ui/node_modules/@fontsource/zen-maru-gothic/900.css"
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+
+      .stage {
+        position: relative;
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        background-color: var(--background);
+        color: var(--foreground);
+        font-family: var(--font-sans);
+        font-weight: 700;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* The wallpaper's first frame. */
+      .doubutsu .stage::before {
+        animation: none;
+      }
+
+      .card {
+        position: absolute;
+        inset: 64px 64px 72px;
+        padding: 64px 72px;
+        overflow: hidden;
+        isolation: isolate;
+        border-radius: 48px;
+        background-color: var(--card);
+        box-shadow: var(--doubutsu-sticker-shadow);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 32px;
+      }
+      .icon {
+        width: 128px;
+        height: 128px;
+      }
+      .wordmark {
+        margin: 0;
+        font-size: 72px;
+        line-height: 1;
+        font-weight: 900;
+        letter-spacing: -0.01em;
+      }
+      .romaji {
+        margin-top: 12px;
+        font-size: 28px;
+        color: var(--muted-foreground);
+      }
+
+      .tagline {
+        margin: 56px 0 0;
+        font-size: 60px;
+        line-height: 1.15;
+        font-weight: 900;
+        letter-spacing: -0.01em;
+      }
+
+      .watermark {
+        position: absolute;
+        z-index: -1;
+        right: -64px;
+        bottom: -150px;
+        font-size: 420px;
+        line-height: 1;
+        font-weight: 900;
+        color: var(--doubutsu-watermark);
+        opacity: 0.15;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage" data-doubutsu-zone="main">
+      <div class="card">
+        <div class="brand">
+          <img class="icon" src="../public/img/icon.png" alt="" />
+          <div>
+            <h1 class="wordmark">仕事の森</h1>
+            <div class="romaji">Shigoto no Mori</div>
+          </div>
+        </div>
+        <p class="tagline">A Mac app for managing<br />git worktrees</p>
+        <span class="watermark">森</span>
+      </div>
+    </div>
+  </body>
+</html>
