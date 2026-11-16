@@ -114,6 +114,12 @@ func TestServeKeepsGitOutOfReach(t *testing.T) {
 		}}},
 		{Path: "sub/.git", New: directory},
 		{Path: "sub/b", New: &core.Entry{Kind: core.EntryKind_Directory, Contents: map[string]*core.Entry{".git": directory}}},
+		// The names NTFS reads as .git, held on every OS.
+		{Path: "sub/.git.", New: &core.Entry{Kind: core.EntryKind_Directory, Contents: map[string]*core.Entry{"hooks": directory}}},
+		{Path: ".git /x", New: directory},
+		{Path: "sub/e", New: &core.Entry{Kind: core.EntryKind_Directory, Contents: map[string]*core.Entry{"GIT~1": directory}}},
+		{Path: "link2", New: &core.Entry{Kind: core.EntryKind_SymbolicLink, Target: "GIT~1/hooks"}},
+		{Path: "link3", New: &core.Entry{Kind: core.EntryKind_SymbolicLink, Target: ".git./hooks"}},
 	} {
 		results, problems, _, err := endpoint.Transition(ctx, []*core.Change{change})
 		if err != nil {
@@ -123,7 +129,7 @@ func TestServeKeepsGitOutOfReach(t *testing.T) {
 			t.Fatalf("a change to %s was not refused as a problem: %v %v", change.Path, results, problems)
 		}
 	}
-	for _, path := range []string{".git/hooks", "sub/.git", "sub/b", "link", "sub/d"} {
+	for _, path := range []string{".git/hooks", ".git /x", ".git/x", "sub/.git", "sub/.git.", "sub/b", "sub/e", "link", "link2", "link3", "sub/d"} {
 		if _, err := os.Lstat(filepath.Join(root, path)); err == nil {
 			t.Fatalf("%s was written", path)
 		}
@@ -259,7 +265,8 @@ func TestServeRefusesARealRepositorysGitByName(t *testing.T) {
 		}
 	}
 	// Each refusal ends the stream, so each read is asked on its own.
-	for _, path := range []string{".git/config", ".GIT/config", ".g\u200cit/config", ".git\ufeff/config", ".Git/hooks/pre-commit", "vendor/lib/.git"} {
+	for _, path := range []string{".git/config", ".GIT/config", ".g\u200cit/config", ".git\ufeff/config", ".Git/hooks/pre-commit", "vendor/lib/.git",
+		".git./config", "GIT~1/config", ".git::$INDEX_ALLOCATION/config"} {
 		session, err := identifier.New(identifier.PrefixSynchronization)
 		if err != nil {
 			t.Fatal(err)

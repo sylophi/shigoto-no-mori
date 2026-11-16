@@ -15,6 +15,8 @@ package main
 //     credentials in a remote's URL, and git there would run what a peer
 //     put in it (hooks, core.fsmonitor). The app's sessions ignore it on
 //     both sides already, under the ignore syntax this side picks;
+//   - a name this side's OS would store under another name, or as a
+//     device, is never made: the other side keeps its file;
 //   - links stay portable, and files and folders keep the modes this
 //     side gives them.
 //
@@ -31,6 +33,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"path"
 	"slices"
 	"strings"
@@ -176,7 +179,7 @@ func (e guardedEndpoint) Stage(paths []string, digests [][]byte) ([]string, []*r
 	var allowedPaths []string
 	var allowedDigests [][]byte
 	for p, path := range paths {
-		if !touchesGit(path) {
+		if !touchesGit(path) && unkeepablePath(path) == "" {
 			allowedPaths = append(allowedPaths, path)
 			allowedDigests = append(allowedDigests, digests[p])
 		}
@@ -237,13 +240,25 @@ func (e guardedEndpoint) Transition(ctx context.Context, transitions []*core.Cha
 	var allowed []*core.Change
 	var allowedAt []int
 	for t, change := range transitions {
+		var refusal string
 		if touchesGit(change.Path) || holdsGit(change.Old) || holdsGit(change.New) || linksIntoGit(change.Path, change.New) {
-			results[t] = change.Old
-			problems = append(problems, &core.Problem{Path: change.Path, Error: "touches .git, which is not synchronized"})
+			refusal = "touches .git, which is not synchronized"
 		} else {
-			allowed = append(allowed, change)
-			allowedAt = append(allowedAt, t)
+			refusal = unkeepablePath(change.Path)
 		}
+		if refusal != "" {
+			results[t] = change.Old
+			problems = append(problems, &core.Problem{Path: change.Path, Error: refusal})
+			continue
+		}
+		// A folder keeps the rest of its contents. What it leaves out
+		// comes again next cycle as a change of its own, refused above.
+		if kept, left := keepable(change.Path, change.New); len(left) > 0 {
+			change = &core.Change{Path: change.Path, Old: change.Old, New: kept}
+			problems = append(problems, left...)
+		}
+		allowed = append(allowed, change)
+		allowedAt = append(allowedAt, t)
 	}
 	if len(allowed) == 0 {
 		return results, problems, false, nil
@@ -262,11 +277,19 @@ func touchesGit(p string) bool {
 	return p != "" && slices.ContainsFunc(strings.Split(path.Clean(p), "/"), isGitName)
 }
 
-// A name the volume reads as .git: APFS and HFS+ fold case by default,
-// so .GIT opens the same folder, and HFS+ also skips the code points it
-// ignores in a name, so .g\u200cit does too (git's is_hfs_dotgit).
+// A name a volume reads as .git, held on every OS since the worktree
+// may live on any of them: APFS and HFS+ fold case by default, so .GIT
+// opens the same folder, and HFS+ also skips the code points it ignores
+// in a name, so .g\u200cit does too (git's is_hfs_dotgit). NTFS drops
+// trailing dots and spaces, reads what follows a colon as one of the
+// folder's streams, and answers to the 8.3 short name, GIT~1 or a later
+// digit when that one was taken (git's is_ntfs_dotgit, which checks
+// ~1 alone).
 func isGitName(name string) bool {
-	return strings.EqualFold(strings.Map(hfsVisible, name), ".git")
+	name, _, _ = strings.Cut(strings.Map(hfsVisible, name), ":")
+	name = strings.TrimRight(name, ". ")
+	return strings.EqualFold(name, ".git") ||
+		len(name) == 5 && strings.EqualFold(name[:4], "git~") && name[4] >= '1' && name[4] <= '9'
 }
 
 func hfsVisible(r rune) rune {
@@ -306,6 +329,44 @@ func holdsGit(entry *core.Entry) bool {
 		}
 	}
 	return false
+}
+
+// Why this side can't make p under p's own name (unkeepable), or "".
+func unkeepablePath(p string) string {
+	for _, name := range strings.Split(p, "/") {
+		if refusal := unkeepable(name); refusal != "" {
+			return refusal
+		}
+	}
+	return ""
+}
+
+// The entry at `at` without the names this side can't keep, each left
+// out as a problem. The entry given is never changed: the daemon's side
+// passes its own.
+func keepable(at string, entry *core.Entry) (*core.Entry, []*core.Problem) {
+	var contents map[string]*core.Entry
+	var left []*core.Problem
+	for name, child := range entry.GetContents() {
+		childPath := path.Join(at, name)
+		if refusal := unkeepable(name); refusal != "" {
+			left = append(left, &core.Problem{Path: childPath, Error: refusal})
+			if contents == nil {
+				contents = maps.Clone(entry.Contents)
+			}
+			delete(contents, name)
+		} else if kept, childLeft := keepable(childPath, child); len(childLeft) > 0 {
+			left = append(left, childLeft...)
+			if contents == nil {
+				contents = maps.Clone(entry.Contents)
+			}
+			contents[name] = kept
+		}
+	}
+	if contents == nil {
+		return entry, nil
+	}
+	return &core.Entry{Kind: entry.Kind, Contents: contents}, left
 }
 
 // --- Mutagen's endpoint server, as v0.18.1 has it ---
