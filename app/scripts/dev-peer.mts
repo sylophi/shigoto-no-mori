@@ -8,7 +8,7 @@
 // forge does only on `rs` typed in its terminal, never on its own).
 // lab/devices.md covers the workflow around it.
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
@@ -41,10 +41,12 @@ try {
   const { profile, args } = parsePositionalDevProfile(process.argv.slice(2));
 
   // The build must be the dev one forge made for the running vite
-  // server: forge bakes that server's URL into it, so the bundle is
-  // checked for the port port-pool gave this worktree (.env.ports,
-  // the one vite.renderer.config.ts pins), and the server is probed.
-  const build = join(appRoot, ".vite", "build", "index.js");
+  // server: forge bakes that server's URL into it, so the bundle's
+  // chunks are checked for the port port-pool gave this worktree
+  // (.env.ports, the one vite.renderer.config.ts pins), and the server
+  // is probed.
+  const buildDir = join(appRoot, ".vite", "build");
+  const build = join(buildDir, "index.js");
   if (!existsSync(build)) {
     die(
       "no dev build at .vite/build/index.js. Start the primary dev app first " +
@@ -53,9 +55,14 @@ try {
   }
   const devServerUrl = rendererDevServerUrl();
   if (devServerUrl !== undefined) {
-    if (!readFileSync(build, "utf8").includes(devServerUrl)) {
+    const builtFor = readdirSync(buildDir).some(
+      (file) =>
+        file.endsWith(".js") &&
+        readFileSync(join(buildDir, file), "utf8").includes(devServerUrl),
+    );
+    if (!builtFor) {
       die(
-        `.vite/build/index.js was not built for the dev server at ${devServerUrl}` +
+        `.vite/build was not built for the dev server at ${devServerUrl}` +
           " (a packaging run or a port change since). Restart `pnpm start`.",
       );
     }
