@@ -283,13 +283,13 @@ func touchesGit(p string) bool {
 // in a name, so .g\u200cit does too (git's is_hfs_dotgit). NTFS drops
 // trailing dots and spaces, reads what follows a colon as one of the
 // folder's streams, and answers to the 8.3 short name, GIT~1 or a later
-// number when that one was taken (git's is_ntfs_dotgit, which checks
+// digit when that one was taken (git's is_ntfs_dotgit, which checks
 // ~1 alone).
 func isGitName(name string) bool {
 	name, _, _ = strings.Cut(strings.Map(hfsVisible, name), ":")
 	name = strings.TrimRight(name, ". ")
 	return strings.EqualFold(name, ".git") ||
-		len(name) > 4 && strings.EqualFold(name[:4], "git~") && strings.Trim(name[4:], "0123456789") == ""
+		len(name) == 5 && strings.EqualFold(name[:4], "git~") && name[4] >= '1' && name[4] <= '9'
 }
 
 func hfsVisible(r rune) rune {
