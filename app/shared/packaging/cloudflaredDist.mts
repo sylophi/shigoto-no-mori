@@ -8,8 +8,9 @@
 //
 // One version and one sha256 per asset, committed, so a bump is a
 // reviewed diff to this file and the fetch refuses anything else. A
-// platform with no pinned asset ships no connector (the runner reports
-// "no-binary" and the account page says so).
+// platform with no pinned asset can't be packaged, and its dev runs
+// have no connector (the runner reports "no-binary" and the account
+// page says so).
 //
 // .mts with no imports, loadable by plain `node scripts/*.mts` and by
 // the host through the @shared alias. Never import this from the renderer.
@@ -23,7 +24,8 @@ export const CLOUDFLARED_LICENSE = "Apache-2.0";
 export const CLOUDFLARED_REPOSITORY =
   "https://github.com/cloudflare/cloudflared";
 
-// A Mac's asset is a tgz holding the binary, and Linux's the binary.
+// A Mac's asset is a tgz holding the binary, and Linux's and Windows'
+// the binary.
 type CloudflaredAsset = { name: string; sha256: string };
 
 // Keyed by node's `${process.platform}-${process.arch}`, the vocabulary
@@ -40,6 +42,10 @@ const ASSETS: Record<string, CloudflaredAsset> = {
   "linux-x64": {
     name: "cloudflared-linux-amd64",
     sha256: "ae5e8add7884b0531d66bbca4570d1de491ff6da51e4ebe7eb160cdf241d9e42",
+  },
+  "win32-x64": {
+    name: "cloudflared-windows-amd64.exe",
+    sha256: "411b16d40c8d872243efeb52c550053d00af0a8a97fbb32e730fb8aba429eaa8",
   },
 };
 
