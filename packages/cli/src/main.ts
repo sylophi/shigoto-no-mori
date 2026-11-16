@@ -6,6 +6,7 @@ import { canonicalPlatform } from "@shigomori/engine/canonicalPlatform";
 import { flavorNames } from "@shigomori/engine/flavor";
 import * as Paths from "@shigomori/engine/Paths";
 import { childDefaults } from "@shigomori/engine/processes";
+import * as ProcessTable from "@shigomori/engine/ProcessTable";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
 import * as Shells from "@shigomori/engine/Shells";
 import * as Cause from "effect/Cause";
@@ -163,7 +164,11 @@ const sm = Command.make("sm").pipe(
     doctorCommand.pipe(changingWithFix, Command.provide(doctor(flavor))),
     update.pipe(Command.provide(services)),
     dataCommand.pipe(Command.provide(services)),
-    nuke.pipe(Command.provide(Paths.layer(flavor))),
+    nuke.pipe(
+      Command.provide(
+        Layer.merge(Paths.layer(flavor), ProcessTable.layer(nativefs())),
+      ),
+    ),
     serviceCommand.pipe(Command.provide(Paths.layer(flavor))),
     guideCommand.pipe(Command.provide(services)),
   ]),

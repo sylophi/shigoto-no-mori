@@ -23,6 +23,7 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { DEV_PROFILES_DIR } from "@shared/packaging/appName.mts";
+import { byPlatform } from "@shigomori/engine/platform";
 import {
   dataDir,
   dataDirPointerPath,
@@ -111,6 +112,14 @@ export function writeNukeMarker(
   renameSync(staged, marker);
 }
 
+// Chromium's single-instance lock in userData.
+const isLockFile = (entry: string) =>
+  byPlatform({
+    darwin: entry.startsWith("Singleton"),
+    linux: entry.startsWith("Singleton"),
+    win32: entry === "lockfile",
+  });
+
 // What a start that found a marker couldn't delete, and why, or null
 // for no marker. The lock's own files stay, since this process holds the
 // lock through them, and so do the plain dev instance's profiles, other
@@ -134,7 +143,7 @@ export function finishPendingNuke(userData: string): {
     if (
       entry === NUKE_MARKER ||
       entry === DEV_PROFILES_DIR ||
-      entry.startsWith("Singleton")
+      isLockFile(entry)
     ) {
       continue;
     }

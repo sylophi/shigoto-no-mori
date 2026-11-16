@@ -179,6 +179,9 @@ const config: ForgeConfig = {
     name: names.appName,
     appBundleId: names.bundleId,
     appCopyright: "© 2026 sylophi",
+    // Squirrel's Start menu folder is named for it
+    // (main/electron/squirrel.ts).
+    win32metadata: { CompanyName: APP_REPO_OWNER },
     // The renderer-origin scheme (main/electron/clerk.ts): packaged
     // builds load the renderer from <scheme>://app, and Clerk's OAuth
     // redirects deep-link back to it. macOS routes the scheme to the

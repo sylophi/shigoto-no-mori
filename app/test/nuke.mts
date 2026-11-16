@@ -4,7 +4,9 @@
 // finishing what an interrupted first left. The next start's half
 // deletes what the marker names and all of userData but the lock and
 // the dev profiles, and finishes after a start that died halfway
-// through.
+// through. The terminal's nuke then deletes the rest of its own and
+// nothing of another build's, keeping a kept app's own folder that
+// holds the marker.
 //
 // Run: pnpm test nuke.
 import assert from "node:assert/strict";
@@ -19,6 +21,12 @@ import { basename, join } from "../../test/canonicalPaths.mts";
 import * as Effect from "effect/Effect";
 import { afterAll, beforeAll, it } from "vitest";
 import { readOnly } from "../../packages/engine/test/lib/holds.ts";
+import { isSameOrInside } from "../../packages/contracts/src/projectPaths.ts";
+import { canonicalPath } from "../../packages/engine/src/canonicalPath.ts";
+import {
+  footprint,
+  removeLeftovers,
+} from "../../packages/engine/src/footprint.ts";
 import { runHost } from "./lib/hostRuntime.mts";
 import { cliSandbox } from "./lib/cliSandbox.mts";
 import {
@@ -162,6 +170,7 @@ it("removes every worktree the app made, and a second run finishes an interrupte
 });
 
 it("deletes at the next start what the marker names and all of userData, the lock and the profiles aside", () => {
+  const lock = process.platform === "win32" ? "lockfile" : "SingletonLock";
   const root = join(sandbox, "start");
   const userData = join(root, "userData");
   const data = join(root, "data");
@@ -180,7 +189,7 @@ it("deletes at the next start what the marker names and all of userData, the loc
     join(userData, "clerk-tokens.json"),
     join(userData, "account.json"),
     join(userData, "clientConfig.json"),
-    join(userData, "SingletonLock"),
+    join(userData, lock),
     join(userData, "profiles", "other", "account.json"),
     join(data, "store.db"),
     join(logs, "main.log"),
@@ -194,10 +203,7 @@ it("deletes at the next start what the marker names and all of userData, the loc
   rmSync(data, { recursive: true, force: true });
   assert.deepEqual(finishPendingNuke(userData), { left: [] });
   for (const path of [data, logs, pointer]) assert.ok(!existsSync(path), path);
-  assert.deepEqual(readdirSync(userData).toSorted(), [
-    "SingletonLock",
-    "profiles",
-  ]);
+  assert.deepEqual(readdirSync(userData).toSorted(), [lock, "profiles"]);
   assert.ok(existsSync(join(userData, "profiles", "other", "account.json")));
   assert.ok(!existsSync(join(userData, NUKE_MARKER)));
   assert.ok(existsSync(join(root, "config")), "only the pointer itself");
@@ -248,4 +254,109 @@ it("deletes all it can past a path it can't, says which, and keeps the marker fo
   assert.deepEqual(finishPendingNuke(userData), { left: [] });
   assert.ok(!existsSync(join(held, "file")));
   assert.ok(!existsSync(join(userData, NUKE_MARKER)));
+});
+
+// Every build's things under one home, as the OS this runs on places
+// them.
+const homeOf = (name: string) => {
+  const home = join(sandbox, name);
+  return {
+    home,
+    configHome: join(home, ".config"),
+    dataHome: join(home, ".local", "share"),
+    stateHome: join(home, ".local", "state"),
+    binHome: join(home, ".local", "bin"),
+  };
+};
+const FLAVORS = ["lab", "prod", "dev"] as const;
+const within = (path: string, folder: string) =>
+  isSameOrInside(canonicalPath(path), canonicalPath(folder));
+// Everything under home but the lab's.
+const othersUnder = (home: string): string[] =>
+  readdirSync(home, { recursive: true, encoding: "utf8" })
+    .filter((entry) => !entry.includes("lab"))
+    .toSorted();
+
+it("keeps each build's footprint its own: no path of one is or holds another's", () => {
+  const place = homeOf("footprints");
+  const paths = (flavor: string) =>
+    footprint(flavor, place).paths.map(({ path }) => path);
+  for (const flavor of FLAVORS) {
+    for (const path of paths(flavor)) {
+      assert.ok(within(path, place.home), `${path} is under home`);
+      for (const other of FLAVORS.filter((each) => each !== flavor)) {
+        for (const theirs of paths(other)) {
+          assert.ok(
+            !within(path, theirs) && !within(theirs, path),
+            `${flavor}'s ${path} and ${other}'s ${theirs}`,
+          );
+        }
+      }
+    }
+  }
+  if (process.platform === "win32") {
+    const lab = footprint("lab", place).paths.map(({ id, path }) => ({
+      id,
+      path: canonicalPath(path),
+    }));
+    const userData = join(
+      place.home,
+      "AppData",
+      "Roaming",
+      "Shigoto no Mori (lab)",
+    );
+    assert.deepEqual(
+      lab.filter(({ id }) => ["userData", "logs", "preferences"].includes(id)),
+      [
+        { id: "userData", path: userData },
+        { id: "logs", path: join(userData, "logs") },
+      ],
+    );
+  }
+});
+
+it("deletes the rest of this build's own after the app's nuke, nothing of another's", () => {
+  const place = homeOf("leftovers");
+  // Each build's files, written whole: the data dir with its store, the
+  // app's own folder and logs, and the config folder with its pointer
+  // and lock.
+  const seed = (flavor: string) => {
+    for (const { id, path } of footprint(flavor, place).paths) {
+      if (["config", "data", "userData", "logs"].includes(id)) {
+        mkdirSync(path, { recursive: true });
+        writeFileSync(join(path, id === "config" ? "data-dir" : "file"), "x");
+      } else {
+        mkdirSync(join(path, ".."), { recursive: true });
+        writeFileSync(path, "x");
+      }
+    }
+  };
+  for (const flavor of FLAVORS) seed(flavor);
+  const lab = (id: string) =>
+    footprint("lab", place).paths.find((each) => each.id === id)?.path ?? "";
+  // The app's nuke took the data dir's files and the pointer.
+  rmSync(join(lab("config"), "data-dir"));
+  const others = othersUnder(place.home);
+
+  assert.deepEqual(removeLeftovers("lab", place, false), []);
+  for (const id of ["userData", "logs", "dataDirLock", "config"]) {
+    assert.ok(!existsSync(lab(id)), `lab's ${id} is gone`);
+  }
+  assert.ok(existsSync(join(lab("data"), "file")), "the data dir is the app's");
+  assert.deepEqual(
+    othersUnder(place.home),
+    others,
+    "no other build's file went",
+  );
+
+  // A kept app whose start left files keeps its own folder, the marker
+  // in it, and a config folder holding the owner's file stays.
+  seed("lab");
+  rmSync(join(lab("config"), "data-dir"));
+  writeFileSync(join(lab("config"), "notes.txt"), "mine");
+  assert.deepEqual(removeLeftovers("lab", place, true), []);
+  assert.ok(existsSync(join(lab("userData"), "file")), "userData stays");
+  assert.ok(!existsSync(lab("dataDirLock")));
+  assert.deepEqual(readdirSync(lab("config")), ["notes.txt"]);
+  assert.deepEqual(othersUnder(place.home), others);
 });
