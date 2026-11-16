@@ -20,7 +20,11 @@ import { installedVersionOf, linuxInstall } from "../linuxInstall.ts";
 import { appFoldersOf } from "../Launchers.ts";
 import * as Paths from "../Paths.ts";
 import { byPlatform } from "../platform.ts";
-import { windowsCliBinDir } from "../windowsInstall.ts";
+import {
+  windowsCliBinDir,
+  windowsInstallRoot,
+  windowsUpdateExe,
+} from "../windowsInstall.ts";
 import * as Shells from "../Shells.ts";
 import {
   askPowerShell,
@@ -289,14 +293,29 @@ export const makeEnvironmentChecks = ({
         return line.ok(`${installed}, its host running`);
       });
 
-    // Nothing installs the app on Windows yet, so there is no install to
-    // check.
-    const checkWindows = ({ version }: RunInput) =>
-      Effect.succeed(
-        check("Environment", "app", "app").ok(
-          `${binaryName} ${version}, with no install on Windows yet`,
-        ),
+    // On Windows: the install this binary is from, Squirrel's folder two
+    // above its resources.
+    const checkWindows = Effect.fnUntraced(function* ({
+      version,
+      executable,
+    }: RunInput) {
+      const line = check("Environment", "app", "install");
+      if (flavor === "dev") {
+        return line.ok(
+          `dev build (${binaryName} ${version}): runs from a checkout, no install`,
+        );
+      }
+      const resources = path.dirname(executable);
+      if (Option.isNone(yield* statOf(windowsUpdateExe(resources)))) {
+        return line.warn(
+          "this binary isn't from an install, so update and the app have nothing behind them",
+          `Install Shigoto no Mori, and the CLI from its Settings, which puts \`${binaryName}\` on PATH.`,
+        );
+      }
+      return line.ok(
+        `${version} at ${tildify(windowsInstallRoot(resources), home)}`,
       );
+    });
 
     const checkApp = byPlatform({
       darwin: checkBundle,

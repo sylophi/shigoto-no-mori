@@ -1,23 +1,34 @@
-// The updater's files: the commands it runs, the files it shares with the app and a v2 sm, read leniently and written whole, and whether the app is running.
+// The updater's files: the commands it runs, the files it shares with the app and a v2 sm, read leniently and written whole, the download's digest, and whether the app is running.
+import { createHash } from "node:crypto";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
+import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { programFile } from "../executables.ts";
 import { type Flavor, flavorNames } from "../flavor.ts";
 import { unitState } from "../hostUnit.ts";
 import { parseJson } from "../json.ts";
 import { linuxInstall } from "../linuxInstall.ts";
 import * as Paths from "../Paths.ts";
 import { byPlatform } from "../platform.ts";
-import { exec } from "../processes.ts";
-import { type AppStatus, appStatusOf } from "../updateFeed.ts";
+import { exec, pidAlive } from "../processes.ts";
+import * as ProcessTable from "../ProcessTable.ts";
 import {
+  type AppStatus,
+  appStatusOf,
+  type ReleaseInfo,
+} from "../updateFeed.ts";
+import {
+  DigestRejected,
   type Ran,
   RemoveFailed,
   StagingFailed,
+  type UpdateInput,
+  report,
   updaterFiles,
 } from "./documents.ts";
 
@@ -27,6 +38,7 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
     const path = yield* Path.Path;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const paths = yield* Paths.Paths;
+    const processTable = yield* ProcessTable.ProcessTable;
     // CFBundleExecutable of the app (forge names it for the flavor), which
     // survives bundle moves and renames, so it tells the app from a
     // process that got a recycled pid.
@@ -34,12 +46,14 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
     const at = updaterFiles(path, paths.dataDir);
     const statusPath = at.status;
     const temporaries = yield* Ref.make(0);
-    // A command run to the end, `from` its stdout or both its streams.
-    // One that couldn't start reads as a failure with no output.
+    // A command run to the end, `from` its stdout or both its streams,
+    // with `env` over this process's own. One that couldn't start reads
+    // as a failure with no output.
     const run = (
       command: string,
       args: ReadonlyArray<string>,
       from: "stdout" | "all" = "all",
+      env?: Record<string, string>,
     ) =>
       // A stuck codesign, ditto or open would leave a headless install
       // waiting for good, with the app closed.
@@ -47,6 +61,8 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
         timeout: "5 minutes",
         all: from === "all",
         anyExit: true,
+        env,
+        extendEnv: true,
       }).pipe(
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.map(({ stdout, code }): Ran => ({
@@ -67,8 +83,7 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
     // app.asar inside a bundle for a folder, so a recursive remove of an
     // .app fails on it, leaving a husk a rename onto then refuses.
     // Windows has no rm: there it is FileSystem.remove, which clears a
-    // read-only file and takes a junction without what it names. What an
-    // app.asar does to it is the Windows install layout's to settle.
+    // read-only file and takes a junction without what it names.
     const removeAll = (target: string) =>
       byPlatform({
         darwin: removeByRm,
@@ -128,6 +143,43 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
         .pipe(Effect.tapError(() => fs.remove(temporary).pipe(Effect.ignore)));
     });
 
+    const hashOf = Effect.fnUntraced(function* (
+      file: string,
+      algorithm: "sha1" | "sha256",
+    ) {
+      const hash = createHash(algorithm);
+      yield* Stream.runForEach(fs.stream(file), (chunk) =>
+        Effect.sync(() => hash.update(chunk)),
+      );
+      return hash.digest("hex");
+    });
+
+    // The download holds to the digest its release names, read from
+    // GitHub's API over HTTPS: the trust of a build with no signature to
+    // check (Linux's, Windows').
+    const checkDigest = Effect.fn("Updater.checkDigest")(function* (
+      release: ReleaseInfo,
+      input: UpdateInput,
+    ) {
+      const { version } = release;
+      const download = at.download;
+      yield* report(input, { phase: "verifying", version });
+      if (!release.digest.startsWith("sha256:")) {
+        yield* prune(download);
+        return yield* new DigestRejected({ reason: "missing", version });
+      }
+      const digest = yield* hashOf(download, "sha256").pipe(
+        Effect.mapError(
+          (cause) =>
+            new StagingFailed({ reason: "read", path: download, cause }),
+        ),
+      );
+      if (`sha256:${digest}` !== release.digest) {
+        yield* prune(download);
+        return yield* new DigestRejected({ reason: "other", version });
+      }
+    });
+
     const makeDirectory = (target: string) =>
       fs
         .makeDirectory(target, { recursive: true })
@@ -150,8 +202,7 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
     // the install to a recycled one would wait on a process that never
     // restarts. On a Mac the executable's name has to match too, and ps
     // fails for a pid that is gone. On Linux it has to be the pid the
-    // host's unit runs. Nothing installs the app on Windows yet, so no
-    // process there is the installed app.
+    // host's unit runs. On Windows its program has to be the app's.
     const appAlive = (pid: number) =>
       byPlatform({
         darwin: run("ps", ["-o", "comm=", "-p", String(pid)], "stdout").pipe(
@@ -161,22 +212,26 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
           unit,
           (state) => Option.isSome(state) && state.value.pid === pid,
         ),
-        win32: Effect.succeed(false),
+        win32: Effect.gen(function* () {
+          if (!(yield* pidAlive(pid))) return false;
+          return Option.exists(
+            yield* processTable.identify(pid),
+            ({ name }) => name === programFile(appExecutable),
+          );
+        }),
       });
 
     // The app running, even one that hasn't published updater.json yet:
-    // on a Mac any process with its executable name (-x matches exactly,
-    // so the "... Helper" processes don't count), on Linux the host's
-    // unit.
+    // any process with its executable's name (on a Mac the "... Helper"
+    // processes don't count), on Linux the host's unit.
+    const anyApp = processTable.running(programFile(appExecutable));
     const appRunning = byPlatform({
-      darwin: run("pgrep", ["-x", appExecutable]).pipe(
-        Effect.map((ran) => ran.ok),
-      ),
+      darwin: anyApp,
       linux: Effect.map(
         unit,
         (state) => Option.isSome(state) && state.value.running,
       ),
-      win32: Effect.succeed(false),
+      win32: anyApp,
     });
 
     // The app's updater.json, none when it is missing or malformed.
@@ -197,6 +252,8 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
       removeAll,
       prune,
       run,
+      hashOf,
+      checkDigest,
       makeDirectory,
       readShared,
       writeShared,

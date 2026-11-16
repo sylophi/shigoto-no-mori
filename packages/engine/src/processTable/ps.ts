@@ -123,6 +123,12 @@ export const makePs = Effect.gen(function* () {
     });
   }, withSpawner);
 
+  // -x matches the name whole.
+  const running = Effect.fn("ProcessTable.running")(function* (name: string) {
+    const pgrep = yield* exec("pgrep", ["-x", name]).pipe(Effect.option);
+    return Option.isSome(pgrep);
+  }, withSpawner);
+
   // One is held while its terminal's foreground process group is not
   // its own. Untraced, as the terminals ask every two seconds.
   const held = Effect.fnUntraced(function* (pids: ReadonlyArray<number>) {
@@ -142,5 +148,5 @@ export const makePs = Effect.gen(function* () {
     );
   }, withSpawner);
 
-  return { startedAt, listed, identify, held };
+  return { startedAt, listed, identify, running, held };
 });
