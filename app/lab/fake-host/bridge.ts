@@ -51,6 +51,7 @@ import {
 } from "@shigomori/contracts/contract";
 import { WEB_PLATFORM } from "@shigomori/contracts/platform";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
+import type { ShellIntegrationStatus } from "@shigomori/contracts/modules/cli";
 import type {
   AgentHarnessStatus,
   UpdaterState,
@@ -151,6 +152,7 @@ import {
   fakeAgentHarnesses,
   fakeCliStatus,
   fakeShellStatus,
+  fakeWindowsShellStatus,
 } from "@shigomori/ui/fixtures/settingsFixtures.ts";
 import {
   expandHome,
@@ -463,6 +465,9 @@ function hostHandlersFor(
   const allWorktrees = () => Object.values(forest.worktrees).flat();
   // Claude Code's hooks in, Codex's waiting on a fresh install.
   let agentHarnesses = fakeAgentHarnesses(disk.home);
+  let shellStatus = onWindows(disk)
+    ? fakeWindowsShellStatus(disk.home)
+    : fakeShellStatus(disk.home);
   const findWorktree = (worktreeId: string) =>
     allWorktrees().find((worktree) => worktree.id === worktreeId);
   const changes = createFakeChanges(findWorktree);
@@ -810,7 +815,10 @@ function hostHandlersFor(
     },
     "agents:status": () => agentHarnesses,
     "cli:status": () => fakeCliStatus(disk.home),
-    "cli:shellStatus": () => fakeShellStatus(disk.home),
+    "cli:shellStatus": () => shellStatus,
+    "cli:shellInstall": () => (shellStatus = setShellHooks(shellStatus, true)),
+    "cli:shellUninstall": () =>
+      (shellStatus = setShellHooks(shellStatus, false)),
     "agents:setHooks": async ({ harness, install }) => {
       await sleep(400);
       agentHarnesses = setHooks(
@@ -1379,6 +1387,25 @@ function setHooks(
       ? { ...rest, hooks, trusted: false }
       : { ...rest, hooks };
   });
+}
+
+// The login shell's hook installed, or every installed hook removed.
+function setShellHooks(
+  status: ShellIntegrationStatus,
+  install: boolean,
+): ShellIntegrationStatus {
+  return {
+    ...status,
+    shells: status.shells.map((hook) => ({
+      ...hook,
+      state:
+        install && hook.shell === status.loginShell
+          ? "installed"
+          : !install && hook.state === "installed"
+            ? "missing"
+            : hook.state,
+    })),
+  };
 }
 
 // What a push or a publish leaves: every commit on the branch is on the

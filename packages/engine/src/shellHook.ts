@@ -24,6 +24,7 @@ import * as PlatformError from "effect/PlatformError";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Result from "effect/Result";
+import { canonicalPath } from "./canonicalPath.ts";
 import { flavorNames } from "./flavor.ts";
 import { byPlatform } from "./platform.ts";
 import type { Paths } from "./Paths.ts";
@@ -272,7 +273,7 @@ export const askPowerShell = (program: string) =>
         ]),
       );
       const [profile = "", policy = ""] = output.trim().split(/\r?\n/);
-      return { profile: profile.trim(), policy: policy.trim() };
+      return { profile: canonicalPath(profile.trim()), policy: policy.trim() };
     }).pipe(
       Effect.timeout("10 seconds"),
       Effect.orElseSucceed(() => noPowerShell),

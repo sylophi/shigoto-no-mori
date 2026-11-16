@@ -122,6 +122,21 @@ export function fakeShellStatus(home: string): ShellIntegrationStatus {
   };
 }
 
+// A Windows PC's: PowerShell, its profile under Documents.
+export function fakeWindowsShellStatus(home: string): ShellIntegrationStatus {
+  return {
+    loginShell: "powershell",
+    shells: [
+      { shell: "bash", path: `${home}/.bashrc`, state: "missing" },
+      {
+        shell: "powershell",
+        path: `${home}/Documents/PowerShell/profile.ps1`,
+        state: "missing",
+      },
+    ],
+  };
+}
+
 // A health check that found a stale lock to repair and a project gone
 // from disk, beside the checks that passed.
 export const FAKE_DOCTOR_REPORT: DoctorReport = {

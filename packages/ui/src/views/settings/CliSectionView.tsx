@@ -4,6 +4,7 @@ import { Button } from "../../primitives/button.tsx";
 import { SectionIntro } from "../../primitives/section-heading.tsx";
 import { StatusDot } from "../../primitives/status-dot.tsx";
 import { isWindowsDevice, shownPath } from "../../lib/devicePaths.ts";
+import { shellName } from "@shigomori/contracts/shellName";
 import type {
   CliStatus,
   ShellIntegrationStatus,
@@ -195,13 +196,16 @@ export function ShellIntegrationView({
       {status.loginShell === null ? (
         <p className="text-xs text-muted-foreground">
           Your login shell isn&apos;t one integration supports (
-          {status.shells.map((s) => s.shell).join(", ")}). Run{" "}
+          {status.shells.map((s) => shellName(s.shell)).join(", ")}). Run{" "}
           <span className="font-mono select-text">{name} shell install</span>{" "}
           from the shell you use.
         </p>
       ) : login?.state === "installed" ? (
         <div className="flex flex-wrap items-center gap-3">
-          <StatusDot tone="emerald" label={`Enabled for ${login.shell}`} />
+          <StatusDot
+            tone="emerald"
+            label={`Enabled for ${shellName(login.shell)}`}
+          />
           <span className="font-mono text-sm text-muted-foreground select-text">
             {shownPath(login.path, home)}
           </span>
@@ -234,7 +238,7 @@ export function ShellIntegrationView({
             onClick={onEnable}
           >
             <Download />
-            Enable for {status.loginShell}
+            Enable for {shellName(status.loginShell)}
           </Button>
           {enabledAnywhere && (
             <span className="text-xs text-muted-foreground">
