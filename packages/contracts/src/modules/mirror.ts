@@ -490,13 +490,13 @@ export function mirrorStopBlocker(
       ? "a file changed on both sides"
       : `${conflicts} files changed on both sides`;
   }
-  // A file the original couldn't take may exist only on the copy. One
-  // the copy couldn't take is still on the original.
-  const unwritten = mirrorProblemCount(session.local);
-  if (unwritten > 0) {
-    return unwritten === 1
-      ? "a file couldn't be written on the original"
-      : `${unwritten} files couldn't be written on the original`;
+  // A side's problems hold the files it couldn't read with the ones it
+  // couldn't write, so either side's may be a file only the copy has.
+  const problems = mirrorProblemCount(session.local, session.remote);
+  if (problems > 0) {
+    return problems === 1
+      ? "a file couldn't be copied"
+      : `${problems} files couldn't be copied`;
   }
   if (!mirrorFilesSettled(session)) return "files are still syncing";
   if (session.git === "timed-out") return "git didn't finish checking in time";

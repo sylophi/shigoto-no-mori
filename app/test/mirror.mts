@@ -35,7 +35,7 @@
 //     its rule leaves out,
 //   - a one-shot that couldn't write a file, either way, hasn't
 //     crossed, and a stop refuses removing a copy holding a file the
-//     original couldn't write,
+//     original couldn't write or the copy couldn't read,
 //   - a moved worktree re-opens only its own mirrors, at its new path,
 //   - a stop refuses removing a copy unforced while a conflict or git
 //     not in step (or not checked in time) may leave it the only
@@ -110,7 +110,7 @@ import {
   standInPeers,
 } from "./lib/hostStandIns.mts";
 import { EXE } from "../../packages/engine/test/lib/nativefs.ts";
-import { readOnly } from "../../packages/engine/test/lib/holds.ts";
+import { readOnly, unreadable } from "../../packages/engine/test/lib/holds.ts";
 import { runHost } from "./lib/hostRuntime.mts";
 import {
   bootDirectWire,
@@ -882,18 +882,14 @@ it("one-shot transfer: a file the receiving side couldn't write keeps the files 
   );
 });
 
-it("stop: a file the original couldn't write refuses removing the copy", async () => {
-  // Written on the copy into a folder the original can't add to: the
-  // copy holds the only one, so the stop keeps it.
-  standInMirror({
-    ...inertImpl(),
-    refreshGit: () => Effect.succeed({ status: "synced", detail: "" }),
-  });
-  const release = holdFolder(
-    dialerRoot,
-    listenerWorktree,
-    "only-on-the-copy.txt",
-  );
+// A mirror from the dialer to the listener whose `side` reports a problem
+// with `path`, a file only on the copy: the stop is refused and the copy
+// keeps it. The session ends before `release`, so the file stays put.
+const refusedStop = async (
+  side: "local" | "remote",
+  path: string,
+  release: () => void,
+) => {
   const held = await daemon.create({
     localRoot: dialerRoot,
     deviceId: LISTENER,
@@ -914,28 +910,39 @@ it("stop: a file the original couldn't write refuses removing the copy", async (
             (raw) =>
               raw.session === held &&
               raw.successfulCycles > 0 &&
-              raw.local.problems.some(
-                (problem) => problem.path === "held/only-on-the-copy.txt",
-              ),
+              raw[side].problems.some((problem) => problem.path === path),
           ),
-      "the original's problem with the copy's file",
+      `the ${side} side's problem with ${path}`,
       30_000,
     );
     await assert.rejects(
       stop({ session: held }),
-      (error) =>
-        mirrorStopRefusalReason(error) ===
-        "a file couldn't be written on the original",
-    );
-    assert.equal(
-      read(join(listenerWorktree, "held", "only-on-the-copy.txt")),
-      "only here\n",
+      (error) => mirrorStopRefusalReason(error) === "a file couldn't be copied",
     );
   } finally {
-    release();
     await daemon.terminate(held);
+    release();
   }
+  assert.equal(read(join(listenerWorktree, ...path.split("/"))), "only here\n");
+};
+
+it("stop: a file only on the copy that the original couldn't write, or the copy couldn't read, refuses removing the copy", async () => {
+  standInMirror({
+    ...inertImpl(),
+    refreshGit: () => Effect.succeed({ status: "synced", detail: "" }),
+  });
+  // Written on the copy into a folder the original can't add to.
+  await refusedStop(
+    "local",
+    "held/only-on-the-copy.txt",
+    holdFolder(dialerRoot, listenerWorktree, "only-on-the-copy.txt"),
+  );
   clearHeld();
+  // Only on the copy, which can't read it (held open elsewhere, say).
+  const unread = join(listenerWorktree, "unread.txt");
+  writeFileSync(unread, "only here\n");
+  await refusedStop("remote", "unread.txt", unreadable(unread));
+  rmSync(unread);
 });
 
 // A mirror of `original` into the copy `worktreeId` on `deviceId`.

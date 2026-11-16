@@ -1,4 +1,5 @@
-// A stop removes the copy, so what the original couldn't take holds it.
+// A stop removes the copy, so a file either side couldn't read or write
+// holds it: it may exist only on the copy.
 import assert from "node:assert/strict";
 import { it } from "vitest";
 import { mirrorStopBlocker } from "../src/modules/mirror.ts";
@@ -29,17 +30,20 @@ it("stops a mirror in step", () => {
   assert.equal(mirrorStopBlocker(session()), undefined);
 });
 
-it("refuses while the original couldn't write some of the copy's files", () => {
+it("refuses while the original has problems", () => {
   assert.equal(
     mirrorStopBlocker(session(side(1))),
-    "a file couldn't be written on the original",
+    "a file couldn't be copied",
   );
   assert.equal(
     mirrorStopBlocker(session(side(2, 3))),
-    "5 files couldn't be written on the original",
+    "5 files couldn't be copied",
   );
 });
 
-it("stops though the copy couldn't write some of the original's files", () => {
-  assert.equal(mirrorStopBlocker(session(side(0), side(2, 1))), undefined);
+it("refuses while the copy has problems", () => {
+  assert.equal(
+    mirrorStopBlocker(session(side(0), side(2, 1))),
+    "3 files couldn't be copied",
+  );
 });
