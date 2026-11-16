@@ -269,7 +269,7 @@ jobs:
   release-windows:
     needs: release-mac
     runs-on: windows-latest
-    timeout-minutes: 40
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
@@ -296,9 +296,9 @@ jobs:
         working-directory: .
         run: pnpm run postinstall
 
-      # Forge's publish names a package file a numbered prerelease's
-      # never has (its version is padded), so make alone, and the upload
-      # below.
+      # Make, not forge's publish: for a numbered prerelease publish
+      # lists a package file make never writes (Squirrel's version is
+      # padded), so the upload below names the assets itself.
       - name: Build the installer
         env:
           SM_DEVICE_HUB_URL: ${{ vars.SM_DEVICE_HUB_URL }}
