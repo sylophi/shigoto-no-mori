@@ -6,7 +6,9 @@
 // login item, the device on the hub). So nothing of one build is
 // another's, and nothing of a nuked build stays (the terminal's `nuke`,
 // commands/nuke.ts).
+import { readdirSync, rmdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { type Flavor, flavorNames } from "./flavor.ts";
 import { byPlatform } from "./platform.ts";
 
@@ -115,6 +117,39 @@ export const footprint = (flavor: Flavor, place: FootprintPlace): Footprint => {
     bundleId: names.bundleId,
     scheme: names.scheme,
   };
+};
+
+// What the terminal's nuke deletes once the app's own is done: the
+// app's own folder (but a kept app's that holds the nuke's marker), its
+// logs and preferences, the data-folder lock, and the config folder
+// once empty, as anything else in it is the owner's. What stayed, with
+// why.
+export const removeLeftovers = (
+  flavor: Flavor,
+  place: Omit<FootprintPlace, "binHome">,
+  keepUserData: boolean,
+) => {
+  const left: { readonly path: string; readonly why: string }[] = [];
+  for (const { id, path } of footprint(flavor, { ...place, binHome: "" })
+    .paths) {
+    if (id === "config") {
+      try {
+        if (readdirSync(path).length === 0) rmdirSync(path);
+      } catch {}
+    } else if (
+      (id === "userData" && !keepUserData) ||
+      id === "logs" ||
+      id === "dataDirLock" ||
+      id === "preferences"
+    ) {
+      try {
+        rmSync(path, { recursive: true, force: true });
+      } catch (error) {
+        left.push({ path, why: errorMessageOf(error) });
+      }
+    }
+  }
+  return left;
 };
 
 // The app started to nuke itself with no window (`<binary> nuke`): it

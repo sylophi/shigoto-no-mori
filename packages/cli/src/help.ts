@@ -124,9 +124,9 @@ const catalog = (names: Names) => {
           "The host's service is stopped and taken out, then the host is started to remove its worktrees, this command's links and the shell and agent hooks, then its data folder, logs and install. Runs only from an installed build's command. Exits non-zero when something stayed, saying what.",
         ],
         win32: [
-          "nuke --yes",
+          "nuke --yes [--keep-app]",
           "Take everything of this build off the machine",
-          "Runs only from an installed build's command, and nothing installs the app on Windows yet. Settings' Danger zone does it from the app.",
+          "What Settings' Danger zone does, with no window: the app is quit, then started to remove its worktrees, this command from PATH, the shell and agent hooks, this device from your account and its login item, then its data folder and its own folder. Then the app is uninstalled (--keep-app keeps it). Runs only from an installed build's command. Exits non-zero when something stayed, saying what.",
         ],
       }),
       [

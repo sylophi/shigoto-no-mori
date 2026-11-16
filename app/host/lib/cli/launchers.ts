@@ -46,12 +46,15 @@ const userPath = (facts: Facts, verb: "has" | "add") =>
     windowsCliBinDir(facts.resourcesPath),
   ]);
 
+const onUserPath = async (facts: Facts) =>
+  (await userPath(facts, "has")).stdout.trim() === "true";
+
 async function status(facts: Facts): Promise<CliStatus> {
   const launchers = launchersOf(facts);
   const onPath =
     isInstalled(facts) &&
     launchers.every((launcher) => existsSync(launcher)) &&
-    (await userPath(facts, "has")).stdout.trim() === "true";
+    (await onUserPath(facts));
   return {
     name: cliBinaryName(facts.flavor),
     aliasName: cliAliasName(facts.flavor),
@@ -87,17 +90,21 @@ async function remove(facts: Facts): Promise<void> {
   if (isInstalled(facts)) removeCliLaunchers(facts);
 }
 
-// An update can ship a new launcher: an installed one that differs is
-// replaced. One a terminal is running is replaced at a later start.
+// While PATH names the bin folder, its launchers are put back as
+// shipped: an update can ship a new one, and Setup.exe run over the
+// install empties the folder. One a terminal is running is replaced at
+// a later start.
 async function repair(facts: Facts): Promise<void> {
   try {
-    if ((await status(facts)).state !== "installed") return;
+    if (!isInstalled(facts) || !(await onUserPath(facts))) return;
     const [shipped, ...placed] = await Promise.all(
       [shippedLauncher(facts), ...launchersOf(facts)].map((file) =>
-        readFile(file),
+        readFile(file).catch(() => null),
       ),
     );
-    if (placed.every((bytes) => shipped?.equals(bytes))) return;
+    if (placed.every((bytes) => bytes !== null && shipped?.equals(bytes))) {
+      return;
+    }
     await placeLaunchers(facts);
   } catch (err) {
     log.warn("[cli] launcher repair failed", err);
