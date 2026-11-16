@@ -1,5 +1,6 @@
 // The doctor's environment checks: git, gh, the shell hook and its wrapper, the programs `sm` runs.
 import { tildify } from "@shigomori/contracts/projectPaths";
+import { shellName } from "@shigomori/contracts/shellName";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -423,13 +424,13 @@ export const makeEnvironmentChecks = ({
         }
         if (edited.length > 0) {
           return line.warn(
-            `the block in ${edited.join(", ")}'s config was edited, so install and uninstall won't touch it`,
+            `the block in ${edited.map(shellName).join(", ")}'s config was edited, so install and uninstall won't touch it`,
             `Restore or remove the marker block, then \`${binaryName} shell install\`.`,
           );
         }
         if (stale.length > 0) {
           return line.warn(
-            `the ${stale.join(", ")} hook is an older vintage than this build writes`,
+            `the ${stale.map(shellName).join(", ")} hook is an older vintage than this build writes`,
             `Run \`${binaryName} shell install\` to refresh it.`,
           );
         }
@@ -454,7 +455,7 @@ export const makeEnvironmentChecks = ({
         // would always read as a problem.
         const inactive = input.terminal && cdFile === "";
         return line.ok(
-          `installed for ${installed.join(", ")}${inactive ? " (not active in this session)" : ""}`,
+          `installed for ${installed.map(shellName).join(", ")}${inactive ? " (not active in this session)" : ""}`,
         );
       });
 

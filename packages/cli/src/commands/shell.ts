@@ -2,6 +2,7 @@
 // moves the calling shell instead of nesting a subshell (the engine's
 // shellHook says how). And sm cd, which enters a worktree through the
 // wrapper's directive file, or in a subshell without one.
+import { shellName } from "@shigomori/contracts/shellName";
 import { envVar } from "@shigomori/engine/environment";
 import * as Paths from "@shigomori/engine/Paths";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
@@ -152,7 +153,7 @@ const statusCommand = Command.make("status", {}, () =>
       renderTable(
         ["shell", "hook", "config"],
         found.shells.map(({ shell, state }, index) => [
-          shell === found.loginShell ? `${shell} *` : shell,
+          `${shellName(shell)}${shell === found.loginShell ? " *" : ""}`,
           label[state],
           dim(shown[index] ?? ""),
         ]),
