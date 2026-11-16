@@ -41,15 +41,10 @@ export const causeText = (cause: unknown): string => {
 
 export class UpdatesUnavailable extends Schema.TaggedError<UpdatesUnavailable>()(
   "UpdatesUnavailable",
-  { reason: Schema.Literals(["dev", "windows"]) },
+  {},
 ) {
   override get message(): string {
-    switch (this.reason) {
-      case "dev":
-        return "This is the dev CLI. Dev builds have no update channel. Pull the checkout instead.";
-      case "windows":
-        return "Nothing installs the app on Windows yet, so there are no updates for it.";
-    }
+    return "This is the dev CLI. Dev builds have no update channel. Pull the checkout instead.";
   }
 }
 
@@ -243,9 +238,8 @@ export class SignatureRejected extends Schema.TaggedError<SignatureRejected>()(
   }
 }
 
-// A removal a later step needs (a clear folder to stage or swap into)
-// failed: `rm -rf` of `path`.
-// A Linux release's tarball that isn't the one the release names.
+// A release's download (Linux's tarball, Windows' package) that isn't
+// the one the release names.
 export class DigestRejected extends Schema.TaggedError<DigestRejected>()(
   "DigestRejected",
   {
@@ -260,6 +254,8 @@ export class DigestRejected extends Schema.TaggedError<DigestRejected>()(
   }
 }
 
+// A removal of `path` a later step needs (a clear folder to stage or
+// swap into) that failed.
 export class RemoveFailed extends Schema.TaggedError<RemoveFailed>()(
   "RemoveFailed",
   { path: Schema.String, cause: Schema.Defect() },

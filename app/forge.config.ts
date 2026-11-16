@@ -20,6 +20,10 @@ import {
 } from "@shigomori/engine/flavor";
 import { programFile } from "@shigomori/engine/executables";
 import { byPlatform } from "@shigomori/engine/platform";
+import {
+  squirrelPackageId,
+  squirrelVersion,
+} from "@shigomori/engine/windowsInstall";
 import { buildFlavor } from "./shared/packaging/buildFlavor.mts";
 import {
   CLOUDFLARED_BINARY_NAME,
@@ -336,12 +340,14 @@ const config: ForgeConfig = {
     ),
     new MakerZIP({}, ["darwin"]),
     // Windows installs per user into %LOCALAPPDATA%\<name>, named like
-    // the Linux install's folder, with the hyphen Squirrel refuses made
-    // an underscore. The update feed serves its .nupkg and RELEASES.
-    // Apps & features fetches its icon from iconUrl at install.
+    // the Linux install's folder. The update feed serves its full
+    // .nupkg. The package's version is one Squirrel ranks right, and the
+    // app's own stays the real one. Apps & features fetches its icon
+    // from iconUrl at install.
     new MakerSquirrel(
       {
-        name: names.configDir.replaceAll("-", "_"),
+        name: squirrelPackageId(flavor),
+        version: squirrelVersion(version),
         setupIcon: "assets/icon.ico",
         iconUrl: `https://raw.githubusercontent.com/${APP_REPO}/main/app/assets/icon.ico`,
       },

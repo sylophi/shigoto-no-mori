@@ -6,17 +6,14 @@
 //          can't answer, ask the update.electronjs.org feed, which
 //          compares versions itself (204 up to date, 200 the release's
 //          zip) but hides prereleases.
-//   stage  download the zip into updates/, extract it, verify its code
-//          signature, and park the bundle in updates/staged with a
-//          manifest the app reads too.
-//   swap   replace the installed bundle with the staged one: placed next
-//          to it first (the slow step, which may cross volumes), verified
-//          again there, then two renames in one directory, the second
-//          rolled back when it fails.
-// The trust anchor is Apple's code signature: a bundle installs only when
-// `codesign --verify` passes and its Team ID matches the installed app's,
-// so a compromised feed can point at another release of ours and nowhere
-// else. Every verification failure refuses the update.
+//   stage  download the release into updates/, verify and unpack it,
+//          and park it in updates/staged with a manifest the app reads
+//          too.
+//   swap   put the staged copy in place of the installed app.
+// How an OS verifies and swaps is its install's (updater/installation.ts):
+// a Mac's trust is Apple's code signature, Linux's and Windows' the
+// digest GitHub names for the download. Every verification failure
+// refuses the update.
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -28,6 +25,7 @@ import { makeFiles } from "./updater/files.ts";
 import { makeFeeds } from "./updater/feeds.ts";
 import { makeBundle } from "./updater/bundle.ts";
 import { makeSignatures } from "./updater/signatures.ts";
+import { makeSquirrel } from "./updater/squirrel.ts";
 import { makeStaging } from "./updater/staging.ts";
 import { makeVersions } from "./updater/versions.ts";
 import { byPlatform } from "./platform.ts";
@@ -39,7 +37,7 @@ import {
   HandoffFailed,
   type InstallError,
   InvalidAppPid,
-  NotInBundle,
+  type NotInBundle,
   type QueryError,
   RelaunchFailed,
   type Running,
@@ -49,7 +47,7 @@ import {
   type UpdateAvailable,
   type UpdateInput,
   type Updated,
-  UpdatesUnavailable,
+  type UpdatesUnavailable,
 } from "./updater/documents.ts";
 export {
   AppStillRunning,
@@ -133,31 +131,16 @@ export class Updater extends Context.Service<
   }
 >()("sm/engine/Updater") {}
 
-// Nothing installs the app on Windows yet, so nothing updates it.
-const unavailableOn = (method: string) =>
-  Effect.fn(method)(() =>
-    Effect.fail(new UpdatesUnavailable({ reason: "windows" })),
-  );
-const unavailable = Updater.of({
-  check: unavailableOn("Updater.check"),
-  stage: unavailableOn("Updater.stage"),
-  update: unavailableOn("Updater.update"),
-  finishInstall: unavailableOn("Updater.finishInstall"),
-  staged: Effect.fn("Updater.staged")(() => Effect.succeedNone),
-  install: Effect.fn("Updater.install")(() => Effect.fail(new NotInBundle())),
-});
-
 const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
   const files = yield* makeFiles({ flavor });
   const feeds = yield* makeFeeds({ flavor, files });
-  const installation: Installation | null = yield* byPlatform({
+  const installation: Installation = yield* byPlatform({
     darwin: Effect.flatMap(makeSignatures({ files }), (signatures) =>
       makeBundle({ files, signatures }),
     ),
     linux: makeVersions({ flavor, files }),
-    win32: Effect.succeed(null),
+    win32: makeSquirrel({ flavor, files }),
   });
-  if (installation === null) return unavailable;
   const staging = yield* makeStaging({ files, feeds, installation });
   const swap = yield* makeSwap({ files, staging, installation });
   const restart = yield* makeRestart({ files });

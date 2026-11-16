@@ -97,6 +97,13 @@ export const makeNativefs = (helper: string) =>
       );
     }, withSpawner);
 
+    const running = Effect.fn("ProcessTable.running")(function* (name: string) {
+      const table = yield* readProcesses(helper).pipe(
+        Effect.orElseSucceed(() => new Map<number, typeof Process.Type>()),
+      );
+      return [...table.values()].some((row) => row.name === name);
+    }, withSpawner);
+
     // Windows has no foreground, so a shell is held while a command it
     // started runs: its child, or another process on its console, where
     // what Git Bash forks and execs runs once its parent is gone. One it
@@ -121,5 +128,5 @@ export const makeNativefs = (helper: string) =>
       return busy;
     }, withSpawner);
 
-    return { startedAt, listed, identify, held };
+    return { startedAt, listed, identify, running, held };
   });

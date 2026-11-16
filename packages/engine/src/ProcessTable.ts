@@ -52,6 +52,9 @@ export class ProcessTable extends Context.Service<
         readonly name: string;
       }>
     >;
+    // Whether a live process runs a program of this name (its file's,
+    // .exe and all on Windows). False when the table can't be read.
+    readonly running: (name: string) => Effect.Effect<boolean>;
     // The shells among `pids` that a command they started holds in the
     // foreground.
     readonly held: (

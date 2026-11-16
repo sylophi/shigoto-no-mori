@@ -11,7 +11,7 @@ import { promisify } from "node:util";
 import { programFile } from "@shigomori/engine/executables";
 import {
   windowsCliBinDir,
-  windowsInstallRoot,
+  windowsUpdateExe,
 } from "@shigomori/engine/windowsInstall";
 import type { CliStatus } from "@shigomori/contracts/modules/cli";
 import { bundledBinaryPath } from "@shared/packaging/bundledBinary.mts";
@@ -29,8 +29,7 @@ import type { CliPlacement, Facts } from "./placement";
 const run = promisify(execFile);
 
 const isInstalled = (facts: Facts) =>
-  facts.packaged &&
-  existsSync(join(windowsInstallRoot(facts.resourcesPath), "Update.exe"));
+  facts.packaged && existsSync(windowsUpdateExe(facts.resourcesPath));
 
 const launchersOf = (facts: Facts) =>
   [cliBinaryName(facts.flavor), cliAliasName(facts.flavor)].map((name) =>
