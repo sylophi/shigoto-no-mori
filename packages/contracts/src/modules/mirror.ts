@@ -282,6 +282,17 @@ export const MirrorSessionSchema = strict(
 );
 export type MirrorSession = typeof MirrorSessionSchema.Type;
 
+// The paths the sides couldn't read or write, the ones past the
+// engine's cap included.
+export function mirrorProblemCount(
+  ...sides: ReadonlyArray<MirrorSession["local"]>
+): number {
+  return sides.reduce(
+    (count, side) => count + side.problems.length + side.excludedProblems,
+    0,
+  );
+}
+
 // As the daemon's state line carries it, without what the host adds
 // (its project, its ignore mode, git's status, a stop under way). An
 // unknown top-level key is stripped rather than refused, so a newer
@@ -478,6 +489,14 @@ export function mirrorStopBlocker(
     return conflicts === 1
       ? "a file changed on both sides"
       : `${conflicts} files changed on both sides`;
+  }
+  // A file the original couldn't take may exist only on the copy. One
+  // the copy couldn't take is still on the original.
+  const unwritten = mirrorProblemCount(session.local);
+  if (unwritten > 0) {
+    return unwritten === 1
+      ? "a file couldn't be written on the original"
+      : `${unwritten} files couldn't be written on the original`;
   }
   if (!mirrorFilesSettled(session)) return "files are still syncing";
   if (session.git === "timed-out") return "git didn't finish checking in time";

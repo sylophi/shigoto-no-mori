@@ -33,6 +33,9 @@
 //   - a one-shot pull never writes the dialer's files onto the listener,
 //     and a replica pass never writes onto the original nor deletes what
 //     its rule leaves out,
+//   - a one-shot that couldn't write a file, either way, hasn't
+//     crossed, and a stop refuses removing a copy holding a file the
+//     original couldn't write,
 //   - a moved worktree re-opens only its own mirrors, at its new path,
 //   - a stop refuses removing a copy unforced while a conflict or git
 //     not in step (or not checked in time) may leave it the only
@@ -63,6 +66,7 @@ import {
   isMirrorStopUnconfirmed,
   mirrorContract,
   type MirrorGitStatus,
+  mirrorStopRefusalReason,
 } from "@shigomori/contracts/modules/mirror";
 import type { Project } from "@shigomori/contracts/schemas";
 import { syncContract } from "@shigomori/contracts/modules/sync";
@@ -106,6 +110,7 @@ import {
   standInPeers,
 } from "./lib/hostStandIns.mts";
 import { EXE } from "../../packages/engine/test/lib/nativefs.ts";
+import { readOnly } from "../../packages/engine/test/lib/holds.ts";
 import { runHost } from "./lib/hostRuntime.mts";
 import {
   bootDirectWire,
@@ -801,6 +806,136 @@ it("replica pass: the copy takes the original's version of a clash and loses wha
     () => daemon.sessions().length === 0,
     "the replica session to be gone",
   );
+});
+
+// A folder `held` on `root` that can't be added to, and in the one on
+// `from` a file for it. Answers its release.
+const holdFolder = (root: string, from: string, file: string) => {
+  mkdirSync(join(root, "held"));
+  mkdirSync(join(from, "held"));
+  writeFileSync(join(from, "held", file), "only here\n");
+  return readOnly(join(root, "held"));
+};
+
+const clearHeld = () => {
+  rmSync(join(dialerRoot, "held"), { recursive: true });
+  rmSync(join(listenerWorktree, "held"), { recursive: true });
+};
+
+it("one-shot transfer: a file the receiving side couldn't write keeps the files from counting as crossed, either way, while a replica still crosses", async () => {
+  // A folder each side can't add to, with a file for it on the other.
+  // What a move brought and couldn't write is still only on its source,
+  // so its teardown must not count it across.
+  standInMirror(inertImpl());
+  const transfer = (direction: "pull" | "push" | "replica") =>
+    runHost(
+      transferFilesOnce(
+        {
+          localRoot: dialerRoot,
+          localWorktreeId: dialerWorktreeId,
+          sourceDeviceId: LISTENER,
+          sourceProjectId: listenerProjectId,
+          sourceWorktreeId: listenerWorktreeId,
+          remoteRoot: listenerWorktree,
+          name: "feature",
+          ignores: ["/skip"],
+          direction,
+        },
+        () => {},
+      ),
+    );
+  const unheld = "1 file couldn't be copied (held/new.txt)";
+
+  const intoDialer = holdFolder(dialerRoot, listenerWorktree, "new.txt");
+  try {
+    assert.deepEqual(await transfer("pull"), {
+      crossed: false,
+      conflicts: 0,
+      error: unheld,
+    });
+  } finally {
+    intoDialer();
+  }
+  assert.equal(existsSync(join(dialerRoot, "held", "new.txt")), false);
+  clearHeld();
+
+  const intoListener = holdFolder(listenerWorktree, dialerRoot, "new.txt");
+  try {
+    assert.deepEqual(await transfer("push"), {
+      crossed: false,
+      conflicts: 0,
+      error: unheld,
+    });
+    // A mirror's first pass: the mirror goes on to show the problem.
+    assert.deepEqual(await transfer("replica"), {
+      crossed: true,
+      conflicts: 0,
+    });
+  } finally {
+    intoListener();
+  }
+  assert.equal(existsSync(join(listenerWorktree, "held", "new.txt")), false);
+  clearHeld();
+  await waitFor(
+    () => daemon.sessions().length === 0,
+    "the one-shot sessions to be gone",
+  );
+});
+
+it("stop: a file the original couldn't write refuses removing the copy", async () => {
+  // Written on the copy into a folder the original can't add to: the
+  // copy holds the only one, so the stop keeps it.
+  standInMirror({
+    ...inertImpl(),
+    refreshGit: () => Effect.succeed({ status: "synced", detail: "" }),
+  });
+  const release = holdFolder(
+    dialerRoot,
+    listenerWorktree,
+    "only-on-the-copy.txt",
+  );
+  const held = await daemon.create({
+    localRoot: dialerRoot,
+    deviceId: LISTENER,
+    projectId: listenerProjectId,
+    worktreeId: listenerWorktreeId,
+    remoteRoot: listenerWorktree,
+    name: "feature",
+    localWorktreeId: dialerWorktreeId,
+    labels: { [MIRROR_LABEL_MODE]: "mirror" },
+    ignores: ["/skip"],
+  });
+  try {
+    await waitFor(
+      () =>
+        daemon
+          .sessions()
+          .some(
+            (raw) =>
+              raw.session === held &&
+              raw.successfulCycles > 0 &&
+              raw.local.problems.some(
+                (problem) => problem.path === "held/only-on-the-copy.txt",
+              ),
+          ),
+      "the original's problem with the copy's file",
+      30_000,
+    );
+    await assert.rejects(
+      stop({ session: held }),
+      (error) =>
+        mirrorStopRefusalReason(error) ===
+        "a file couldn't be written on the original",
+    );
+    assert.equal(
+      read(join(listenerWorktree, "held", "only-on-the-copy.txt")),
+      "only here\n",
+    );
+  } finally {
+    release();
+    await daemon.terminate(held);
+  }
+  clearHeld();
 });
 
 // A mirror of `original` into the copy `worktreeId` on `deviceId`.
