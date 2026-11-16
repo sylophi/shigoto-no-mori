@@ -9,15 +9,26 @@
 // renderer's vite server, deep links). A window launched while that vite
 // server answers is a peer on the primary's build (scripts/dev-peer.mts).
 // Without port-pool the renderer has no fixed port to probe, so every
-// window starts as a primary. SIGINT and SIGTERM go to the window's
-// tree, which is how weblab stops it when the last session on it ends.
+// window starts as a primary. On macOS and Linux, SIGINT and SIGTERM go
+// to the window's tree, which is how weblab stops it when the last
+// session on it ends. Windows delivers no SIGTERM, and Ctrl+C reaches
+// every process on the console already: weblab ends the tree itself.
 import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import { byPlatform } from "@shigomori/engine/platform";
 import { appRoot } from "./lib/appRoot.mts";
 import { parsePositionalDevProfile } from "./lib/devProfile.mts";
+import { pnpm } from "./lib/pnpm.mts";
 import { descendantsIn } from "../host/lib/scripts/descendants.ts";
 import { rendererDevServerAnswers } from "./lib/portsEnvFile.mts";
+
+const FORWARDED = ["SIGINT", "SIGTERM"] as const;
+const forwarded = byPlatform({
+  darwin: FORWARDED,
+  linux: FORWARDED,
+  win32: [],
+});
 
 // The launch and everything under it: pnpm does not forward a signal
 // to its children.
@@ -66,11 +77,13 @@ if (asPeer) {
 } else {
   // `pnpm start` is a shell chain, which passes no signal on to the
   // step that is running, so a stop goes to the whole tree under pnpm.
-  const child = spawn("pnpm", ["start", "--profile", ...argv], {
+  const start = pnpm(["start", "--profile", ...argv]);
+  const child = spawn(start.command, start.args, {
     cwd: appRoot,
     stdio: "inherit",
+    shell: start.shell,
   });
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  for (const signal of forwarded) {
     process.on(signal, () => {
       if (child.pid !== undefined) signalPidTree(child.pid, signal);
     });

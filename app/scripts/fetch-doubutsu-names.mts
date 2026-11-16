@@ -37,6 +37,7 @@ import {
   WIKI_USER_AGENT,
 } from "../shared/villagers/wiki.ts";
 import { appRoot, repoRoot } from "./lib/appRoot.mts";
+import { pnpm } from "./lib/pnpm.mts";
 
 // Category members that are not characters with a name of their own:
 // concept pages, the player, a placeholder puppet, an unused internal ID.
@@ -385,9 +386,11 @@ writeFileSync(
   }),
 );
 // The repo's formatter owns the layout, so a re-run diffs cleanly.
-execFileSync("pnpm", ["exec", "oxfmt", namesPath, manifestPath], {
+const format = pnpm(["exec", "oxfmt", namesPath, manifestPath]);
+execFileSync(format.command, format.args, {
   cwd: appRoot,
   stdio: "inherit",
+  shell: format.shell,
 });
 process.stderr.write(
   `${villagers.length} villagers, ${specials.length} special characters, ${bySlug.size} names, ${names.length} with a face in the pool\n`,
