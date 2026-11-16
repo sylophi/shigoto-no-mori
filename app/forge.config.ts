@@ -112,15 +112,13 @@ const dmgVolumeName =
     (name) => name.length <= DMG_VOLUME_NAME_MAX,
   ) ?? `v${version}`.slice(0, DMG_VOLUME_NAME_MAX);
 
-// What the package carries per OS. Windows has no pinned cloudflared,
-// so tunnels stay off there. Of node-pty's Windows prebuild it ships the
-// ConPTY addon alone: the other files beside it serve options and calls
-// the host never makes (useConptyDll, the console process list). Only
-// Windows needs a launcher to put the terminal command on PATH
-// (host/lib/cli/launchers.ts). Linux is packaged by
+// What the package carries per OS. Of node-pty's Windows prebuild it
+// ships the ConPTY addon alone: the other files beside it serve options
+// and calls the host never makes (useConptyDll, the console process
+// list). Only Windows needs a launcher to put the terminal command on
+// PATH (host/lib/cli/launchers.ts). Linux is packaged by
 // scripts/package-linux.mts, not forge.
 const macPackage = {
-  cloudflared: true,
   cliLauncher: false,
   ptyPrebuilds: "darwin-.*",
   ptyFiles: [NODE_PTY_ADDON, NODE_PTY_SPAWN_HELPER],
@@ -129,7 +127,6 @@ const osPackage = byPlatform({
   darwin: macPackage,
   linux: macPackage,
   win32: {
-    cloudflared: false,
     cliLauncher: true,
     ptyPrebuilds: "win32-[^/]+(/conpty\\.node)?",
     ptyFiles: [NODE_PTY_CONPTY_ADDON],
@@ -200,9 +197,7 @@ const config: ForgeConfig = {
       // The tunnel connector, fetched by the prePackage hook below for
       // the target platform (shared/packaging/cloudflaredDist.mts pins
       // it), so remote access needs nothing installed.
-      ...(osPackage.cloudflared
-        ? [`${CLOUDFLARED_DIST_DIR}/${CLOUDFLARED_BINARY_NAME}`]
-        : []),
+      `${CLOUDFLARED_DIST_DIR}/${programFile(CLOUDFLARED_BINARY_NAME)}`,
       // The file-sync engine (continuous worktree mirroring), compiled
       // by the prePackage hook and spawned by the host
       // (host/fileSync/runner.ts).
@@ -261,15 +256,13 @@ const config: ForgeConfig = {
       // Fetch the pinned cloudflared for the TARGET platform, not the
       // build machine's: a cross-arch package must ship the arch it
       // runs on.
-      if (osPackage.cloudflared) {
-        runScript(
-          "fetch-cloudflared.mts",
-          "--platform",
-          platform,
-          "--arch",
-          arch,
-        );
-      }
+      runScript(
+        "fetch-cloudflared.mts",
+        "--platform",
+        platform,
+        "--arch",
+        arch,
+      );
     },
     // The ignore above spells out node-pty's layout. If a release moves
     // it, fail the build here, not the first script run of a shipped app.

@@ -50,19 +50,21 @@ function fail(message: string): never {
 
 const asset = cloudflaredAsset(platform, arch);
 if (asset === null) fail(`no pinned cloudflared asset for ${platform}-${arch}`);
+const binaryFile =
+  CLOUDFLARED_BINARY_NAME + (platform === "win32" ? ".exe" : "");
 
 let kept: boolean;
 try {
   kept = await fetchPinned({
     label: "cloudflared",
     distDir: join(appRoot, CLOUDFLARED_DIST_DIR),
-    binaryName: CLOUDFLARED_BINARY_NAME,
+    binaryName: binaryFile,
     stamp: `${CLOUDFLARED_VERSION} ${platform}-${arch}\n`,
     url: cloudflaredDownloadUrl(asset),
     name: asset.name,
     sha256: asset.sha256,
     unpack: (bytes, staging) => {
-      const binaryPath = join(staging, CLOUDFLARED_BINARY_NAME);
+      const binaryPath = join(staging, binaryFile);
       if (asset.name.endsWith(".tgz")) {
         const archive = join(staging, asset.name);
         writeFileSync(archive, bytes);
@@ -86,5 +88,5 @@ try {
 console.log(
   kept
     ? `[cloudflared] ${CLOUDFLARED_VERSION} (${platform}-${arch}) already in ${CLOUDFLARED_DIST_DIR}/`
-    : `[cloudflared] ${CLOUDFLARED_VERSION} ready at ${CLOUDFLARED_DIST_DIR}/${CLOUDFLARED_BINARY_NAME}`,
+    : `[cloudflared] ${CLOUDFLARED_VERSION} ready at ${CLOUDFLARED_DIST_DIR}/${binaryFile}`,
 );
