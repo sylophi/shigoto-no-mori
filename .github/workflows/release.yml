@@ -263,6 +263,91 @@ jobs:
           TAG: ${{ github.event.release.tag_name }}
         run: gh release upload "$TAG" "out/make/shigomori-linux-x64-${TAG#v}.tar.gz" --clobber
 
+  # The Windows installer and the package its updates install
+  # (forge.config.ts, MakerSquirrel), once the Mac job has passed the
+  # tag's gates. Unsigned for now.
+  release-windows:
+    needs: release-mac
+    runs-on: windows-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+        working-directory: app
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-toolchains
+
+      # As in the Linux job, before the install and on the image's npm.
+      - name: Sync package.json version with tag
+        run: npm pkg set version="${TAG#v}"
+
+      - uses: ./.github/actions/install-workspace
+
+      # Lays the 7-Zip Squirrel packs with and checks node-pty's ConPTY
+      # addon.
+      - name: Postinstall
+        working-directory: .
+        run: pnpm run postinstall
+
+      # Forge's publish names a package file a numbered prerelease's
+      # never has (its version is padded), so make alone, and the upload
+      # below.
+      - name: Build the installer
+        env:
+          SM_DEVICE_HUB_URL: ${{ vars.SM_DEVICE_HUB_URL }}
+          SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
+          SM_ACCOUNT_WEB_ORIGIN: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
+          SM_ACCOUNT_CLERK_OAUTH_CLIENT_ID: ${{ vars.SM_ACCOUNT_CLERK_OAUTH_CLIENT_ID }}
+        run: pnpm run make
+
+      # The terminal command on an empty data dir, then the installer
+      # installing as a user's would: Squirrel's folder with the version
+      # the package carries, the launcher, and that version's own sm.
+      - name: Install the package
+        run: |
+          MADE="$PWD/out/make/squirrel.windows/x64"
+          NUPKG="$(basename "$MADE"/*-full.nupkg)"
+          SQUIRREL_VERSION="${NUPKG#shigomori-}"
+          SQUIRREL_VERSION="${SQUIRREL_VERSION%-full.nupkg}"
+          SM="$PWD/out/Shigoto no Mori-win32-x64/resources/sm.exe"
+          SMOKE="$PWD/scripts/smoke-sm.sh"
+          export SHIGOMORI_DATA_DIR="$RUNNER_TEMP/sm-empty-data"
+          mkdir -p "$SHIGOMORI_DATA_DIR"
+          cd "$RUNNER_TEMP"
+
+          "$SMOKE" "$SM" "${TAG#v}"
+
+          "$MADE"/*Setup.exe --silent
+          ROOT="$LOCALAPPDATA/shigomori"
+          ls -la "$ROOT"
+          test -f "$ROOT/Update.exe"
+          test -f "$ROOT/Shigoto no Mori.exe"
+          SM_VERSION="$("$ROOT/app-$SQUIRREL_VERSION/resources/sm.exe" --version)"
+          echo "installed sm --version: $SM_VERSION"
+          [[ "$SM_VERSION" == *"${TAG#v}"* ]]
+
+      # GitHub turns the spaces in a name into dots. The updater takes
+      # <configDir>-win32-<arch>-<version>.nupkg (engine updateFeed.ts),
+      # and each other platform's picker passes over both.
+      - name: Name the assets
+        run: |
+          MADE=out/make/squirrel.windows/x64
+          mkdir out/assets
+          cp "$MADE"/*-full.nupkg "out/assets/shigomori-win32-x64-${TAG#v}.nupkg"
+          cp "$MADE"/*Setup.exe "out/assets/Shigoto.no.Mori-${TAG#v}-x64-Setup.exe"
+
+      - name: Upload the assets to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" out/assets/* --clobber
+
   # Vercel deploys app.shigomori.com from web-client-prod
   # (hub/README.md). The ref update refuses a non-fast-forward, so a
   # branch moved by hand fails here instead of being overwritten. The
