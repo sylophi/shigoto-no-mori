@@ -13,7 +13,7 @@ pnpm dev      # local preview with reload
 pnpm typecheck # astro check: the pages, components and scripts (build runs it too)
 pnpm build    # static output in dist/
 pnpm preview  # serve dist/ as it deploys
-pnpm og       # shoot public/img/og.jpg from dist/ (after a build)
+pnpm og       # render public/img/og.jpg from scripts/og.html
 ```
 
 Lint and format are the repo's (`pnpm lint`, `pnpm format` at the
@@ -50,7 +50,8 @@ Astro preset and the install command, and holds the headers.
   - `download.ts` points the download buttons at the latest release's
     dmg.
   - `wallpaper.ts` pauses the wallpaper of bands that are off screen.
-- `scripts/og.mts` shoots the link preview image (below).
+- `scripts/og.html` is the link preview card, and `scripts/og.mts`
+  renders it (below).
 - `public/` is served as is: the icons, the wallpapers, the link
   preview image and the font license, which need fixed URLs.
 
@@ -105,27 +106,13 @@ and every project wears the app's letter tile.
 
 ## The link preview
 
-`public/img/og.jpg` is the hero as a link preview shows it, 1200 by
-630: the headline over the hero window's first hundred pixels, as the
-build draws it. `pnpm og` shoots it from the built site with the
-system's Chrome through playwright-core, as the scene comparison does.
-
-The Link preview workflow (`.github/workflows/og.yml`) builds the site
-and shoots it whenever the site, the views or the lockfile change on
-`main`, and opens a pull request when the image changed. It is shot in
-CI and committed rather than at deploy because Vercel's build has no
-browser to shoot with, and a committed image keeps the fixed URL with
-its own caching, reviewed like any other change. The committed image is
-the workflow's shot, which a run with nothing changed repeats byte for
-byte on the same runner image. A runner draws text a little differently
-from a Mac, so a shot from `pnpm og` on a Mac is for looking at:
-committed, it would differ from every run's. The runner's Chrome comes
-with its image, so the first run after an update to it can bring an
-image with no visible change, which merging settles once every runner
-has the update. The branch is named for the image, so runs that shoot
-the same one push it once. Opening the pull request needs the
-repository to let Actions create them. Without that, the run's summary
-links the pushed branch.
+`public/img/og.jpg` is the card a link preview shows, 1200 by 630: the
+app's icon and name over the tagline. Like the dmg's art
+(`app/scripts/dmg-background.html`), `scripts/og.html` links the app's
+`doubutsu.css`, so the card wears the app's wallpaper, palette and
+type. `pnpm og` renders it with the system's Chrome, and the image is
+committed, so it keeps a fixed URL. Re-run it after changing the card
+or anything it draws from: the icon, the palette, the font.
 
 ## Where the pieces come from
 
