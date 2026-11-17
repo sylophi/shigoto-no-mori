@@ -16,7 +16,9 @@
 //     end keep that, with the bytes carried to the other end as the
 //     engine would,
 //   - a file committed on the copy is the blob the original would stage,
-//   - the copy's device's other worktrees keep their own config.
+//   - the copy's device's other worktrees keep their own config,
+//   - a copy whose device's checkout is the original's own writes
+//     nothing into its repository's config.
 // And for tracked symlinks:
 //   - a Mac original's link is a link on the copy where this OS can make
 //     one, and the start is refused where it can't,
@@ -31,6 +33,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
+  existsSync,
   lstatSync,
   readFileSync,
   readlinkSync,
@@ -371,6 +374,45 @@ async function othersKeepTheirs(kind: Kind, before: string) {
   }
   assert.equal(await status(otherWorktree), before);
 }
+
+// First, while the copy's repository has never had a copy land in it.
+it("two ends of one kind leave the copy's repository config as it was, and two of different kinds still read clean", async () => {
+  await setKind(sourceRepo, "mac");
+  await setKind(targetRepo, "mac");
+  const common = await gitOut(
+    targetRepo,
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-common-dir",
+  );
+  const config = readFileSync(join(common, "config"), "utf8");
+  const sameKind = await original("same-kind", "main");
+  const { worktree: copy } = await start(sameKind);
+  await inStep(sameKind, copy.path, "one kind");
+  assert.equal(
+    readFileSync(join(common, "config"), "utf8"),
+    config,
+    "the repository's config is as it was",
+  );
+  assert.doesNotMatch(config, /worktreeConfig/);
+  for (const file of [
+    join(common, "config.worktree"),
+    await gitOut(
+      copy.path,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-path",
+      "config.worktree",
+    ),
+  ]) {
+    assert.equal(existsSync(file), false, `no ${file}`);
+  }
+
+  await setKind(sourceRepo, "windows");
+  const otherKind = await original("other-kind", "main");
+  const { worktree: otherCopy } = await start(otherKind);
+  await inStep(otherKind, otherCopy.path, "two kinds");
+});
 
 for (const [originalKind, copyKind] of [
   ["windows", "mac"],

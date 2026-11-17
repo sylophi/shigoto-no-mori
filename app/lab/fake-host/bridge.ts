@@ -1782,7 +1782,8 @@ async function fakeMirrorStartTo(
     session: session.session,
     // ?crlfScripts=1: the original's scripts have CRLF #! lines.
     crlfScripts:
-      new URLSearchParams(location.search).get("crlfScripts") === "1",
+      new URLSearchParams(location.search).get("crlfScripts") === "1" &&
+      !isWindowsPath(landed.worktree.path),
   };
 }
 

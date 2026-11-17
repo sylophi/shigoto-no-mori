@@ -41,11 +41,14 @@ import {
   SyncPullProgressSchema,
   syncContract,
 } from "@shigomori/contracts/modules/sync";
+import { isWindowsPath } from "@shigomori/contracts/projectPaths";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { PeerReach, peerMirrorFor } from "@host/ipc/PeerReach";
 import * as DeviceId from "@host/lib/config/DeviceId";
+import { findWorktreePath } from "@host/lib/projects";
 import * as Moves from "@host/lib/sync/Moves";
 import { rollBackSent, sendWorktree } from "@host/lib/sync/move";
+import { readOriginal } from "./checkout";
 import { transferFilesOnce } from "./oneShot";
 import {
   annotateMirrorSession,
@@ -122,12 +125,9 @@ export const startMirrorTo = (
       ctx,
       input.worktreeId,
       Effect.gen(function* () {
-        const {
-          source,
-          crlfScripts,
-          result: sent,
-        } = yield* sendWorktree(sendInput, ctx, {
-          mirror: true,
+        const original = yield* readOriginal(yield* findWorktreePath(input));
+        const { source, result: sent } = yield* sendWorktree(sendInput, ctx, {
+          mirror: original.checkout,
           onCopy: noteCopy,
         });
         // The copy's root as the peer's landing answered it, re-parsed
@@ -192,7 +192,12 @@ export const startMirrorTo = (
           "started",
           summarizeIgnores(ignoreMode, ignores),
         );
-        return { ...sent, session, crlfScripts };
+        return {
+          ...sent,
+          session,
+          // Only a shell outside Windows starts a script by its #! line.
+          crlfScripts: original.crlfScripts && !isWindowsPath(copy.path),
+        };
       }).pipe(
         Effect.onError(() =>
           Effect.sync(() => ledger.forgetStarting(input.worktreeId)),

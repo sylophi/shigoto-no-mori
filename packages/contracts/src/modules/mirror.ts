@@ -423,7 +423,8 @@ const MirrorStartFromPayloadSchema = strict(
 export type MirrorStartFromPayload = typeof MirrorStartFromPayloadSchema.Type;
 
 // `crlfScripts`: a Windows original tracks scripts whose #! line ends
-// in CRLF, which the copy holds as they are and only Windows starts.
+// in CRLF, which the copy holds as they are and only Windows starts,
+// and the copy isn't on Windows.
 export const MirrorStartToResultSchema = strict(
   Schema.Struct({
     ...SyncPullWorktreeResultSchema.struct.fields,

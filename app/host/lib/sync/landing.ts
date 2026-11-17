@@ -6,8 +6,6 @@
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import {
@@ -25,7 +23,6 @@ import {
   pullBranchCollision,
   pullBranchInTheWay,
   pullFolderCollision,
-  symlinksRefusal,
 } from "@shared/pullCollision";
 import { type Project } from "@shigomori/contracts/schemas";
 import { asCall, changing } from "@host/lib/Engine";
@@ -34,7 +31,6 @@ import { incomingRef as incomingRefFor } from "@shigomori/engine/Bundle";
 import * as Dirty from "@shigomori/engine/Dirty";
 import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import * as Git from "@shigomori/engine/Git";
-import { byPlatform } from "@shigomori/engine/platform";
 import {
   findProject,
   findProjectByIdentity,
@@ -49,6 +45,10 @@ import {
   type WorktreeSource,
 } from "@host/lib/sync/sourceLink";
 import { worktreeNotifiers } from "@host/ipc/scriptRun";
+import {
+  copyCheckoutConfig,
+  refuseUnmakeableSymlinks,
+} from "@host/mirror/checkout";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import type { HostServices } from "@host/process/services";
 
@@ -73,24 +73,10 @@ class LandingCollisionError extends Schema.TaggedError<LandingCollisionError>()(
   }
 }
 
-// Whether a symlink can be made in `dir`, made first if missing.
-const symlinksHold = (dir: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    yield* fs.makeDirectory(dir, { recursive: true });
-    const probe = yield* fs.makeTempDirectoryScoped({ directory: dir });
-    return yield* fs.symlink("target", path.join(probe, "link")).pipe(
-      Effect.as(true),
-      Effect.orElseSucceed(() => false),
-    );
-  }).pipe(Effect.scoped);
-
 const refuseLandingCollision = Effect.fnUntraced(function* (
   project: Project,
   branch: string,
   worktreeName: string | undefined,
-  checkout: SyncCheckout | undefined,
 ) {
   const [{ local }, existing] = yield* Effect.all(
     [
@@ -126,29 +112,18 @@ const refuseLandingCollision = Effect.fnUntraced(function* (
   // case-insensitively, or anything at the path). That refusal lands at
   // the create, after the bundle crossed. The engine's destination read
   // makes the same two checks here, before a byte moves.
-  const tracksSymlinks = checkout?.symlinks === true && checkout.tracksSymlinks;
-  if (worktreeName === undefined && !tracksSymlinks) return;
-  const registered = yield* findProject(project.id);
-  const { path, taken } = yield* asCall(
-    Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
-      worktrees.destination(registered, worktreeName ?? ""),
-    ),
-  );
-  if (worktreeName !== undefined && taken) {
-    return yield* new LandingCollisionError({
-      reason: pullFolderCollision(worktreeName, path),
-    });
-  }
-  // A mirror's copy writes the original's symlinks as links, which
-  // the place it goes must hold.
-  const parent = (yield* Path.Path).dirname(path);
-  if (tracksSymlinks && !(yield* symlinksHold(parent))) {
-    return yield* new LandingCollisionError({
-      reason: symlinksRefusal(
-        parent,
-        byPlatform({ darwin: false, linux: false, win32: true }),
+  if (worktreeName !== undefined) {
+    const registered = yield* findProject(project.id);
+    const { path, taken } = yield* asCall(
+      Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
+        worktrees.destination(registered, worktreeName),
       ),
-    });
+    );
+    if (taken) {
+      return yield* new LandingCollisionError({
+        reason: pullFolderCollision(worktreeName, path),
+      });
+    }
   }
 });
 
@@ -246,13 +221,15 @@ export const landWorktree = (
     }
 
     // 2. Refuse up front what the create would refuse after the bundle
-    // crossed.
+    // crossed, and a mirror's copy whose links this device can't make.
     yield* refuseLandingCollision(
       project,
       landBranch,
       landing.worktreeName,
-      landing.checkout,
     ).pipe(Effect.withSpan("Landing.refusals"));
+    yield* refuseUnmakeableSymlinks(project, landing.checkout).pipe(
+      Effect.withSpan("Landing.symlinks"),
+    );
 
     // 3. The tip, then the capture. The tip decides whether the branch
     // needs transferring at all: `git bundle create` silently drops a
@@ -327,6 +304,10 @@ export const landWorktree = (
         captureCommit !== undefined
           ? yield* git.treeOf(project.path, captureCommit)
           : undefined;
+      const checkoutConfig = yield* copyCheckoutConfig(
+        project,
+        landing.checkout,
+      );
 
       // 5 and 6. The create on the incoming ref, then the capture
       // re-applied in it.
@@ -340,7 +321,7 @@ export const landWorktree = (
           ignoredFilesFollow: pullBringsIgnoredFiles(landing.ignoreMode)
             ? (landing.ignores ?? [])
             : undefined,
-          checkoutConfig: landing.checkout,
+          checkoutConfig,
           capture:
             captureCommit !== undefined
               ? { sourceWorktreeId, commit: captureCommit }
