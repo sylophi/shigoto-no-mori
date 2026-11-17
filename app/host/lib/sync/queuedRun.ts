@@ -62,29 +62,19 @@ const choiceOf = (
   ...(move.cloneInto === undefined ? {} : { cloneInto: move.cloneInto }),
 });
 
-// Ignored files the files step meant to bring and could not are only
-// on the source, so a teardown asked for stays undone, as the finish
-// step would not offer it by default.
 const settled = <R>(
   move: SyncQueueMovePayload,
   deviceId: string,
   result: Pick<SyncPullWorktreeResult, "worktree" | "files">,
-  settle: Parameters<typeof settleSource<R>>[1],
+  settle: Parameters<typeof settleSource<R>>[2],
 ) => {
   const landed = {
     deviceId,
     projectId: result.worktree.projectId,
     worktreeId: result.worktree.id,
   };
-  const filesFailed = result.files !== undefined && !result.files.crossed;
-  if (move.source === "teardown" && filesFailed) {
-    return Effect.succeed<QueuedOutcome>({
-      landed,
-      sourceError: "its ignored files didn't make it across.",
-    });
-  }
   return Effect.map(
-    settleSource(move.source ?? "keep", settle),
+    settleSource(move.source ?? "keep", result.files, settle),
     (source): QueuedOutcome =>
       source.error === undefined
         ? { landed }

@@ -258,12 +258,22 @@ export const pullSettle = (move: SyncMoveRef, ctx: HandlerContext) => ({
 
 // What became of the source, in the finish step's terms. A fate that
 // could not be carried out is an answer, never a throw: the transfer
-// already stands.
+// already stands. Ignored files the files step meant to bring and
+// could not are only on the source, so a teardown asked for up front
+// stays undone, as the finish step would not offer it by default.
 export const settleSource = <R>(
   fate: SyncSourceFate,
+  files: ControlTransferResult["files"],
   run: Settle<R>,
 ): Effect.Effect<NonNullable<ControlTransferResult["source"]>, never, R> => {
   if (fate === "keep") return Effect.succeed({ fate, done: true });
+  if (fate === "teardown" && files?.crossed === false) {
+    return Effect.succeed({
+      fate,
+      done: false,
+      error: `its ignored files didn't make it across${files.error ? `: ${files.error}` : ""}.`,
+    });
+  }
   const outcome: Effect.Effect<
     NonNullable<ControlTransferResult["source"]>,
     unknown,

@@ -205,7 +205,11 @@ const settled =
         Effect.mapError(hostCallFailure),
       );
       if ("done" in moved) return moved.done;
-      const source = yield* settleSource(input.source ?? "keep", moved.settle);
+      const source = yield* settleSource(
+        input.source ?? "keep",
+        moved.moved.files,
+        moved.settle,
+      );
       return { ...moved.moved, source };
     });
 

@@ -9,6 +9,7 @@ import {
   isHaltedStatus,
   type MirrorSession,
   mirrorFilesSettled,
+  mirrorProblemCount,
 } from "@shigomori/contracts/modules/mirror";
 import type { MovedSource } from "@shigomori/contracts/schemas";
 import { answerWithin } from "@shigomori/engine/liveness";
@@ -33,6 +34,12 @@ import type { Streams } from "./streams";
 
 const KEPT_DETAIL =
   "This worktree wasn't deleted, so its mirror ended. The copy on the other device stays as a worktree.";
+
+// A file one side couldn't write or read may exist only on the other,
+// so a pair with problems isn't in step.
+const inStep = (session: Parameters<typeof mirrorFilesSettled>[0]): boolean =>
+  mirrorFilesSettled(session) &&
+  mirrorProblemCount(session.local, session.remote) === 0;
 
 // A mirror that can't come into step without someone's help, so its
 // other side isn't read.
@@ -128,7 +135,7 @@ export const makeTombstones = ({
                 );
                 if (expect?.branchTip !== tip) return;
                 const live = (yield* findSession(daemon, raw.session)) ?? raw;
-                if (mirrorFilesSettled(live)) looks.set(raw.session, expect);
+                if (inStep(live)) looks.set(raw.session, expect);
               }),
             { concurrency: "unbounded", discard: true },
           ),
@@ -161,7 +168,7 @@ export const makeTombstones = ({
               ? listed.value.value.sessions.find(
                   (running: MirrorSession) =>
                     running.localWorktreeId === stream.peerWorktreeId &&
-                    mirrorFilesSettled(running),
+                    inStep(running),
                 )
               : undefined,
         );

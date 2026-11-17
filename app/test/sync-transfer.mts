@@ -20,6 +20,8 @@
 //     whatever its setup left running there, and leaves the source as
 //     it was, so the same pull lands after, and a send cancelled on the
 //     peer leaves no receipt, so its teardown is refused.
+// And a queued transplant whose ignored files couldn't all be written
+// keeps the source its teardown was asked for.
 //
 // Both "devices" share one node process and one sandboxed
 // SHIGOMORI_DATA_DIR holding two projects (source and target repos);
@@ -42,7 +44,13 @@ import {
 } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { WorktreeSchema } from "@shigomori/contracts/schemas";
-import { standInDeviceId, standInPeers } from "./lib/hostStandIns.mts";
+import {
+  standInDeviceId,
+  standInMirror,
+  standInPeers,
+} from "./lib/hostStandIns.mts";
+import { inertMirrorImpl, rawMirrorSession } from "./lib/mirrorFakes.mts";
+import { runQueued } from "@host/lib/sync/queuedRun";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { runHost } from "./lib/hostRuntime.mts";
@@ -660,6 +668,52 @@ it("sendWorktree: a dirty worktree lands on the peer with its commit and its unc
   const tornSent = await runHost(syncHandlers.teardownSource(wt7Sent, pullCtx));
   assert.equal(tornSent.sourceRemoved, true, tornSent.sourceError);
   assert.equal(existsSync(wt7Path), false);
+});
+
+it("queued transplant: ignored files the copy couldn't write keep the source its teardown was asked for", async () => {
+  // The files step's engine reports a file this side couldn't write
+  // (mirror.mts makes one for real), so the file is only on the source.
+  const heldPath = await addWorktree(sourceRepo, "wt-held", "held");
+  await commitFile(heldPath, "held.txt", "held\n", "held");
+  const problem = { path: "notes?.md", error: "unable to create file" };
+  standInMirror(
+    inertMirrorImpl({
+      create: () => Effect.succeed("held-files"),
+      sessions: Effect.succeed([
+        rawMirrorSession({
+          session: "held-files",
+          successfulCycles: 1,
+          local: {
+            connected: true,
+            scanned: true,
+            files: 1,
+            problems: [problem],
+            excludedProblems: 0,
+          },
+        }),
+      ]),
+      terminate: () => Effect.void,
+    }),
+  );
+  const outcome = await runHost(
+    runQueued({
+      direction: "pull",
+      deviceId: LISTENER,
+      projectId: sourceProjectId,
+      worktreeId: worktreeIdFromPath(heldPath),
+      kind: "transplant",
+      branch: "held",
+      identity,
+      rule: { base: "everything", leftOut: [], brought: [] },
+      runSetup: false,
+      source: "teardown",
+    }),
+  ).finally(() => standInMirror(inertMirrorImpl()));
+  assert.equal(
+    outcome.sourceError,
+    "its ignored files didn't make it across: 1 file couldn't be copied (notes?.md).",
+  );
+  assert.equal(existsSync(heldPath), true, "the source must survive");
 });
 
 // ---- The cancel (sync:cancelMove, host/lib/sync/Moves.ts): a pull
