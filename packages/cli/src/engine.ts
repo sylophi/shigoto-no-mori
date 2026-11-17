@@ -23,8 +23,10 @@ import * as Transfer from "./Transfer.ts";
 
 const open: Store.OpenDatabase = (filename, options) =>
   SqliteClient.make({ filename, ...options });
-export const nativefs = () =>
-  join(dirname(process.execPath), programFile("nativefs"));
+export const nativefs = join(
+  dirname(process.execPath),
+  programFile("nativefs"),
+);
 // What the agent hooks run: this binary (Agents names it by a path
 // that outlasts an update).
 const sm = process.execPath;
@@ -50,7 +52,7 @@ export const engine = (flavor: Flavor) =>
             flavor,
             store: owed ? Store.fromFiles(open, true) : Store.layer(open),
             open,
-            nativefs: nativefs(),
+            nativefs,
             sm,
           }),
         ),
@@ -94,4 +96,4 @@ export const changingWithFix = <
 // `sm doctor`'s, which opens the store inside each run, so a store that
 // won't open still gets its checklist.
 export const doctor = (flavor: Flavor) =>
-  doctorLayer({ flavor, open, nativefs: nativefs() });
+  doctorLayer({ flavor, open, nativefs });
