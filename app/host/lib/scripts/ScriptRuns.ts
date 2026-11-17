@@ -38,7 +38,7 @@ export class PtySpawnError extends Schema.TaggedError<PtySpawnError>()(
       case "cwd-missing":
         return `Worktree directory is missing: ${this.cwd}`;
       case "shell-missing":
-        return `Login shell not found: ${this.shell}`;
+        return `Shell not found: ${this.shell}`;
       case "failed":
         return "The script's terminal could not be started.";
     }
