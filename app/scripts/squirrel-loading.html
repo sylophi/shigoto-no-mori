@@ -1,0 +1,61 @@
+<!doctype html>
+<!--
+  The card Squirrel shows while the Windows installer works, rendered
+  to a GIF by scripts/build-squirrel-loading.cts (`pnpm squirrel:loading`).
+
+  Made like the dmg's art (scripts/dmg-background.html), and the same
+  brand plaque on the leaf canvas. Squirrel shows the image as it is,
+  with no window around it, and a GIF's edge is either there or not, so
+  the card is a plain rectangle. The script's window is its size.
+
+  The one thing that moves is the bar: the app's stripes, sliding the
+  way they do under a hover. The script steps --frame through one loop.
+-->
+<html class="doubutsu" data-theme-scope>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../../packages/ui/src/styles/doubutsu.css" />
+    <link
+      rel="stylesheet"
+      href="../../packages/ui/node_modules/@fontsource/zen-maru-gothic/700.css"
+    />
+    <link
+      rel="stylesheet"
+      href="../../packages/ui/node_modules/@fontsource/zen-maru-gothic/900.css"
+    />
+    <link rel="stylesheet" href="installer-art.css" />
+    <style>
+      .stage {
+        width: 100vw;
+        height: 100vh;
+      }
+
+      /* ac-stripe-slide's travel, a frame at a time. */
+      .bar {
+        position: absolute;
+        top: 146px;
+        left: 50%;
+        width: 340px;
+        height: 16px;
+        margin-left: -170px;
+        border-radius: 999px;
+        background-color: var(--primary);
+        background-image: var(--doubutsu-stripe-image);
+        background-size: 20px 20px;
+        background-position: 0 calc(var(--frame, 0) * 20px);
+        box-shadow: var(--doubutsu-sticker-shadow);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage" data-doubutsu-zone="main">
+      <div class="plaque">
+        <h1 class="wordmark">仕事の森</h1>
+        <span class="romaji">Shigoto no Mori</span>
+        <span class="watermark">森</span>
+      </div>
+      <div class="bar"></div>
+      <footer>Installing</footer>
+    </div>
+  </body>
+</html>

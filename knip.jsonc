@@ -28,6 +28,8 @@
         "test/*.mts",
         // Run through package.json scripts or by hand (their headers say how).
         "scripts/*.{mts,cts}",
+        // Linked by the installer art pages (scripts/*.html).
+        "scripts/installer-art.css",
         // A lab check run by hand against a packaged build.
         "lab/relaunch.mts",
       ],

@@ -1,0 +1,101 @@
+/* What the installer art pages share: the stage and its type, the
+   brand plaque and the hint band. Each page (dmg-background.html,
+   squirrel-loading.html) links doubutsu.css first and keeps its own
+   geometry. */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.stage {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--background);
+  color: var(--foreground);
+  /* Type is doubutsu.css's: its --font-sans (Zen Maru Gothic,
+     with the app's fallback stack behind it) at its body's 700.
+     The app's body reads the token through Tailwind, which these
+     pages don't load. */
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* data-doubutsu-zone="main" on the stage brings the app's leaf
+   wallpaper with it. In the app that layer drifts forever, but a
+   still frame wants the loop's first frame, so stop the clock. */
+.doubutsu .stage::before {
+  animation: none;
+}
+
+/* --- Brand plaque ----------------------------------------------
+   The sidebar's brand card, lifted onto the installer: cream on
+   the patterned canvas, 仕事の森 as the hero, a giant 森 watermark
+   bleeding off the bottom. Elevation is doubutsu's sticker recipe
+   (faint solid outline + hard blur-less drop), never a soft
+   shadow. A plain div, not a <header>: inside the main zone,
+   doubutsu.css would dress a header as a translucent page band,
+   and this one wants to read as a card floating above the
+   canvas. */
+.plaque {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  width: 340px;
+  height: 96px;
+  margin-left: -170px;
+  padding: 20px 24px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 24px;
+  background-color: var(--card);
+  box-shadow: var(--doubutsu-sticker-shadow);
+}
+.wordmark {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+.romaji {
+  position: relative;
+  z-index: 1;
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+.watermark {
+  position: absolute;
+  right: -6px;
+  bottom: -40px;
+  font-size: 130px;
+  line-height: 1;
+  font-weight: 900;
+  color: var(--doubutsu-watermark);
+  opacity: 0.15;
+}
+
+/* --- Hint band -------------------------------------------------
+   A real <footer> inside the main zone, so doubutsu.css dresses it
+   the way it dresses a detail page's footer in the app: card fill
+   held back to 70%, which lets the leaf wallpaper carry on through
+   the band instead of being walled off by it. */
+footer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--muted-foreground);
+}
