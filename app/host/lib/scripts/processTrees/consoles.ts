@@ -54,16 +54,28 @@ export const makeConsoles = (nativefs: string) =>
         Effect.orElseSucceed(() => []),
       );
 
+    const end = (found: ReadonlyArray<{ pid: number; birth: number }>) =>
+      found.length === 0
+        ? Effect.void
+        : exec(nativefs, [
+            "end",
+            ...found.map((member) => `${member.pid}:${member.birth}`),
+          ]).pipe(Effect.ignore);
+
+    // Closes the console and ends the rest of the tree.
     const endTree = (tree: Tree) =>
       Effect.gen(function* () {
         const found = yield* members(tree.pid);
         yield* close(tree);
-        if (found.length === 0) return;
-        yield* exec(nativefs, [
-          "end",
-          ...found.map((member) => `${member.pid}:${member.birth}`),
-        ]).pipe(Effect.ignore);
+        yield* end(found);
       }).pipe(
+        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      );
+
+    // The same once the console is closed.
+    const endAgain = (tree: Tree) =>
+      members(tree.pid).pipe(
+        Effect.flatMap(end),
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       );
 
@@ -77,6 +89,10 @@ export const makeConsoles = (nativefs: string) =>
           }
         }
         yield* endTree(tree);
+        if (yield* exitedWithin(stop.exited, stop.graceMs)) return true;
+        // The first end may not have finished the tree: a table read that
+        // failed finds nothing, and an end that failed says nothing.
+        yield* endAgain(tree);
         if (yield* exitedWithin(stop.exited, stop.endMs)) return true;
         yield* Effect.logWarning(
           `[scripts] ${stop.name} (pid ${tree.pid}) still runs after its tree was ended, giving up on it`,

@@ -4,7 +4,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byFamily } from "@shigomori/engine/platform";
 import { makeConsoles } from "./processTrees/consoles";
 import { makeSignals } from "./processTrees/signals";
 import type { Stop, Tree } from "./processTrees/tree";
@@ -30,10 +30,9 @@ export class ProcessTrees extends Context.Service<
 const make = (nativefs: string) =>
   Effect.gen(function* () {
     return ProcessTrees.of(
-      yield* byPlatform({
-        darwin: makeSignals,
-        linux: makeSignals,
-        win32: makeConsoles(nativefs),
+      yield* byFamily({
+        posix: makeSignals,
+        windows: makeConsoles(nativefs),
       }),
     );
   });
