@@ -2,8 +2,8 @@
 // `sm shell status/install/uninstall` share: one owner of the rc-file
 // mechanics and the supported-shell list, so the app and a terminal
 // can never disagree about what the hook looks like, what counts as
-// ours, or which shells qualify. The app contributes where the login
-// shell's config lives.
+// ours, or which shells qualify. The app contributes where the
+// interactive shell's config lives.
 import type { ShellIntegrationStatus } from "@shigomori/contracts/modules/cli";
 import { outputUntil } from "@shared/shellEnv";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
@@ -22,12 +22,12 @@ import { keptAnswers } from "@shigomori/engine/keptAnswers";
 // The engine resolves rc locations from ZDOTDIR / XDG_CONFIG_HOME, which
 // a Finder-launched app doesn't have (launchd sources no shell
 // profile). Without them the hook could land in a file the user's
-// shell never reads while Settings reports success. Read from the login
-// shell, as an interactive one sets them, so the app targets the same
-// file a terminal-run `sm shell install` would. Its own probe rather
-// than the startup rebuild's (shared/shellEnv.ts): that one sees exports
-// only, and a ZDOTDIR a .zshenv sets without exporting still names the
-// rc file.
+// shell never reads while Settings reports success. Read from the
+// interactive shell, started as a terminal starts it, so the app
+// targets the same file a terminal-run `sm shell install` would. Its
+// own probe rather than the startup rebuild's (shared/shellEnv.ts):
+// that one sees exports only, and a ZDOTDIR a .zshenv sets without
+// exporting still names the rc file.
 const SENTINEL = "__SHIGOMORI_HOOK_ENV__";
 const END = "__SHIGOMORI_HOOK_ENV_END__";
 // Asked while Settings waits, and asked again after a failure.
@@ -124,8 +124,8 @@ class ShellHookError extends Schema.TaggedError<ShellHookError>()(
   }
 }
 
-// `shells` enumerates exactly the kinds sm supports, so the login
-// shell is "supported" iff it appears there.
+// `shells` enumerates exactly the kinds sm supports, so the
+// interactive shell is "supported" iff it appears there.
 export const shellIntegrationStatus = onShell((integration, shell) =>
   Effect.map(
     integration.status(shell),

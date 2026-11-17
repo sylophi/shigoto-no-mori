@@ -6,13 +6,13 @@
 // A service whose verbs all differ by OS gives each OS a module of its
 // own behind one name, which picks this OS's (Shells, ProcessTable,
 // ProcessTrees, Open's Desktop, the updater's Installation, the
-// command line tool's placement). A difference of one value or one call
-// stays where it is used, as a table every OS is placed in: byFamily
-// when macOS and Linux agree, byPlatform when they don't. So a new OS
-// is a type error at each place that differs, and a three-way table
-// says macOS and Linux really differ there. A step only a Mac takes
-// asks current(), and one that differs by the machine's role asks
-// byHostKind.
+// command line tool's placement, a data-folder move's copy and flush).
+// A difference of one value or one call stays where it is used, as a
+// table every OS is placed in: byFamily when macOS and Linux agree,
+// byPlatform when they don't. So a new OS is a type error at each place
+// that differs, and a three-way table says macOS and Linux really
+// differ there. A step only a Mac takes asks current(), and one that
+// differs by the machine's role asks byHostKind.
 //
 // Code that can't ask the OS (the renderer, packages/ui,
 // packages/contracts, the web client) decides from what the host sent

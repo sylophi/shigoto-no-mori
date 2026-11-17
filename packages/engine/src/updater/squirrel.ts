@@ -3,7 +3,7 @@
 // one to from a folder holding its package and the RELEASES file naming
 // it. The trust is GitHub's, as on Linux: the package holds to the
 // digest the release list names for it. A version runs from its own
-// folder until it exits, and Squirrel's launchers start the newest, so
+// folder until it exits, and Squirrel's stubs start the newest, so
 // the swap changes nothing that runs. Squirrel keeps the version it
 // replaced and removes the ones before it.
 import * as Effect from "effect/Effect";
@@ -87,7 +87,7 @@ export const makeSquirrel = ({
     });
 
     // Not interruptible: Update.exe stopped partway leaves a half-written
-    // version folder, which the launchers start as the newest. Its own
+    // version folder, which the stubs start as the newest. Its own
     // output is a progress count, so a failure points at its log.
     const swap = Effect.fn("Updater.swapSquirrel")(function* (
       staged: string,

@@ -152,7 +152,7 @@ const updaterStates = Layer.effectDiscard(
 );
 
 // What the host answers from caches: other tools' (gh, its PR maps
-// and port-pool) and the login shell's config place.
+// and port-pool) and the interactive shell's config place.
 const cachedAnswers = Layer.mergeAll(
   PullRequestMaps.layer.pipe(Layer.provideMerge(GithubCli.layer)),
   CliShell.layer,

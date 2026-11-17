@@ -24,7 +24,7 @@ export const squirrelPackageId = (flavor: Flavor) =>
   flavorNames(flavor).configDir.replaceAll("-", "_");
 
 // The version a package carries, which names its app-<version> folder.
-// Squirrel's launcher, the CLI's and Squirrel's own updates rank a
+// Squirrel's stub, the CLI launcher and Squirrel's own updates rank a
 // prerelease label as text and NuGet takes no dots in one, so each
 // number in it is padded: 3.0.0-beta.10 is 3.0.0-beta0010, above
 // 3.0.0-beta0009.
