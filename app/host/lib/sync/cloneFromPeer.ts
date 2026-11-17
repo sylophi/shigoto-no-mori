@@ -19,6 +19,7 @@
 // source's was) is registered as it is and landed in, its files
 // untouched.
 import { isCloneableRemote } from "@shigomori/contracts/predicates/remoteUrl";
+import { isWindowsPath } from "@shigomori/contracts/projectPaths";
 import {
   lstat,
   mkdir,
@@ -39,6 +40,7 @@ import {
 } from "@shigomori/contracts/modules/sync";
 import * as Git from "@shigomori/engine/Git";
 import { errnoWords } from "@shigomori/engine/platformErrors";
+import { byFamily } from "@shigomori/engine/platform";
 import { pidAlive } from "@shigomori/engine/processes";
 import { expandHome, home } from "@shared/paths";
 import * as EngineConfig from "@shigomori/engine/Config";
@@ -225,9 +227,15 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
   // that cannot be made (a file in its place) is the destination
   // check's to name.
   const parent = expandHome(parentDir);
-  // Another OS's spelling (`D:/src` sent to Linux) is relative here, and
-  // would land the clone under the host's cwd.
-  if (!isAbsolute(parent)) {
+  // A relative folder is under the host's cwd. A drive sent to macOS or
+  // Linux (`D:/src`, `D:\src`) would read as one, so it is refused
+  // there, and Windows takes only a full path.
+  if (
+    byFamily({
+      posix: isWindowsPath(parent.replaceAll("\\", "/")),
+      windows: !isAbsolute(parent),
+    })
+  ) {
     return yield* new Git.GitRefusedError({
       reason: `The folder to clone into must be an absolute path: ${parentDir}`,
     });
