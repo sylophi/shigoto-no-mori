@@ -387,7 +387,7 @@ jobs:
   # job token triggers no workflow run, but Vercel's GitHub app still
   # sees the push.
   web-client-prod:
-    needs: attach
+    needs: [tag, attach]
     if: github.event.release.prerelease == false
     runs-on: ubuntu-latest
     permissions:
@@ -396,7 +396,7 @@ jobs:
       - name: Fast-forward web-client-prod to the release
         env:
           GH_TOKEN: ${{ github.token }}
-          SHA: ${{ github.sha }}
+          SHA: ${{ needs.tag.outputs.sha }}
         run: |
           STATUS="$(gh api "repos/$GITHUB_REPOSITORY/compare/web-client-prod...$SHA" --jq .status)"
           if [[ "$STATUS" == identical || "$STATUS" == behind ]]; then

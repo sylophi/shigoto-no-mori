@@ -1683,12 +1683,10 @@ async function fakeMirrorStartTo(
   if (new URLSearchParams(location.search).get("mirrorRefused") === "1") {
     await sleep(600);
     const disk = fakeDisks[input.targetDeviceId];
-    const windows = disk !== undefined && onWindows(disk);
-    const base = `${disk?.home ?? "/Users/rin"}/.sm/wt/${project.name}`;
     throw new RemoteCallError({
       text: `The other device answered: ${symlinksRefusal(
-        windows ? base.replaceAll("/", "\\") : base,
-        windows,
+        `${disk?.home ?? "/Users/rin"}/.sm/wt/${project.name}`,
+        disk !== undefined && onWindows(disk),
       )}`,
     });
   }

@@ -10,7 +10,8 @@
 // (entries.ts), with no cp or rmdir to wrap. There `holdingFs` holds the
 // same steps in node:fs/promises, which a test file mocks with it: after
 // a file is copied to a path holding `match`, or before the folder at
-// one is removed, it writes this process's pid to `mark` and sleeps.
+// one is removed, it writes this process's pid to `mark` and sleeps. It
+// holds once per stopWrappers, as a cp of the whole tree does.
 import { mkdirSync, writeFileSync } from "node:fs";
 import type * as FsPromises from "node:fs/promises";
 import { delimiter, join } from "node:path";
@@ -108,9 +109,10 @@ export const holdingFs = (real: typeof FsPromises): typeof FsPromises => {
     ) {
       return;
     }
-    writeFileSync(armed.mark, String(process.pid));
-    const ms = armed.seconds * 1000;
-    await new Promise((resolve) => setTimeout(resolve, ms));
+    const { mark, seconds } = armed;
+    armed = undefined;
+    writeFileSync(mark, String(process.pid));
+    await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
   };
   return {
     ...real,
