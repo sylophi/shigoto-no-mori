@@ -7,22 +7,19 @@ import * as Layer from "effect/Layer";
 import { byPlatform } from "@shigomori/engine/platform";
 import { makeConsoles } from "./processTrees/consoles";
 import { makeSignals } from "./processTrees/signals";
-import type { Tree } from "./processTrees/tree";
+import type { Stop, Tree } from "./processTrees/tree";
 
 export class ProcessTrees extends Context.Service<
   ProcessTrees,
   {
-    // Asks the tree under `pid` to end: a stop, or a hangup, which an
-    // interactive shell (ignoring a stop) ends on.
-    readonly ask: (tree: Tree, how: "stop" | "hangup") => Effect.Effect<void>;
-    // A stop to a PTY run's tree without reading the process table: the
-    // update-install quit can't wait on that.
-    readonly askNow: (tree: Tree) => Effect.Effect<void>;
-    // Ends the tree, whether or not it listens.
-    readonly end: (tree: Tree) => Effect.Effect<void>;
-    // Lets go of a PTY run's terminal once the run is over. Where the
-    // terminal is a pseudoconsole that closes it, which ends what is
-    // still attached, as a session's end hangs up its group elsewhere.
+    // Asks the tree under `pid` to end, ends it if it is still there
+    // past the grace, and waits for it to go: true once it has. One
+    // that outlives its end is logged and given up on.
+    readonly stop: (tree: Tree, stop: Stop) => Effect.Effect<boolean>;
+    // Asks the tree to end and waits on nothing: the update-install
+    // quit can't.
+    readonly stopNow: (tree: Tree) => Effect.Effect<void>;
+    // Lets go of a PTY run's tree once its shell has exited on its own.
     readonly release: (tree: Tree) => Effect.Effect<void>;
   }
 >()("sm/host/ProcessTrees") {}

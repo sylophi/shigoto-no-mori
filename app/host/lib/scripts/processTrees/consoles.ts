@@ -14,7 +14,7 @@ import * as Effect from "effect/Effect";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { readProcesses } from "@shigomori/engine/processTable/nativefs";
 import { exec } from "@shigomori/engine/processes";
-import type { Tree } from "./tree";
+import { exitedWithin, type Stop, type Tree } from "./tree";
 
 const close = (tree: Tree) =>
   Effect.try(() => tree.closeTerminal?.()).pipe(Effect.ignore);
@@ -68,15 +68,31 @@ export const makeConsoles = (nativefs: string) =>
       );
 
     return {
-      ask: Effect.fn("ProcessTrees.ask")((tree: Tree, how: "stop" | "hangup") =>
-        how === "stop" && tree.interrupt !== undefined
-          ? Effect.try(tree.interrupt).pipe(Effect.ignore)
-          : endTree(tree),
+      // Ctrl+C and the grace, where there is a console to type it into,
+      // then the console closed and the rest ended.
+      stop: Effect.fn("ProcessTrees.stop")(function* (tree: Tree, stop: Stop) {
+        if (stop.how === "stop" && tree.interrupt !== undefined) {
+          yield* Effect.try(tree.interrupt).pipe(Effect.ignore);
+          if (yield* exitedWithin(stop, stop.graceMs)) {
+            yield* close(tree);
+            return true;
+          }
+        }
+        yield* endTree(tree);
+        if (yield* exitedWithin(stop, stop.endMs)) return true;
+        yield* Effect.logWarning(
+          `[scripts] ${stop.name} (pid ${tree.pid}) still runs after its tree was ended, giving up on it`,
+        );
+        return false;
+      }),
+      // A PTY run's console closes without reading the table: what
+      // escaped the console goes on, as a process that left its group
+      // does elsewhere.
+      stopNow: Effect.fn("ProcessTrees.stopNow")((tree: Tree) =>
+        tree.closeTerminal === undefined ? endTree(tree) : close(tree),
       ),
-      // What escaped the console goes on, as a process that left its
-      // group does elsewhere.
-      askNow: Effect.fn("ProcessTrees.askNow")(close),
-      end: Effect.fn("ProcessTrees.end")(endTree),
+      // The console outlives its shell (the node-pty patch), and closing
+      // it ends what is still attached.
       release: Effect.fn("ProcessTrees.release")(close),
     };
   });

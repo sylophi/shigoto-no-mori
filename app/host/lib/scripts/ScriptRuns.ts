@@ -10,12 +10,10 @@
 // kill chain (./ProcessTrees.ts), its exit an effect to wait on.
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import { type IPty, spawn as spawnPty } from "node-pty";
@@ -73,8 +71,8 @@ export interface Stopping {
 // What the layer's close stops a run it finds still open with.
 const DEFAULT_STOPPING: Stopping = { graceMs: 3_000, wait: true };
 
-// How long to wait for a child that outlived its kill (kernel-stuck
-// I/O) before giving up. A delete or a quit must not hang behind it.
+// How long an ended tree has to go before it is given up on. A delete
+// or a quit must not hang behind one stuck in the kernel's I/O.
 export const UNKILLABLE_WAIT_MS = 5_000;
 
 export interface PtyHandle {
@@ -158,12 +156,6 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
   }>();
   const exit = Deferred.await(exited);
   const started = yield* Deferred.make<void>();
-  const waitExit = (ms: number) =>
-    exit.pipe(
-      Effect.timeoutOption(Duration.millis(ms)),
-      Effect.map(Option.isSome),
-    );
-  // The PTY child runs in its own session, so it leads its own group.
   const child = yield* Effect.acquireRelease(
     Effect.try({
       try: (): IPty => {
@@ -207,17 +199,17 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
         interrupt: () => spawned.write("\x03"),
       };
       return Effect.gen(function* () {
-        if (yield* Deferred.isDone(exited)) return;
+        if (yield* Deferred.isDone(exited)) return yield* trees.release(tree);
         const { graceMs, wait, how = "stop" } = stopping();
-        if (!wait) return yield* trees.askNow(tree);
-        yield* trees.ask(tree, how);
-        if (yield* waitExit(graceMs)) return;
-        yield* trees.end(tree);
-        if (yield* waitExit(UNKILLABLE_WAIT_MS)) return;
-        yield* Effect.logWarning(
-          `[scripts] "${opts.command ?? program}" (pid ${spawned.pid}) outlived its kill, giving up on it`,
-        );
-      }).pipe(Effect.ensuring(trees.release(tree)));
+        if (!wait) return yield* trees.stopNow(tree);
+        yield* trees.stop(tree, {
+          how,
+          graceMs,
+          endMs: UNKILLABLE_WAIT_MS,
+          exited: exit,
+          name: `"${opts.command ?? program}"`,
+        });
+      });
     },
   );
   // node-pty reports exit only after the terminal stream has drained

@@ -36,14 +36,14 @@ export const makeUnderWay = ({
         busyTerminals,
       })).pipe(Effect.withSpan("Scripts.busy")),
       // A delete in flight loses its cleanup scripts first, which leaves
-      // the worktree directory whole. A hurried quit signals and moves
-      // on: an update's installer is waiting on this process to exit, and
+      // the worktree directory whole. A hurried quit asks and moves on:
+      // an update's installer is waiting on this process to exit, and
       // the data-folder move behind a relaunch has already reaped. A
-      // script that ignores the signal may outlive it, which an explicit
+      // script that ignores the ask may outlive it, which an explicit
       // update accepts.
       quit: (hurried: boolean) =>
         hurried
-          ? runs.signalAll
+          ? runs.stopAllNow
           : Effect.forEach(marks.deleteIds(), runs.stopWorktree, {
               concurrency: "unbounded",
               discard: true,
