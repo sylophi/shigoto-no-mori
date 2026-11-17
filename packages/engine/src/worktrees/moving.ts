@@ -272,7 +272,7 @@ export const makeMoving = ({
           ),
         ).pipe(Effect.ignore);
         const cp = (keepTimes: boolean) =>
-          copyTree(spawner, from, partial, { keepTimes });
+          copyTree(spawner, from, partial, to, { keepTimes });
         // A volume that can't hold the times and modes fails the first
         // try, so the plain copy is the second.
         const copied = yield* restore(
