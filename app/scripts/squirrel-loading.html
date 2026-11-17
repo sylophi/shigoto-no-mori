@@ -1,0 +1,139 @@
+<!doctype html>
+<!--
+  The card Squirrel shows while the Windows installer works, rendered
+  to a GIF by scripts/build-squirrel-loading.cts (`pnpm squirrel:loading`).
+
+  Made like the dmg's art (scripts/dmg-background.html): this page links
+  the app's own doubutsu.css, and the composition is the same brand card
+  on the leaf canvas. Squirrel shows the image as it is, with no window
+  around it, and a GIF's edge is either there or not, so the card is a
+  plain rectangle with a line around it.
+
+  The one thing that moves is the bar: the app's stripes, sliding the
+  way they do under a hover. The script steps --frame through one loop.
+-->
+<html class="doubutsu" data-theme-scope>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../../packages/ui/src/styles/doubutsu.css" />
+    <link
+      rel="stylesheet"
+      href="../../packages/ui/node_modules/@fontsource/zen-maru-gothic/700.css"
+    />
+    <link
+      rel="stylesheet"
+      href="../../packages/ui/node_modules/@fontsource/zen-maru-gothic/900.css"
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+
+      .stage {
+        position: relative;
+        width: 420px;
+        height: 232px;
+        box-sizing: border-box;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        background-color: var(--background);
+        color: var(--foreground);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* The wallpaper holds still, so only the bar differs between
+         frames. */
+      .doubutsu .stage::before {
+        animation: none;
+      }
+
+      /* The dmg art's brand plaque. */
+      .plaque {
+        position: absolute;
+        top: 24px;
+        left: 50%;
+        width: 340px;
+        height: 96px;
+        margin-left: -170px;
+        padding: 20px 24px;
+        box-sizing: border-box;
+        overflow: hidden;
+        border-radius: 24px;
+        background-color: var(--card);
+        box-shadow: var(--doubutsu-sticker-shadow);
+      }
+      .wordmark {
+        position: relative;
+        z-index: 1;
+        margin: 0;
+        font-size: 30px;
+        line-height: 1;
+        font-weight: 900;
+        letter-spacing: -0.01em;
+      }
+      .romaji {
+        position: relative;
+        z-index: 1;
+        display: block;
+        margin-top: 8px;
+        font-size: 13px;
+        color: var(--muted-foreground);
+      }
+      .watermark {
+        position: absolute;
+        right: -6px;
+        bottom: -40px;
+        font-size: 130px;
+        line-height: 1;
+        font-weight: 900;
+        color: var(--doubutsu-watermark);
+        opacity: 0.15;
+      }
+
+      /* ac-stripe-slide's travel, a frame at a time. */
+      .bar {
+        position: absolute;
+        top: 146px;
+        left: 50%;
+        width: 340px;
+        height: 16px;
+        margin-left: -170px;
+        border-radius: 999px;
+        background-color: var(--primary);
+        background-image: var(--doubutsu-stripe-image);
+        background-size: 20px 20px;
+        background-position: 0 calc(var(--frame, 0) * 20px);
+        box-shadow: var(--doubutsu-sticker-shadow);
+      }
+
+      footer {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        overflow: hidden;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        color: var(--muted-foreground);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage" data-doubutsu-zone="main">
+      <div class="plaque">
+        <h1 class="wordmark">仕事の森</h1>
+        <span class="romaji">Shigoto no Mori</span>
+        <span class="watermark">森</span>
+      </div>
+      <div class="bar"></div>
+      <footer>Installing</footer>
+    </div>
+  </body>
+</html>

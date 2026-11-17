@@ -39,6 +39,7 @@
     "villagers:fetch": "bun scripts/fetch-villager-data.mts",
     "extract-icon": "scripts/extract-app-icon.sh",
     "dmg:background": "electron scripts/build-dmg-background.cts",
+    "squirrel:loading": "electron scripts/build-squirrel-loading.cts",
     "cli:build": "node scripts/build-cli.mts",
     "file-sync:build": "node scripts/build-go.mts file-sync",
     "nativefs:build": "node scripts/build-go.mts nativefs",

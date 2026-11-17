@@ -335,12 +335,14 @@ const config: ForgeConfig = {
     // the Linux install's folder. The update feed serves its full
     // .nupkg. The package's version is one Squirrel ranks right, and the
     // app's own stays the real one. Apps & features fetches its icon
-    // from iconUrl at install.
+    // from iconUrl at install. loadingGif is what shows while it
+    // installs (scripts/build-squirrel-loading.cts).
     new MakerSquirrel(
       {
         name: squirrelPackageId(flavor),
         version: squirrelVersion(version),
         setupIcon: "assets/icon.ico",
+        loadingGif: "assets/squirrel-loading.gif",
         iconUrl: `https://raw.githubusercontent.com/${APP_REPO}/main/app/assets/icon.ico`,
       },
       ["win32"],
