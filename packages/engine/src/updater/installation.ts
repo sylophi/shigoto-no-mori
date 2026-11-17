@@ -1,12 +1,15 @@
 // What an OS's install of the app is to the updater, between the steps
 // every install shares (the feeds, the download, the staging area and
 // its manifest, its lock, the handoff to a running app): a Mac's is the
-// signed bundle (bundle.ts), Linux's a folder per version (versions.ts).
+// signed bundle (bundle.ts), Linux's a folder per version (versions.ts),
+// Windows' a Squirrel install (squirrel.ts).
 import type * as Effect from "effect/Effect";
+import type { Relaunched } from "../relaunchEnv.ts";
 import type { ReleaseInfo } from "../updateFeed.ts";
 import type {
   InstallError,
   NotInBundle,
+  Ran,
   StageError,
   UpdateInput,
 } from "./documents.ts";
@@ -35,4 +38,9 @@ export type Installation = {
     version: string,
     pid: number,
   ) => Effect.Effect<void, InstallError>;
+  // The installed app started again, with what the run carries on.
+  readonly relaunch: (
+    installed: string,
+    carried: Relaunched,
+  ) => Effect.Effect<Ran>;
 };

@@ -2,6 +2,7 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import { canonicalPath } from "../canonicalPath.ts";
 import { splitLines } from "../gitParse.ts";
 import {
   BranchMovedError,
@@ -68,7 +69,9 @@ export const makeRefs = ({ running }: { readonly running: RunningArea }) =>
         ref,
         "--git-path",
         "packed-refs",
-      ])).split("\n");
+      ]))
+        .split("\n")
+        .map(canonicalPath);
       const unreadable =
         (yield* fs.exists(loose).pipe(Effect.orElseSucceed(() => true))) ||
         ((yield* fs.exists(packed).pipe(Effect.orElseSucceed(() => true))) &&

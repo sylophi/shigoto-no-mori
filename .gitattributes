@@ -1,0 +1,3 @@
+# LF in every checkout, whatever git's core.autocrlf says: oxfmt and the
+# shell scripts read the same bytes on every OS.
+* text=auto eol=lf

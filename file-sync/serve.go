@@ -15,6 +15,8 @@ package main
 //     credentials in a remote's URL, and git there would run what a peer
 //     put in it (hooks, core.fsmonitor). The app's sessions ignore it on
 //     both sides already, under the ignore syntax this side picks;
+//   - a name this side's OS would store under another name, or as a
+//     device, is never made: the other side keeps its file;
 //   - links stay portable, and files and folders keep the modes this
 //     side gives them.
 //
@@ -31,9 +33,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path"
-	"slices"
-	"strings"
 
 	"google.golang.org/protobuf/proto"
 
@@ -49,7 +48,6 @@ import (
 	"github.com/mutagen-io/mutagen/pkg/synchronization/endpoint/local"
 	"github.com/mutagen-io/mutagen/pkg/synchronization/endpoint/remote"
 	"github.com/mutagen-io/mutagen/pkg/synchronization/rsync"
-	urlpkg "github.com/mutagen-io/mutagen/pkg/url"
 )
 
 // The buffering on each side of the stream, Mutagen's own for it.
@@ -153,159 +151,6 @@ func servedConfiguration(asked *synchronization.Configuration) *synchronization.
 	served.DefaultOwner = ""
 	served.DefaultGroup = ""
 	return served
-}
-
-// A local endpoint that keeps .git, at any depth, out of every call: a
-// read through one is refused, and a path staged or changed through one,
-// a folder whose old or new contents hold one, or a link into one, is
-// left out.
-type guardedEndpoint struct {
-	synchronization.Endpoint
-}
-
-func (e guardedEndpoint) Supply(paths []string, signatures []*rsync.Signature, receiver rsync.Receiver) error {
-	if i := slices.IndexFunc(paths, touchesGit); i >= 0 {
-		return fmt.Errorf("refused to read %q: .git is not synchronized", paths[i])
-	}
-	return e.Endpoint.Supply(paths, signatures, receiver)
-}
-
-// The paths left out are never staged: their changes come back as
-// problems from Transition.
-func (e guardedEndpoint) Stage(paths []string, digests [][]byte) ([]string, []*rsync.Signature, rsync.Receiver, error) {
-	var allowedPaths []string
-	var allowedDigests [][]byte
-	for p, path := range paths {
-		if !touchesGit(path) {
-			allowedPaths = append(allowedPaths, path)
-			allowedDigests = append(allowedDigests, digests[p])
-		}
-	}
-	return e.Endpoint.Stage(allowedPaths, allowedDigests)
-}
-
-// What a side makes, files and folders, gets the modes a checkout gives
-// them (umask 022). Mutagen's own defaults are owner-only, and its
-// portable permissions carry only the executable bit across, which it
-// adds for whoever may read.
-const (
-	madeFileMode      = 0o644
-	madeDirectoryMode = 0o755
-)
-
-// The daemon's own side of each session, which applies what the peer's
-// scan reports, holds .git as serve does: a peer's serve can be changed
-// to report it. It makes files with a checkout's modes, as serve does,
-// whatever the session was created with.
-type guardedLocalHandler struct {
-	synchronization.ProtocolHandler
-}
-
-func (h guardedLocalHandler) Connect(
-	ctx context.Context,
-	logger *logging.Logger,
-	url *urlpkg.URL,
-	prompter string,
-	session string,
-	version synchronization.Version,
-	configuration *synchronization.Configuration,
-	alpha bool,
-) (synchronization.Endpoint, error) {
-	made := proto.Clone(configuration).(*synchronization.Configuration)
-	made.DefaultFileMode = madeFileMode
-	made.DefaultDirectoryMode = madeDirectoryMode
-	endpoint, err := h.ProtocolHandler.Connect(ctx, logger, url, prompter, session, version, made, alpha)
-	if err != nil {
-		return nil, err
-	}
-	return guardedEndpoint{endpoint}, nil
-}
-
-// Once, before a session connects.
-func holdGitOnLocalEndpoints() {
-	local := synchronization.ProtocolHandlers[urlpkg.Protocol_Local]
-	if _, held := local.(guardedLocalHandler); !held {
-		synchronization.ProtocolHandlers[urlpkg.Protocol_Local] = guardedLocalHandler{local}
-	}
-}
-
-// The inner endpoint is called at most once: the local one refuses a
-// second transition without a scan between.
-func (e guardedEndpoint) Transition(ctx context.Context, transitions []*core.Change) ([]*core.Entry, []*core.Problem, bool, error) {
-	results := make([]*core.Entry, len(transitions))
-	var problems []*core.Problem
-	var allowed []*core.Change
-	var allowedAt []int
-	for t, change := range transitions {
-		if touchesGit(change.Path) || holdsGit(change.Old) || holdsGit(change.New) || linksIntoGit(change.Path, change.New) {
-			results[t] = change.Old
-			problems = append(problems, &core.Problem{Path: change.Path, Error: "touches .git, which is not synchronized"})
-		} else {
-			allowed = append(allowed, change)
-			allowedAt = append(allowedAt, t)
-		}
-	}
-	if len(allowed) == 0 {
-		return results, problems, false, nil
-	}
-	applied, appliedProblems, stagerMissingFiles, err := e.Endpoint.Transition(ctx, allowed)
-	if err != nil {
-		return nil, nil, false, err
-	}
-	for a, t := range allowedAt {
-		results[t] = applied[a]
-	}
-	return results, append(problems, appliedProblems...), stagerMissingFiles, nil
-}
-
-func touchesGit(p string) bool {
-	return p != "" && slices.ContainsFunc(strings.Split(path.Clean(p), "/"), isGitName)
-}
-
-// A name the volume reads as .git: APFS and HFS+ fold case by default,
-// so .GIT opens the same folder, and HFS+ also skips the code points it
-// ignores in a name, so .g\u200cit does too (git's is_hfs_dotgit).
-func isGitName(name string) bool {
-	return strings.EqualFold(strings.Map(hfsVisible, name), ".git")
-}
-
-func hfsVisible(r rune) rune {
-	switch {
-	case r >= 0x200c && r <= 0x200f, r >= 0x202a && r <= 0x202e,
-		r >= 0x206a && r <= 0x206f, r == 0xfeff:
-		return -1
-	}
-	return r
-}
-
-// A link this side would make that points into .git: Mutagen never
-// follows one, but whatever here opens the worktree does (an editor,
-// the files page, an agent writing through it).
-func linksIntoGit(at string, entry *core.Entry) bool {
-	if entry == nil {
-		return false
-	}
-	if entry.Kind == core.EntryKind_SymbolicLink {
-		return touchesGit(path.Join(path.Dir(at), entry.Target))
-	}
-	for name, child := range entry.Contents {
-		if linksIntoGit(path.Join(at, name), child) {
-			return true
-		}
-	}
-	return false
-}
-
-func holdsGit(entry *core.Entry) bool {
-	if entry == nil {
-		return false
-	}
-	for name, child := range entry.Contents {
-		if isGitName(name) || holdsGit(child) {
-			return true
-		}
-	}
-	return false
 }
 
 // --- Mutagen's endpoint server, as v0.18.1 has it ---

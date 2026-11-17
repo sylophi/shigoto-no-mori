@@ -2,11 +2,13 @@
 // with `bun build --compile`, its flavor from the build (build.ts).
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
+import { canonicalPlatform } from "@shigomori/engine/canonicalPlatform";
 import { flavorNames } from "@shigomori/engine/flavor";
 import * as Paths from "@shigomori/engine/Paths";
-import * as Lifecycle from "@shigomori/engine/Lifecycle";
 import { childDefaults } from "@shigomori/engine/processes";
+import * as ProcessTable from "@shigomori/engine/ProcessTable";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
+import * as Shells from "@shigomori/engine/Shells";
 import * as Cause from "effect/Cause";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
@@ -43,7 +45,7 @@ import { autopull, shelve, unshelve } from "./commands/marks.ts";
 import { agentsCommand } from "./commands/agents.ts";
 import { guideCommand } from "./commands/guide.ts";
 import { status } from "./commands/status.ts";
-import { changingWithFix, doctor, engine } from "./engine.ts";
+import { changingWithFix, doctor, engine, nativefs } from "./engine.ts";
 import { canonical } from "./aliases.ts";
 import * as Here from "./here.ts";
 import { commandLine, splitAtDashes } from "./argv.ts";
@@ -58,6 +60,9 @@ import {
   untilReaderGone,
   watchStreams,
 } from "./output.ts";
+import { uppercasePath } from "@shigomori/engine/environment";
+
+uppercasePath();
 
 // --json, --verbose and --version are global wherever they sit, up to
 // a `--`, past which everything is the command's.
@@ -115,7 +120,7 @@ const sm = Command.make("sm").pipe(
     loaded(launchersCommand),
     shellCommand.pipe(
       Command.provide(
-        Layer.mergeAll(ShellIntegration.layer, Lifecycle.layer).pipe(
+        Layer.mergeAll(ShellIntegration.layer, Shells.layer(nativefs)).pipe(
           Layer.provide(childDefaults),
           Layer.provideMerge(Paths.layer(flavor)),
         ),
@@ -159,11 +164,17 @@ const sm = Command.make("sm").pipe(
     doctorCommand.pipe(changingWithFix, Command.provide(doctor(flavor))),
     update.pipe(Command.provide(services)),
     dataCommand.pipe(Command.provide(services)),
-    nuke.pipe(Command.provide(Paths.layer(flavor))),
+    nuke.pipe(
+      Command.provide(
+        Layer.merge(Paths.layer(flavor), ProcessTable.layer(nativefs)),
+      ),
+    ),
     serviceCommand.pipe(Command.provide(Paths.layer(flavor))),
     guideCommand.pipe(Command.provide(services)),
   ]),
 );
+
+const platform = canonicalPlatform(BunServices.layer);
 
 const program = commandLine(sm, canonical(rest, worktreesCommand)).pipe(
   Effect.flatMap(Command.runWith(sm, { version, renderErrors: false })),
@@ -174,11 +185,8 @@ const program = commandLine(sm, canonical(rest, worktreesCommand)).pipe(
   Effect.provide(
     Layer.mergeAll(
       verbose
-        ? Layer.merge(
-            BunServices.layer,
-            verboseSpawner.pipe(Layer.provide(BunServices.layer)),
-          )
-        : BunServices.layer,
+        ? Layer.merge(platform, verboseSpawner.pipe(Layer.provide(platform)))
+        : platform,
       CliConfig.layer({ builtIns: [] }),
       Here.layer,
     ),

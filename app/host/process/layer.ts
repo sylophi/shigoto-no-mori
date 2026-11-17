@@ -20,6 +20,7 @@ import * as Scripts from "@host/lib/Scripts";
 import * as Engine from "@host/lib/Engine";
 import * as StoreChanges from "@host/lib/storeChanges";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
+import { Holders } from "@shigomori/engine/Holders";
 import { MirrorsOnDelete } from "@shigomori/engine/MirrorsOnDelete";
 import { mirrorsOnDelete } from "@host/mirror/onDelete";
 import * as Shell from "@host/lib/Shell";
@@ -29,6 +30,7 @@ import * as PullRequestMaps from "@host/lib/githubCli/PullRequestMaps";
 import * as Views from "@host/lib/Views";
 import * as Ports from "@host/lib/Ports";
 import * as ScriptRuns from "@host/lib/scripts/ScriptRuns";
+import * as ProcessTrees from "@host/lib/scripts/ProcessTrees";
 import * as ScriptChanges from "@host/lib/scripts/ScriptChanges";
 import * as Terminals from "@host/lib/terminals/Terminals";
 import { terminalStart, terminalWorktrees } from "@host/ipc/scriptRun";
@@ -36,7 +38,7 @@ import * as Villagers from "@host/lib/VillagerData";
 import * as Worktrees from "@host/lib/Worktrees";
 import * as GitWatcher from "@host/lib/GitWatcher";
 import * as BackgroundFetch from "@host/lib/BackgroundFetch";
-import { repairCliLinks } from "@host/lib/cli/install";
+import { repairCli } from "@host/lib/cli/install";
 import * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
 import * as Moves from "@host/lib/sync/Moves";
 import * as MoveQueue from "@host/lib/sync/MoveQueue";
@@ -150,7 +152,7 @@ const updaterStates = Layer.effectDiscard(
 );
 
 // What the host answers from caches: other tools' (gh, its PR maps
-// and port-pool) and the login shell's config place.
+// and port-pool) and the interactive shell's config place.
 const cachedAnswers = Layer.mergeAll(
   PullRequestMaps.layer.pipe(Layer.provideMerge(GithubCli.layer)),
   CliShell.layer,
@@ -219,6 +221,16 @@ const scriptsAndFoundation = (options: {
     // last run left running is reaped here. It claims the records before
     // any script can spawn, and kills in the background.
     Layer.provideMerge(OrphanSweep.layer),
+    // On Windows the engine's deletes and moves close the terminals in
+    // what they take or move first.
+    Layer.provideMerge(
+      Layer.effect(
+        Holders,
+        Effect.map(Terminals.Terminals, (terminals) =>
+          Holders.of({ release: terminals.closeOf }),
+        ),
+      ),
+    ),
     // Every terminal, each saved for the next start as it closes with
     // the quit.
     Layer.provideMerge(
@@ -234,6 +246,8 @@ const scriptsAndFoundation = (options: {
     // Every script run, each in a scope the quit's policy above has
     // already closed or shortened.
     Layer.provideMerge(ScriptRuns.layer),
+    // How the scripts, the terminals and the sweep end a process tree.
+    Layer.provideMerge(ProcessTrees.layer(options.engine.nativefs)),
     Layer.provideMerge(foundation(options.engine, options.migration)),
   );
 
@@ -305,11 +319,10 @@ const below = (options: Parameters<typeof layer>[0]) =>
     Layer.provideMerge(logged("the store's changes", StoreChanges.layer)),
     Layer.provideMerge(gitWatcher),
     Layer.provideMerge(BackgroundFetch.layer),
-    // Installing the CLI link is a Settings action. A start only
-    // repairs an installed link whose target moved (an app update,
-    // another checkout).
+    // Installing the CLI is a Settings action. A start only repairs an
+    // install whose target moved (an app update, another checkout).
     Layer.provideMerge(
-      starts("the CLI link repair", () => void repairCliLinks(hostFacts())),
+      starts("the CLI repair", () => void repairCli(hostFacts())),
     ),
     Layer.provideMerge(
       logged("the synced project settings", ProjectSettingsSync.layer),

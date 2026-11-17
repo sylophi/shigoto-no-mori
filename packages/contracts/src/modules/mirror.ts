@@ -282,6 +282,17 @@ export const MirrorSessionSchema = strict(
 );
 export type MirrorSession = typeof MirrorSessionSchema.Type;
 
+// The paths the sides couldn't read or write, the ones past the
+// engine's cap included.
+export function mirrorProblemCount(
+  ...sides: ReadonlyArray<MirrorSession["local"]>
+): number {
+  return sides.reduce(
+    (count, side) => count + side.problems.length + side.excludedProblems,
+    0,
+  );
+}
+
 // As the daemon's state line carries it, without what the host adds
 // (its project, its ignore mode, git's status, a stop under way). An
 // unknown top-level key is stripped rather than refused, so a newer
@@ -353,7 +364,7 @@ export function mirrorEngineBlocker(
 }
 
 // "Mirror here" has the peer write into this device, which both of this
-// device's switches must let it do. A host with no window (Linux) has
+// device's switches must let it do. A host with no window (headless) has
 // them turned on from its terminal, not an account page.
 export function mirrorHereBlocker(
   own: {
@@ -411,10 +422,14 @@ const MirrorStartFromPayloadSchema = strict(
 );
 export type MirrorStartFromPayload = typeof MirrorStartFromPayloadSchema.Type;
 
+// `crlfScripts`: a Windows original tracks scripts whose #! line ends
+// in CRLF, which the copy holds as they are and only Windows starts,
+// and the copy isn't on Windows.
 export const MirrorStartToResultSchema = strict(
   Schema.Struct({
     ...SyncPullWorktreeResultSchema.struct.fields,
     session: MirrorSessionIdSchema,
+    crlfScripts: Schema.Boolean,
   }),
 );
 
@@ -478,6 +493,14 @@ export function mirrorStopBlocker(
     return conflicts === 1
       ? "a file changed on both sides"
       : `${conflicts} files changed on both sides`;
+  }
+  // A side's problems hold the files it couldn't read with the ones it
+  // couldn't write, so either side's may be a file only the copy has.
+  const problems = mirrorProblemCount(session.local, session.remote);
+  if (problems > 0) {
+    return problems === 1
+      ? "a file couldn't be copied"
+      : `${problems} files couldn't be copied`;
   }
   if (!mirrorFilesSettled(session)) return "files are still syncing";
   if (session.git === "timed-out") return "git didn't finish checking in time";
@@ -668,6 +691,14 @@ export const mirrorContract = defineContract(
     "applyGitState",
     MirrorApplyGitStatePayloadSchema,
     MirrorApplyGitStateResultSchema,
+    gatedBy("changeCode"),
+  ),
+  // The copy's index told the sizes of the original's files written
+  // over its checkout's (host/mirror/checkout.ts).
+  invoke(
+    "clearStaleSizes",
+    MirrorWorktreePayloadSchema,
+    VoidSchema,
     gatedBy("changeCode"),
   ),
   // Carries the list, since a busy mirror fires several times a second.

@@ -15,9 +15,12 @@ import { join } from "node:path";
 import {
   app,
   BrowserWindow,
+  type BrowserWindowConstructorOptions,
   dialog,
+  nativeTheme,
   type Rectangle,
   screen,
+  type TitleBarOverlayOptions,
   type WebContents,
 } from "electron";
 import * as Schema from "effect/Schema";
@@ -36,6 +39,7 @@ import {
   DEV_BUILD_FLAG,
   LAB_FLAG,
   ROUTE_FLAG,
+  SIDEBAR_RIGHT_FLAG,
   startedForLab,
 } from "../argFlags";
 import { names } from "../flavor";
@@ -51,7 +55,10 @@ import {
   applyRestartVisibility,
   type RestartVisibility,
 } from "./restartVisibility";
-import { current as currentPlatform } from "@shigomori/engine/platform";
+import {
+  byFamily,
+  current as currentPlatform,
+} from "@shigomori/engine/platform";
 
 const HOME_ROUTE = "/";
 // The v3 migration's page (renderer/lib/routePaths.ts).
@@ -204,6 +211,62 @@ function raise(entry: Held): void {
   entry.window.focus();
 }
 
+// Inset traffic lights over a transparent shell so the
+// NSVisualEffectView material set via `vibrancy` shows through where
+// the renderer paints no background (the sidebar column). Inset as far
+// from the top as from the left, which centers the 14pt buttons on
+// y=23: the renderer's title bars line up on that (SidebarHeader,
+// PageHeader's device tabs).
+const INSET_TRAFFIC_LIGHTS: BrowserWindowConstructorOptions = {
+  titleBarStyle: "hiddenInset",
+  trafficLightPosition: { x: 16, y: 16 },
+  backgroundColor: "#00000000",
+  vibrancy: "sidebar",
+  visualEffectState: "active",
+};
+
+// A window's frame on each system: its options, the flags its page lays
+// out by (argFlags.ts), and what follows the app's light or dark.
+type Frame = {
+  readonly options: () => BrowserWindowConstructorOptions;
+  readonly flags: readonly string[];
+  readonly recolor: (window: BrowserWindow) => void;
+};
+
+const TRAFFIC_LIGHTS: Frame = {
+  options: () => INSET_TRAFFIC_LIGHTS,
+  flags: [],
+  recolor: () => {},
+};
+
+// Windows draws its own caption buttons over the window's top right
+// corner, so the page puts its sidebar on the right to hold them in its
+// top strip, as a Mac's holds the traffic lights. Their strip is
+// transparent so the sidebar shows through, and its hue still picks the
+// hover's shade, dark on a light sidebar and light on a dark one. Mica
+// shows through the transparent shell where vibrancy would.
+const CAPTION_BUTTONS: Frame = {
+  options: () => ({
+    titleBarStyle: "hidden",
+    titleBarOverlay: { height: 32, ...captionColors() },
+    backgroundColor: "#00000000",
+    backgroundMaterial: "mica",
+  }),
+  flags: [SIDEBAR_RIGHT_FLAG],
+  recolor: (window) => window.setTitleBarOverlay(captionColors()),
+};
+
+function captionColors(): TitleBarOverlayOptions {
+  return nativeTheme.shouldUseDarkColors
+    ? { color: "#00000000", symbolColor: "#ffffff" }
+    : { color: "#ffffff00", symbolColor: "#000000" };
+}
+
+const FRAME = byFamily({
+  posix: TRAFFIC_LIGHTS,
+  windows: CAPTION_BUTTONS,
+});
+
 function create(
   route: string,
   options: {
@@ -224,17 +287,7 @@ function create(
     minWidth: 640,
     minHeight: 420,
     show: options.restart === undefined,
-    // Inset traffic lights over a transparent shell so the
-    // NSVisualEffectView material set via `vibrancy` shows through where
-    // the renderer paints no background (the sidebar column). Inset as
-    // far from the top as from the left, which centers the 14pt buttons
-    // on y=23: the renderer's title bars line up on that (SidebarHeader,
-    // PageHeader's device tabs).
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 16 },
-    backgroundColor: "#00000000",
-    vibrancy: "sidebar",
-    visualEffectState: "active",
+    ...FRAME.options(),
     webPreferences: {
       preload: join(__dirname, "preload.js"),
       sandbox: true,
@@ -254,6 +307,7 @@ function create(
         `${CLERK_PK_FLAG}${clerkPublishableKey()}`,
         // The page the window opens on.
         `${ROUTE_FLAG}${route}`,
+        ...FRAME.flags,
         ...(app.isPackaged ? [] : [DEV_BUILD_FLAG]),
         ...(startedForLab(process.argv, {
           packaged: app.isPackaged,
@@ -264,6 +318,9 @@ function create(
       ],
     },
   });
+  // A menu bar in the window (Windows) stays hidden: the menu is there
+  // for its keys (menu.ts).
+  window.setMenuBarVisibility(false);
   const entry: Held = {
     window,
     id: window.webContents.id,
@@ -426,6 +483,9 @@ export function openWindowsAtStart(options: {
 }): void {
   isShuttingDown = options.isShuttingDown;
   started = true;
+  nativeTheme.on("updated", () => {
+    for (const entry of held) FRAME.recolor(entry.window);
+  });
   let remembered: readonly Remembered[] = [];
   try {
     remembered = readJsonOrNullSync(rememberedPath(), RememberedSchema) ?? [];

@@ -3,17 +3,15 @@
 import { execFileSync, spawn } from "node:child_process";
 import { type AddressInfo } from "node:net";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  realpathSync,
   rmSync,
-  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import { delimiter } from "node:path";
+import { dirname, join, realpath } from "@shigomori/engine/canonicalPath";
 import type { HandlerContext } from "../../shared/ipc/transport.ts";
 import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -24,6 +22,7 @@ import {
   isolateGit,
 } from "../../../test/gitIsolation.ts";
 import { own, SYNC_SPAWN } from "../../../test/testProcesses.mts";
+import { writeStub } from "../../../packages/engine/test/lib/stubs.ts";
 
 // The app root (app/ in the repo), resolved from this file's location
 // under test/lib/.
@@ -192,7 +191,7 @@ export const scriptEnv = {
 // (macOS puts tmpdir behind a symlink, and git records the real path),
 // that the check's tracker removes.
 export function tempDir(prefix: string, track: Track): string {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
+  const dir = realpath(mkdtempSync(join(tmpdir(), prefix)));
   track(() => rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
@@ -207,8 +206,7 @@ export function installFakeGh(
 ): void {
   const bin = join(root, "bin");
   mkdirSync(bin);
-  writeFileSync(join(bin, "gh"), script);
-  chmodSync(join(bin, "gh"), 0o755);
+  writeStub(bin, "gh", script);
   const path = process.env["PATH"];
   const ghConfig = process.env["GH_CONFIG_DIR"];
   process.env["PATH"] = `${bin}${delimiter}${path ?? ""}`;

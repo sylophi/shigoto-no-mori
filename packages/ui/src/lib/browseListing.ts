@@ -1,10 +1,13 @@
 import type { DirectoryListing } from "@shigomori/contracts/schemas";
+import type { DevicePaths } from "./devicePaths.ts";
 
 // A typed path read as a folder browse, as the folder picker and the
 // add-project views draw it: the directory part listed, the last
 // segment filtering that listing by prefix, and the two moves (into an
 // entry, up to the parent). The app's useBrowseListing builds it.
 export type BrowseListing = {
+  // How the device's paths show and type.
+  readonly paths: DevicePaths;
   readonly browseDir: string;
   readonly leafFilter: string;
   // Whether the query names a folder to list (it ends in a slash).

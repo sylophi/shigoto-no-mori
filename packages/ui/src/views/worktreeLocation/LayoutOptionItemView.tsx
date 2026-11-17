@@ -1,7 +1,7 @@
 import { FolderOpen } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { tildify } from "@shigomori/contracts/projectPaths";
+import { shownPath } from "../../lib/devicePaths.ts";
 import type { LayoutOption } from "./layoutOptions.ts";
 import {
   type DeviceLayout,
@@ -35,15 +35,15 @@ export function LayoutOptionItemView({
   const previewPath =
     option.value === "custom" && !hasCustomPath
       ? null
-      : `${tildify(
-          worktreeBase({
+      : shownPath(
+          `${worktreeBase({
             ...device,
             layout: option.value,
             projectPath,
             customPath,
-          }),
+          })}/`,
           device.homedir,
-        )}/`;
+        );
   // The device's "Keep worktrees on the project's drive" setting takes
   // the managed layout out of the data folder for a project on an
   // external drive, and the description follows the preview there.

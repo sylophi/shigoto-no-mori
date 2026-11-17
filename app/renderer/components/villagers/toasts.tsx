@@ -30,12 +30,12 @@ import { VillagerLetterView } from "@shigomori/ui/views/villagers/VillagerLetter
 const VILLAGE_TOASTER = "village";
 
 // The toaster village news goes to (toastVillagerMove), mounted beside
-// the everyday one (AppChrome.tsx) with its look. A lane of its own in
-// the top corner, so a villager moving in never covers the toasts that
-// matter: an error, or an undo waiting on its button. It sits below the
-// title-bar drag strip (AppShell.tsx), which would swallow clicks on
-// its top edge, and answers Alt+Shift+T, leaving Alt+T to the everyday
-// toasts.
+// the everyday one (AppChrome.tsx) with its look and on its side. A
+// lane of its own in the top corner, so a villager moving in never
+// covers the toasts that matter: an error, or an undo waiting on its
+// button. It sits below the title-bar drag strip (AppShell.tsx), which
+// would swallow clicks on its top edge, and answers Alt+Shift+T,
+// leaving Alt+T to the everyday toasts.
 //
 // News goes at a click anywhere on it, or Enter on it focused, the way
 // a villager's line goes at a press of A, so it wears no close button,
@@ -45,8 +45,10 @@ const VILLAGE_TOASTER = "village";
 // id as its test id, since sonner puts no other on the card.
 export function VillageToaster({
   classNames,
+  corner,
 }: {
   classNames: ToastClassnames;
+  corner: "left" | "right";
 }) {
   return (
     <VillageToasterView onDismiss={dismissCard}>
@@ -54,8 +56,8 @@ export function VillageToaster({
         id={VILLAGE_TOASTER}
         containerAriaLabel="Village news"
         hotkey={["altKey", "shiftKey", "KeyT"]}
-        position="top-right"
-        offset={{ top: 40, right: 16 }}
+        position={`top-${corner}`}
+        offset={{ top: 40, [corner]: 16 }}
         toastOptions={{
           className: "cursor-pointer",
           classNames: {

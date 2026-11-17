@@ -11,6 +11,7 @@ import * as Scope from "effect/Scope";
 import {
   type MirrorIgnoreMode,
   pullBringsIgnoredFiles,
+  type SyncCheckout,
   type SyncCloneInto,
   type SyncPullProgress,
   type SyncReceipt,
@@ -44,6 +45,10 @@ import {
   type WorktreeSource,
 } from "@host/lib/sync/sourceLink";
 import { worktreeNotifiers } from "@host/ipc/scriptRun";
+import {
+  copyCheckoutConfig,
+  refuseUnmakeableSymlinks,
+} from "@host/mirror/checkout";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import type { HostServices } from "@host/process/services";
 
@@ -147,6 +152,9 @@ export type Landing = {
   ignores?: readonly string[];
   cloneInto?: SyncCloneInto;
   sourceWorktreeId: string;
+  // A mirror's: how the original reads and writes its files, which the
+  // copy's checkout takes.
+  checkout?: SyncCheckout;
 };
 
 // The landing, on the destination, whichever device started the move.
@@ -213,12 +221,15 @@ export const landWorktree = (
     }
 
     // 2. Refuse up front what the create would refuse after the bundle
-    // crossed.
+    // crossed, and a mirror's copy whose links this device can't make.
     yield* refuseLandingCollision(
       project,
       landBranch,
       landing.worktreeName,
     ).pipe(Effect.withSpan("Landing.refusals"));
+    yield* refuseUnmakeableSymlinks(project, landing.checkout).pipe(
+      Effect.withSpan("Landing.symlinks"),
+    );
 
     // 3. The tip, then the capture. The tip decides whether the branch
     // needs transferring at all: `git bundle create` silently drops a
@@ -293,6 +304,10 @@ export const landWorktree = (
         captureCommit !== undefined
           ? yield* git.treeOf(project.path, captureCommit)
           : undefined;
+      const checkoutConfig = yield* copyCheckoutConfig(
+        project,
+        landing.checkout,
+      );
 
       // 5 and 6. The create on the incoming ref, then the capture
       // re-applied in it.
@@ -306,6 +321,7 @@ export const landWorktree = (
           ignoredFilesFollow: pullBringsIgnoredFiles(landing.ignoreMode)
             ? (landing.ignores ?? [])
             : undefined,
+          checkoutConfig,
           capture:
             captureCommit !== undefined
               ? { sourceWorktreeId, commit: captureCommit }
@@ -388,6 +404,7 @@ type IncomingInput = {
   worktreeName: string | undefined;
   runSetup: boolean | undefined;
   ignoredFilesFollow: readonly string[] | undefined;
+  checkoutConfig: SyncCheckout | undefined;
   // The capture commit, and the worktree id its ref arrived under.
   capture: { sourceWorktreeId: string; commit: string } | undefined;
 };
@@ -448,6 +465,7 @@ const landWhole = (
           worktreeName: input.worktreeName,
           skipSetup: input.runSetup === false,
           ignoredFilesFollow: input.ignoredFilesFollow,
+          checkoutConfig: input.checkoutConfig,
         },
         {
           ...notify,

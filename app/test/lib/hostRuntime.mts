@@ -3,16 +3,10 @@
 // instead of waiting for a graph that never comes (EFFECT.md, runtime
 // boundaries). Every proof's file starts and disposes it (hostSetup.mts),
 // and a bench under plain node disposes it itself.
-import {
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import { join, realpath } from "@shigomori/engine/canonicalPath";
+import * as NodeServices from "@shared/nodeServices";
 import { childDefaults } from "@shigomori/engine/processes";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -28,6 +22,7 @@ import * as GithubCli from "../../host/lib/githubCli/GithubCli.ts";
 import * as PullRequestMaps from "../../host/lib/githubCli/PullRequestMaps.ts";
 import * as Scripts from "../../host/lib/Scripts.ts";
 import * as ScriptRuns from "../../host/lib/scripts/ScriptRuns.ts";
+import * as ProcessTrees from "../../host/lib/scripts/ProcessTrees.ts";
 import * as ScriptChanges from "../../host/lib/scripts/ScriptChanges.ts";
 import * as Terminals from "../../host/lib/terminals/Terminals.ts";
 import * as HostAccount from "../../host/lib/HostAccount.ts";
@@ -53,7 +48,7 @@ import { nativefs } from "../../../packages/engine/test/lib/nativefs.ts";
 // A proof that drives the host's engine calls points the host's own
 // data dir (initDataDirAt) at it too.
 export const engineDataDir = join(
-  realpathSync(mkdtempSync(join(tmpdir(), "sm-proof-data-"))),
+  realpath(mkdtempSync(join(tmpdir(), "sm-proof-data-"))),
   "data",
 );
 
@@ -143,6 +138,7 @@ const hostBelow = Worktrees.layer.pipe(
   Layer.provideMerge(HostPushes.layer),
   Layer.provideMerge(EngineStoreChanges.layer),
   Layer.provideMerge(ScriptRuns.layer),
+  Layer.provideMerge(ProcessTrees.layer(nativefs())),
   Layer.provideMerge(ScriptChanges.layer),
   Layer.provideMerge(FileSync.layer(() => null)),
   Layer.provideMerge(GithubCli.layer),

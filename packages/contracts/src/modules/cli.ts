@@ -8,7 +8,11 @@ const CliStatusSchema = Schema.Struct({
   name: Schema.String,
   aliasName: Schema.String,
   binDir: Schema.String,
-  linkPath: Schema.String,
+  // The file the command is run by, as placed: a link into binDir
+  // (macOS, Linux), or a launcher in binDir with binDir added to PATH
+  // (Windows).
+  commandPath: Schema.String,
+  placement: Schema.Literals(["link", "launcher"]),
   state: Schema.Literals(["installed", "stale", "missing", "foreign"]),
   // So the replace consent can name each file it would overwrite.
   foreignPaths: Schema.Array(Schema.String),
@@ -25,8 +29,9 @@ const ShellHookStateSchema = Schema.Struct({
 });
 
 const ShellIntegrationStatusSchema = Schema.Struct({
-  // Resolved app-side: a Finder-launched app may not have $SHELL.
-  loginShell: Schema.NullOr(Schema.String),
+  // The shell a terminal runs, resolved app-side: a Finder-launched app
+  // may not have $SHELL.
+  interactiveShell: Schema.NullOr(Schema.String),
   shells: Schema.Array(ShellHookStateSchema),
 });
 export type ShellIntegrationStatus = typeof ShellIntegrationStatusSchema.Type;
@@ -63,7 +68,7 @@ const gated = gatedBy("changeApp");
 
 export const cliContract = defineContract(
   "cli",
-  { scope: "host", version: 1 },
+  { scope: "host", version: 2 },
   invoke("status", VoidSchema, CliStatusSchema, gated),
   invoke(
     "install",

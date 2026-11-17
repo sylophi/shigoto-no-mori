@@ -7,9 +7,11 @@ import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { envVar } from "../environment.ts";
+import { isRunnable, joinSearchPath } from "../executables.ts";
 import * as Git from "../Git.ts";
 import { splitZ } from "../gitParse.ts";
 import { captureToFiles } from "../processes.ts";
+import * as Shells from "../Shells.ts";
 import { HookFailed } from "./documents.ts";
 
 export const makeHook = Effect.gen(function* () {
@@ -17,6 +19,7 @@ export const makeHook = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const shells = yield* Shells.Shells;
 
   // Runs post-checkout as `git worktree add` does after its checkout:
   // every hook `git hook list` names, in its order, in the new worktree,
@@ -43,11 +46,10 @@ export const makeHook = Effect.gen(function* () {
     } else {
       // A git without `hook list` has no config hooks either, only the
       // hooks folder's, which runs when it's executable.
-      const hook = yield* fs
-        .stat(path.join(yield* hooksDir, "post-checkout"))
-        .pipe(Effect.option);
+      const hookPath = path.join(yield* hooksDir, "post-checkout");
+      const hook = yield* fs.stat(hookPath).pipe(Effect.option);
       list =
-        Option.isSome(hook) && (hook.value.mode & 0o111) !== 0
+        Option.isSome(hook) && (yield* isRunnable(hookPath, hook.value.mode))
           ? "hook from hookdir"
           : "";
     }
@@ -57,13 +59,19 @@ export const makeHook = Effect.gen(function* () {
     const dir = yield* fs
       .realPath(worktree)
       .pipe(Effect.orElseSucceed(() => worktree));
-    const searched = yield* envVar("PATH");
-    // The environment git gives its hooks: its exec path exported and
-    // first on PATH, no prefix.
+    const noShell = Effect.mapError(
+      (cause: Shells.NoScriptShell) => new HookFailed({ cause }),
+    );
+    const { env: shellEnv } = yield* noShell(shells.script);
+    const sh = yield* noShell(shells.sh);
+    const searched = shellEnv["PATH"] ?? (yield* envVar("PATH"));
+    // The environment git gives its hooks: the script shell's, its exec
+    // path exported and first on PATH, no prefix.
     const hookEnv = {
+      ...shellEnv,
       GIT_EXEC_PATH: execPath,
       GIT_PREFIX: "",
-      PATH: `${execPath}:${searched}`,
+      PATH: joinSearchPath([execPath, searched]),
       GIT_DIR: undefined,
       GIT_WORK_TREE: undefined,
     };
@@ -75,6 +83,7 @@ export const makeHook = Effect.gen(function* () {
         env: hookEnv,
       }).pipe(
         Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.provideService(Shells.Shells, shells),
         Effect.map(({ code, stdout }) =>
           code === 0
             ? Option.none<HookFailed>()
@@ -107,12 +116,8 @@ export const makeHook = Effect.gen(function* () {
         if (Option.isNone(commands)) continue;
         const values = splitZ(commands.value);
         const command = values.at(-1) ?? "";
-        failed = yield* run("/bin/sh", [
-          "-c",
-          `${command} "$@"`,
-          command,
-          ...args,
-        ]);
+        const [program = "", ...shArgs] = sh.runCommand(`${command} "$@"`);
+        failed = yield* run(program, [...shArgs, command, ...args]);
       }
       if (first === undefined && Option.isSome(failed)) first = failed.value;
     }

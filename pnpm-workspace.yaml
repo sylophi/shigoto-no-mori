@@ -15,6 +15,10 @@ packages:
 nodeLinker: hoisted
 hoistingLimits: workspaces
 
+# Scripts run in pnpm's own shell on every OS, so one written for sh
+# (`VAR=x cmd`, `$(...)`, `$PWD`) runs on Windows too.
+shellEmulator: true
+
 # blockExoticSubdeps: false is a project-scoped allowance for the
 # @electron/node-gyp transitive dep (git+https://github.com/electron/node-gyp.git,
 # pinned SHA, used by @electron/rebuild during native-module builds).
@@ -62,6 +66,8 @@ allowBuilds:
   esbuild: true
   workerd: true
   lefthook: true
+  # The Squirrel maker's 7-Zip pick, app/scripts/prepare-winstaller.mts
+  # instead.
   electron-winstaller: false
   # appdmg's two native addons, pulled in by the dmg maker
   # (@electron-forge/maker-dmg -> electron-installer-dmg -> appdmg).
@@ -135,13 +141,17 @@ catalog:
   "@types/node": ^24.13.5
   "@types/react": ^19.2.17
   "@types/react-dom": ^19.2.3
-  "@xterm/addon-fit": 0.12.0-beta.311
-  "@xterm/addon-serialize": 0.15.0-beta.310
-  "@xterm/addon-unicode-graphemes": 0.5.0-beta.310
-  "@xterm/addon-web-links": 0.13.0-beta.310
-  "@xterm/addon-webgl": 0.20.0-beta.309
-  "@xterm/headless": 6.1.0-beta.313
-  "@xterm/xterm": 6.1.0-beta.315
+  # The xterm 6.1 betas, for the kitty keyboard protocol and for the fix
+  # to a resize dropping the writes queued behind it
+  # (xtermjs/xterm.js#6201), which host/lib/terminals/screen.ts's resize
+  # relies on. Back to stable once 6.1.0 ships.
+  "@xterm/addon-fit": 0.12.0-beta.332
+  "@xterm/addon-serialize": 0.15.0-beta.330
+  "@xterm/addon-unicode-graphemes": 0.5.0-beta.330
+  "@xterm/addon-web-links": 0.13.0-beta.330
+  "@xterm/addon-webgl": 0.20.0-beta.329
+  "@xterm/headless": 6.1.0-beta.334
+  "@xterm/xterm": 6.1.0-beta.336
   class-variance-authority: ^0.7.1
   clsx: ^2.1.1
   cmdk: ^1.1.1
@@ -165,6 +175,18 @@ catalog:
 # sonner measures a toast that changes behind the front one through
 # the stack's scale, so it shrank on hover. The patch measures it
 # unscaled.
+# node-pty's close on Windows lists the console's processes from a
+# helper that attaches only once the console is gone, then kills the
+# shell's pid 5 s later, by which time another process may hold it. The
+# patch leaves the close to close the console, and the host ends what
+# is left of the tree (host/lib/scripts/processTrees/consoles.ts). Once
+# the shell has exited, node-pty has dropped the console without closing
+# it, so the close also closes the console's input, which ends its host.
+# node-pty is on the 1.2.0 beta (app/package.json) because 1.1.0's ConPTY
+# addon crashes the host when two shells exit together
+# (microsoft/node-pty#921, fixed by microsoft/node-pty#922). Back to
+# stable once 1.2.0 ships, the patch moved to it.
 patchedDependencies:
+  node-pty@1.2.0-beta.18: patches/node-pty@1.2.0-beta.18.patch
   react-grab@0.2.0: patches/react-grab@0.2.0.patch
   sonner@2.0.7: patches/sonner@2.0.7.patch

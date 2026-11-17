@@ -14,9 +14,10 @@ is here is the app's own.
   (`push.ts`), a module's client, its invokes as effects over a link
   (`effectClient.ts`), and the window's port to its shell (`shell.ts`).
 - `paths.ts`, `shellEnv.ts`, `observability.ts`, `lifetimes.ts`,
-  `layerLatch.ts`, `hostFacts.ts`: what the host and the shell both
-  compile (the data dir, the login shell's environment, the logger and
-  tracer, the layer helpers, the facts the shell hands its host).
+  `layerLatch.ts`, `hostFacts.ts`, `cliLaunchers.ts`: what the host and
+  the shell both compile (the data dir, the login shell's environment,
+  the logger and tracer, the layer helpers, the facts the shell hands
+  its host, the terminal command's place on the Windows PATH).
 - `account/`: enrollment and the credential store both shells use.
 - `log.ts`: the app's `logger`, which writes Effect code's `Effect.log*`
   lines, and `log` for Promise code, so a line from either reads the

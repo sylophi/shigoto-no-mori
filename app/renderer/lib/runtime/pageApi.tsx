@@ -10,7 +10,7 @@ import type { ClientApi } from "./Api";
 
 export type RendererApi = Omit<
   ElectronBridge,
-  "requestShellPort" | "route" | "isLab"
+  "requestShellPort" | "route" | "isLab" | "sidebarSide"
 > & {
   readonly deviceId: string;
 } & ClientApi;

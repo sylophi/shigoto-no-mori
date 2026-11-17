@@ -19,6 +19,11 @@ file here, and `lib/` holds what they share.
   once the copy holds it, and a cancelled one keeps nothing that could.
 - `mirror.mts`, `mirror-engine.mts`: a mirror never deletes or
   overwrites what isn't its own.
+- `mirror-checkout.mts`: a mirror's copy holds its original's bytes
+  whichever kind of device each end is (line endings, symlinks), git
+  reads both ends as clean, the copy's device's other worktrees keep
+  their own config, and a copy whose device checks out alike writes
+  nothing into its repository's config.
 - `control.mts`: an unmirror removes the copy only once the follower
   holds it, and never the original.
 
@@ -26,8 +31,8 @@ They run one file at a time, each in a process of its own
 (`../vitest.config.ts`), since they spawn real git, the real `sm` and
 file-sync binaries and sockets. `pnpm test` runs them all, and
 `pnpm test <name>` the files whose name holds it. lefthook runs them
-for a change to what they run (`../../lefthook.yml`), and CI on each
-pull request.
+for a change to what they run (`../../lefthook.yml`), except on Windows,
+and CI on each pull request.
 
 No proof's git can reach this repository: the vitest config removes
 every `GIT_*` variable and sets `GIT_CEILING_DIRECTORIES`

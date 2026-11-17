@@ -23,6 +23,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
+import { canonicalPath } from "./canonicalPath.ts";
+import type { CheckoutConfig } from "./gitIndex.ts";
 import type { BranchRefs, WorktreeEntry } from "./gitParse.ts";
 import { makeRunning } from "./git/running.ts";
 import { makeWorktreeVerbs } from "./git/worktreeVerbs.ts";
@@ -99,8 +101,9 @@ export const commonDirOf = (projectPath: string) =>
     if (stat.value.type !== "File") return null;
     const text = yield* fs.readFileString(dotGit).pipe(Effect.option);
     if (Option.isNone(text)) return null;
-    const pointed = /^gitdir:\s*(.+)$/m.exec(text.value)?.[1]?.trim();
-    if (pointed === undefined) return null;
+    const found = /^gitdir:\s*(.+)$/m.exec(text.value)?.[1]?.trim();
+    if (found === undefined) return null;
+    const pointed = canonicalPath(found);
     const gitDir = path.isAbsolute(pointed)
       ? pointed
       : path.resolve(projectPath, pointed);
@@ -109,7 +112,7 @@ export const commonDirOf = (projectPath: string) =>
       .readFileString(path.join(gitDir, "commondir"))
       .pipe(Effect.option);
     if (Option.isNone(common)) return gitDir;
-    const dir = common.value.trim();
+    const dir = canonicalPath(common.value.trim());
     return path.isAbsolute(dir) ? dir : path.resolve(gitDir, dir);
   });
 
@@ -173,14 +176,25 @@ export class Git extends Context.Service<
     ) => Effect.Effect<WorktreeEntry[], GitError>;
     // A worktree on a new branch from `base` (HEAD without one).
     // `noCheckout` leaves the files and the index to the caller (a
-    // clone checkout).
+    // clone checkout). `config` is what its checkout reads over the
+    // repository's.
     readonly addWorktree: (input: {
       readonly repo: string;
       readonly path: string;
       readonly branch: string;
       readonly base?: string | undefined;
       readonly noCheckout?: boolean | undefined;
+      readonly config?: Readonly<Record<string, string>> | undefined;
     }) => Effect.Effect<void, GitError>;
+    // How the checkout at `checkout` reads and writes its files.
+    readonly checkoutConfig: (
+      checkout: string,
+    ) => Effect.Effect<CheckoutConfig, GitError>;
+    // Settings that hold in `worktree` alone (extensions.worktreeConfig).
+    readonly setWorktreeConfig: (
+      worktree: string,
+      entries: Readonly<Record<string, string>>,
+    ) => Effect.Effect<void, GitError>;
     // A worktree on an existing ref, landing on a branch rather than a
     // detached HEAD (resolveCheckoutRef).
     readonly checkoutWorktree: (input: {
@@ -190,6 +204,7 @@ export class Git extends Context.Service<
       readonly remotes?: readonly string[] | undefined;
       readonly noCheckout?: boolean | undefined;
       readonly force?: boolean | undefined;
+      readonly config?: Readonly<Record<string, string>> | undefined;
     }) => Effect.Effect<void, GitError>;
     // Unforced, git refuses a dirty tree, untracked files included
     // whatever the user's status setting says.

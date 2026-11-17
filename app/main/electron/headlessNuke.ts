@@ -12,6 +12,7 @@ import { log } from "@shared/log";
 import { deleteGenericPassword } from "../core/keychain/security";
 import { safeStorageItemNames } from "../core/keychain/reset";
 import { names } from "../flavor";
+import { current as currentPlatform } from "@shigomori/engine/platform";
 import { hostRuntime, letHostGo } from "../hostProcess";
 import { nukeShell } from "./nuke";
 
@@ -34,12 +35,14 @@ export function finishHeadlessNuke(
       console.log(`[nuke] left: the keychain item "${service}": ${error}`);
     }
   }
-  try {
-    execFileSync("/usr/bin/defaults", ["delete", names.bundleId], {
-      stdio: "ignore",
-    });
-  } catch {
-    // None written.
+  if (currentPlatform() === "darwin") {
+    try {
+      execFileSync("/usr/bin/defaults", ["delete", names.bundleId], {
+        stdio: "ignore",
+      });
+    } catch {
+      // None written.
+    }
   }
   app.exit(
     files.length > 0

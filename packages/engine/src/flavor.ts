@@ -21,8 +21,8 @@ export type Flavor = "prod" | "dev" | (string & {});
 export type FlavorNames = {
   // What the OS shows: the bundle's name, the dock and the menu bar.
   readonly appName: string;
-  // Under ~/Library/Application Support (on Linux the configDir names
-  // the app's own folders).
+  // Under ~/Library/Application Support, or AppData/Roaming on Windows
+  // (on Linux the configDir names the app's own folders).
   readonly userDataDir: string;
   // A dev run's bundle adds the worktree to it, so each checkout owns
   // the scheme in turn (app/scripts/lib/devBundle.mts).
@@ -34,7 +34,8 @@ export type FlavorNames = {
   // The pre-2.0 data dir, adopted in place while it still holds state.
   readonly legacyDataDir: string | null;
   // Under XDG_CONFIG_HOME, where the data dir's pointer file lives, and
-  // on Linux under XDG_DATA_HOME and XDG_STATE_HOME too.
+  // on Linux under XDG_DATA_HOME and XDG_STATE_HOME too. The Windows
+  // install's folder is named for it (forge.config.ts).
   readonly configDir: string;
   readonly pointer: string;
   // The pointer's pre-2.0 file name, read only when `pointer` is absent.
@@ -135,8 +136,8 @@ export const isFlavor = (text: string): text is Flavor =>
   isBuild(text) || isTestFlavor(text);
 
 // The app's repo on GitHub, which every flavor's releases are published
-// to (forge.config.ts) and read from: the update feeds, the changelog
-// and the guide's source link.
+// to and read from: the update feeds, the changelog and the guide's
+// source link.
 export const APP_REPO_OWNER = "sylophi";
-export const APP_REPO_NAME = "shigoto-no-mori";
+const APP_REPO_NAME = "shigoto-no-mori";
 export const APP_REPO = `${APP_REPO_OWNER}/${APP_REPO_NAME}`;

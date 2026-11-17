@@ -13,7 +13,7 @@
 // the overrides a launcher sets for the app itself. Every launch then
 // looks the same however it was started, and the shell's exports reach
 // every child.
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeServices from "@shared/nodeServices";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
@@ -67,6 +67,9 @@ const LAUNCHER = byPlatform({
     ],
     path: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
   },
+  // None: Explorer starts an app with the user's whole environment,
+  // and Windows has no login shell to rebuild it from.
+  win32: null,
 });
 
 // The app's and the CLI's own contract, never a shell profile's to
@@ -129,15 +132,16 @@ const loginShell = (launchEnv: NodeJS.ProcessEnv) =>
 // SHELL names the shell the capture runs, so a child asking for the
 // login shell (the script runner) gets the one whose exports it sees.
 function launchBaseEnv(
+  launcher: { readonly keys: ReadonlyArray<string>; readonly path: string },
   launchEnv: NodeJS.ProcessEnv,
   shell: string | null,
 ): Env {
   const base: Env = {};
-  for (const key of LAUNCHER.keys) {
+  for (const key of launcher.keys) {
     const value = launchEnv[key];
     if (value !== undefined) base[key] = value;
   }
-  base["PATH"] = LAUNCHER.path;
+  base["PATH"] = launcher.path;
   if (shell !== null) base["SHELL"] = shell;
   return base;
 }
@@ -280,9 +284,10 @@ function replaceProcessEnv(env: Env): void {
 // layer graph, which inherits the environment it rebuilds, so it
 // brings the platform's services along itself.
 export async function applyUserShellEnv(): Promise<void> {
+  if (LAUNCHER === null) return;
   const launchEnv = { ...process.env };
   const shell = Effect.runSync(loginShell(launchEnv));
-  const base = launchBaseEnv(launchEnv, shell);
+  const base = launchBaseEnv(LAUNCHER, launchEnv, shell);
   const captured =
     shell === null
       ? null

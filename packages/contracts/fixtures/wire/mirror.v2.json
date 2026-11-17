@@ -109,6 +109,12 @@
       "starting": []
     }
   },
+  "mirror:clearStaleSizes": {
+    "payload": {
+      "projectId": "\n",
+      "worktreeId": "db1a5ad23ae8"
+    }
+  },
   "mirror:gitChanged": {
     "payload": {
       "projectId": "P",
@@ -341,7 +347,8 @@
       },
       "captured": false,
       "dirtyApplied": false,
-      "session": "\u0000"
+      "session": "\u0000",
+      "crlfScripts": false
     }
   },
   "mirror:startTo": {
@@ -394,7 +401,8 @@
       },
       "captured": false,
       "dirtyApplied": false,
-      "session": " "
+      "session": " ",
+      "crlfScripts": true
     }
   },
   "mirror:stop": {

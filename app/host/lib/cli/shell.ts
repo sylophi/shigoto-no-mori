@@ -2,12 +2,12 @@
 // `sm shell status/install/uninstall` share: one owner of the rc-file
 // mechanics and the supported-shell list, so the app and a terminal
 // can never disagree about what the hook looks like, what counts as
-// ours, or which shells qualify. The app contributes where the login
-// shell's config lives.
+// ours, or which shells qualify. The app contributes where the
+// interactive shell's config lives.
 import type { ShellIntegrationStatus } from "@shigomori/contracts/modules/cli";
 import { outputUntil } from "@shared/shellEnv";
-import * as Lifecycle from "@shigomori/engine/Lifecycle";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
+import * as Shells from "@shigomori/engine/Shells";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -22,12 +22,12 @@ import { keptAnswers } from "@shigomori/engine/keptAnswers";
 // The engine resolves rc locations from ZDOTDIR / XDG_CONFIG_HOME, which
 // a Finder-launched app doesn't have (launchd sources no shell
 // profile). Without them the hook could land in a file the user's
-// shell never reads while Settings reports success. Read from the login
-// shell, as an interactive one sets them, so the app targets the same
-// file a terminal-run `sm shell install` would. Its own probe rather
-// than the startup rebuild's (shared/shellEnv.ts): that one sees exports
-// only, and a ZDOTDIR a .zshenv sets without exporting still names the
-// rc file.
+// shell never reads while Settings reports success. Read from the
+// interactive shell, started as a terminal starts it, so the app
+// targets the same file a terminal-run `sm shell install` would. Its
+// own probe rather than the startup rebuild's (shared/shellEnv.ts):
+// that one sees exports only, and a ZDOTDIR a .zshenv sets without
+// exporting still names the rc file.
 const SENTINEL = "__SHIGOMORI_HOOK_ENV__";
 const END = "__SHIGOMORI_HOOK_ENV_END__";
 // Asked while Settings waits, and asked again after a failure.
@@ -47,8 +47,8 @@ const hookPlaceOf = (output: string) => {
   return Option.some({ zdotdir, configHome });
 };
 
-// The login shell as the engine's shell integration needs it: which
-// shell it is and where its config lives. A probe that answered is kept
+// The interactive shell as the engine's shell integration needs it:
+// which shell it is and where its config lives. A probe that answered is kept
 // an hour (a profile edit moves it), one that didn't is asked again;
 // until one answers, the shell's config is looked for where it goes by
 // default.
@@ -61,7 +61,7 @@ export const layer = Layer.effect(
   HookShell,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const lifecycle = yield* Lifecycle.Lifecycle;
+    const shells = yield* Shells.Shells;
     // Read up to END, then the shell's exit, which a job its startup
     // files left holding stdout doesn't hold. Past the budget its scope
     // ends it.
@@ -90,13 +90,14 @@ export const layer = Layer.effect(
     );
     return HookShell.of({
       read: Effect.gen(function* () {
-        const { shell, args } = yield* lifecycle.loginShell;
-        // /bin/sh, when no login shell is named: none to integrate with.
-        if (args.length === 0) return { zdotdir: "", loginShell: "" };
-        const place = yield* probes.get(shell).pipe(Effect.option);
+        const { program, login } = yield* shells.interactive;
+        // Not a login shell (/bin/sh when none is named, PowerShell on
+        // Windows): no login config to probe.
+        if (!login) return { zdotdir: "", interactiveShell: program };
+        const place = yield* probes.get(program).pipe(Effect.option);
         return Option.match(place, {
-          onNone: () => ({ zdotdir: "", loginShell: shell }),
-          onSome: (found) => ({ ...found, loginShell: shell }),
+          onNone: () => ({ zdotdir: "", interactiveShell: program }),
+          onSome: (found) => ({ ...found, interactiveShell: program }),
         });
       }),
     });
@@ -123,27 +124,28 @@ class ShellHookError extends Schema.TaggedError<ShellHookError>()(
   }
 }
 
-// `shells` enumerates exactly the kinds sm supports, so the login
-// shell is "supported" iff it appears there.
+// `shells` enumerates exactly the kinds sm supports, so the
+// interactive shell is "supported" iff it appears there.
 export const shellIntegrationStatus = onShell((integration, shell) =>
   Effect.map(
     integration.status(shell),
     ({ document }): ShellIntegrationStatus => ({
-      loginShell: document.loginShell === "" ? null : document.loginShell,
+      interactiveShell:
+        document.interactiveShell === "" ? null : document.interactiveShell,
       shells: document.shells,
     }),
   ),
 );
 
 // Settings never asks for an unsupported shell: the status it renders
-// already reported loginShell null.
+// already reported interactiveShell null.
 export const installShellIntegration = Effect.gen(function* () {
   const kind = yield* onShell((integration, shell) =>
-    integration.loginShell(shell),
+    integration.shellKind(shell),
   );
   if (kind === "") {
     return yield* new ShellHookError({
-      reason: "Couldn't determine your login shell.",
+      reason: "Couldn't determine your interactive shell.",
     });
   }
   yield* onShell((integration, shell) => integration.install(kind, shell));

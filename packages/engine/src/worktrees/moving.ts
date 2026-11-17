@@ -23,8 +23,10 @@ import * as Result from "effect/Result";
 import * as SqlClient from "effect/sql/SqlClient";
 import { findExecutable } from "../executables.ts";
 import * as Git from "../Git.ts";
+import { releaseHolders } from "../Holders.ts";
 import { copyTree } from "../entries.ts";
-import { startOf, stillRunning, UNKNOWN_BIRTH } from "../processes.ts";
+import { byFamily } from "../platform.ts";
+import * as ProcessTable from "../ProcessTable.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import { stagingName, worktreeIdFromPath } from "../worktreeLayout.ts";
@@ -37,6 +39,14 @@ import type { ListingArea } from "./listing.ts";
 import type { CreatingArea } from "./creating.ts";
 import type { KeptArea } from "./kept.ts";
 import type { RemovingArea } from "./removing.ts";
+
+// How git words the rename(2) that can't cross volumes (EXDEV): its C
+// library's text for the error, the only trace of the code it leaves.
+const crossDevice = () =>
+  byFamily({
+    posix: "cross-device link",
+    windows: "improper link",
+  });
 
 type MovingRow = {
   readonly from_path: string;
@@ -63,6 +73,7 @@ export const makeMoving = ({
   Effect.gen(function* () {
     const git = yield* Git.Git;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const processTable = yield* ProcessTable.ProcessTable;
     const sql = yield* SqlClient.SqlClient;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -72,22 +83,21 @@ export const makeMoving = ({
     const { checkName, occupied, portPoolActive } = creating;
     const { wipe, pruneEmptyParents } = removing;
 
-    const withSpawner = Effect.provideService(
-      ChildProcessSpawner.ChildProcessSpawner,
-      spawner,
-    );
     // This process as a move's record names it, read once it could be:
-    // a ps that failed is asked again at the next move, so one slow ps
-    // doesn't leave this process's records unknown for its life.
+    // a read that failed is asked again at the next move, so one slow
+    // read doesn't leave this process's records unknown for its life.
     let known: { readonly pid: number; readonly started_at: number } | null =
       null;
     const self = Effect.suspend(() =>
       known !== null
         ? Effect.succeed(known)
-        : Effect.map(withSpawner(startOf(process.pid)), (started) => {
+        : Effect.map(processTable.startedAt(process.pid), (started) => {
             const owner = {
               pid: process.pid,
-              started_at: Option.getOrElse(started, () => UNKNOWN_BIRTH),
+              started_at: Option.getOrElse(
+                started,
+                () => ProcessTable.UNKNOWN_BIRTH,
+              ),
             };
             if (Option.isSome(started)) known = owner;
             return owner;
@@ -103,7 +113,7 @@ export const makeMoving = ({
         return record.pid === owner.pid &&
           record.started_at === owner.started_at
           ? underWay.has(record.from_path)
-          : yield* withSpawner(stillRunning(record.pid, record.started_at));
+          : yield* processTable.stillRunning(record.pid, record.started_at);
       });
 
     // The record of a move about to start, refused while another move
@@ -261,13 +271,13 @@ export const makeMoving = ({
             Effect.andThen(renamed ? wipeLinkLast(to) : Effect.void),
           ),
         ).pipe(Effect.ignore);
-        const cp = (flags: ReadonlyArray<string>) =>
-          copyTree(spawner, from, partial, flags);
-        // -p keeps the times and modes. A volume that can't hold some of
-        // them fails it, so the plain copy is the second try.
+        const cp = (keepTimes: boolean) =>
+          copyTree(spawner, from, partial, to, { keepTimes });
+        // A volume that can't hold the times and modes fails the first
+        // try, so the plain copy is the second.
         const copied = yield* restore(
-          cp(["-p"]).pipe(
-            Effect.catch(() => wipe(partial).pipe(Effect.andThen(cp([])))),
+          cp(true).pipe(
+            Effect.catch(() => wipe(partial).pipe(Effect.andThen(cp(false)))),
           ),
         ).pipe(
           Effect.onInterrupt(() => undo),
@@ -367,15 +377,17 @@ export const makeMoving = ({
             yield* fs
               .makeDirectory(path.dirname(to), { recursive: true })
               .pipe(Effect.orDie);
+            yield* releaseHolders({
+              projectId: project.id,
+              worktreeId: worktree.id,
+            });
             const moved = yield* git
               .run(project.path, ["worktree", "move", "--", worktree.path, to])
               .pipe(
                 Effect.asVoid,
                 Effect.catchTags({
                   GitCommandError: (error) =>
-                    Git.stderrOf(error)
-                      .toLowerCase()
-                      .includes("cross-device link")
+                    Git.stderrOf(error).toLowerCase().includes(crossDevice())
                       ? Effect.suspend(() => {
                           crossed = true;
                           return moveAcrossVolumes(

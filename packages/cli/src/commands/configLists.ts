@@ -5,7 +5,8 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { isAbsolute, relative } from "node:path";
-import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
+import { canonicalPath } from "@shigomori/engine/canonicalPath";
+import { isSameOrInside } from "@shigomori/contracts/projectPaths";
 import { isSafeRelPath } from "@shigomori/contracts/predicates/relPath";
 import * as Config from "@shigomori/engine/Config";
 import type { ConfigDoc } from "@shigomori/engine/configDoc";
@@ -213,7 +214,7 @@ const outsideRoot = () =>
 // inside another.
 const carryOverPath = (project: Registry.ListedProject, raw: string) =>
   Effect.gen(function* () {
-    let path = raw.trim();
+    let path = canonicalPath(raw.trim());
     if (isAbsolute(path)) {
       const [root] = (yield* (yield* Worktrees.Worktrees).identities(project))
         .map((checkout) => checkout.path)

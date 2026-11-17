@@ -5,6 +5,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type { CloneProgress } from "@shigomori/contracts/modules/projects";
+import { canonicalPath } from "../canonicalPath.ts";
 import { isNotFound } from "../platformErrors.ts";
 import {
   CloneDestinationError,
@@ -100,9 +101,9 @@ export const makeRepositories = ({
           if (toplevel === undefined || commonDir === undefined) {
             return Option.none();
           }
-          const common = commonDir.trim();
+          const common = canonicalPath(commonDir.trim());
           return Option.some({
-            toplevel: toplevel.trim(),
+            toplevel: canonicalPath(toplevel.trim()),
             commonDir: common,
             primaryPath:
               path.basename(common) === ".git" ? path.dirname(common) : common,

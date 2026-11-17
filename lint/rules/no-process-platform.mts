@@ -1,8 +1,9 @@
 // The OS is read in one place, packages/engine/src/platform.ts, and
-// what differs by it picks its case from byPlatform's table, so a new
-// OS is a type error at each place that differs. Everywhere else in the
-// code the app runs (the shell, the host, the engine, the terminal `sm`)
-// `process.platform` and `os.platform()` are refused. Build scripts and
+// what differs by it picks its case from a table every OS is placed in
+// (byFamily, byPlatform), so a new OS is a type error at each place
+// that differs. Everywhere else in the code the app runs (the shell,
+// the host, the engine, the terminal `sm`) `process.platform` and
+// `os.platform()` are refused. Build scripts and
 // tests read the machine they run on.
 import type { Rule } from "../types.mts";
 
@@ -12,7 +13,7 @@ const TEST = /(?:\.test\.m?tsx?$|[\\/]test[\\/])/;
 const PLATFORM_MODULE = /packages[\\/]engine[\\/]src[\\/]platform\.ts$/;
 
 const MESSAGE =
-  "Read the OS through @shigomori/engine/platform (current, byPlatform)";
+  "Read the OS through @shigomori/engine/platform (current, byFamily, byPlatform)";
 
 export default {
   meta: {

@@ -13,6 +13,7 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { programFile } from "@shigomori/engine/executables";
 import { buildFlavor } from "../shared/packaging/buildFlavor.mts";
 import { CLI_DIST_DIR, cliBinaryName } from "../shared/packaging/cliDist.mts";
 import {
@@ -31,7 +32,8 @@ const version =
     : JSON.parse(readFileSync(join(appRoot, "package.json"), "utf8")).version;
 
 const outdir = join(appRoot, CLI_DIST_DIR);
-const outfile = join(outdir, cliBinaryName(flavor));
+// Bun names a Windows binary .exe whatever it is asked for.
+const outfile = join(outdir, programFile(cliBinaryName(flavor)));
 
 execFileSync(
   "node",
@@ -39,7 +41,7 @@ execFileSync(
   { cwd: join(repoRoot, "packages", "cli"), stdio: "inherit" },
 );
 
-const nativefs = join(appRoot, NATIVEFS_DIST_DIR, NATIVEFS_BINARY_NAME);
-if (existsSync(nativefs))
-  copyFileSync(nativefs, join(outdir, NATIVEFS_BINARY_NAME));
+const helper = programFile(NATIVEFS_BINARY_NAME);
+const nativefs = join(appRoot, NATIVEFS_DIST_DIR, helper);
+if (existsSync(nativefs)) copyFileSync(nativefs, join(outdir, helper));
 console.log(`built ${outfile} (version ${version})`);

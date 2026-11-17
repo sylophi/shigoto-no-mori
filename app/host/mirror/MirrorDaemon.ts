@@ -8,14 +8,15 @@
 // ends the child. The last snapshot stands through a restart, read as
 // stale until the next run sends its own. The engine never outlives
 // this process: besides the layer's close, it exits when its stdin
-// closes and on seeing its parent pid change (file-sync/main.go,
-// watchParent), so a host that dies uncleanly takes its daemon and
-// every serve child down with it.
+// closes and when it sees this process gone (file-sync, watchParent),
+// so a host that dies uncleanly takes its daemon and every serve child
+// down with it.
 //
 // Electron-free on purpose: the binary comes through the FileSync
 // service, so the mirror check drives this exact supervisor against a
 // freshly built engine.
 import { randomUUID } from "node:crypto";
+import type * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -140,6 +141,9 @@ const REQUEST_TIMEOUT_MS = 120_000;
 // back with the next run: its snapshot is waited for this long before
 // the create is read back.
 const READ_BACK_MS = 30_000;
+// How long a stopped daemon has to halt its sessions and exit before it
+// is ended.
+const HALT_GRACE_MS = 3_000;
 // The label that tells a create's session by the request that made it.
 const CREATE_LABEL = "createToken";
 
@@ -198,7 +202,9 @@ const make = (options: Options) =>
     // ended on sight, since its caller already reported it failed.
     const abandoned = new Set<string>();
     // The running child's stdin, for the requests.
-    const stdin = yield* Ref.make(Option.none<Queue.Queue<Uint8Array>>());
+    const stdin = yield* Ref.make(
+      Option.none<Queue.Queue<Uint8Array, Cause.Done>>(),
+    );
     // The requests waiting on a response, by id.
     const pending = new Map<
       string,
@@ -361,7 +367,7 @@ const make = (options: Options) =>
         yield* starting;
         return;
       }
-      const input = yield* Queue.unbounded<Uint8Array>();
+      const input = yield* Queue.unbounded<Uint8Array, Cause.Done>();
       yield* Ref.set(lastSaid, undefined);
       const spawned = yield* Effect.try(() => [
         "daemon",
@@ -391,6 +397,17 @@ const make = (options: Options) =>
         return;
       }
       const child = spawned.success;
+      // Before the spawner ends it: the end of its stdin is the daemon's
+      // cue to halt its sessions and exit. Windows has no SIGTERM, so the
+      // end there is a kill, which cuts a pass short and can leave
+      // Mutagen's temporary files in the worktree.
+      yield* Effect.addFinalizer(() =>
+        Queue.end(input).pipe(
+          Effect.andThen(child.exitCode),
+          Effect.timeoutOption(HALT_GRACE_MS),
+          Effect.ignore,
+        ),
+      );
       yield* Ref.set(stdin, Option.some(input));
       yield* starting;
       yield* child.stderr.pipe(

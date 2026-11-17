@@ -25,7 +25,7 @@ one place (`main/flavor.ts`), which hands it to the host.
 | On a project's drive  | `/Volumes/<drive>/.sm/wt`                       | `/Volumes/<drive>/.smd/wt`                                               |
 | Data dir pointer file | `~/.config/shigomori/data-dir`                  | `~/.config/shigomori-dev/data-dir`                                       |
 | userData (macOS)      | `~/Library/Application Support/Shigoto no Mori` | `~/Library/Application Support/Shigoto no Mori (dev)`                    |
-| Logs                  | `~/Library/Logs/Shigoto no Mori/`               | `~/Library/Logs/Shigoto no Mori (Dev)/`, a profile's with ` [<profile>]` |
+| Logs (macOS)          | `~/Library/Logs/Shigoto no Mori/`               | `~/Library/Logs/Shigoto no Mori (Dev)/`, a profile's with ` [<profile>]` |
 | Keychain item         | `Shigoto no Mori Safe Storage`                  | none on macOS (mock keychain)                                            |
 | file-sync state       | `<data dir>/file-sync`                          | `<data dir>/file-sync`                                                   |
 | Single-instance lock  | in its userData                                 | in its userData                                                          |
@@ -323,10 +323,10 @@ removed one the next time they read the registry. A relaunch after
   them (`packages/engine/src/footprint.ts` lists what it puts on the
   machine). It has no updates and no login item, is never signed with
   a Developer ID (forge refuses with `APPLE_SIGNING_IDENTITY` set), so
-  runs on the mock keychain, and takes a debugging port as the dev app
-  does. It can't sign in: Clerk's dev instance refuses its scheme's
-  origin (`origin_authorization_headers_conflict`), so a flow that
-  needs an account runs on a dev profile instead:
+  runs on the mock keychain on macOS, and takes a debugging port as the
+  dev app does. It can't sign in: Clerk's dev instance refuses its
+  scheme's origin (`origin_authorization_headers_conflict`), so a flow
+  that needs an account runs on a dev profile instead. On macOS:
 
   ```sh
   SM_FLAVOR=lab pnpm package
@@ -340,21 +340,21 @@ removed one the next time they read the registry. A relaunch after
   is stopped, and deletes that folder. `smlab nuke --yes` then takes
   everything of the build off the machine, its bundle too.
 - **Packaged prod build** (`pnpm make`). The only way to test a
-  packaged scheme registration under the real names. Without
+  packaged scheme registration under the real names. On macOS, without
   `APPLE_SIGNING_IDENTITY` in the build environment the bundle is
   unsigned and, like dev, runs on Chromium's mock keychain: the real
   keychain is exercised only by a Developer-ID-signed build (the
-  release workflow). A local prod build shares the installed app's
-  userData, and tokens it writes are under the mock key, so switching
-  between it and the installed app signs the other out once. It takes
-  no debugging port: it quits when started with
+  release workflow). A local prod build there shares the installed
+  app's userData, and tokens it writes are under the mock key, so
+  switching between it and the installed app signs the other out once.
+  It takes no debugging port: it quits when started with
   `--remote-debugging-port` or `--remote-debugging-pipe`
-  (`main/electron/debugSwitches.ts`). Read and drive its window
-  through macOS accessibility instead, asking the app for its page's
+  (`main/electron/debugSwitches.ts`). On macOS, read and drive its
+  window through accessibility instead, asking the app for its page's
   tree by setting `AXManualAccessibility` once the page is up
   (`lab/relaunch.mts`), and read `main.log`. It ignores `--sm-lab`.
-  `node scripts/smoke-app.mts <the .app>` launches it on fresh data
-  folders and waits for its store to open, as the release job does.
+  On macOS, `node scripts/smoke-app.mts <the .app>` launches it on fresh
+  data folders and waits for its store to open, as the release job does.
   With `APPLE_SIGNING_IDENTITY` set and the build signed by it, it then
   has the app update itself into a copy signed again under a newer
   version, as the release job does too. Its launches write the build's

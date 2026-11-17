@@ -13,6 +13,7 @@ import {
   optionalArgFlag,
   requireArgFlag,
   ROUTE_FLAG,
+  SIDEBAR_RIGHT_FLAG,
 } from "./argFlags";
 import { requestShellPort } from "./preloadPort";
 import { current as currentPlatform } from "@shigomori/engine/platform";
@@ -28,6 +29,7 @@ const bridge = {
   route: requireArgFlag(ROUTE_FLAG),
   isDev: process.argv.includes(DEV_BUILD_FLAG),
   isLab: process.argv.includes(LAB_FLAG),
+  sidebarSide: process.argv.includes(SIDEBAR_RIGHT_FLAG) ? "right" : "left",
   // Client fact, constant per bridge: true here, false on the web
   // bridge. App-only UI (the port-forward controls, which need a real
   // local TCP listener) gates its mount on it, since the shared pages

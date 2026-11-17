@@ -15,6 +15,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { programFile } from "@shigomori/engine/executables";
 import { flavorNames, type Flavor } from "@shigomori/engine/flavor";
 import { isolatedGitEnv } from "../../../../test/gitIsolation.ts";
 import { nativefs } from "../../../engine/test/lib/nativefs.ts";
@@ -53,7 +54,7 @@ export function binaryPath(flavor: Flavor): string {
   return join(
     tmpdir(),
     `sm-binary-${flavor}-${hash.digest("hex").slice(0, 16)}`,
-    flavorNames(flavor).binaryName,
+    programFile(flavorNames(flavor).binaryName),
   );
 }
 
@@ -67,8 +68,9 @@ export function builtBinary(flavor: Flavor): string {
   mkdirSync(dir, { recursive: true });
   const helper = join(dir, `nativefs.${process.pid}`);
   copyFileSync(nativefs(), helper);
-  renameSync(helper, join(dir, "nativefs"));
-  const partial = `${binary}.${process.pid}`;
+  renameSync(helper, join(dir, programFile("nativefs")));
+  // Bun names a Windows binary .exe whatever it is asked for.
+  const partial = programFile(`${binary}.${process.pid}`);
   execFileSync(process.execPath, ["build.mts", partial, `--flavor=${flavor}`], {
     cwd: join(repoRoot, "packages", "cli"),
     env: isolatedGitEnv(),

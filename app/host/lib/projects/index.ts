@@ -3,7 +3,7 @@
 // path check, repo identity and use stats), and every caller reads it
 // from the engine as `sm projects list` does, so none can be behind a
 // write made here or in a terminal.
-import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
+import { isSameOrInside } from "@shigomori/contracts/projectPaths";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";

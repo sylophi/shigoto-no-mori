@@ -7,13 +7,14 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import { delimiter } from "node:path";
+import { dirname, join, realpath } from "../../src/canonicalPath.ts";
+import * as NodeServices from "./nodeServices.ts";
+import { writeStub } from "./stubs.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
 import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
 import * as Deferred from "effect/Deferred";
@@ -44,19 +45,17 @@ import { doctorLayer, migratingEngineLayer } from "../../src/layer.ts";
 import * as Migration from "../../src/Migration.ts";
 import * as Open from "../../src/Open.ts";
 import * as Paths from "../../src/Paths.ts";
+import * as ProcessTable from "../../src/ProcessTable.ts";
 import * as Store from "../../src/Store.ts";
 import { openNode } from "./nodeStore.ts";
 import * as Worktrees from "../../src/Worktrees.ts";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as WorktreeData from "../../src/WorktreeData.ts";
 import * as WtFolder from "../../src/WtFolder.ts";
-import {
-  GIT_IDENTITY,
-  isolateGit,
-  repositoryRoot,
-} from "../../../../test/gitIsolation.ts";
+import { GIT_IDENTITY, isolateGit } from "../../../../test/gitIsolation.ts";
 import { nativefs } from "./nativefs.ts";
 import { SYNC_SPAWN } from "../../../../test/testProcesses.mts";
+import { homeEnv } from "./platform.ts";
 
 // The services a harness case calls.
 export type Engine =
@@ -83,7 +82,8 @@ export type Engine =
   | WorktreeData.WorktreeData
   | SqlClient.SqlClient
   | Migration.Migration
-  | Paths.Paths;
+  | Paths.Paths
+  | ProcessTable.ProcessTable;
 
 // What the agent hooks run, as the installed binary names itself.
 export const HOOK_BINARY =
@@ -108,6 +108,17 @@ Object.assign(process.env, {
 });
 
 const childEnv = (): NodeJS.ProcessEnv => ({ ...process.env, LC_ALL: "C" });
+
+// What Windows runs nothing without, beside PATH: its system folder,
+// its temp folder, and the extensions it runs a program by. Its names
+// come in any case.
+const WINDOWS_ENV =
+  process.platform === "win32" ? ["SYSTEMROOT", "TEMP", "TMP", "PATHEXT"] : [];
+const PASSED_ENV = new Set(["PATH", "TMPDIR", "LC_ALL", ...WINDOWS_ENV]);
+const passedEnv = (name: string) => PASSED_ENV.has(name.toUpperCase());
+const WINDOWS_ENGINE_ENV = Object.fromEntries(
+  WINDOWS_ENV.map((name) => [name, process.env[name] ?? ""]),
+);
 
 // What a binary did: its exit code, its last JSON document, its output.
 type Run = {
@@ -137,10 +148,6 @@ export type Sandbox = {
   // A git repository at `name` beside the data dirs, which every side
   // shares, with `files` committed.
   readonly repo: (name: string, files?: Record<string, string>) => string;
-  // This repository at `name`, at the commit checked out, on main: a
-  // real project's tree to clone and land from. Its own commit, not a
-  // pinned one, since CI's checkout is shallow and holds no other.
-  readonly realRepo: (name: string) => string;
   // git in `cwd` with the sandbox's identity, answering its stdout.
   readonly git: (cwd: string, ...args: string[]) => string;
   readonly engine: <A, E>(run: Effect.Effect<A, E, Engine>) => Promise<unknown>;
@@ -175,7 +182,7 @@ export function sandbox(
 ): Sandbox {
   const helper = options.nativefs ?? nativefs();
   const originalPath = process.env.PATH;
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "engine-sandbox-")));
+  const root = realpath(mkdtempSync(join(tmpdir(), "engine-sandbox-")));
   const seed = join(root, "seed");
   mkdirSync(seed);
   const sides = new Set<string>();
@@ -207,8 +214,9 @@ export function sandbox(
       ConfigProvider.layer(
         ConfigProvider.fromEnv({
           env: {
-            HOME: root,
+            ...homeEnv(root),
             PATH: process.env.PATH ?? "",
+            ...WINDOWS_ENGINE_ENV,
             SHIGOMORI_DATA_DIR: sideDir(side),
             ...options.env,
           },
@@ -277,15 +285,13 @@ export function sandbox(
   const sideEnv = (): NodeJS.ProcessEnv =>
     Object.fromEntries(
       Object.entries(gitEnv()).filter(
-        ([name]) =>
-          ["PATH", "TMPDIR", "LC_ALL"].includes(name) ||
-          name.startsWith("GIT_"),
+        ([name]) => passedEnv(name) || name.startsWith("GIT_"),
       ),
     );
 
   const env = (side: string): NodeJS.ProcessEnv => ({
     ...sideEnv(),
-    HOME: root,
+    ...homeEnv(root),
     SHIGOMORI_DATA_DIR: sideDir(side),
   });
 
@@ -360,27 +366,6 @@ export function sandbox(
       git("commit", "-q", "--allow-empty", "-m", "init");
       return dir;
     },
-    realRepo: (name) => {
-      const dir = join(root, name);
-      const git = (cwd: string, ...args: string[]) =>
-        execFileSync("git", args, {
-          ...SYNC_SPAWN,
-          cwd,
-          env: gitEnv(),
-          stdio: "ignore",
-        });
-      git(
-        root,
-        "clone",
-        "-q",
-        "--shared",
-        "--no-checkout",
-        repositoryRoot,
-        dir,
-      );
-      git(dir, "checkout", "-q", "-B", "main", "HEAD");
-      return dir;
-    },
     // The service call's answer, or its error as the terminal reports
     // one: {ok: false, error: message}.
     engine: (run) =>
@@ -412,11 +397,9 @@ export function sandbox(
     fakeBin: (name, script) => {
       const bin = join(root, "bin");
       mkdirSync(bin, { recursive: true });
-      writeFileSync(join(bin, name), `#!/bin/sh\n${script}\n`, {
-        mode: 0o755,
-      });
-      if (!process.env.PATH?.startsWith(`${bin}:`)) {
-        process.env.PATH = `${bin}:${originalPath}`;
+      writeStub(bin, name, `#!/bin/sh\n${script}\n`);
+      if (!process.env.PATH?.startsWith(`${bin}${delimiter}`)) {
+        process.env.PATH = `${bin}${delimiter}${originalPath}`;
       }
     },
     remove: async () => {

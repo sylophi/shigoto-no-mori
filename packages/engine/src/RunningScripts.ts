@@ -1,14 +1,8 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as SqlClient from "effect/sql/SqlClient";
-import {
-  BIRTH_TOLERANCE_MS,
-  exec,
-  parseLstart,
-  PS_BIRTH_ENV,
-} from "./processes.ts";
+import * as ProcessTable from "./ProcessTable.ts";
 
 // A script the app started and has not seen exit, and the app instance
 // that started it (its pid). Two instances on one data dir (a dev build
@@ -17,13 +11,15 @@ import {
 export type RunningScript = {
   readonly runId: string;
   readonly ownerPid: number;
+  // What a stop ends: the script's shell, or on Windows the helper that
+  // holds a lifecycle script in a job (Shells.containedSh).
   readonly pid: number;
   // Whether `pid` leads the script's process group: a PTY run's does,
   // while a lifecycle script runs in the app's group.
   readonly groupLeader: boolean;
   readonly projectId: string;
   readonly worktreeId: string;
-  // Epoch ms, stamped just after the spawn.
+  // Its birth as the process table read it once it ran.
   readonly startedAt: number;
   readonly command: string;
 };
@@ -94,34 +90,7 @@ const make = Effect.gen(function* () {
 
 export const layer = Layer.effect(RunningScripts, make);
 
-// "  1234  1234 Mon Aug 17 18:42:41 2026 /bin/zsh -l -c pnpm dev"
-const PS_LINE =
-  /^\s*(\d+)\s+(\d+)\s+(\w{3}\s+\w{3}\s+\d+\s+\d+:\d+:\d+\s+\d{4})\s+(.*)$/;
-
-type LiveProcess = {
-  readonly pgid: number;
-  readonly startedAt: number;
-  readonly command: string;
-};
-
-const parseProcessTable = (stdout: string) => {
-  const table = new Map<number, LiveProcess>();
-  for (const line of stdout.split("\n")) {
-    const match = PS_LINE.exec(line);
-    if (match === null) continue;
-    const [, pid, pgid, lstart = "", command = ""] = match;
-    const startedAt = parseLstart(lstart);
-    if (Option.isNone(startedAt)) continue;
-    table.set(Number(pid), {
-      pgid: Number(pgid),
-      startedAt: startedAt.value,
-      command: command.trim(),
-    });
-  }
-  return table;
-};
-
-// The recorded command is what we handed the login shell, but a shell
+// The recorded command is what we handed the script shell, but a shell
 // execs into the last command of what it runs, so the live command
 // line is often one program with its own argv: `pnpm i && pnpm dev`
 // shows up as `node .../pnpm.cjs dev`, and a shell-quoted absolute
@@ -147,13 +116,17 @@ const commandMatches = (recorded: string, live: string) => {
 // The identity proof. A live pid says nothing on its own, so three
 // independent facts have to agree: the process leads its own group when
 // it did (a script's PTY child leads a session of its own, and setsid
-// survives an exec, while a lifecycle script ran in the app's group), it
-// started when we recorded that it started, and its command line still
-// looks like the one we launched.
-const isSameProcess = (record: RunningScript, live: LiveProcess | undefined) =>
+// survives an exec, while a lifecycle script ran in the app's group),
+// where the OS has groups, it started when we recorded that it started,
+// and its command line still looks like the one we launched.
+const isSameProcess = (
+  record: RunningScript,
+  live: ProcessTable.LiveProcess | undefined,
+  sameBirth: (recorded: number, live: number) => boolean,
+) =>
   live !== undefined &&
-  record.groupLeader === (live.pgid === record.pid) &&
-  Math.abs(live.startedAt - record.startedAt) <= BIRTH_TOLERANCE_MS &&
+  (live.leadsGroup === undefined || record.groupLeader === live.leadsGroup) &&
+  sameBirth(record.startedAt, live.startedAt) &&
   commandMatches(record.command, live.command);
 
 // The recorded scripts still running as the processes they recorded:
@@ -164,24 +137,9 @@ export const survivors = Effect.fnUntraced(function* (
   records: ReadonlyArray<RunningScript>,
 ) {
   if (records.length === 0) return [];
-  // -ww so a long dev-server command line isn't cut short.
-  const listed = yield* exec(
-    "ps",
-    [
-      "-p",
-      records.map(({ pid }) => pid).join(","),
-      "-ww",
-      "-o",
-      "pid=,pgid=,lstart=,command=",
-    ],
-    { env: PS_BIRTH_ENV, extendEnv: true, timeout: "15 seconds" },
-  ).pipe(Effect.option);
-  // `ps` exits non-zero when none of the pids are live, which is the
-  // ordinary "they all died with the app" case. A genuine failure to run
-  // it lands here too, which leaves every record out.
-  if (Option.isNone(listed)) return [];
-  const table = parseProcessTable(listed.value.stdout);
+  const table = yield* ProcessTable.ProcessTable;
+  const live = yield* table.listed(records.map(({ pid }) => pid));
   return records.filter((record) =>
-    isSameProcess(record, table.get(record.pid)),
+    isSameProcess(record, live.get(record.pid), table.sameBirth),
   );
 });

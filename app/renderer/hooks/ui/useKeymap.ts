@@ -15,7 +15,7 @@ import {
   menuAccelerators,
   resolveKeymap,
 } from "@shigomori/ui/lib/keymap.ts";
-import { isMac } from "@shigomori/ui/lib/platform.ts";
+import { isMac, viewerOs } from "@shigomori/ui/lib/platform.ts";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { isEditableTarget, isOverlayOpen, isRawKeySurface } from "@/lib/dom";
 import { useHasLocalHost } from "@/lib/localHost";
@@ -104,6 +104,20 @@ const TERMINAL_ACTIONS = new Set(
   KEYMAP_ACTIONS.filter((action) => action.terminal).map((action) => action.id),
 );
 
+const MENU_ACTIONS = KEYMAP_ACTIONS.filter((action) => action.menu).map(
+  (action) => action.id,
+);
+
+// On Windows, a Ctrl chord no shell is sent, as Windows Terminal keeps
+// its own: Ctrl+Shift on a letter, or Ctrl on a digit or a comma. Every
+// other Ctrl chord (Ctrl+C, D, W, R, K, N...) is the shell's.
+const pastShell = (e: KeyboardEvent): boolean =>
+  viewerOs === "windows" &&
+  e.ctrlKey &&
+  !e.altKey &&
+  ((e.shiftKey && /^Key[A-Z]$/.test(e.code)) ||
+    /^(Digit\d|Comma)$/.test(e.code));
+
 const CTRL_TWIN_ACTIONS = new Set(
   KEYMAP_ACTIONS.filter((action) => action.ctrlTwin).map((action) => action.id),
 );
@@ -112,10 +126,11 @@ const CTRL_TWIN_ACTIONS = new Set(
 // every key but a `Mod` chord and its Ctrl twin, which the action may
 // still leave to the field (Enter's, arrows' and the editing keys'
 // meanings are the field's), and a focused terminal every key a shell
-// can be sent: it gives up a ⌘ chord bound here and the terminal's own
-// toggle. Those two are claimed in the capture phase,
-// before the terminal sees them. The rest wait for the bubble, so a
-// control that spent the key (an editor's Escape) keeps it.
+// can be sent: it gives up a ⌘ chord bound here, on Windows a chord no
+// shell is sent (pastShell), and the terminal's own toggle. Those are
+// claimed in the capture phase, before the terminal sees them. The rest
+// wait for the bubble, so a control that spent the key (an editor's
+// Escape) keeps it.
 export function useKeymapListener(): void {
   const keymap = useKeymap();
   const paused = useExternalStore(recording);
@@ -136,10 +151,15 @@ export function useKeymapListener(): void {
     };
     const fromTerminal = (e: KeyboardEvent) => {
       if (e.repeat || e.isComposing || !isRawKeySurface(e.target)) return;
+      const app = pastShell(e);
       const found = pressedActions(keymap, e).filter(
-        ({ id }) => TERMINAL_ACTIONS.has(id) || (isMac && e.metaKey),
+        ({ id }) => TERMINAL_ACTIONS.has(id) || (isMac && e.metaKey) || app,
       );
       if (run(e, found)) e.stopPropagation();
+      // Kept from the terminal and left to the menu, which runs it.
+      else if (app && MENU_ACTIONS.some((id) => keymap.get(id)?.matches(e))) {
+        e.stopPropagation();
+      }
     };
     const fromPage = (e: KeyboardEvent) => {
       if (e.repeat || e.isComposing || e.defaultPrevented) return;

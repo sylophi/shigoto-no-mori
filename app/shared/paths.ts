@@ -12,12 +12,17 @@
 // script launched from the packaged app's script runner would boot the
 // dev build, see the packaged app's data dir here, and quietly operate
 // on real data.
-import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import { isAbsolute } from "node:path";
+import * as NodeServices from "@shared/nodeServices";
 import type { DataDirSource } from "@shigomori/engine/Paths";
-import { expandHome as expandHomeIn } from "@shigomori/contracts/projectPaths";
+import {
+  canonicalPath,
+  expandHomeAt,
+  join,
+  realpath,
+  resolve,
+} from "@shigomori/engine/canonicalPath";
 import * as Paths from "@shigomori/engine/Paths";
 import type { Flavor } from "@shigomori/engine/flavor";
 import * as Effect from "effect/Effect";
@@ -86,7 +91,7 @@ export function initDataDirAt(
     dataDir: dir,
     source,
     dataDirName: ".sm",
-    defaultDataDir: join(homedir(), ".sm"),
+    defaultDataDir: join(home(), ".sm"),
     pointer: null,
     pointerFiles: null,
   };
@@ -104,11 +109,12 @@ export function dataDir(): string {
 }
 
 // The data dir with its links resolved, none where that spells it the
-// same or it can't be read.
+// same or it can't be read. On Windows the OS's own call, which spells
+// it as git does (canonicalPlatform.ts).
 export function dataDirReal(): string | undefined {
   const dir = dataDir();
   try {
-    const real = realpathSync(dir);
+    const real = realpath(dir);
     return real === resolve(dir) ? undefined : real;
   } catch {
     return undefined;
@@ -155,8 +161,15 @@ export function legacyDataDirPointerPath(): string | null {
   return pointerFiles().legacy;
 }
 
+// The home folder as the OS gives it, which is the account's home where
+// HOME is unset. Paths.home reads the variable alone (HOME, or
+// USERPROFILE on Windows).
+export function home(): string {
+  return canonicalPath(homedir());
+}
+
 export function expandHome(path: string): string {
-  return expandHomeIn(homedir(), path);
+  return expandHomeAt(home(), path);
 }
 
 export function toAbsolute(path: string): string {

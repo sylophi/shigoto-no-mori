@@ -1,20 +1,32 @@
 // The doctor's environment checks: git, gh, the shell hook and its wrapper, the programs `sm` runs.
-import { tildify } from "@shigomori/contracts/projectPaths";
+import { samePath, tildify } from "@shigomori/contracts/projectPaths";
+import { shellName } from "@shigomori/contracts/shellName";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { canonicalPath } from "../canonicalPath.ts";
 import { belowGitFloor, fields, parseGitVersion } from "../doctorParse.ts";
 import { envVar } from "../environment.ts";
-import { findExecutable } from "../executables.ts";
+import {
+  candidatesOnPath,
+  findExecutable,
+  isRunnable,
+} from "../executables.ts";
 import { flavorNames } from "../flavor.ts";
 import * as Git from "../Git.ts";
 import { unitState } from "../hostUnit.ts";
 import { installedVersionOf, linuxInstall } from "../linuxInstall.ts";
 import { appFoldersOf } from "../Launchers.ts";
 import * as Paths from "../Paths.ts";
-import { byPlatform } from "../platform.ts";
+import { byFamily, byPlatform } from "../platform.ts";
+import {
+  windowsCliBinDir,
+  windowsInstallRoot,
+  windowsUpdateExe,
+} from "../windowsInstall.ts";
+import * as Shells from "../Shells.ts";
 import {
   CD_FILE_ENV,
   hookPlace,
@@ -40,6 +52,12 @@ const INSTALL_HINTS = byPlatform({
     gh: "https://cli.github.com",
     path: "Add ~/.local/bin, where the install links it, to PATH.",
   },
+  win32: {
+    git: "`winget install Git.Git`",
+    gitUpgrade: "`winget upgrade Git.Git`",
+    gh: "`winget install GitHub.cli`",
+    path: "Install the CLI from the app's Settings.",
+  },
 });
 
 export const makeEnvironmentChecks = ({
@@ -51,6 +69,7 @@ export const makeEnvironmentChecks = ({
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
     const git = yield* Git.Git;
+    const shells = yield* Shells.Shells;
     const fs = yield* FileSystem.FileSystem;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const { home, binaryName, flavor } = paths;
@@ -69,6 +88,13 @@ export const makeEnvironmentChecks = ({
         return line.fail(
           "not runnable (every command in sm shells out to it)",
           `Install git (${INSTALL_HINTS.git}) and make sure it's on PATH.`,
+        );
+      }
+      const noShell = yield* Effect.option(Effect.flip(shells.sh));
+      if (Option.isSome(noShell)) {
+        return line.fail(
+          noShell.value.message,
+          "Reinstall Git for Windows, which comes with Git Bash.",
         );
       }
       const trimmed = version.value.trim();
@@ -267,28 +293,75 @@ export const makeEnvironmentChecks = ({
         return line.ok(`${installed}, its host running`);
       });
 
-    const checkApp = byPlatform({ darwin: checkBundle, linux: checkInstall });
+    // On Windows: the install this binary is from, Squirrel's folder two
+    // above its resources.
+    const checkWindows = Effect.fnUntraced(function* ({
+      version,
+      executable,
+    }: RunInput) {
+      const line = check("Environment", "app", "install");
+      if (flavor === "dev") {
+        return line.ok(
+          `dev build (${binaryName} ${version}): runs from a checkout, no install`,
+        );
+      }
+      const resources = path.dirname(executable);
+      if (Option.isNone(yield* statOf(windowsUpdateExe(resources)))) {
+        return line.warn(
+          "this binary isn't from an install, so update and the app have nothing behind them",
+          `Install Shigoto no Mori, and the CLI from its Settings, which puts \`${binaryName}\` on PATH.`,
+        );
+      }
+      return line.ok(
+        `${version} at ${tildify(windowsInstallRoot(resources), home)}`,
+      );
+    });
+
+    const checkApp = byPlatform({
+      darwin: checkBundle,
+      linux: checkInstall,
+      win32: checkWindows,
+    });
+
+    // The file a PATH entry runs: on Windows, a launcher in this binary's
+    // install runs this binary.
+    const resolvedOf = (candidate: string, executable: string) => {
+      const runs = byFamily({
+        posix: candidate,
+        windows: samePath(
+          path.dirname(candidate),
+          canonicalPath(windowsCliBinDir(path.dirname(executable))),
+        )
+          ? executable
+          : candidate,
+      });
+      return Effect.map(realPath(runs), (found) =>
+        Option.getOrElse(found, () => runs),
+      );
+    };
 
     // The binary in PATH order, deduped by the file each entry resolves
-    // to, so a symlink and its target don't read as a conflict.
-    const binariesOnPath = Effect.gen(function* () {
+    // to, so a symlink and its target, or a launcher and the binary it
+    // runs, don't read as a conflict.
+    const binariesOnPath = Effect.fnUntraced(function* (executable: string) {
       const searched = yield* envVar("PATH");
+      if (searched === "") return [];
       const found: string[] = [];
       const seen = new Set<string>();
-      for (const dir of searched === "" ? [] : searched.split(":")) {
-        const candidate = path.join(dir === "" ? "." : dir, binaryName);
+      for (const candidate of yield* candidatesOnPath(
+        path,
+        searched,
+        binaryName,
+      )) {
         const info = yield* statOf(candidate);
         if (
           Option.isNone(info) ||
           info.value.type === "Directory" ||
-          (info.value.mode & 0o111) === 0
+          !(yield* isRunnable(candidate, info.value.mode))
         ) {
           continue;
         }
-        const resolved = Option.getOrElse(
-          yield* realPath(candidate),
-          () => candidate,
-        );
+        const resolved = yield* resolvedOf(candidate, executable);
         if (seen.has(resolved)) continue;
         seen.add(resolved);
         found.push(tildify(candidate, home));
@@ -299,22 +372,23 @@ export const makeEnvironmentChecks = ({
     // Two binaries on PATH is the quietest way for an install to go wrong:
     // the one that answers and the one the app updates are different
     // files, so fixes never seem to land.
-    const checkPath = Effect.gen(function* () {
-      const line = check("Environment", "path", "PATH");
-      const found = yield* binariesOnPath;
-      const [first] = found;
-      if (first === undefined) {
+    const checkPath = ({ executable }: RunInput) =>
+      Effect.gen(function* () {
+        const line = check("Environment", "path", "PATH");
+        const found = yield* binariesOnPath(executable);
+        const [first] = found;
+        if (first === undefined) {
+          return line.warn(
+            `no \`${binaryName}\` on PATH, so this run came from an explicit path`,
+            INSTALL_HINTS.path,
+          );
+        }
+        if (found.length === 1) return line.ok(first);
         return line.warn(
-          `no \`${binaryName}\` on PATH, so this run came from an explicit path`,
-          INSTALL_HINTS.path,
+          `${found.length} different \`${binaryName}\` binaries on PATH; ${first} wins`,
+          `Remove the shadowed copies (${found.slice(1).join(", ")}) or reorder PATH.`,
         );
-      }
-      if (found.length === 1) return line.ok(first);
-      return line.warn(
-        `${found.length} different \`${binaryName}\` binaries on PATH; ${first} wins`,
-        `Remove the shadowed copies (${found.slice(1).join(", ")}) or reorder PATH.`,
-      );
-    });
+      });
 
     // Installed and current: install refreshes the block in place, so one
     // from an older vintage was written by a build whose guard line has
@@ -322,7 +396,16 @@ export const makeEnvironmentChecks = ({
     const checkShellHook = (input: RunInput) =>
       Effect.gen(function* () {
         const line = check("Environment", "shell-hook", "shell hook");
-        const place = hookPlace(paths, input.zdotdir ?? zdotdir);
+        const { place, policy } = yield* hookPlace(paths, {
+          zdotdir: input.zdotdir ?? zdotdir,
+          configHome: "",
+          program: (yield* shells.interactive).program,
+        }).pipe(
+          Effect.provideService(
+            ChildProcessSpawner.ChildProcessSpawner,
+            spawner,
+          ),
+        );
         const installed: ShellKind[] = [];
         const edited: ShellKind[] = [];
         const stale: ShellKind[] = [];
@@ -337,14 +420,24 @@ export const makeEnvironmentChecks = ({
         }
         if (edited.length > 0) {
           return line.warn(
-            `the block in ${edited.join(", ")}'s config was edited, so install and uninstall won't touch it`,
+            `the block in ${edited.map(shellName).join(", ")}'s config was edited, so install and uninstall won't touch it`,
             `Restore or remove the marker block, then \`${binaryName} shell install\`.`,
           );
         }
         if (stale.length > 0) {
           return line.warn(
-            `the ${stale.join(", ")} hook is an older vintage than this build writes`,
+            `the ${stale.map(shellName).join(", ")} hook is an older vintage than this build writes`,
             `Run \`${binaryName} shell install\` to refresh it.`,
+          );
+        }
+        // Windows PowerShell's default policy on a desktop.
+        if (
+          installed.includes("powershell") &&
+          (policy === "Restricted" || policy === "AllSigned")
+        ) {
+          return line.warn(
+            `PowerShell's execution policy is ${policy}, so it doesn't load the hook from its profile`,
+            "Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` to let it load your profile.",
           );
         }
         if (installed.length === 0) {
@@ -357,7 +450,7 @@ export const makeEnvironmentChecks = ({
         // would always read as a problem.
         const inactive = input.terminal && cdFile === "";
         return line.ok(
-          `installed for ${installed.join(", ")}${inactive ? " (not active in this session)" : ""}`,
+          `installed for ${installed.map(shellName).join(", ")}${inactive ? " (not active in this session)" : ""}`,
         );
       });
 

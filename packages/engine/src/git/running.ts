@@ -12,6 +12,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { canonicalPath } from "../canonicalPath.ts";
 import { findExecutable } from "../executables.ts";
 import { keptAnswers } from "../keptAnswers.ts";
 import { subcommandOf } from "../gitParse.ts";
@@ -36,6 +37,7 @@ import {
   readToExit,
 } from "../processes.ts";
 import { current } from "../platform.ts";
+import * as Shells from "../Shells.ts";
 
 // A transfer that stalls (a connection left half open by a sleep or a
 // network that changed) ends rather than waiting for good: http's own
@@ -156,6 +158,7 @@ export const makeRunning = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const shells = yield* Shells.Shells;
   const slots = yield* Semaphore.make(SPAWN_SLOTS);
 
   // Apple's /usr/bin/git is a launcher that looks up the selected
@@ -261,6 +264,7 @@ export const makeRunning = Effect.gen(function* () {
                 onStderr: options.onStderr,
               }).pipe(
                 Effect.provideService(FileSystem.FileSystem, fs),
+                Effect.provideService(Shells.Shells, shells),
                 Effect.flatMap(({ stdout, stderr, code }) =>
                   Effect.map(
                     read(Stream.make(stdout), limit, tooLarge),
@@ -313,7 +317,7 @@ export const makeRunning = Effect.gen(function* () {
             read: [stdout, stderr],
             code,
           } = yield* ran.pipe(
-            Effect.catchTag("PlatformError", (cause) =>
+            Effect.catchTag(["PlatformError", "NoScriptShell"], (cause) =>
               Effect.fail(failed(null)(cause)),
             ),
           );
@@ -421,7 +425,7 @@ export const makeRunning = Effect.gen(function* () {
   const gitPath = (cwd: string, name: string) =>
     Effect.map(
       run(cwd, ["rev-parse", "--path-format=absolute", "--git-path", name]),
-      (out) => out.trim(),
+      (out) => canonicalPath(out.trim()),
     );
 
   return {

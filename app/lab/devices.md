@@ -17,6 +17,12 @@ port yet, so it runs `start`, waits for the port, attaches, and stops
 the window when the session ends. weblab runs `start` as written, with
 no `PORT` of its own, so the port goes in all three places.
 
+On Windows weblab runs `start` through cmd, which sets a variable
+with `set`, ended right at the `&&` since cmd keeps a space before it
+in the value:
+`"start": "set SHIGOMORI_DEBUG_PORT=9241&& pnpm device <tag>-a --fresh --clone-login"`.
+`end` stops the window's whole process tree there too.
+
 `pnpm device <profile> [--fresh] [--clone-login]`
 (`scripts/dev-device.mts`) runs a dev window as a dev profile
 (`dev-app.md`) with its debugging port on `SHIGOMORI_DEBUG_PORT`.
@@ -94,6 +100,9 @@ the bridge's answers, the other device's window, and the disk.
   `pkill -9 -f "profiles/<tag>-b"`), then `end` its session and open
   it again with the same `new` (without `--fresh`): it boots as the
   same device. Presence, reconnects and offline catch-up show there.
+  On Windows the window's main process names no profile, so end the
+  tree under its launcher, in PowerShell:
+  `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | ? CommandLine -match 'dev-device.mts <tag>-b( |$)' | % { taskkill /T /F /PID $_.ProcessId }`.
 - **The tunnel path.** On one machine the LAN wins. Launch a device
   with `SHIGOMORI_DIAL_KINDS=tunnel` in its `start` to take the
   tunnel instead (`dev-app.md`, "Rules").
@@ -126,6 +135,12 @@ live devices. Then `end`, and delete the local halves, or launch with
 
 ```sh
 for p in <tag>-a <tag>-b; do rm -rf ~/.smd-profiles/$p "$HOME/Library/Application Support/Shigoto no Mori (dev)/profiles/$p"; done
+```
+
+On Windows the userData half is under `%APPDATA%`, in PowerShell:
+
+```powershell
+foreach ($p in '<tag>-a', '<tag>-b') { Remove-Item -Recurse -Force "$HOME\.smd-profiles\$p", "$env:APPDATA\Shigoto no Mori (dev)\profiles\$p" }
 ```
 
 What a removed device does to itself and to the devices that stay is

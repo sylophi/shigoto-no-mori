@@ -310,7 +310,12 @@ export const layer = Layer.effect(Registry, make);
 - The platform layer is provided once per process: `NodeServices`
   from `@effect/platform-node` in the host and the shells, the Bun
   equivalent in the terminal binary. The engine is written against the
-  service interfaces only and never against Bun globals.
+  service interfaces only and never against Bun globals. Each runtime
+  takes that layer through `canonicalPlatform`
+  (`packages/engine/src/canonicalPlatform.ts`), so its Path and
+  FileSystem answer canonical paths. A path stays canonical through
+  storage and every wire, and only the UI shows it natively (the path
+  model opens `packages/engine/src/canonicalPath.ts`).
 - The filesystem calls Node lacks (clones, swaps, file flags) go
   through the Go helper (`nativefs/`), behind one engine service with
   batched verbs. No native addon.

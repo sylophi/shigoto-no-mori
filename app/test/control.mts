@@ -31,7 +31,7 @@
 import { LOOPBACK_FILE } from "@shigomori/contracts/link";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join } from "@shigomori/engine/canonicalPath";
 import * as Schema from "effect/Schema";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import {
@@ -41,7 +41,6 @@ import {
 import {
   mirrorContract,
   type MirrorGitStatus,
-  type MirrorSessionRaw,
 } from "@shigomori/contracts/modules/mirror";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
@@ -74,7 +73,7 @@ import { type CliResult, makeTracker } from "./lib/checkKit.mts";
 import { afterAll, beforeAll, it } from "vitest";
 import { cliSandbox } from "./lib/cliSandbox.mts";
 import { bootDirectWire, DIALER, LISTENER } from "./lib/directBoot.mts";
-import { inertMirrorImpl, rawMirrorSession } from "./lib/mirrorFakes.mts";
+import { recordingMirror } from "./lib/mirrorFakes.mts";
 import {
   standInAccount,
   standInDeviceId,
@@ -189,51 +188,15 @@ const allowControl = () =>
     ),
   );
 
-// The mirror engine's stand-in: reports the sessions it was asked to
-// create and records the ones it was asked to end. `git` is the
+// The mirror engine's stand-in (mirrorFakes.mts), with `state.git` the
 // follower's verdict the stop guard reads.
 function fakeMirrorEngine() {
-  const sessions = new Map<string, MirrorSessionRaw>();
-  const state: {
-    terminated: string[];
-    git: MirrorGitStatus["status"];
-  } = { terminated: [], git: "following" };
-  let next = 0;
-  const impl = inertMirrorImpl({
-    sessions: Effect.sync(() => [...sessions.values()]),
-    create: (input) =>
-      Effect.sync(() => {
-        next += 1;
-        const session = `sync_fake${next}`;
-        sessions.set(
-          session,
-          rawMirrorSession({
-            session,
-            name: input.name,
-            labels: input.labels,
-            localWorktreeId: input.localWorktreeId,
-            localRoot: input.localRoot,
-            deviceId: input.deviceId,
-            projectId: input.projectId,
-            worktreeId: input.worktreeId,
-            remoteRoot: input.remoteRoot,
-            ignores: [...input.ignores],
-            createdAt: Date.now(),
-            statusText: "Watching for changes",
-            successfulCycles: 1,
-          }),
-        );
-        return session;
-      }),
-    terminate: (session) =>
-      Effect.sync(() => {
-        state.terminated.push(session);
-        sessions.delete(session);
-      }),
+  const state: { git: MirrorGitStatus["status"] } = { git: "following" };
+  const { impl, terminated } = recordingMirror({
     gitStatus: () => ({ status: state.git, detail: "" }),
     refreshGit: () => Effect.succeed({ status: state.git, detail: "" }),
   });
-  return { state, impl };
+  return { state, terminated, impl };
 }
 
 const { track, teardown } = makeTracker();
@@ -302,6 +265,7 @@ beforeAll(async () => {
     openStream: mirrorHandlers.openStream,
     gitState: onListener(mirrorHandlers.gitState),
     applyGitState: onListener(mirrorHandlers.applyGitState),
+    clearStaleSizes: onListener(mirrorHandlers.clearStaleSizes),
   };
   const { listener, toListener } = await bootDirectWire(track, {
     contracts: [
@@ -365,13 +329,13 @@ it("unmirror of a mirror run here is refused until the follower reports synced, 
     "stop-unconfirmed",
   );
   assert.equal(
-    engine.state.terminated.includes(mirrored.session),
+    engine.terminated.includes(mirrored.session),
     false,
     "a refused stop ends nothing",
   );
   engine.state.git = "synced";
   await sm("worktrees", "unmirror", "wt-mirror", "-p", "source");
-  assert.equal(engine.state.terminated.includes(mirrored.session), true);
+  assert.equal(engine.terminated.includes(mirrored.session), true);
   assert.equal(
     existsSync(mirrored.worktree.path),
     false,

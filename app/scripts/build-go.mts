@@ -1,15 +1,22 @@
 // Compiles one of the Go helpers into a standalone binary in its dist
 // dir (shared/packaging/goHelpersDist.mts): the file-sync engine (the
 // Go module in file-sync/, the continuous worktree mirror built on
-// Mutagen, which only the host spawns, host/fileSync/runner.ts) or the
+// Mutagen, which only the host spawns, host/fileSync/runner.ts), the
 // filesystem helper (nativefs/, the filesystem calls Node has no
-// binding for). Built by `pnpm dev` beside the dev CLI and by the
-// prePackage hook for a release.
+// binding for) or the Windows launcher of the terminal command
+// (cli-launcher/, for the packaged build's flavor, SM_FLAVOR). The
+// engine and the helper are built by `pnpm dev` beside the dev CLI, and
+// the prePackage hook builds what a release ships.
 //
-// Run: pnpm file-sync:build, pnpm nativefs:build
+// Run: pnpm file-sync:build, pnpm nativefs:build, pnpm cli-launcher:build
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
+import { programFile } from "@shigomori/engine/executables";
+import { buildFlavor } from "../shared/packaging/buildFlavor.mts";
+import { cliBinaryName } from "../shared/packaging/cliDist.mts";
 import {
+  CLI_LAUNCHER_BINARY_NAME,
+  CLI_LAUNCHER_DIST_DIR,
   FILE_SYNC_BINARY_NAME,
   FILE_SYNC_DIST_DIR,
   NATIVEFS_BINARY_NAME,
@@ -17,7 +24,13 @@ import {
 } from "../shared/packaging/goHelpersDist.mts";
 import { appRoot, repoRoot } from "./lib/appRoot.mts";
 
-const HELPERS = {
+type Helper = {
+  readonly outfile: string;
+  readonly env: Record<string, string>;
+  readonly ldflags?: () => string;
+};
+
+const HELPERS: Record<string, Helper> = {
   "file-sync": {
     outfile: join(FILE_SYNC_DIST_DIR, FILE_SYNC_BINARY_NAME),
     // Mutagen's macOS file watcher (its fsevents cgo binding) calls an
@@ -29,14 +42,19 @@ const HELPERS = {
     outfile: join(NATIVEFS_DIST_DIR, NATIVEFS_BINARY_NAME),
     env: {},
   },
+  "cli-launcher": {
+    outfile: join(CLI_LAUNCHER_DIST_DIR, CLI_LAUNCHER_BINARY_NAME),
+    env: {},
+    ldflags: () => `-X main.program=${cliBinaryName(buildFlavor(process.env))}`,
+  },
 };
 
-const name = process.argv[2];
-if (name !== "file-sync" && name !== "nativefs") {
-  throw new Error("Usage: build-go.mts <file-sync|nativefs>");
-}
+const name = process.argv[2] ?? "";
 const helper = HELPERS[name];
-const outfile = join(appRoot, helper.outfile);
+if (helper === undefined) {
+  throw new Error(`Usage: build-go.mts <${Object.keys(HELPERS).join("|")}>`);
+}
+const outfile = join(appRoot, programFile(helper.outfile));
 
 execFileSync(
   "go",
@@ -46,7 +64,7 @@ execFileSync(
     join(repoRoot, name),
     "-trimpath",
     "-ldflags",
-    "-s -w",
+    ["-s -w", helper.ldflags?.()].filter(Boolean).join(" "),
     "-o",
     outfile,
     ".",

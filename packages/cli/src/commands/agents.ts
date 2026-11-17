@@ -8,7 +8,6 @@ import { HARNESSES } from "@shigomori/engine/agentHooks";
 import { shortSession } from "@shigomori/engine/agentSessions";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
@@ -17,6 +16,7 @@ import * as Flag from "effect/cli/Flag";
 import { unlessUnmigrated, UsageError } from "../errors.ts";
 import { cwd, given, resolveWorktree, rest, worktreeFlags } from "../here.ts";
 import { alignRows, emit, note, out, Output, styles } from "../output.ts";
+import { readStdin } from "../stdin.ts";
 
 // No session to act on: neither flags nor a harness's shell name one.
 class NoAgentSession extends Schema.TaggedError<NoAgentSession>()(
@@ -163,10 +163,7 @@ const event = Command.make(
           `Usage: ${binaryName} agents event --harness <id> (the event on stdin)`,
         );
       }
-      const fs = yield* FileSystem.FileSystem;
-      const raw = yield* fs
-        .readFileString("/dev/stdin")
-        .pipe(Effect.orElseSucceed(() => ""));
+      const raw = yield* readStdin.pipe(Effect.orElseSucceed(() => ""));
       // A hook's event, which a data dir still v2's doesn't take.
       yield* unlessUnmigrated(
         (yield* Agents.Agents).event(harness.value, raw, yield* cwd),

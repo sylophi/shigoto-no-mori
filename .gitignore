@@ -50,6 +50,7 @@ dist-cloudflared/
 dist-file-sync/
 file-sync/file-sync
 file-sync/filesync
+file-sync/filesync.exe
 
 # headless host bundle (scripts/build-headless.mts)
 dist-headless/
@@ -60,6 +61,11 @@ dist-node/
 # filesystem helper compiled binary (scripts/build-go.mts)
 dist-nativefs/
 nativefs/nativefs
+nativefs/nativefs.exe
+
+# Windows launcher of the terminal command (scripts/build-go.mts)
+dist-cli-launcher/
+cli-launcher/cli-launcher.exe
 
 # The scene comparison's report (app/lab/scene-compare)
 app/lab/scene-compare/report/

@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 import type * as EngineScripts from "@shigomori/engine/Scripts";
+import type { NoScriptShell } from "@shigomori/engine/Shells";
 import type * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import type {
   Mark,
@@ -43,7 +44,10 @@ export class Scripts extends Context.Service<
     // A PTY run of the command in the worktree, answering its id.
     readonly start: (
       args: RunArgs,
-    ) => Effect.Effect<string, ScriptRefusedError | PtySpawnError>;
+    ) => Effect.Effect<
+      string,
+      ScriptRefusedError | PtySpawnError | NoScriptShell
+    >;
     // A PTY run of one of the worktree's package scripts, by name.
     readonly startPackage: (
       located: EngineWorktrees.Located,
@@ -162,4 +166,5 @@ type PackageRunError =
   | EngineScripts.UnreadableScripts
   | EngineScripts.ScriptRefused
   | ScriptRefusedError
-  | PtySpawnError;
+  | PtySpawnError
+  | NoScriptShell;

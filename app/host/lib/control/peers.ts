@@ -8,7 +8,7 @@ import {
   isNoDirectConnectionError,
   isNotSharingError,
 } from "@shigomori/contracts/errors";
-import { homedir } from "node:os";
+import { home } from "@shared/paths";
 import {
   type ControlDevice,
   ControlError,
@@ -20,10 +20,11 @@ import {
 } from "@shigomori/contracts/modules/mirror";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byHostKind } from "@shigomori/engine/platform";
 import type { SyncCloneInto } from "@shigomori/contracts/modules/sync";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { tildify } from "@shigomori/contracts/projectPaths";
+import { canonicalPath } from "@shigomori/engine/canonicalPath";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { PROBE_TIMEOUT_MS } from "@shared/remote/link";
 import { answerWithin } from "@shigomori/engine/liveness";
@@ -65,10 +66,10 @@ const probe = <A, E, R>(asked: Effect.Effect<A, E, R>, late: () => A) =>
 export const signedOut = () =>
   new ControlError(
     "signed-out",
-    `This device isn't signed in to an account, so it has no other devices to reach. ${byPlatform(
+    `This device isn't signed in to an account, so it has no other devices to reach. ${byHostKind(
       {
-        darwin: "Sign in from the app first.",
-        linux: "Sign in first (`login`).",
+        app: "Sign in from the app first.",
+        headless: "Sign in first (`login`).",
       },
     )}`,
   );
@@ -353,6 +354,15 @@ export const mirrorOf = (target: { projectId: string; worktreeId: string }) =>
       ),
   );
 
+// A folder typed for another device. One under this device's home is
+// the same place under the target's. Any other is the target's own
+// spelling, left for its host to read: `//nas/src` typed on Linux is a
+// share on Windows.
+export const targetFolder = (typed: string) => {
+  const tildified = tildify(canonicalPath(typed), home());
+  return tildified.startsWith("~") ? tildified : typed;
+};
+
 // Where a send clones the repo on a device with no checkout of it, as
 // the dialogs' review defaults it (shared/cloneDestination.ts): the
 // source's own layout with this device's home swapped for the
@@ -365,10 +375,9 @@ export const cloneIntoOn = (
   project: Project,
   parent: string | undefined,
 ) => {
-  const here = homedir();
   if (parent !== undefined) {
     return Effect.succeed<SyncCloneInto>(
-      cloneIntoOf(tildify(parent, here), project.path),
+      cloneIntoOf(targetFolder(parent), project.path),
     );
   }
   return Effect.map(
@@ -383,7 +392,7 @@ export const cloneIntoOn = (
       cloneIntoOf(
         moveCloneParent({
           sourcePath: project.path,
-          sourceHome: here,
+          sourceHome: home(),
           destinationHome: info.homedir,
           destinationProjects: projects,
         }),

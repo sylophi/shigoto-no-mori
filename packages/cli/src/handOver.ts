@@ -3,6 +3,9 @@
 // passes signals on to it without being ended by them, and ends as it
 // ended, killed by its signal included.
 import { spawn } from "node:child_process";
+import { startable, startOnWindows } from "@shigomori/engine/batchFiles";
+import { findOn } from "@shigomori/engine/executables";
+import { byFamily } from "@shigomori/engine/platform";
 import { errnoWords } from "@shigomori/engine/platformErrors";
 import { KILL_GRACE } from "@shigomori/engine/processes";
 import * as Effect from "effect/Effect";
@@ -55,6 +58,11 @@ const FROM_TERMINAL = new Set<NodeJS.Signals>([
   "SIGCONT",
 ]);
 
+// On Windows the console's Ctrl-C, Ctrl-Break and close reach every
+// process attached to it, the program included, so sm only holds them
+// off, and no other signal comes to pass on.
+const CONSOLE: ReadonlyArray<NodeJS.Signals> = ["SIGINT", "SIGBREAK", "SIGHUP"];
+
 // Runs `program` with the terminal handed to it, and ends as it ended.
 // Until it exits, the runtime's own handlers are set aside, so a signal
 // sm gets goes to the program and never interrupts sm. SIGTSTP stops sm
@@ -63,10 +71,35 @@ export const handOver = (
   kind: StartFailed["kind"],
   program: string,
   args: ReadonlyArray<string>,
-  options: {
-    readonly cwd: string;
-    readonly env: Readonly<Record<string, string | undefined>>;
-  },
+  options: Options,
+) =>
+  Effect.flatMap(startOf(program, args, options.env["PATH"] ?? ""), (start) =>
+    handedOver(kind, program, start, options),
+  );
+
+type Options = {
+  readonly cwd: string;
+  readonly env: Readonly<Record<string, string | undefined>>;
+};
+
+// How `program` starts: as named, and on Windows a bare name as cmd
+// finds it on `searched` (Node's spawn finds no batch file), a batch
+// file through cmd.
+const startOf = (
+  program: string,
+  args: ReadonlyArray<string>,
+  searched: string,
+) =>
+  byFamily({
+    posix: Effect.succeed({ command: program, args, shell: false }),
+    windows: startOnWindows((name) => findOn(searched, name), program, args),
+  });
+
+const handedOver = (
+  kind: StartFailed["kind"],
+  program: string,
+  start: ReturnType<typeof startable>,
+  options: Options,
 ) =>
   Effect.callback<
     { readonly code: number } | { readonly signal: NodeJS.Signals },
@@ -80,21 +113,26 @@ export const handOver = (
       Object.entries(options.env).filter(([, value]) => value !== undefined),
     );
     releaseStdin();
-    const child = spawn(program, args, {
+    const child = spawn(start.command, start.args, {
       cwd: options.cwd,
       env,
       stdio: "inherit",
+      shell: start.shell,
     });
     // Settles once the child is gone, or never started.
     const gone = new Promise<void>((resolve) => {
       child.once("exit", () => resolve());
       child.once("error", () => resolve());
     });
-    const pass = (signal: NodeJS.Signals) => {
+    const relay = (signal: NodeJS.Signals) => {
       if (!(atTerminal && FROM_TERMINAL.has(signal))) child.kill(signal);
       if (signal === "SIGTSTP") process.kill(process.pid, "SIGSTOP");
     };
-    const set = PASSED.map((signal) => {
+    const { held, pass } = byFamily({
+      posix: { held: PASSED, pass: relay },
+      windows: { held: CONSOLE, pass: () => {} },
+    });
+    const set = held.map((signal) => {
       const listeners = process.listeners(signal);
       const listener = () => pass(signal);
       process.removeAllListeners(signal);

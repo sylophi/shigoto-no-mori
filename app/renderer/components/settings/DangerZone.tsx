@@ -7,7 +7,7 @@ import {
   useConfirmTwice,
 } from "@/hooks/ui/useConfirmTwice";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { tildify } from "@shigomori/contracts/projectPaths";
+import { shownPath } from "@shigomori/ui/lib/devicePaths.ts";
 import { notifyError } from "@/lib/toast";
 import { DangerZoneView } from "@shigomori/ui/views/settings/DangerZoneView.tsx";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
@@ -61,7 +61,7 @@ export function DangerZone() {
 
   return (
     <DangerZoneView
-      root={runtime ? tildify(runtime.dataDir, runtime.homedir) : null}
+      root={runtime ? shownPath(runtime.dataDir, runtime.homedir) : null}
       nuking={nuking}
       progress={progress}
       left={left}

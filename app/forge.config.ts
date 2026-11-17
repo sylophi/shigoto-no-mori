@@ -1,7 +1,7 @@
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { MakerDMG } from "@electron-forge/maker-dmg";
+import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
-import { PublisherGithub } from "@electron-forge/publisher-github";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
@@ -12,16 +12,24 @@ import { config as loadEnv } from "dotenv";
 import { CLI_DIST_DIR, cliBinaryName } from "./shared/packaging/cliDist.mts";
 import { version } from "./package.json";
 import {
-  APP_REPO_NAME,
+  APP_REPO,
   APP_REPO_OWNER,
   flavorNames,
 } from "@shigomori/engine/flavor";
+import { programFile } from "@shigomori/engine/executables";
+import { byFamily } from "@shigomori/engine/platform";
+import {
+  squirrelPackageId,
+  squirrelVersion,
+} from "@shigomori/engine/windowsInstall";
 import { buildFlavor } from "./shared/packaging/buildFlavor.mts";
 import {
   CLOUDFLARED_BINARY_NAME,
   CLOUDFLARED_DIST_DIR,
 } from "./shared/packaging/cloudflaredDist.mts";
 import {
+  CLI_LAUNCHER_BINARY_NAME,
+  CLI_LAUNCHER_DIST_DIR,
   FILE_SYNC_BINARY_NAME,
   FILE_SYNC_DIST_DIR,
   NATIVEFS_BINARY_NAME,
@@ -37,6 +45,7 @@ import { macSigningIdentity } from "./shared/packaging/macSigning.mts";
 import { rendererSchemeName } from "./shared/packaging/rendererScheme.mts";
 import {
   NODE_PTY_ADDON,
+  NODE_PTY_CONPTY_ADDON,
   NODE_PTY_SPAWN_HELPER,
   nodePtyPrebuildDir,
 } from "./shared/packaging/nodePty.mts";
@@ -101,19 +110,39 @@ const dmgVolumeName =
     (name) => name.length <= DMG_VOLUME_NAME_MAX,
   ) ?? `v${version}`.slice(0, DMG_VOLUME_NAME_MAX);
 
+// What the package carries per OS. Of node-pty's Windows prebuild it
+// ships the ConPTY addon alone: the other files beside it serve options
+// and calls the host never makes (useConptyDll, the console process
+// list). Only Windows needs a launcher to put the terminal command on
+// PATH (host/lib/cli/launchers.ts). Linux is packaged by
+// scripts/package-linux.mts, not forge.
+const osPackage = byFamily({
+  posix: {
+    cliLauncher: false,
+    ptyPrebuilds: "darwin-.*",
+    ptyFiles: [NODE_PTY_ADDON, NODE_PTY_SPAWN_HELPER],
+  },
+  windows: {
+    cliLauncher: true,
+    ptyPrebuilds: "win32-[^/]+(/conpty\\.node)?",
+    ptyFiles: [NODE_PTY_CONPTY_ADDON],
+  },
+});
+
 // Forge's Vite plugin normally ships only the .vite/ bundles. node-pty
 // (the script console's PTY) is the one dependency Vite can't bundle:
-// its loader requires the native addon by path and posix_spawns the
-// spawn-helper next to it, so the package has to exist as real files:
-// its manifest, the JS in lib/, and the prebuilt darwin binaries.
-// Everything else in the package (sources, typings, tests' fixtures)
-// stays out, as do the files of every other node_modules entry (the
-// packager's pruner still creates an empty directory per production
+// its loader requires the native addon by path and, on a Mac,
+// posix_spawns the spawn-helper next to it, so the package has to exist
+// as real files: its manifest, the JS in lib/, and the OS's prebuilt
+// binaries. Everything else in the package (sources, typings, tests'
+// fixtures) stays out, as do the files of every other node_modules entry
+// (the packager's pruner still creates an empty directory per production
 // dependency, which is harmless). Paths always start with "/" and
 // directories are filtered too, so the node_modules parents have to
 // pass for their children to be visited.
-const NODE_PTY_SHIPPED =
-  /^\/node_modules(\/node-pty(\/(package\.json|lib(\/.*)?|prebuilds(\/darwin-.*)?))?)?$/;
+const NODE_PTY_SHIPPED = new RegExp(
+  `^/node_modules(/node-pty(/(package\\.json|lib(/.*)?|prebuilds(/${osPackage.ptyPrebuilds})?))?)?$`,
+);
 const packagerIgnore = (file: string): boolean => {
   if (!file) return false;
   if (file.startsWith("/.vite")) return false;
@@ -143,6 +172,9 @@ const config: ForgeConfig = {
     name: names.appName,
     appBundleId: names.bundleId,
     appCopyright: "© 2026 sylophi",
+    // Squirrel's Start menu folder is named for it
+    // (main/electron/squirrel.ts).
+    win32metadata: { CompanyName: APP_REPO_OWNER },
     // The renderer-origin scheme (main/electron/clerk.ts): packaged
     // builds load the renderer from <scheme>://app, and Clerk's OAuth
     // redirects deep-link back to it. macOS routes the scheme to the
@@ -157,18 +189,21 @@ const config: ForgeConfig = {
     // into the user's bin dir.
     extraResource: [
       "resources/licenses",
-      `${CLI_DIST_DIR}/${cliBinaryName(flavor)}`,
+      `${CLI_DIST_DIR}/${programFile(cliBinaryName(flavor))}`,
       // The tunnel connector, fetched by the prePackage hook below for
       // the target platform (shared/packaging/cloudflaredDist.mts pins
       // it), so remote access needs nothing installed.
-      `${CLOUDFLARED_DIST_DIR}/${CLOUDFLARED_BINARY_NAME}`,
+      `${CLOUDFLARED_DIST_DIR}/${programFile(CLOUDFLARED_BINARY_NAME)}`,
       // The file-sync engine (continuous worktree mirroring), compiled
       // by the prePackage hook and spawned by the host
       // (host/fileSync/runner.ts).
-      `${FILE_SYNC_DIST_DIR}/${FILE_SYNC_BINARY_NAME}`,
+      `${FILE_SYNC_DIST_DIR}/${programFile(FILE_SYNC_BINARY_NAME)}`,
       // The filesystem helper (the filesystem calls Node lacks), compiled by
       // the prePackage hook the same way.
-      `${NATIVEFS_DIST_DIR}/${NATIVEFS_BINARY_NAME}`,
+      `${NATIVEFS_DIST_DIR}/${programFile(NATIVEFS_BINARY_NAME)}`,
+      ...(osPackage.cliLauncher
+        ? [`${CLI_LAUNCHER_DIST_DIR}/${programFile(CLI_LAUNCHER_BINARY_NAME)}`]
+        : []),
     ],
     // The Local Network (macOS 15+) and Automation prompts' sentences,
     // shared with the dev bundle. See shared/packaging/infoPlist.mts.
@@ -212,6 +247,7 @@ const config: ForgeConfig = {
       // the terminal sm (Bun).
       runScript("build-go.mts", "file-sync");
       runScript("build-go.mts", "nativefs");
+      if (osPackage.cliLauncher) runScript("build-go.mts", "cli-launcher");
       runScript("build-cli.mts");
       // Fetch the pinned cloudflared for the TARGET platform, not the
       // build machine's: a cross-arch package must ship the arch it
@@ -228,7 +264,7 @@ const config: ForgeConfig = {
     // it, fail the build here, not the first script run of a shipped app.
     packageAfterCopy: async (_config, buildPath, _electron, platform, arch) => {
       const prebuild = path.join(buildPath, nodePtyPrebuildDir(platform, arch));
-      for (const file of [NODE_PTY_ADDON, NODE_PTY_SPAWN_HELPER]) {
+      for (const file of osPackage.ptyFiles) {
         const full = path.join(prebuild, file);
         const mode =
           file === NODE_PTY_SPAWN_HELPER ? fsConstants.X_OK : fsConstants.R_OK;
@@ -295,14 +331,20 @@ const config: ForgeConfig = {
       ["darwin"],
     ),
     new MakerZIP({}, ["darwin"]),
-  ],
-  publishers: [
-    new PublisherGithub({
-      // Derived, not restated: publishing to a repo the CLI's updater
-      // doesn't poll would look exactly like "no updates ever appear".
-      repository: { owner: APP_REPO_OWNER, name: APP_REPO_NAME },
-      draft: false,
-    }),
+    // Windows installs per user into %LOCALAPPDATA%\<name>, named like
+    // the Linux install's folder. The update feed serves its full
+    // .nupkg. The package's version is one Squirrel ranks right, and the
+    // app's own stays the real one. Apps & features fetches its icon
+    // from iconUrl at install.
+    new MakerSquirrel(
+      {
+        name: squirrelPackageId(flavor),
+        version: squirrelVersion(version),
+        setupIcon: "assets/icon.ico",
+        iconUrl: `https://raw.githubusercontent.com/${APP_REPO}/main/app/assets/icon.ico`,
+      },
+      ["win32"],
+    ),
   ],
   plugins: [
     new VitePlugin({

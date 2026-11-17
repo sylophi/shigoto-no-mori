@@ -21,6 +21,7 @@
 // palette's, the commit's, the palette's changes' and an edit's save
 // also answer Ctrl in place of ⌘ (⌃K is ⌘K, ⌃↩ is ⌘↩). No other chord
 // has a Ctrl twin.
+import { isMac } from "./platform.ts";
 
 // Where an action acts. The window is every page, and a page or a
 // dialog is only itself, so two of them can share a chord.
@@ -378,10 +379,9 @@ function chordAria(chord: Chord, mac: boolean): string {
     .join("+");
 }
 
-// A chord as an Electron accelerator, for the shell's menu, which is
-// macOS's alone.
+// A chord as an Electron accelerator, for the shell's menu.
 function chordAccelerator(chord: Chord): string {
-  return chordText(chord, "Cmd");
+  return chordText(chord, "CmdOrCtrl");
 }
 
 // ---- a window's keymap ----
@@ -483,9 +483,10 @@ export function menuAccelerators(
   return accelerators;
 }
 
-// The default bindings, for a scene: a Mac's, as the fixtures are.
+// The default bindings, for a scene: this machine's, a Mac's in a
+// render with no browser (platform.ts).
 const DEFAULT_KEYMAP = resolveKeymap(undefined, {
-  mac: true,
+  mac: isMac,
   desktop: true,
 });
 

@@ -126,6 +126,10 @@ Poses ride the URL:
   `?migration=`.
 - `?fresh=1`: Studio Mac a fresh install with no project, for the
   home a fresh install opens on.
+- `?windows=sm,mb`: the devices on Windows, by the same keys, with
+  their paths on drive `C:` and Windows launchers. The folder picker
+  browses up from a drive to the drives. With `sm`, this window poses a Windows viewer too
+  (its keys, its file manager and its sidebar on the right).
 - `?notSharing=mb,mini`: the devices with sharing off, by the same
   keys, which then serve this page nothing.
 - `?outdated=mb:terminals.scripts,mini:core`: the devices on another
@@ -145,6 +149,13 @@ Poses ride the URL:
 - `?mirrorEngine=running|starting|stopped|unavailable`: every
   device's mirror engine (default `running`), for the reason the
   Mirror buttons give when it can't take a start.
+- `?mirrorRefused=1`: every mirror start refused by the copy's device,
+  which can't make the symlinks the original tracks, in the words its
+  landing gives (with `?windows=`, the Windows ones).
+- `?crlfScripts=1`: every mirror start's original tracks scripts with
+  Windows line endings, as a Windows checkout gives them, for the Live
+  step's line about them on a copy that isn't on Windows (with
+  `?windows=sm`, Studio Mac the original).
 - `?mirrored=1`: a mirror running from boot (Studio Mac's
   `brave-badger` with a copy on MacBook), for the surfaces that list
   mirrors (the Live page, the sidebar's fold).

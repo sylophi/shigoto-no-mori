@@ -7,7 +7,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { insideTheRoot } from "@shigomori/ui/styles/insideTheRoot.ts";
 import { woff2Only } from "@shigomori/ui/styles/woff2Only.ts";
-import type { UserConfig } from "vite";
+import { normalizePath, type UserConfig } from "vite";
 import { dedupe } from "./vite.dedupe";
 import { materialIcons } from "./vite.materialIcons";
 import { reactCompiler } from "./vite.reactCompiler";
@@ -24,8 +24,9 @@ export function rendererTreeConfig(opts: {
   // The page vite pre-bundles deps from, relative to the root.
   entry: string;
 }): UserConfig {
+  // A glob, so with forward slashes on Windows too.
   const fromRoot = (path: string) =>
-    relative(opts.root, resolve(appRoot, path));
+    normalizePath(relative(opts.root, resolve(appRoot, path)));
   return {
     root: opts.root,
     // The web client's public files, for the theme boot script every

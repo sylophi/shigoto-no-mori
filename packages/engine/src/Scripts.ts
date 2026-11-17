@@ -19,6 +19,7 @@ import {
   parseMakefile,
   type Runner,
 } from "./scriptFiles.ts";
+import * as Shells from "./Shells.ts";
 import * as Usage from "./Usage.ts";
 import { entryExists, isDirectory } from "./entries.ts";
 
@@ -137,11 +138,13 @@ export class Scripts extends Context.Service<
     // for a package.json script, just or make for a recipe or target.
     // From a terminal a recipe can be named as two words (`just build`),
     // which takes the first of `extra`, and `script` is the name it
-    // resolved to.
+    // resolved to. With `inShell` the tool is found as the script shell
+    // finds it, for a command run as a line there.
     readonly command: (input: {
       readonly worktree: { readonly path: string; readonly name: string };
       readonly script: string;
       readonly extra: ReadonlyArray<string>;
+      readonly inShell: boolean;
     }) => Effect.Effect<
       {
         readonly program: string;
@@ -268,6 +271,7 @@ const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const usage = yield* Usage.Usage;
+  const shells = yield* Shells.Shells;
   const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
   // The manager a package.json's lockfile picks, npm without one.
@@ -457,6 +461,7 @@ const make = Effect.gen(function* () {
     readonly worktree: { readonly path: string; readonly name: string };
     readonly script: string;
     readonly extra: ReadonlyArray<string>;
+    readonly inShell: boolean;
   }) {
     const { scripts, files } = yield* readFound(input.worktree.path);
     const manager = yield* packageManager(input.worktree.path);
@@ -485,7 +490,9 @@ const make = Effect.gen(function* () {
     }
     const { script, extra } = found;
     const tool = script.runner ?? manager;
-    const program = yield* findExecutable(tool);
+    const program = yield* (
+      input.inShell ? shells.findForScript : findExecutable
+    )(tool);
     if (Option.isNone(program)) {
       return yield* refused("no-tool", {
         name: tool,

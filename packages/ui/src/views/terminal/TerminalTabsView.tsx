@@ -89,12 +89,15 @@ export function TerminalTabsView({
       {/* Its controls are clear of the window's title-bar drag strip,
           which the row sits under when docked at the side. As a title
           bar it clears the traffic lights and centers on them (y=23,
-          main/electron/windows.ts), and drags the window. */}
+          main/electron/windows.ts), or the caption buttons and lines up
+          with them, and drags the window. */}
       <div
         className={cn(
           "relative flex shrink-0 flex-wrap items-center gap-x-2",
-          titleBar ? "pt-[7px] pl-[92px]" : "pl-3",
           ["pr-3", "pr-9", "pr-16", "pr-23"][buttons],
+          titleBar
+            ? "pt-[7px] pl-[92px] sidebar-right:pt-0 sidebar-right:pr-caption sidebar-right:pl-3"
+            : "pl-3",
           onHide ? "phone:pr-9" : "phone:pr-3",
         )}
         style={titleBar ? dragRegion("drag") : undefined}

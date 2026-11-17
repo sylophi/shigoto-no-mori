@@ -5,13 +5,11 @@
 // the same the install script checks. A version runs from its own
 // folder to its end, so the install changes nothing that runs, and the
 // host's unit starts the new one when the host exits.
-import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
-import * as Stream from "effect/Stream";
 import type { Flavor } from "../flavor.ts";
 import {
   HOST_BUNDLE,
@@ -22,14 +20,13 @@ import {
 import * as Paths from "../Paths.ts";
 import type { ReleaseInfo } from "../updateFeed.ts";
 import {
-  DigestRejected,
   NotInBundle,
+  type Ran,
   SignatureRejected,
   StagingFailed,
   SwapFailed,
   type UpdateInput,
   isNewer,
-  report,
 } from "./documents.ts";
 import type { FilesArea } from "./files.ts";
 import type { Installation } from "./installation.ts";
@@ -37,6 +34,11 @@ import type { Installation } from "./installation.ts";
 // What an update leaves beside versions/ while it lands.
 const INCOMING = ".incoming-";
 const NEXT_CURRENT = ".current-";
+
+// Nothing to start: the host's unit starts the new version once the host
+// exits.
+const relaunch = () =>
+  Effect.succeed<Ran>({ ok: true, output: "", cause: undefined });
 
 export const makeVersions = ({
   flavor,
@@ -50,7 +52,7 @@ export const makeVersions = ({
     const path = yield* Path.Path;
     const install = linuxInstall(flavor, yield* Paths.Paths);
     const { download: downloadPath, extract: extractDir } = files.at;
-    const { removeAll, prune, run, makeDirectory } = files;
+    const { removeAll, prune, run, makeDirectory, checkDigest } = files;
 
     // The version folder the binary runs from.
     const installed = Effect.fn("Updater.installedVersion")(function* (
@@ -95,15 +97,6 @@ export const makeVersions = ({
       }
     });
 
-    const digestOf = (file: string) =>
-      Effect.gen(function* () {
-        const hash = createHash("sha256");
-        yield* Stream.runForEach(fs.stream(file), (chunk) =>
-          Effect.sync(() => hash.update(chunk)),
-        );
-        return `sha256:${hash.digest("hex")}`;
-      });
-
     // The tarball holds to its release's digest before anything is
     // unpacked, and holds the one folder of the version offered.
     const unpack = Effect.fn("Updater.unpackVersion")(function* (
@@ -112,21 +105,7 @@ export const makeVersions = ({
       input: UpdateInput,
     ) {
       const { version } = release;
-      yield* report(input, { phase: "verifying", version });
-      if (!release.digest.startsWith("sha256:")) {
-        yield* prune(downloadPath);
-        return yield* new DigestRejected({ reason: "missing", version });
-      }
-      const digest = yield* digestOf(downloadPath).pipe(
-        Effect.mapError(
-          (cause) =>
-            new StagingFailed({ reason: "read", path: downloadPath, cause }),
-        ),
-      );
-      if (digest !== release.digest) {
-        yield* prune(downloadPath);
-        return yield* new DigestRejected({ reason: "other", version });
-      }
+      yield* checkDigest(release, input);
       yield* removeAll(extractDir);
       yield* makeDirectory(extractDir);
       const extracted = yield* run("tar", [
@@ -238,5 +217,6 @@ export const makeVersions = ({
       pruneLeftovers,
       unpack,
       swap,
+      relaunch,
     } satisfies Installation;
   });

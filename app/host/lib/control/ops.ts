@@ -42,8 +42,6 @@ import {
 } from "@shigomori/contracts/leaveOutRule";
 import { type Project } from "@shigomori/contracts/schemas";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
-import { tildify } from "@shigomori/contracts/projectPaths";
-import { homedir } from "node:os";
 import {
   parseLeaveOutPreset,
   sharedSettingKeys,
@@ -99,6 +97,7 @@ import {
   repoIdentityOf,
   roster,
   standingsOf,
+  targetFolder,
   worktreesOn,
 } from "./peers";
 
@@ -204,7 +203,11 @@ const settled =
         Effect.mapError(hostCallFailure),
       );
       if ("done" in moved) return moved.done;
-      const source = yield* settleSource(input.source ?? "keep", moved.settle);
+      const source = yield* settleSource(
+        input.source ?? "keep",
+        moved.moved.files,
+        moved.settle,
+      );
       return { ...moved.moved, source };
     });
 
@@ -396,7 +399,11 @@ export const send = settled<"send">((input, ctx) =>
         : {}),
     };
     if (mirror) {
-      const { session, ...sent } = yield* startMirrorTo(payload, ctx);
+      const {
+        session,
+        crlfScripts: _crlfScripts,
+        ...sent
+      } = yield* startMirrorTo(payload, ctx);
       return {
         done: { ...sent, device, copySide: "remote" as const, session },
       };
@@ -514,7 +521,11 @@ export const bring = settled<"bring">((input, ctx) =>
       if (running !== undefined) {
         return { done: yield* alreadyMirrored(running, undefined) };
       }
-      const { session, ...pulled } = yield* startMirrorFrom(
+      const {
+        session,
+        crlfScripts: _crlfScripts,
+        ...pulled
+      } = yield* startMirrorFrom(
         {
           sourceDeviceId: found.device.deviceId,
           sourceProjectId: found.projectId,
@@ -585,7 +596,7 @@ export const clone = (
         projectId: project.id,
         ...(input.cloneInto === undefined
           ? {}
-          : { parentDir: tildify(input.cloneInto, homedir()) }),
+          : { parentDir: targetFolder(input.cloneInto) }),
       });
       return {
         ...cloned,

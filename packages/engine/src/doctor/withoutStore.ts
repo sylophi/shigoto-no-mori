@@ -1,9 +1,9 @@
 // The doctor's checks that need no state, for a data dir the store won't open.
 import { tildify } from "@shigomori/contracts/projectPaths";
 import * as Effect from "effect/Effect";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as ProcessTable from "../ProcessTable.ts";
 import * as Paths from "../Paths.ts";
 import { stagingHolder } from "../stagingLock.ts";
 import { type RunInput, check } from "./documents.ts";
@@ -18,7 +18,7 @@ export const makeWithoutStore = ({
   readonly checklist: ChecklistArea;
 }) =>
   Effect.gen(function* () {
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const processTable = yield* ProcessTable.ProcessTable;
     const paths = yield* Paths.Paths;
     const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
@@ -45,10 +45,7 @@ export const makeWithoutStore = ({
         const processes = yield* checkOrphanTunnel;
         if (!dir.usable) return [...environment, dir.entry, ...processes];
         const holder = yield* stagingHolder(stagingLock).pipe(
-          Effect.provideService(
-            ChildProcessSpawner.ChildProcessSpawner,
-            spawner,
-          ),
+          Effect.provideService(ProcessTable.ProcessTable, processTable),
         );
         return [
           ...environment,

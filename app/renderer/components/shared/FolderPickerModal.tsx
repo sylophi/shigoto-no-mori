@@ -12,9 +12,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useBinding } from "@/hooks/ui/useKeymap";
 import { notifyError } from "@/lib/toast";
 import {
-  canNavigateUp,
   ensureTrailingSep,
-  isAnchoredPath,
   normalizeForSubmit,
 } from "@shigomori/contracts/projectPaths";
 import { useApi } from "@/lib/runtime/pageApi";
@@ -31,7 +29,7 @@ export function FolderPickerModal({
   title?: string;
   confirmLabel?: string;
   // One line under the input explaining what the picked folder is for.
-  // Also shown by the native dialog (its message) when Finder is used.
+  // Also shown by the native dialog (its message).
   hint?: string;
   onPick: (path: string) => void;
   onClose: () => void;
@@ -56,7 +54,8 @@ export function FolderPickerModal({
     setHighlighted,
     enabled: browsable,
   });
-  const { listingEnabled, listing, leafFilter, error } = browse;
+  const { paths, listingEnabled, listing, leafFilter, error, canBrowseUp } =
+    browse;
 
   // The folder we'd confirm, off the listing's resolved path where
   // there is one: the listed folder itself when the input ends in "/"
@@ -67,8 +66,7 @@ export function FolderPickerModal({
     listingEnabled && listing
       ? `${leafFilter ? ensureTrailingSep(listing.path) : listing.path}${leafFilter}`
       : normalizeForSubmit(query);
-  const canConfirm = isAnchoredPath(confirmTarget) && !(browsable && error);
-  const canBrowseUp = canNavigateUp(query);
+  const canConfirm = paths.isFolder(confirmTarget) && !(browsable && error);
 
   const confirm = () => {
     if (!canConfirm) return;
@@ -104,7 +102,7 @@ export function FolderPickerModal({
   };
 
   const openFinder = async () => {
-    // Open Finder where the picker is, not at ~.
+    // Opens where the picker is, not at ~.
     const defaultPath = listing?.path;
     let picked: string | null;
     try {

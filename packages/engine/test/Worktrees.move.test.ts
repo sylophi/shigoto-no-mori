@@ -1,22 +1,19 @@
 // The re-key of a worktree's dirty capture, which the data-folder move
 // and its undo run: a capture is never written over or taken for none,
 // and one that can't follow stays where it was. And a create at a path
-// whose id holds one leaves it (real git on a sandbox data dir).
+// whose id holds one leaves it (real git on a sandbox data dir). And a
+// move ends what the app runs in the worktree only on Windows.
 import assert from "node:assert/strict";
-import {
-  chmodSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "../src/canonicalPath.ts";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import { afterEach, beforeEach, it } from "vitest";
+import { Holders } from "../src/Holders.ts";
 import * as Registry from "../src/Registry.ts";
 import * as Worktrees from "../src/Worktrees.ts";
 import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
+import { heldIn, unreadable } from "./lib/holds.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox;
@@ -24,6 +21,8 @@ beforeEach(() => {
   box = sandbox();
 });
 afterEach(() => box.remove());
+
+const silent = { report: () => Effect.void, color: false };
 
 // A dirty capture whose ref can't follow (a lock git left on it) fails
 // the re-key. Asked again, the re-key carries it.
@@ -184,11 +183,11 @@ it("fails a re-key back whose capture can't be read, and carries it once it can"
       const head = box.git(repo, "rev-parse", "HEAD").trim();
       box.git(repo, "update-ref", `refs/shigomori/dirty/${to}`, head);
       const loose = join(repo, ".git", "refs", "shigomori", "dirty", to);
-      chmodSync(loose, 0o000);
+      const release = unreadable(loose);
       const first = yield* Effect.flip(
         worktrees.rekey(project, to, fromPath, { expect: head, back: true }),
       );
-      chmodSync(loose, 0o644);
+      release();
       yield* worktrees.rekey(project, to, fromPath, {
         expect: head,
         back: true,
@@ -246,7 +245,6 @@ it("fails a re-key back over a packed-refs git can't parse, and carries it once 
 // and the capture that one left may be the only copy of its work.
 it("leaves the dirty capture a create finds under the new worktree's id", async () => {
   const repo = box.repo("proj", { "README.md": "hi\n" });
-  const silent = { report: () => Effect.void, color: false };
   const result = (await box.engine(
     Effect.gen(function* () {
       const registry = yield* Registry.Registry;
@@ -286,4 +284,43 @@ it("leaves the dirty capture a create finds under the new worktree's id", async 
     }),
   )) as { sameId: boolean; kept: boolean };
   assert.deepEqual(result, { sameId: true, kept: true });
+});
+
+it("lets go of what the app runs in a worktree before a move only on Windows", async () => {
+  const repo = box.repo("proj", { "README.md": "hi\n" });
+  const located = (await box.engine(
+    Effect.gen(function* () {
+      const project = yield* (yield* Registry.Registry).register({
+        name: "proj",
+        path: repo,
+      });
+      const worktrees = yield* Worktrees.Worktrees;
+      const { worktree } = yield* worktrees.create(
+        project,
+        { name: "fox", skipSetup: true },
+        silent,
+      );
+      return yield* worktrees.resolve(yield* worktrees.nowhere, {
+        projectId: project.id,
+        worktreeId: worktree.id,
+      });
+    }),
+  )) as Worktrees.Located;
+  const { holders, told, settle } = heldIn(located.worktree.path);
+  const to = join(dirname(located.worktree.path), "vixen");
+  const moved = (await box.engine(
+    Effect.flatMap(Effect.service(Worktrees.Worktrees), (worktrees) =>
+      worktrees.move(located, to),
+    ).pipe(Effect.provideService(Holders, holders)),
+  )) as { worktree?: { path: string } };
+  const alive = await settle();
+  assert.equal(moved.worktree?.path, to);
+  const windows = process.platform === "win32";
+  assert.deepEqual(
+    told.map(({ owner }) => owner),
+    windows
+      ? [{ projectId: located.project.id, worktreeId: located.worktree.id }]
+      : [],
+  );
+  assert.equal(alive, !windows);
 });

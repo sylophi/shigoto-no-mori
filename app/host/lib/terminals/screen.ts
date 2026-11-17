@@ -19,7 +19,7 @@ export type Screen<A> = {
   readonly behind: () => number;
   // Once what was written is parsed.
   readonly parsed: Effect.Effect<void>;
-  // Once what came before, drawn at the old size, is parsed.
+  // Parses what came before at the old size, then takes the new one.
   readonly resize: (size: GridSize) => void;
   // The screen as output that draws it, scrollback, modes and all, its
   // size, and the `at` of the last write in it.
@@ -67,7 +67,7 @@ export function makeScreen<A>(size: GridSize, past: string, at: A): Screen<A> {
     write,
     behind: () => behind,
     parsed: afterParsed(() => undefined),
-    resize: ({ cols, rows }) => term.write("", () => term.resize(cols, rows)),
+    resize: ({ cols, rows }) => term.resize(cols, rows),
     snapshot: afterParsed(() => {
       const data = serializer.serialize();
       // It ends with the scroll region when there is one, which puts the

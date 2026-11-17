@@ -14,6 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { isolatedGitEnv } from "../../../../test/gitIsolation.ts";
+import { programFile } from "../../src/executables.ts";
 
 const dir = join(import.meta.dirname, "..", "..", "..", "..", "nativefs");
 let built: string | undefined;
@@ -35,7 +36,7 @@ export function nativefs(): string {
   const binary = join(
     tmpdir(),
     `nativefs-${hash.digest("hex").slice(0, 16)}`,
-    "nativefs",
+    programFile("nativefs"),
   );
   if (!existsSync(binary)) {
     mkdirSync(dirname(binary), { recursive: true });

@@ -8,7 +8,7 @@ import * as Graph from "./graph";
 import * as BackgroundFetch from "@host/lib/BackgroundFetch";
 import * as Tunnel from "@host/direct/Tunnel";
 import * as Agents from "@shigomori/engine/Agents";
-import { dirname } from "node:path";
+import { dirname } from "@shigomori/engine/canonicalPath";
 import * as HostFacts from "@host/lib/HostFacts";
 import * as HostRpc from "@host/socket/hostRpc";
 import { applyAccount, noteAccountDevices } from "./handlers";

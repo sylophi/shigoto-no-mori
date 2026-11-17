@@ -1,16 +1,18 @@
 // A typed path read as a folder browse, shared by the add-project modal
 // and the folder picker: the directory part is listed, the last segment
 // filters that listing by prefix, and the two moves (into an entry, up
-// to the parent) rewrite the query and clear the highlight.
+// to the parent) rewrite the query and clear the highlight. The query
+// is spelled as the engine spells it, and the moves as the scoped
+// device's paths go (devicePaths.ts).
 import {
-  appendBrowsePathSegment,
   getBrowseDirectoryPath,
   getBrowseLeafSegment,
-  getBrowseParentPath,
   hasTrailingSlash,
 } from "@shigomori/contracts/projectPaths";
 import type { BrowseListing } from "@shigomori/ui/lib/browseListing.ts";
+import { devicePaths } from "@shigomori/ui/lib/devicePaths.ts";
 import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
+import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 
 interface UseBrowseListingOptions {
   query: string;
@@ -24,7 +26,11 @@ export function useBrowseListing({
   setQuery,
   setHighlighted,
   enabled = true,
-}: UseBrowseListingOptions): BrowseListing {
+}: UseBrowseListingOptions): BrowseListing & {
+  // Whether there is a folder above the listed one.
+  readonly canBrowseUp: boolean;
+} {
+  const paths = devicePaths(useRuntimeInfo().data?.homedir, query);
   const browseDir = getBrowseDirectoryPath(query);
   const leafFilter = hasTrailingSlash(query) ? "" : getBrowseLeafSegment(query);
 
@@ -41,12 +47,12 @@ export function useBrowseListing({
   );
 
   const browseTo = (name: string) => {
-    setQuery(appendBrowsePathSegment(query, name));
+    setQuery(paths.childOf(query, name));
     setHighlighted("");
   };
 
+  const parent = paths.parentOf(query);
   const browseUp = () => {
-    const parent = getBrowseParentPath(query);
     if (parent) {
       setQuery(parent);
       setHighlighted("");
@@ -54,6 +60,7 @@ export function useBrowseListing({
   };
 
   return {
+    paths,
     browseDir,
     leafFilter,
     // Whether the query names a folder to list (it ends in a slash).
@@ -62,6 +69,7 @@ export function useBrowseListing({
     isLoading,
     error,
     filtered,
+    canBrowseUp: hasTrailingSlash(query) && parent !== null,
     browseTo,
     browseUp,
   };

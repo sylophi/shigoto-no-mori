@@ -92,7 +92,12 @@ export const runCommand = Command.make(
           problem: `\`${binaryName} run <script>\` hands the terminal to the script. --json only applies to the list form.`,
         });
       }
-      const command = yield* scripts.command({ worktree, script, extra });
+      const command = yield* scripts.command({
+        worktree,
+        script,
+        extra,
+        inShell: false,
+      });
       const context = yield* (yield* Worktrees.Worktrees).scriptContext({
         project,
         worktree,

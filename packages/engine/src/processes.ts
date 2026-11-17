@@ -4,7 +4,6 @@
 // caller ends it with its process group. The long-lived children
 // (cloudflared, the file-sync daemon, the scripts) hold their handles
 // themselves.
-import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -17,7 +16,12 @@ import * as Schema from "effect/Schema";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
+import { startOnWindows } from "./batchFiles.ts";
+import { findOn } from "./executables.ts";
+import { keptAnswers } from "./keptAnswers.ts";
+import { byFamily } from "./platform.ts";
 import { isMissingProgram } from "./platformErrors.ts";
+import * as Shells from "./Shells.ts";
 import { CD_FILE_ENV } from "./shellHook.ts";
 
 // How long a child has after its SIGTERM before it is SIGKILLed. Given
@@ -46,13 +50,51 @@ const withDefaults = (command: ChildProcess.Command): ChildProcess.Command =>
       })
     : command;
 
+// Windows starts a batch file only through cmd (startable), and Node
+// finds a bare name only as an .exe or a .com, past a batch file
+// earlier on PATH, so a bare name is found as cmd finds it, on the
+// child's PATH (startOnWindows). Looked up again each minute, for a
+// program installed or removed meanwhile.
+const windowsSpawner = Effect.fnUntraced(function* (
+  inner: ChildProcessSpawner.ChildProcessSpawner["Service"],
+) {
+  const found = yield* keptAnswers(
+    ([searched, name]: readonly [string, string]) => findOn(searched, name),
+    "1 minute",
+  );
+  return (command: ChildProcess.Command) =>
+    Effect.gen(function* () {
+      if (!ChildProcess.isStandardCommand(command)) {
+        return yield* inner.spawn(command);
+      }
+      const searched =
+        command.options.env?.["PATH"] ?? process.env["PATH"] ?? "";
+      const started = yield* startOnWindows(
+        (name) => found.get([searched, name]),
+        command.command,
+        command.args,
+      );
+      return yield* inner.spawn(
+        ChildProcess.make(started.command, started.args, {
+          ...command.options,
+          shell: started.shell,
+        }),
+      );
+    });
+});
+
 // The platform's spawner with those defaults, provided once by each
 // graph that spawns: the engine's (`layer.ts`) and the host's.
 export const childDefaults = Layer.effect(
   ChildProcessSpawner.ChildProcessSpawner,
-  Effect.map(ChildProcessSpawner.ChildProcessSpawner, (inner) =>
-    ChildProcessSpawner.make((command) => inner.spawn(withDefaults(command))),
-  ),
+  Effect.gen(function* () {
+    const inner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const spawn = yield* byFamily({
+      posix: Effect.succeed(inner.spawn),
+      windows: windowsSpawner(inner),
+    });
+    return ChildProcessSpawner.make((command) => spawn(withDefaults(command)));
+  }),
 );
 
 // Whether a process with the pid exists, whoever owns it. Signal 0
@@ -68,88 +110,6 @@ export const isPidAlive = (pid: number) => {
 };
 
 export const pidAlive = (pid: number) => Effect.sync(() => isPidAlive(pid));
-
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
-
-// ps's `lstart` ("Sat Oct 17 03:21:24 2026"), as ps prints it under
-// PS_BIRTH_ENV, in epoch milliseconds, and none for anything else.
-export const parseLstart = (text: string): Option.Option<number> => {
-  const match =
-    /^\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})\s+(\d{4})$/.exec(
-      text.trim(),
-    );
-  if (match === null) return Option.none();
-  const [, month = "", day, hours, minutes, seconds, year] = match;
-  const index = MONTHS.indexOf(month);
-  if (index < 0) return Option.none();
-  return Option.some(
-    DateTime.toEpochMillis(
-      DateTime.makeUnsafe({
-        year: Number(year),
-        month: index + 1,
-        day: Number(day),
-        hour: Number(hours),
-        minute: Number(minutes),
-        second: Number(seconds),
-      }),
-    ),
-  );
-};
-
-// What `ps -o lstart` runs under: UTC, so a zone or a daylight-saving
-// change doesn't move a birth, and C, so its names are English.
-export const PS_BIRTH_ENV = { TZ: "UTC", LC_ALL: "C" };
-
-// When `pid` was born, in epoch milliseconds to the second: the stamp
-// the kernel took at its fork, which no later clock step moves. None
-// when ps can't say.
-export const startOf = (pid: number) =>
-  exec("ps", ["-o", "lstart=", "-p", String(pid)], {
-    env: PS_BIRTH_ENV,
-    extendEnv: true,
-    timeout: "5 seconds",
-  }).pipe(
-    Effect.map(({ stdout }) => parseLstart(stdout)),
-    Effect.orElseSucceed(() => Option.none<number>()),
-  );
-
-// A record's birth when the process that wrote it couldn't read its own.
-export const UNKNOWN_BIRTH = 0;
-
-// How far a birth ps reports may be from a recorded one of the same
-// process: ps counts in whole seconds, and a spawn is stamped just after
-// it returns. Generous enough for a loaded machine, still orders of
-// magnitude tighter than any plausible pid reuse.
-export const BIRTH_TOLERANCE_MS = 5_000;
-
-// Whether the process that recorded itself as `pid`, born at
-// `startedAt`, still runs: a live pid born at another time is another
-// process the system handed the number to since. A birth unknown on
-// either side counts as the same process, so nothing takes over the
-// work of an owner it can't tell is gone.
-export const stillRunning = (pid: number, startedAt: number) =>
-  Effect.gen(function* () {
-    if (pid < 2 || !(yield* pidAlive(pid))) return false;
-    if (startedAt === UNKNOWN_BIRTH) return true;
-    const started = yield* startOf(pid);
-    return (
-      Option.isNone(started) ||
-      Math.abs(started.value - startedAt) <= BIRTH_TOLERANCE_MS
-    );
-  });
 
 const text = <E>(stream: Stream.Stream<Uint8Array, E>) =>
   stream.pipe(Stream.decodeText(), Stream.mkString);
@@ -187,25 +147,27 @@ export const captureToFiles = (
   Effect.scoped(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
+      const shells = yield* Shells.Shells;
       const dir = yield* fs.makeTempDirectoryScoped({ prefix: "sm-run-" });
       const out = `${dir}/out`;
       const err = options.all === true ? out : `${dir}/err`;
       const { onStderr } = options;
       // There before the shell opens it, for the tail to open first.
       if (onStderr !== undefined) yield* fs.writeFile(err, new Uint8Array());
+      const sh = yield* shells.containedSh(FILES_SCRIPT, [
+        out,
+        err,
+        command,
+        ...args,
+      ]);
       const handle = yield* spawner.spawn(
-        ChildProcess.make(
-          "/bin/sh",
-          ["-c", FILES_SCRIPT, out, err, command, ...args],
-          {
-            stdin: options.stdin ?? "ignore",
-            stderr: "ignore",
-            ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-            ...(options.env === undefined
-              ? {}
-              : { env: options.env, extendEnv: true }),
-          },
-        ),
+        ChildProcess.make(sh.program, sh.args, {
+          stdin: options.stdin ?? "ignore",
+          stderr: "ignore",
+          ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+          env: { ...options.env, ...sh.env },
+          extendEnv: true,
+        }),
       );
       const exited = Effect.gen(function* () {
         const said = yield* text(handle.stdout);
@@ -301,8 +263,16 @@ export const readToExit = <A, E, R>(
       handle.exitCode,
       Effect.andThen(Fiber.join(reading), Effect.never),
     );
-    // Nothing left to end is no failure.
-    yield* handle.kill({ forceKillAfter: KILL_GRACE }).pipe(Effect.ignore);
+    // Nothing left to end is no failure. Windows keeps no group to end
+    // once the command is gone, whose pid may be another process's by
+    // then, which the spawner's taskkill would end with its tree.
+    const endGroup = handle
+      .kill({ forceKillAfter: KILL_GRACE })
+      .pipe(Effect.ignore);
+    yield* byFamily({
+      posix: endGroup,
+      windows: Effect.void,
+    });
     return { read: yield* Fiber.join(reading), code: Number(code) };
   });
 

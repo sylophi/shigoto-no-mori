@@ -1,6 +1,7 @@
 import { app, dialog } from "electron";
 import { dialogContract } from "@shigomori/contracts/modules/dialog";
 import type { Handlers } from "@shigomori/contracts/types";
+import { canonicalPath } from "@shigomori/engine/canonicalPath";
 
 export const dialogHandlers: Handlers<typeof dialogContract> = {
   pickFolder: async (opts) => {
@@ -13,7 +14,7 @@ export const dialogHandlers: Handlers<typeof dialogContract> = {
       // sensible starting point when the caller has no better one.
       defaultPath: opts?.defaultPath ?? app.getPath("home"),
     });
-    if (result.canceled) return null;
-    return result.filePaths[0] ?? null;
+    const picked = result.canceled ? undefined : result.filePaths[0];
+    return picked === undefined ? null : canonicalPath(picked);
   },
 };

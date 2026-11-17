@@ -18,11 +18,11 @@
 // alone from its first step to its last (`DataDirLock`). A move a crash
 // cuts short is finished or undone at the next start: the move keeps a
 // journal in the data dir from before its re-key to its end, and a copy
-// to another volume goes into a sibling of the destination, flushed to
-// disk and renamed in only once whole. While the journal is there the
-// store refuses every write but the move's own, and every engine graph
-// but the doctor's settles it as it comes up (`settleLayer`), or keeps
-// refusing.
+// (to another volume, and every move on Windows) goes into a sibling of
+// the destination, flushed to disk and renamed in only once whole.
+// While the journal is there the store refuses every write but the
+// move's own, and every engine graph but the doctor's settles it as it
+// comes up (`settleLayer`), or keeps refusing.
 //
 // The journal (`dataDirMoveJournal.ts`) holds an entry per worktree that
 // moves, marked `planned`, `rekeyed` or `returned`. A strict read takes
@@ -75,7 +75,7 @@
 // before the relaunch goes with the old tree; a copy can take a mirrored
 // file mid-write (the peer's next cycle sends it again); under reftable
 // a capture ref git can't open reads as absent.
-import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
+import { isSameOrInside } from "@shigomori/contracts/projectPaths";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -88,6 +88,7 @@ import type * as Scope from "effect/Scope";
 import * as SqlClient from "effect/sql/SqlClient";
 import type * as Types from "effect/Types";
 import { DataDirLock } from "./DataDirLock.ts";
+import { byFamily } from "./platform.ts";
 import { dirtyRef } from "./Dirty.ts";
 import {
   JOURNAL,
@@ -567,10 +568,11 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     // What holds the folder let go (step 7).
     readonly releasing: Effect.Effect<void, E, R>;
     // The tree at `from` copied into `to` and flushed whole, holding the
-    // store with `holdingStore` (step 8).
+    // store with `holdingStore` (step 8). It is renamed to `landsAt` after.
     readonly copy: (
       from: string,
       to: string,
+      landsAt: string,
     ) => Effect.Effect<void, E, R | SqlClient.SqlClient>;
   },
 ) {
@@ -581,10 +583,23 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   const worktrees = yield* Worktrees.Worktrees;
   const { from, to, pointerFile, legacyPointerFile } = move;
   // A file or folder flushed to disk (on macOS, past the drive's cache).
-  const flushed = (at: string) =>
+  // Windows flushes a file only through a handle that may write it, and
+  // never a folder: a new name there reaches the disk when NTFS writes
+  // its journal, soon after but not on demand. That journal keeps its
+  // order, so a power loss takes the last names made, never one without
+  // those before it, and the move is undone or finished as after a crash
+  // between two steps.
+  const synced = (at: string, flag: "r" | "r+") =>
     Effect.scoped(
-      Effect.flatMap(fs.open(at, { flag: "r" }), (handle) => handle.sync),
+      Effect.flatMap(fs.open(at, { flag }), (handle) => handle.sync),
     );
+  const flushedFile = (at: string) =>
+    synced(at, byFamily({ posix: "r", windows: "r+" } as const));
+  const flushedFolder = (at: string) =>
+    byFamily({
+      posix: synced(at, "r"),
+      windows: Effect.void,
+    });
   const underFrom = (at: string) =>
     move.spellings.find((dir) => isSameOrInside(at, dir));
   // The registered projects, none of them inside the data dir.
@@ -628,7 +643,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     if (!move.toDefault) {
       yield* fs.makeDirectory(path.dirname(pointerFile), { recursive: true });
       yield* fs.writeFileString(pointerTmp, `${to}\n`);
-      yield* flushed(pointerTmp);
+      yield* flushedFile(pointerTmp);
       pointerStaged = true;
     }
     yield* retireStore;
@@ -715,23 +730,29 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     const landed = Effect.sync(() => {
       renamed = true;
     });
-    const sameVolume = yield* fs.rename(from, to).pipe(
+    // Windows won't rename a folder while a file in it is open, and this
+    // process holds the store in it open throughout: there it is copied.
+    const rename = fs.rename(from, to).pipe(
       Effect.andThen(landed),
       Effect.as(true),
       Effect.catchIf(crossesVolumes, () => Effect.succeed(false)),
       Effect.uninterruptible,
     );
+    const sameVolume = yield* byFamily({
+      posix: rename,
+      windows: Effect.succeed(false),
+    });
     if (!sameVolume) {
       const partial = `${to}.partial-${suffix}`;
       journal.partial = partial;
       yield* journalHere;
-      yield* hooks.copy(from, partial);
+      yield* hooks.copy(from, partial, to);
       yield* fs
         .rename(partial, to)
         .pipe(Effect.andThen(landed), Effect.uninterruptible);
     }
-    yield* flushed(path.dirname(to));
-    if (sameVolume) yield* flushed(path.dirname(from));
+    yield* flushedFolder(path.dirname(to));
+    if (sameVolume) yield* flushedFolder(path.dirname(from));
 
     // Renamed in, so no reader sees a half-written path, and committed
     // before the old copy goes. Moving to the default removes the pointer
@@ -755,7 +776,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     if (legacyPointerFile !== null) {
       yield* fs.remove(legacyPointerFile, { force: true });
     }
-    yield* flushed(path.dirname(pointerFile));
+    yield* flushedFolder(path.dirname(pointerFile));
     // The store this process holds is the old place's: the first engine
     // graph to come up at the new place (not the doctor's) removes the old
     // tree, the journal, and lets it write.

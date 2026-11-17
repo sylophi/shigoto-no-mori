@@ -1,10 +1,13 @@
 // Where a binary the app ships lives: Resources/ when packaged, the
 // build's dist directory under the app path in dev. The sm CLI, the
-// file-sync engine and cloudflared all follow this one rule. The shell
-// and the host each know their app's place (main/electron/appPlace.ts,
-// host/lib/HostFacts.ts) and pass it in.
+// file-sync engine and cloudflared all follow this one rule, and on
+// Windows each is named with .exe. The shell and the host each know
+// their app's place (main/electron/appPlace.ts, host/lib/HostFacts.ts)
+// and pass it in.
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { programFile } from "@shigomori/engine/executables";
+import { NATIVEFS_BINARY_NAME, NATIVEFS_DIST_DIR } from "./goHelpersDist.mts";
 
 export type AppPlace = {
   readonly packaged: boolean;
@@ -19,9 +22,10 @@ export function bundledBinaryPath(
   devDistDir: string,
   name: string,
 ): string {
+  const file = programFile(name);
   return place.packaged
-    ? path.join(place.resourcesPath, name)
-    : path.join(place.appPath, devDistDir, name);
+    ? path.join(place.resourcesPath, file)
+    : path.join(place.appPath, devDistDir, file);
 }
 
 // The same, existence-checked: a positive answer is cached (the binary
@@ -41,3 +45,7 @@ export function bundledBinaryResolver(
     return candidate;
   };
 }
+
+// The filesystem helper (goHelpersDist.mts).
+export const nativefsPath = (place: AppPlace): string =>
+  bundledBinaryPath(place, NATIVEFS_DIST_DIR, NATIVEFS_BINARY_NAME);

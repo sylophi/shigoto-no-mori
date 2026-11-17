@@ -1,13 +1,14 @@
 // The engine under the terminal: the store over Bun's SQLite, the
 // filesystem helper beside the binary, and the running app, which the
-// cross-device verbs ask and which is asked to stop a mirror before its
-// worktree's files go.
+// cross-device verbs ask and which is asked to stop a mirror before a
+// worktree's files go, and on Windows to let go of its terminals.
 import { dirname, join } from "node:path";
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
 import * as DataDirLock from "@shigomori/engine/DataDirLock";
 import type { Flavor } from "@shigomori/engine/flavor";
 import { doctorLayer, engineServices } from "@shigomori/engine/layer";
 import * as Migration from "@shigomori/engine/Migration";
+import { programFile } from "@shigomori/engine/executables";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Store from "@shigomori/engine/Store";
 import { StoreError } from "@shigomori/engine/storeErrors";
@@ -16,12 +17,16 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Control from "./Control.ts";
+import { holders } from "./holders.ts";
 import { mirrorsOnDelete } from "./mirrorsOnDelete.ts";
 import * as Transfer from "./Transfer.ts";
 
 const open: Store.OpenDatabase = (filename, options) =>
   SqliteClient.make({ filename, ...options });
-const nativefs = join(dirname(process.execPath), "nativefs");
+export const nativefs = join(
+  dirname(process.execPath),
+  programFile("nativefs"),
+);
 // What the agent hooks run: this binary (Agents names it by a path
 // that outlasts an update).
 const sm = process.execPath;
@@ -40,7 +45,7 @@ export class Unmigrated extends Context.Service<
 export const engine = (flavor: Flavor) =>
   Layer.unwrap(
     Effect.map(Store.importOwed(open), (owed) =>
-      Layer.merge(mirrorsOnDelete, Transfer.layer).pipe(
+      Layer.mergeAll(mirrorsOnDelete, holders, Transfer.layer).pipe(
         Layer.provideMerge(Control.layer(flavor)),
         Layer.provideMerge(
           engineServices({

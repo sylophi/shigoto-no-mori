@@ -61,7 +61,8 @@
       "name": "\udc00",
       "aliasName": " ",
       "binDir": "",
-      "linkPath": "",
+      "commandPath": "",
+      "placement": "launcher",
       "state": "missing",
       "foreignPaths": ["\\"],
       "onPath": false
@@ -69,19 +70,19 @@
   },
   "cli:shellInstall": {
     "success": {
-      "loginShell": null,
+      "interactiveShell": null,
       "shells": []
     }
   },
   "cli:shellStatus": {
     "success": {
-      "loginShell": " ",
+      "interactiveShell": " ",
       "shells": []
     }
   },
   "cli:shellUninstall": {
     "success": {
-      "loginShell": null,
+      "interactiveShell": null,
       "shells": [
         {
           "shell": "0",
@@ -101,7 +102,8 @@
       "name": "",
       "aliasName": "0",
       "binDir": "",
-      "linkPath": "-1",
+      "commandPath": "-1",
+      "placement": "link",
       "state": "missing",
       "foreignPaths": [],
       "onPath": true
@@ -112,7 +114,8 @@
       "name": "uJ",
       "aliasName": "-1",
       "binDir": "0",
-      "linkPath": "\"",
+      "commandPath": "\"",
+      "placement": "launcher",
       "state": "stale",
       "foreignPaths": ["", ""],
       "onPath": false

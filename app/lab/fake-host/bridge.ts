@@ -37,6 +37,7 @@ import {
   patchedPorts,
 } from "@shigomori/contracts/schemas";
 import { cloneFolderName } from "@shared/cloneUrl";
+import { symlinksRefusal } from "@shared/pullCollision";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import {
   createSharedSettingsCopy,
@@ -51,6 +52,7 @@ import {
 } from "@shigomori/contracts/contract";
 import { WEB_PLATFORM } from "@shigomori/contracts/platform";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
+import type { ShellIntegrationStatus } from "@shigomori/contracts/modules/cli";
 import type {
   AgentHarnessStatus,
   UpdaterState,
@@ -146,8 +148,20 @@ import {
 import {
   FAKE_DETECTED,
   FAKE_LAUNCHERS,
+  FAKE_WINDOWS_DETECTED,
+  FAKE_WINDOWS_LAUNCHERS,
   fakeAgentHarnesses,
+  fakeCliStatus,
+  fakeShellStatus,
+  fakeWindowsShellStatus,
 } from "@shigomori/ui/fixtures/settingsFixtures.ts";
+import {
+  expandHome,
+  isWindowsPath,
+  lastSegment,
+  normalizeForSubmit,
+} from "@shigomori/contracts/projectPaths";
+import { devicePaths } from "@shigomori/ui/lib/devicePaths.ts";
 import { villagerHandlersFor } from "./villagerData";
 
 // The launch row's tools that run in a terminal.
@@ -379,12 +393,16 @@ function sharedSettingsHandlersFor(
   } satisfies FixtureHandlers;
 }
 
+// A Windows PC's disk (?windows=), its home on a drive.
+const onWindows = (disk: FakeDisk) => isWindowsPath(disk.home);
+
 // A typed path as the device's disk spells it: `~` expanded against
-// that device's home, trailing separators dropped.
-function resolveOnDisk(disk: FakeDisk, path: string): string {
-  const expanded =
-    path === "~" || path.startsWith("~/") ? disk.home + path.slice(1) : path;
-  return expanded.length > 1 ? expanded.replace(/\/+$/, "") : expanded;
+// that device's home, trailing separators dropped but a root's. A
+// Windows PC's reads `\` as `/`, as its host does.
+function resolveOnDisk(disk: FakeDisk, typed: string): string {
+  return normalizeForSubmit(
+    expandHome(disk.home, devicePaths(disk.home).read(typed)),
+  );
 }
 
 function isRepoOnDisk(disk: FakeDisk, path: string): boolean {
@@ -448,6 +466,9 @@ function hostHandlersFor(
   const allWorktrees = () => Object.values(forest.worktrees).flat();
   // Claude Code's hooks in, Codex's waiting on a fresh install.
   let agentHarnesses = fakeAgentHarnesses(disk.home);
+  let shellStatus = onWindows(disk)
+    ? fakeWindowsShellStatus(disk.home)
+    : fakeShellStatus(disk.home);
   const findWorktree = (worktreeId: string) =>
     allWorktrees().find((worktree) => worktree.id === worktreeId);
   const changes = createFakeChanges(findWorktree);
@@ -456,7 +477,14 @@ function hostHandlersFor(
     const terminalId = `t-${Date.now().toString(36)}`;
     fakeOpenTerminals[forest.deviceId] = [
       ...(fakeOpenTerminals[forest.deviceId] ?? []),
-      { terminalId, projectId, worktreeId, openedAt: Date.now(), busy: false },
+      {
+        terminalId,
+        projectId,
+        worktreeId,
+        openedAt: Date.now(),
+        busy: false,
+        syntax: onWindows(disk) ? "powershell" : "posix",
+      },
     ];
     return terminalId;
   };
@@ -787,6 +815,12 @@ function hostHandlersFor(
       return worktree;
     },
     "agents:status": () => agentHarnesses,
+    "cli:status": () =>
+      fakeCliStatus(disk.home, onWindows(disk) ? "launcher" : "link"),
+    "cli:shellStatus": () => shellStatus,
+    "cli:shellInstall": () => (shellStatus = setShellHooks(shellStatus, true)),
+    "cli:shellUninstall": () =>
+      (shellStatus = setShellHooks(shellStatus, false)),
     "agents:setHooks": async ({ harness, install }) => {
       await sleep(400);
       agentHarnesses = setHooks(
@@ -994,7 +1028,8 @@ function hostHandlersFor(
         restartIntoUpdate();
       }, 4_000);
     },
-    "launchers:detect": () => [...FAKE_DETECTED],
+    "launchers:detect": () =>
+      onWindows(disk) ? [...FAKE_WINDOWS_DETECTED] : [...FAKE_DETECTED],
     // A terminal tool runs in a posed terminal, as the terminal
     // setting's default has it.
     "launchers:launch": ({ projectId, worktreeId, launcherId }) =>
@@ -1003,7 +1038,9 @@ function hostHandlersFor(
         : {},
     "launchers:openFile": () => ({}),
     "launchers:forProject": () => ({
-      entries: [...FAKE_LAUNCHERS],
+      entries: onWindows(disk)
+        ? [...FAKE_WINDOWS_LAUNCHERS]
+        : [...FAKE_LAUNCHERS],
       hiddenCount: 0,
     }),
     "packageScripts:list": () => ({
@@ -1354,6 +1391,25 @@ function setHooks(
   });
 }
 
+// The login shell's hook installed, or every installed hook removed.
+function setShellHooks(
+  status: ShellIntegrationStatus,
+  install: boolean,
+): ShellIntegrationStatus {
+  return {
+    ...status,
+    shells: status.shells.map((hook) => ({
+      ...hook,
+      state:
+        install && hook.shell === status.interactiveShell
+          ? "installed"
+          : !install && hook.state === "installed"
+            ? "missing"
+            : hook.state,
+    })),
+  };
+}
+
 // What a push or a publish leaves: every commit on the branch is on the
 // remote now.
 function pushed(worktree: FakeWorktree): void {
@@ -1622,6 +1678,18 @@ async function fakeMirrorStartTo(
   if (!target || !emit || !project?.identity || !sourceWorktree) {
     throw new Error("[fake-host] no such worktree to mirror");
   }
+  // ?mirrorRefused=1: the copy's device can't make the symlinks the
+  // original tracks, and its landing refuses before anything lands.
+  if (new URLSearchParams(location.search).get("mirrorRefused") === "1") {
+    await sleep(600);
+    const disk = fakeDisks[input.targetDeviceId];
+    throw new RemoteCallError({
+      text: `The other device answered: ${symlinksRefusal(
+        `${disk?.home ?? "/Users/rin"}/.sm/wt/${project.name}`,
+        disk !== undefined && onWindows(disk),
+      )}`,
+    });
+  }
   // The rule is the session's, not the send's: a mirror start brings
   // the files through its own session, so the landing poses no files
   // step. A primary's copy lands on its mirror branch and folder.
@@ -1708,7 +1776,14 @@ async function fakeMirrorStartTo(
       mirrorChanged();
     }
   })();
-  return { ...landed, session: session.session };
+  return {
+    ...landed,
+    session: session.session,
+    // ?crlfScripts=1: the original's scripts have CRLF #! lines.
+    crlfScripts:
+      new URLSearchParams(location.search).get("crlfScripts") === "1" &&
+      !isWindowsPath(landed.worktree.path),
+  };
 }
 
 async function fakeSyncPull(
@@ -2107,6 +2182,63 @@ function initMissing(): void {
   ];
 }
 
+// ?windows=sm,mb: those devices Windows PCs, under names a PC goes by,
+// with their paths on drive C: and the drives listed above it, as a
+// Windows host lists them. Posing Studio Mac poses this window's own
+// machine, which the desktop entry runs as Windows too (viewer.ts).
+const WINDOWS_NAMES: Record<string, string> = {
+  [LOCAL_DEVICE_ID]: "Studio PC",
+  [MACBOOK_ID]: "ThinkPad",
+  [MINI_ID]: "NUC",
+  [WORK_IMAC_ID]: "Work PC",
+};
+
+const onC = (path: string) => (path.startsWith("/") ? `C:${path}` : path);
+const folder = (name: string) => ({ name, isGitRepo: false });
+
+function initWindows(): void {
+  const posed = new Set<string>();
+  posedDevices(
+    new URLSearchParams(location.search).get("windows") ?? "",
+    posed,
+  );
+  for (const id of posed) {
+    const device = peerEntry(id);
+    if (device !== undefined) {
+      device.platform = "win32";
+      device.name = WINDOWS_NAMES[id] ?? device.name;
+      if (id === LOCAL_DEVICE_ID) deviceName = device.name;
+    }
+    const forest = forests[id];
+    if (forest !== undefined) {
+      forest.projects = forest.projects.map((project) => ({
+        ...project,
+        path: onC(project.path),
+      }));
+      for (const rows of Object.values(forest.worktrees)) {
+        for (const row of rows) row.path = onC(row.path);
+      }
+    }
+    const disk = fakeDisks[id];
+    if (disk !== undefined) {
+      const user = lastSegment(disk.home);
+      disk.home = onC(disk.home);
+      disk.dirs = {
+        "/": [folder("C:"), folder("D:")],
+        "C:/": [folder("Users")],
+        "C:/Users": [folder(user)],
+        "D:/": [],
+        ...Object.fromEntries(
+          Object.entries(disk.dirs).map(([path, entries]) => [
+            onC(path),
+            entries,
+          ]),
+        ),
+      };
+    }
+  }
+}
+
 // A pose's comma-separated device keys, into their ids.
 function posedDevices(keys: string, into: Set<string>): void {
   for (const key of keys.split(",")) {
@@ -2163,6 +2295,7 @@ export function installFakeHostBridge(
   initCrowd();
   initFresh();
   initMissing();
+  initWindows();
   // Remote hosts: one fixture wire per device, reached only through
   // hub:invokePeer exactly like the real hub bridge, and broadcasting
   // the way it delivers a peer's: as a peer push on the client wire.
@@ -2483,7 +2616,9 @@ export function installFakeHostBridge(
     clerkPublishableKey: "pk_test_fake",
     isDev: opts.dev ?? true,
     isElectron: !WEB_SHELL,
-    platform: WEB_SHELL ? WEB_PLATFORM : "darwin",
+    platform: WEB_SHELL
+      ? WEB_PLATFORM
+      : (peerEntry(LOCAL_DEVICE_ID)?.platform ?? "darwin"),
     pathOfFile: undefined,
     ...fixtureClient.api,
   };

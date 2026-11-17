@@ -21,23 +21,14 @@ func main() {
 }
 
 // The parent-death tripwire (see the lifecycle note in engine.go):
-// both roles are children of the host and must not outlive it. When
-// the host dies, the kernel reparents this process (to launchd or
-// init), so a changed parent pid is the host being gone. Polled,
-// because macOS has no parent-death signal. Stdin EOF usually wins the
-// race anyway, and this catches the cases where it cannot (a host that
-// leaked the pipe's write end to another child, say).
-func watchParent(interval time.Duration) {
-	parent := os.Getppid()
-	go func() {
-		for {
-			time.Sleep(interval)
-			if os.Getppid() != parent {
-				fmt.Fprintln(os.Stderr, "file-sync: host process is gone, exiting")
-				os.Exit(0)
-			}
-		}
-	}()
+// both roles are children of the host and must not outlive it, so
+// watchParent (parent_unix.go, parent_windows.go) ends this process
+// once the host is gone. Stdin EOF usually wins the race anyway, and
+// this catches the cases where it cannot (a host that leaked the
+// pipe's write end to another child, say).
+func hostGone() {
+	fmt.Fprintln(os.Stderr, "file-sync: host process is gone, exiting")
+	os.Exit(0)
 }
 
 func usage() {

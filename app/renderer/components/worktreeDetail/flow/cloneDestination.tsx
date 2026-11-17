@@ -35,6 +35,7 @@ import {
 import { runtimeInfoQueryOptions } from "@/hooks/system/useRuntimeInfo";
 import { gatedHostReadMeta } from "@/lib/queryClientOptions";
 import { ensureTrailingSep, tildify } from "@shigomori/contracts/projectPaths";
+import { shownPath } from "@shigomori/ui/lib/devicePaths.ts";
 
 // The clone the flow would make, computed only while it is the
 // landing (`enabled`): the reads behind it are the destination's home
@@ -118,7 +119,7 @@ export function useCloneDestination(
   return {
     projectName: sourceProject.name,
     cloneInto,
-    dest: `${parent}${cloneInto.name}`,
+    dest: shownPath(`${parent}${cloneInto.name}`, destinationHome),
     ready,
     found,
     setParent: (chosen) =>

@@ -7,7 +7,7 @@
 // the proofs after the first in a run skip the build.
 import * as Schema from "effect/Schema";
 import assert from "node:assert/strict";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeServices from "@shared/nodeServices";
 import * as Migration from "@shigomori/engine/Migration";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";

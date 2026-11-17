@@ -1,30 +1,24 @@
 // Where a project's new worktrees go, as path math: the managed root
 // under the data dir, the in-project folder, a custom base, and the
 // project's own external drive. The engine places worktrees by it and
-// the renderer previews them by it, so it is posix strings only.
+// the renderer previews them by it, so it works on strings alone,
+// spelled as projectPaths.ts spells them.
 
-import { cleanPath, expandHome } from "../projectPaths.ts";
+import {
+  cleanPath,
+  expandHome,
+  joinPath,
+  lastSegment,
+  relativeInside,
+} from "../projectPaths.ts";
 import { PROJECT_CONFIG_DEFAULTS } from "../schemas/projectConfigDefaults.ts";
 
 // The folder worktrees live in under each root: short, since agents and
 // people read and type these paths all day.
 export const WORKTREES_DIR = "wt";
 
-// The whole subtree, as destructive flows guarding against it want.
-// The engine's isManagedPath uses parent equality instead.
-export function isSameOrInside(path: string, ancestor: string): boolean {
-  const folded = path.replace(/\/+$/, "");
-  const base = ancestor.replace(/\/+$/, "");
-  return folded === base || folded.startsWith(`${base}/`);
-}
-
-const joinPath = (...parts: string[]) =>
-  cleanPath(parts.filter((part) => part !== "").join("/"));
-
-const lastSegment = (path: string) =>
-  path.split("/").findLast((segment) => segment !== "") ?? "";
-
-// None for the mount point itself.
+// None for the mount point itself, and for a Windows path, whose
+// worktrees stay where the setting's other choices put them.
 export function externalVolumeRoot(path: string): string | undefined {
   return /^(\/Volumes\/[^/]+)\/+[^/]/.exec(path)?.[1];
 }
@@ -78,8 +72,8 @@ export function projectDriveBase(
   const volume = externalVolumeRoot(projectPath);
   if (
     volume !== undefined &&
-    [place.dataDir, place.dataDirReal].some((dir) =>
-      dir?.startsWith(`${volume}/`),
+    [place.dataDir, place.dataDirReal].some(
+      (dir) => dir !== undefined && relativeInside(dir, volume) !== undefined,
     )
   ) {
     return undefined;

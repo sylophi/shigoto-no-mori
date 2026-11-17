@@ -17,7 +17,7 @@ import { type AgentSession, anyWorking } from "../agentSessions.ts";
 import type { Source } from "../CarryOver.ts";
 import type { CloneFailed, CloneReport } from "../CloneCheckout.ts";
 import * as Git from "../Git.ts";
-import { byPlatform } from "../platform.ts";
+import { byHostKind } from "../platform.ts";
 import * as GitHub from "../GitHub.ts";
 import type { WorktreeEntry } from "../gitParse.ts";
 import * as Lifecycle from "../Lifecycle.ts";
@@ -286,7 +286,7 @@ export class TargetError extends Schema.TaggedError<TargetError>()(
       case "not-in-project":
         return `Not inside a registered project. Pass -p <project>. ${hint}`;
       case "unregistered-project":
-        return `This repo (${this.ref}) isn't registered as a project. Add it ${byPlatform({ darwin: "in the app", linux: "with `projects add`" })}, or target a project with -p. ${hint}`;
+        return `This repo (${this.ref}) isn't registered as a project. Add it ${byHostKind({ app: "in the app", headless: "with `projects add`" })}, or target a project with -p. ${hint}`;
       case "unknown-project":
         return `Unknown project ${quoted}. ${hint}`;
       case "ambiguous-project":

@@ -1,7 +1,7 @@
 // Adding and removing projects: the registry's entry, and what a new
 // project starts with.
 import { listed } from "@shigomori/contracts/words";
-import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
+import { isSameOrInside } from "@shigomori/contracts/projectPaths";
 import { UnknownProjectError } from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -14,6 +14,7 @@ import type * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as Config from "./Config.ts";
 import * as Git from "./Git.ts";
+import { releaseHolders } from "./Holders.ts";
 import * as Paths from "./Paths.ts";
 import * as Registry from "./Registry.ts";
 import * as Scripts from "./Scripts.ts";
@@ -430,6 +431,7 @@ const make = Effect.gen(function* () {
         reporter,
       );
     }
+    yield* releaseHolders({ projectId: project.id });
     yield* fs.remove(project.path, { recursive: true, force: true });
     yield* remove(project);
   });

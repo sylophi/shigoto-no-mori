@@ -21,6 +21,8 @@ import type { TokenStorage } from "@clerk/electron";
 import { clerkTokenStorage } from "./clerkTokenStorage";
 import { clerkFrontendHost } from "@shigomori/contracts/accountServiceConfig";
 import { rendererContentPolicy } from "./contentPolicy";
+import { registerScheme } from "./squirrel";
+import { byFamily } from "@shigomori/engine/platform";
 import {
   RENDERER_SCHEME_HOST,
   rendererSchemeName,
@@ -69,10 +71,12 @@ function memoizedTokenStorage(): TokenStorage {
 // the dev userData suffix is applied (token storage lives in userData).
 // Its open-url listener receives the OAuth deep links.
 export function createDesktopClerkBridge(): { cleanup: () => void } {
-  return createClerkBridge({
+  const bridge = createClerkBridge({
     storage: memoizedTokenStorage(),
     renderer: { scheme: rendererScheme(), host: RENDERER_SCHEME_HOST },
   });
+  byFamily({ posix: () => {}, windows: registerScheme })();
+  return bridge;
 }
 
 type SchemeHandler = (request: Request) => Response | Promise<Response>;

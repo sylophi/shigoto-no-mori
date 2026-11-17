@@ -7,6 +7,7 @@ import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { appRoot, repoRoot } from "./lib/appRoot.mts";
+import { pnpm } from "./lib/pnpm.mts";
 
 import {
   CLOUDFLARED_LICENSE,
@@ -210,21 +211,22 @@ type Listed = {
 // included.
 async function shippedPackages(): Promise<Set<string>> {
   const listings = await Promise.all(
-    NPM_ROOTS.map((root) =>
-      execFileP(
-        "pnpm",
-        [
-          "--filter",
-          `./${relative(repoRoot, root)}`,
-          "list",
-          "--prod",
-          "--json",
-          "--depth",
-          "Infinity",
-        ],
-        { cwd: repoRoot, maxBuffer: 256 * 1024 * 1024 },
-      ),
-    ),
+    NPM_ROOTS.map((root) => {
+      const list = pnpm([
+        "--filter",
+        `./${relative(repoRoot, root)}`,
+        "list",
+        "--prod",
+        "--json",
+        "--depth",
+        "Infinity",
+      ]);
+      return execFileP(list.command, list.args, {
+        cwd: repoRoot,
+        shell: list.shell,
+        maxBuffer: 256 * 1024 * 1024,
+      });
+    }),
   );
   const shipped = new Set<string>();
   const walk = (deps: Record<string, Listed> | undefined) => {

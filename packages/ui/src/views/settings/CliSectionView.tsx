@@ -3,17 +3,21 @@ import { Download, Trash2 } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
 import { SectionIntro } from "../../primitives/section-heading.tsx";
 import { StatusDot } from "../../primitives/status-dot.tsx";
-import { tildify } from "@shigomori/contracts/projectPaths";
+import { shownPath } from "../../lib/devicePaths.ts";
+import { shellName } from "@shigomori/contracts/shellName";
 import type {
   CliStatus,
   ShellIntegrationStatus,
 } from "@shigomori/contracts/modules/cli";
 
-// Install/uninstall of the CLI symlink lives here, not in a launch
-// prompt: the app runs its bundled binary directly and never needs the
-// link, so this is purely "do you want the command in your shell".
+const CLI_ABOUT =
+  "The Shigoto no Mori CLI lets you (or a coding agent) create, list, merge, and delete this app's worktrees from any shell.";
+
+// Install/uninstall of the CLI lives here, not in a launch prompt: the
+// app runs its bundled binary directly and never needs the command on
+// PATH, so this is purely "do you want the command in your shell".
 //
-// Host-scoped: the links and rc files belong to whichever device the
+// Host-scoped: the command and rc files belong to whichever device the
 // section is mounted for, so a peer's section installs on the peer. A
 // peer refuses the status read without the command grant, and the
 // section then renders nothing rather than toasting a permission state.
@@ -29,31 +33,46 @@ export function CliSectionView({
   // The device's home, for the paths.
   home: string | null;
   busy: boolean;
-  // Installs the link, replacing what is there when `force`.
+  // Installs the command, replacing what is there when `force`.
   onInstall: (force: boolean) => void;
   onUninstall: () => void;
-  // Shell integration (ShellIntegrationBlock), offered once the link
-  // is installed and on PATH.
+  // Shell integration (ShellIntegrationBlock), offered once the
+  // command is installed and on PATH.
   shell: ReactNode;
 }) {
   const { name, state, onPath, foreignPaths } = status;
+  const commands = (
+    <>
+      <span className="font-mono">{name}</span> and{" "}
+      <span className="font-mono">{status.aliasName}</span>
+    </>
+  );
+  const binDir = (
+    <span className="font-mono">{shownPath(status.binDir, home)}</span>
+  );
   const pathLine = `export PATH="${home && status.binDir.startsWith(home) ? `$HOME${status.binDir.slice(home.length)}` : status.binDir}:$PATH"`;
 
   return (
     <section className="space-y-3">
       <SectionIntro title="Command line tool">
-        The Shigoto no Mori CLI lets you (or a coding agent) create, list,
-        merge, and delete this app's worktrees from any shell. Installing links
-        the <span className="font-mono">{name}</span> and{" "}
-        <span className="font-mono">{status.aliasName}</span> commands into{" "}
-        <span className="font-mono">{tildify(status.binDir, home)}</span>.
+        {CLI_ABOUT}{" "}
+        {status.placement === "launcher" ? (
+          <>
+            Installing puts the {commands} commands in {binDir} and adds it to
+            your PATH.
+          </>
+        ) : (
+          <>
+            Installing links the {commands} commands into {binDir}.
+          </>
+        )}
       </SectionIntro>
 
       {state === "installed" && (
         <div className="flex flex-wrap items-center gap-3">
           <StatusDot tone="emerald" label="Installed" />
           <span className="font-mono text-sm text-muted-foreground select-text">
-            {tildify(status.linkPath, home)}
+            {shownPath(status.commandPath, home)}
           </span>
           <Button
             variant="outline"
@@ -102,7 +121,7 @@ export function CliSectionView({
             {foreignPaths.map((path, i) => (
               <span key={path}>
                 {i > 0 && " and "}
-                <span className="font-mono">{tildify(path, home)}</span>
+                <span className="font-mono">{shownPath(path, home)}</span>
               </span>
             ))}{" "}
             {foreignPaths.length > 1
@@ -162,7 +181,9 @@ export function ShellIntegrationView({
   // Enabled or removed from here: open terminals keep the old behavior.
   changed: boolean;
 }) {
-  const login = status.shells.find((s) => s.shell === status.loginShell);
+  const interactive = status.shells.find(
+    (s) => s.shell === status.interactiveShell,
+  );
   const enabledAnywhere = status.shells.some((s) => s.state === "installed");
 
   return (
@@ -174,18 +195,21 @@ export function ShellIntegrationView({
         removable block to your shell&apos;s config file.
       </p>
 
-      {status.loginShell === null ? (
+      {status.interactiveShell === null ? (
         <p className="text-xs text-muted-foreground">
           Your login shell isn&apos;t one integration supports (
-          {status.shells.map((s) => s.shell).join(", ")}). Run{" "}
+          {status.shells.map((s) => shellName(s.shell)).join(", ")}). Run{" "}
           <span className="font-mono select-text">{name} shell install</span>{" "}
           from the shell you use.
         </p>
-      ) : login?.state === "installed" ? (
+      ) : interactive?.state === "installed" ? (
         <div className="flex flex-wrap items-center gap-3">
-          <StatusDot tone="emerald" label={`Enabled for ${login.shell}`} />
+          <StatusDot
+            tone="emerald"
+            label={`Enabled for ${shellName(interactive.shell)}`}
+          />
           <span className="font-mono text-sm text-muted-foreground select-text">
-            {tildify(login.path, home)}
+            {shownPath(interactive.path, home)}
           </span>
           <Button
             variant="outline"
@@ -197,12 +221,14 @@ export function ShellIntegrationView({
             Remove
           </Button>
         </div>
-      ) : login?.state === "modified" ? (
+      ) : interactive?.state === "modified" ? (
         <p className="text-xs text-muted-foreground">
           <span className="text-amber-500">
             The integration block in{" "}
-            <span className="font-mono">{tildify(login.path, home)}</span> was
-            edited,
+            <span className="font-mono">
+              {shownPath(interactive.path, home)}
+            </span>{" "}
+            was edited,
           </span>{" "}
           so it won&apos;t be touched from here. Restore or remove it, then
           enable again.
@@ -216,7 +242,7 @@ export function ShellIntegrationView({
             onClick={onEnable}
           >
             <Download />
-            Enable for {status.loginShell}
+            Enable for {shellName(status.interactiveShell)}
           </Button>
           {enabledAnywhere && (
             <span className="text-xs text-muted-foreground">

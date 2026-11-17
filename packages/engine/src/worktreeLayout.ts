@@ -8,6 +8,10 @@ import {
   inProjectBaseOf,
   managedRootOf,
 } from "@shigomori/contracts/git/worktreeLayout";
+import {
+  samePath,
+  trimTrailingSlashes,
+} from "@shigomori/contracts/projectPaths";
 import { createHash } from "node:crypto";
 
 // A worktree's id: a hash of its path, an on-disk format fixed for good
@@ -48,9 +52,8 @@ export const ownedLevels = (
   parent: string,
   projectPath: string,
   place: DataDirPlace,
-) => ownBases(projectPath, place).indexOf(parent) + 1;
-
-const trimTrailingSlashes = (path: string) => path.replace(/\/+$/, "");
+) =>
+  ownBases(projectPath, place).findIndex((base) => samePath(base, parent)) + 1;
 
 // Every base whose direct children count as managed for a project, all
 // layouts included, so switching layouts doesn't turn worktrees external.
@@ -77,5 +80,5 @@ export function isManagedPath(
   const cut = folded.lastIndexOf("/");
   if (cut < 0) return false;
   const parent = folded.slice(0, cut);
-  return bases.some((base) => trimTrailingSlashes(base) === parent);
+  return bases.some((base) => samePath(trimTrailingSlashes(base), parent));
 }

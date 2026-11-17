@@ -1,6 +1,6 @@
 import type { LauncherEntry } from "@shigomori/contracts/schemas/launchers";
 import { findExecutable } from "./executables.ts";
-import { byPlatform } from "./platform.ts";
+import { byFamily, byPlatform } from "./platform.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -15,8 +15,9 @@ import * as Paths from "./Paths.ts";
 import * as Usage from "./Usage.ts";
 
 // One app the launcher row knows, as the catalog lists it: found by its
-// bundle name in the app folders (or "__finder__", always there), or by
-// its command line tool on PATH. A deep link with {path} opens it, and
+// bundle name in a Mac's app folders, by its program on PATH on Windows
+// (either one FILE_MANAGER, the desktop's own), or by its command line
+// tool on PATH. A deep link with {path} opens it, and
 // openArgs are the launch arguments of one that takes the folder that
 // way. A terminal tool is the command line inTerminal runs in the
 // user's terminal, found by its first word on PATH. editor marks the
@@ -25,6 +26,7 @@ export type CatalogApp = {
   readonly id: string;
   readonly label: string;
   readonly bundleNames?: ReadonlyArray<string>;
+  readonly programs?: ReadonlyArray<string>;
   readonly cli?: string;
   readonly deepLink?: string;
   readonly openArgs?: ReadonlyArray<string>;
@@ -45,14 +47,15 @@ export type CatalogEntry = {
 // being listed.
 export type RowEntry = LauncherEntry;
 
-// A launcher with what launching it takes: an installed app with the
-// bundle or tool it was found by, or a custom command line.
+// A launcher with what launching it takes: an installed app with what
+// it was found by, or a custom command line.
 export type Launchable =
   | (RowEntry & {
       readonly kind: "detected";
       readonly app: CatalogApp;
-      // The first bundle found ("__finder__" for Finder), if any.
-      readonly bundle: string | undefined;
+      // What opens it: the first bundle or program found (FILE_MANAGER
+      // for the desktop's), if any.
+      readonly target: string | undefined;
       readonly cliOnPath: boolean;
     })
   | (RowEntry & { readonly kind: "custom"; readonly command: string });
@@ -147,9 +150,8 @@ const launchersOf = (
   };
 };
 
-// Where an installed .app can live, in the order they are looked in,
-// and whether Finder is there, as it always is on a Mac. Linux has
-// neither: its launchers are the tools found on PATH.
+// Where an installed .app can live, in the order they are looked in.
+// Linux and Windows have none: their launchers are found on PATH.
 export const appFoldersOf = (path: Path.Path, home: string) =>
   byPlatform({
     darwin: [
@@ -158,10 +160,21 @@ export const appFoldersOf = (path: Path.Path, home: string) =>
       "/System/Applications",
     ],
     linux: [],
+    win32: [],
   });
-const FINDER = byPlatform({ darwin: true, linux: false });
 
-const apps: ReadonlyArray<CatalogApp> = catalog;
+// The desktop's file manager, always there where the OS has one, which
+// opens a folder as the desktop does (Open).
+export const FILE_MANAGER = "__file_manager__";
+
+const catalogApps: ReadonlyArray<CatalogApp> = catalog;
+
+// Where an app is looked for on this OS.
+const placesOf = (app: CatalogApp) =>
+  byFamily({
+    posix: app.bundleNames,
+    windows: app.programs,
+  }) ?? [];
 
 // Code-unit order, as Go compares strings.
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -173,6 +186,7 @@ const make = Effect.gen(function* () {
   const settings = yield* EngineConfig.Config;
   const usage = yield* Usage.Usage;
   const appFolders = appFoldersOf(path, home);
+  const fileManager = byPlatform({ darwin: true, linux: false, win32: true });
   // The provider the engine was built with, not the caller's: a fiber
   // with none set reads a copy of the environment taken once.
   const configProvider = yield* ConfigProvider.ConfigProvider;
@@ -180,28 +194,67 @@ const make = Effect.gen(function* () {
   const exists = (file: string) =>
     fs.exists(file).pipe(Effect.orElseSucceed(() => false));
 
-  // Whether `name` is on PATH. Read on each ask, since the host
-  // outlives a tool's install.
-  const onPath = (name: string) =>
+  // Where `name` is on PATH. Read on each ask, since the host outlives
+  // a tool's install.
+  const pathTo = (name: string) =>
     findExecutable(name).pipe(
-      Effect.map(Option.isSome),
       Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
       Effect.provideService(FileSystem.FileSystem, fs),
       Effect.provideService(Path.Path, path),
     );
 
-  const available = (app: CatalogApp) =>
+  const onPath = (name: string) => Effect.map(pathTo(name), Option.isSome);
+
+  const inAppFolders = Effect.fnUntraced(function* (bundle: string) {
+    for (const folder of appFolders) {
+      const found = path.join(folder, bundle);
+      if (yield* exists(found)) return found;
+    }
+    return undefined;
+  });
+
+  const foundAt = byFamily({
+    posix: inAppFolders,
+    windows: (name: string) => Effect.map(pathTo(name), Option.getOrUndefined),
+  });
+
+  // The catalog's apps this OS can have: those with a place to look for
+  // them here, a command line tool or a terminal tool.
+  const apps = catalogApps.filter(
+    (app) =>
+      placesOf(app).length > 0 ||
+      app.cli !== undefined ||
+      app.inTerminal !== undefined,
+  );
+
+  // What an app was found by, in its own order.
+  const targetOf = (app: CatalogApp) =>
     Effect.gen(function* () {
-      for (const bundle of app.bundleNames ?? []) {
-        if (bundle === "__finder__") return FINDER;
-        for (const folder of appFolders) {
-          if (yield* exists(path.join(folder, bundle))) return true;
-        }
+      for (const place of placesOf(app)) {
+        if (place === FILE_MANAGER) return fileManager ? place : undefined;
+        const found = yield* foundAt(place);
+        if (found !== undefined) return found;
       }
-      if (app.cli !== undefined && (yield* onPath(app.cli))) return true;
-      const tool = app.inTerminal?.trim().split(/\s+/)[0];
-      return tool !== undefined && (yield* onPath(tool));
+      return undefined;
     });
+
+  const toolOnPath = (app: CatalogApp) => {
+    const tool = app.inTerminal?.trim().split(/\s+/)[0];
+    return tool === undefined ? Effect.succeed(false) : onPath(tool);
+  };
+
+  // What an installed app was found by.
+  const foundBy = (app: CatalogApp) =>
+    Effect.gen(function* () {
+      const target = yield* targetOf(app);
+      const cliOnPath = app.cli !== undefined && (yield* onPath(app.cli));
+      return target !== undefined || cliOnPath || (yield* toolOnPath(app))
+        ? { app, target, cliOnPath }
+        : undefined;
+    });
+
+  const available = (app: CatalogApp) =>
+    Effect.map(foundBy(app), (found) => found !== undefined);
 
   const listCatalog = Effect.forEach(
     apps,
@@ -274,19 +327,6 @@ const make = Effect.gen(function* () {
     };
   });
 
-  // The bundle an app was found by, in its own order of names.
-  const bundleOf = (app: CatalogApp) =>
-    Effect.gen(function* () {
-      for (const bundle of app.bundleNames ?? []) {
-        if (bundle === "__finder__") return FINDER ? bundle : undefined;
-        for (const folder of appFolders) {
-          const found = path.join(folder, bundle);
-          if (yield* exists(found)) return found;
-        }
-      }
-      return undefined;
-    });
-
   const launchable = Effect.fn("Launchers.launchable")(function* (project: {
     readonly id: string;
     readonly path: string;
@@ -299,25 +339,23 @@ const make = Effect.gen(function* () {
           projectId: project.id,
           path: project.path,
         }),
-        // In the catalog's order, which Effect.filter doesn't keep.
-        Effect.forEach(apps, available, { concurrency: "unbounded" }).pipe(
-          Effect.map((found) => apps.filter((_, index) => found[index])),
-        ),
+        Effect.forEach(apps, foundBy, { concurrency: "unbounded" }),
       ],
       { concurrency: "unbounded" },
     );
-    const detected = yield* Effect.forEach(installed, (app) =>
-      Effect.gen(function* () {
-        return {
-          kind: "detected" as const,
-          id: `app:${app.id}`,
-          label: app.label,
-          available: true as const,
-          app,
-          bundle: yield* bundleOf(app),
-          cliOnPath: app.cli !== undefined && (yield* onPath(app.cli)),
-        };
-      }),
+    // In the catalog's order.
+    const detected = installed.flatMap((found) =>
+      found === undefined
+        ? []
+        : [
+            {
+              kind: "detected" as const,
+              id: `app:${found.app.id}`,
+              label: found.app.label,
+              available: true as const,
+              ...found,
+            },
+          ],
     );
     const configured =
       typeof stored?.defaultBranch === "string" &&

@@ -7,12 +7,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as NativeFs from "../NativeFs.ts";
 import * as Git from "../Git.ts";
-import {
-  blobBytes,
-  type CheckoutConfig,
-  CONVERSION_ATTRS,
-  toHex,
-} from "../gitIndex.ts";
+import { blobBytes, CONVERSION_ATTRS, toHex } from "../gitIndex.ts";
 import * as Paths from "../Paths.ts";
 
 export const makeReads = Effect.gen(function* () {
@@ -71,39 +66,6 @@ export const makeReads = Effect.gen(function* () {
       Effect.map((value) => Option.contains(value, "true")),
     );
 
-  const readCheckoutConfig = Effect.fnUntraced(function* (checkout: string) {
-    const eol = Option.getOrElse(
-      yield* configValue(checkout, ["--get", "core.eol"]),
-      () => "",
-    );
-    // git reads booleans its own way, so it's asked to. autocrlf also
-    // takes "input", which isn't one. A value git can't read at all is
-    // taken as true, which only leaves more to git.
-    let autocrlf = "false";
-    const raw = yield* configValue(checkout, ["--get", "core.autocrlf"]);
-    if (Option.isSome(raw) && raw.value === "input") autocrlf = "input";
-    else if (Option.isSome(raw)) {
-      const value = yield* configValue(checkout, [
-        "--type=bool",
-        "--get",
-        "core.autocrlf",
-      ]);
-      if (Option.isNone(value) || value.value === "true") autocrlf = "true";
-    }
-    let symlinks = true;
-    if (
-      Option.isSome(yield* configValue(checkout, ["--get", "core.symlinks"]))
-    ) {
-      const value = yield* configValue(checkout, [
-        "--type=bool",
-        "--get",
-        "core.symlinks",
-      ]);
-      symlinks = Option.isSome(value) && value.value === "true";
-    }
-    return { autocrlf, eol, symlinks } satisfies CheckoutConfig;
-  });
-
   // What decides each path's conversions: the attributes as a checkout
   // of HEAD sees them and as the source saw them when it wrote and last
   // hashed its files, and both sides' config.
@@ -131,8 +93,8 @@ export const makeReads = Effect.gen(function* () {
           ["check-attr", "-z", "--stdin", ...CONVERSION_ATTRS],
           { stdin: targetPaths },
         ),
-        config: readCheckoutConfig(worktree),
-        sourceConfig: readCheckoutConfig(source),
+        config: git.checkoutConfig(worktree),
+        sourceConfig: git.checkoutConfig(source),
       },
       { concurrency: "unbounded" },
     );

@@ -2,8 +2,8 @@ import { cliContract } from "@shigomori/contracts/modules/cli";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import { requireCliBinary } from "@host/lib/cli/binary";
 import {
-  cliLinkStatus,
-  installCliLinks,
+  cliStatus,
+  installCli,
   uninstallCliEverything,
 } from "@host/lib/cli/install";
 import {
@@ -25,7 +25,7 @@ import * as Effect from "effect/Effect";
 const DOCTOR_TIMEOUT_MS = 60_000;
 
 // The doctor's checklist, told about this install: the app's version,
-// the bundled `sm`, and the login shell's ZDOTDIR alone for the
+// the bundled `sm`, and the interactive shell's ZDOTDIR alone for the
 // shell-hook check's .zshrc. XDG_CONFIG_HOME also places the data dir
 // pointer, and the doctor must inspect the data dir the app runs on,
 // not the one a shell would find. `fix` applies every repair: the
@@ -55,12 +55,12 @@ const runDoctor = (fix: boolean) =>
   });
 
 export const cliHandlers = {
-  status: () => cliLinkStatus,
-  install: ({ force }) => installCliLinks(force),
-  // Only ever removes what shigomori made (links it owns, hooks it
-  // wrote), so a foreign occupant survives this unchanged and the
-  // returned status says so.
-  uninstall: () => Effect.andThen(uninstallCliEverything, cliLinkStatus),
+  status: () => cliStatus,
+  install: ({ force }) => installCli(force),
+  // Only ever removes what shigomori made (the command it placed,
+  // hooks it wrote), so a foreign occupant survives this unchanged and
+  // the returned status says so.
+  uninstall: () => Effect.andThen(uninstallCliEverything, cliStatus),
   shellStatus: () => shellIntegrationStatus,
   shellInstall: () => installShellIntegration,
   shellUninstall: () => uninstallShellIntegration,

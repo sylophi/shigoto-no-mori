@@ -3,7 +3,8 @@
 // command also takes -p <project>, said once in the prose instead of on
 // every usage line. Help is data, and layout and color are computed.
 import type { flavorNames } from "@shigomori/engine/flavor";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byFamily, byHostKind, byPlatform } from "@shigomori/engine/platform";
+import { SHELL_KINDS } from "@shigomori/engine/shellHook";
 import { commandName, projectVerb } from "./aliases.ts";
 import { splitAtDashes } from "./argv.ts";
 import { styles, type Styles } from "./output.ts";
@@ -33,9 +34,18 @@ const catalog = (names: Names) => {
         "The tools `open` offers, in the app's order (recent use, then label), hidden ones left out. --json prints {ok, entries: [{kind, id, label, available?}], hiddenCount, usage: {<id>: {lastUsed, recentCount}}}, kind being detected, custom or web. " +
           '--catalog lists every tool the app knows instead, installed or not, with no project needed: --json prints {ok, apps: [{kind: "detected", id: "app:<id>", label, available}]}, sorted by label case-insensitively.',
       ],
-      ...byPlatform<{ darwin: Item[]; linux: Item[] }>({
-        darwin: [["app", "Open the Shigoto no Mori app", ""]],
-        linux: [
+      ...byHostKind<{ app: Item[]; headless: Item[] }>({
+        app: [
+          [
+            "app",
+            "Open the Shigoto no Mori app",
+            byFamily({
+              posix: "",
+              windows: "Not on Windows: open it from the Start menu.",
+            }),
+          ],
+        ],
+        headless: [
           [
             "login",
             "Sign this machine in to your account",
@@ -51,7 +61,7 @@ const catalog = (names: Names) => {
       [
         "devices [-p <project>]",
         "List your other devices",
-        `The machines signed in to your account, by the names --to and --from take. Inside a project (or with -p) each says whether it can take part in a send, bring or mirror, and if not, why. ${byPlatform({ darwin: "Needs the app open.", linux: "Needs the host running, signed in (`login`)." })}`,
+        `The machines signed in to your account, by the names --to and --from take. Inside a project (or with -p) each says whether it can take part in a send, bring or mirror, and if not, why. ${byHostKind({ app: "Needs the app open.", headless: "Needs the host running, signed in (`login`)." })}`,
       ],
       [
         "devices share [on|off]",
@@ -63,8 +73,8 @@ const catalog = (names: Names) => {
         "Let your other devices act on this one as you",
         "Runs their commands here: scripts and terminals, worktrees and mirrors into this device, files, ports and settings. Needs sharing on and an account signed in. Off by default, and off again after a sign-out.",
       ],
-      ...byPlatform<{ darwin: Item[]; linux: Item[] }>({
-        darwin: [
+      ...byHostKind<{ app: Item[]; headless: Item[] }>({
+        app: [
           [
             "devices reachable [on|off]",
             "Keep this device reachable",
@@ -72,7 +82,7 @@ const catalog = (names: Names) => {
           ],
         ],
         // The service keeps it reachable (`service`).
-        linux: [
+        headless: [
           [
             "devices rename <name>",
             "Rename this machine on your account",
@@ -90,13 +100,13 @@ const catalog = (names: Names) => {
           ],
         ],
       }),
-      byPlatform<{ darwin: Item; linux: Item }>({
-        darwin: [
+      byHostKind<{ app: Item; headless: Item }>({
+        app: [
           "update [--check]",
           "Update the app to the latest release",
           "Checks GitHub releases, downloads, verifies and installs without opening the app (the linked CLI updates with it), restarting a running app into the new version. --check only reports. A prerelease build takes any later prerelease or release, a release build only a later release.",
         ],
-        linux: [
+        headless: [
           "update [--check]",
           "Update the host to the latest release",
           "Checks GitHub releases, downloads, verifies and installs it (the linked CLI updates with it), restarting a running host into the new version. --check only reports. A prerelease build takes any later prerelease or release, a release build only a later release.",
@@ -105,14 +115,14 @@ const catalog = (names: Names) => {
       [
         "doctor [--fix] [--yes]",
         "Check the installation and data dir",
-        `Checks the environment, the data dir, each project, and the processes a crashed ${byPlatform({ darwin: "app", linux: "host" })} left running. Exits non-zero when anything failed. --fix applies only the safe repairs, asking before each one that deletes something (--yes skips the prompts), and reports anything else. A v2 data dir the app hasn't moved to v3 yet is read as v2 left it, and --fix moves it, as the app's start does.`,
+        `Checks the environment, the data dir, each project, and the processes a crashed ${byHostKind({ app: "app", headless: "host" })} left running. Exits non-zero when anything failed. --fix applies only the safe repairs, asking before each one that deletes something (--yes skips the prompts), and reports anything else. A v2 data dir the app hasn't moved to v3 yet is read as v2 left it, and --fix moves it, as the app's start does.`,
       ],
       [
         "data [move <folder> | reset]",
         "Show or move the data folder",
-        `Prints where it is. move puts it inside <folder> under its own name, and reset puts it back where it starts, as Settings' Data location does. Either stops every running script and restarts the ${byPlatform({ darwin: "app", linux: "host" })} into the new place. Refused while SHIGOMORI_DATA_DIR sets it. --json prints {ok, dataDir, dataDirSource, atDefaultDataDir}, and after a move {ok, dataDir}, null for a reset.`,
+        `Prints where it is. move puts it inside <folder> under its own name, and reset puts it back where it starts, as Settings' Data location does. Either stops every running script and restarts the ${byHostKind({ app: "app", headless: "host" })} into the new place. Refused while SHIGOMORI_DATA_DIR sets it. --json prints {ok, dataDir, dataDirSource, atDefaultDataDir}, and after a move {ok, dataDir}, null for a reset.`,
       ],
-      byPlatform<{ darwin: Item; linux: Item }>({
+      byPlatform<{ darwin: Item; linux: Item; win32: Item }>({
         darwin: [
           "nuke --yes [--keep-app]",
           "Take everything of this build off the machine",
@@ -122,6 +132,11 @@ const catalog = (names: Names) => {
           "nuke --yes",
           "Take everything of this build off the machine",
           "The host's service is stopped and taken out, then the host is started to remove its worktrees, this command's links and the shell and agent hooks, then its data folder, logs and install. Runs only from an installed build's command. Exits non-zero when something stayed, saying what.",
+        ],
+        win32: [
+          "nuke --yes [--keep-app]",
+          "Take everything of this build off the machine",
+          "What Settings' Danger zone does, with no window: the app is quit, then started to remove its worktrees, this command from PATH, the shell and agent hooks, this device from your account and its login item, then its data folder and its own folder. Then the app is uninstalled (--keep-app keeps it). Runs only from an installed build's command. Exits non-zero when something stayed, saying what.",
         ],
       }),
       [
@@ -207,7 +222,7 @@ const catalog = (names: Names) => {
       [
         "worktrees send [<name>] [--to <device>]",
         "Move a worktree to another device",
-        "The app's \"Transplant to…\". --to takes a device's name or id, or the start of either, and can be left off when only one device qualifies (`devices` says which). --leave-out nothing|gitignored picks which ignored files stay behind (default: the project's saved rule). --setup / --no-setup overrides whether the copy runs the setup script. --source keep|shelve|teardown decides what becomes of the original (default keep). teardown also deletes ignored files that did not cross. A device with no checkout of the repo takes it too, cloning the repo first into the folder --clone-into <dir> names there (a leading ~ is that device's home, so quote it, and a path in this device's home reads as the same path in that one's), by default the checkout's own place with the two homes swapped. A checkout of the repo already in that folder is used as it is. Left off, --to prefers a device that holds the repo. Needs the app open. Interrupted before the worktree lands, it is cancelled and its copy removed, though a repo it cloned there stays. Exits 3 when the worktree landed but something after it didn't hold.",
+        "The app's \"Transplant to…\". --to takes a device's name or id, or the start of either, and can be left off when only one device qualifies (`devices` says which). --leave-out nothing|gitignored picks which ignored files stay behind (default: the project's saved rule). --setup / --no-setup overrides whether the copy runs the setup script. --source keep|shelve|teardown decides what becomes of the original (default keep). teardown also deletes the ignored files left out, and keeps the source when the ones brought did not all cross. A device with no checkout of the repo takes it too, cloning the repo first into the folder --clone-into <dir> names there (a leading ~ is that device's home, so quote it, and a path in this device's home reads as the same path in that one's), by default the checkout's own place with the two homes swapped. A checkout of the repo already in that folder is used as it is. Left off, --to prefers a device that holds the repo. Needs the app open. Interrupted before the worktree lands, it is cancelled and its copy removed, though a repo it cloned there stays. Exits 3 when the worktree landed but something after it didn't hold.",
       ],
       [
         "worktrees bring <worktree> [--from <device>]",
@@ -253,7 +268,7 @@ const catalog = (names: Names) => {
       [
         "worktrees open [<tool>] [<name>]",
         "Launch a launcher-row tool in a worktree",
-        "Finder, editors, custom commands. <tool> is a label, a bare catalog id (finder) or a full launcher id (app:vscode, custom:<id>), case-insensitive. With no tool, shows the row as a menu. " +
+        "The file manager, editors, custom commands. <tool> is a label, a bare catalog id (vscode) or a full launcher id (app:vscode, custom:<id>), case-insensitive. With no tool, shows the row as a menu. " +
           "--project-id <id> --worktree-id <id> address the worktree exactly (the primary included), with the tool after --. --json prints {ok, launcher, worktree}, and an unknown tool fails with code unknown-launcher.",
       ],
       [
@@ -421,7 +436,12 @@ const catalog = (names: Names) => {
       [
         "shell install [<shell>]",
         "Hook shell integration into your shell config",
-        "A guarded eval line in .zshrc/.bashrc (marker-fenced) or a fish conf.d drop-in. Defaults to your login shell.",
+        byFamily({
+          posix:
+            "A guarded eval line in .zshrc/.bashrc (marker-fenced) or a fish conf.d drop-in. Defaults to your login shell.",
+          windows:
+            "A guarded eval line in the PowerShell profile or .zshrc/.bashrc (marker-fenced), or a fish conf.d drop-in. Defaults to PowerShell, which terminals run here.",
+        }),
       ],
       [
         "shell uninstall",
@@ -430,7 +450,7 @@ const catalog = (names: Names) => {
       ],
       ["shell status", "Show hook and session state", ""],
       [
-        "shell init <zsh|bash|fish>",
+        `shell init <${SHELL_KINDS.join("|")}>`,
         "Print the wrapper the hook evals",
         "A function shadowing the command: it runs the real binary, then cd's to the path the binary reports.",
       ],
@@ -548,10 +568,9 @@ const namespacesOf = (bin: string, items: Catalog) => [
     items: items.shell,
     canon: (name: string) => name,
   },
-  // A Mac's app is its host, so only Linux has one to run as a service.
-  ...byPlatform({
-    darwin: [],
-    linux: [
+  ...byHostKind({
+    app: [],
+    headless: [
       {
         name: "service",
         desc: "The host, run by systemd",
@@ -684,7 +703,7 @@ export const helpPages = (look: HelpLook) => {
     ["Config", items.config],
     ["Agents", items.agents],
     ["Shell integration", items.shell],
-    ...byPlatform({ darwin: [], linux: [["Service", items.service] as const] }),
+    ...byHostKind({ app: [], headless: [["Service", items.service] as const] }),
     ["Flags", items.flags],
     ["Environment", items.environment],
   ];

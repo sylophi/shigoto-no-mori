@@ -16,6 +16,22 @@ export const isAbsent = (error: PlatformError.PlatformError) =>
   (Predicate.hasProperty(error.cause, "code") &&
     error.cause.code === "ENOTDIR");
 
+// The reason Node's FileSystem gives a failed call's errno, for a call
+// made past it.
+const REASONS: Partial<Record<string, PlatformError.SystemErrorTag>> = {
+  ENOENT: "NotFound",
+  EACCES: "PermissionDenied",
+  EEXIST: "AlreadyExists",
+  EISDIR: "BadResource",
+  ENOTDIR: "BadResource",
+  EBUSY: "Busy",
+  ELOOP: "BadResource",
+};
+
+export const reasonOf = (cause: unknown): PlatformError.SystemErrorTag =>
+  REASONS[Predicate.hasProperty(cause, "code") ? String(cause.code) : ""] ??
+  "Unknown";
+
 // The words Go's syscall errors use for the common errnos.
 const ERRNO_TEXT: Record<string, string> = {
   ENOENT: "no such file or directory",

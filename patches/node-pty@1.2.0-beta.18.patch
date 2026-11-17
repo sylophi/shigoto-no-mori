@@ -1,0 +1,23 @@
+diff --git a/lib/windowsPtyAgent.js b/lib/windowsPtyAgent.js
+index 81d885b51f22f2e1d3b05798b6b4b20a41a777a1..d492ef35f8293f8e0f56aa66a5228288fdeb6f92 100644
+--- a/lib/windowsPtyAgent.js
++++ b/lib/windowsPtyAgent.js
+@@ -199,17 +199,8 @@ var WindowsPtyAgent = /** @class */ (function () {
+         if (!this._useConptyDll) {
+             this._inSocket.readable = false;
+             this._outSocket.readable = false;
+-            this._getConsoleProcessList().then(function (consoleProcessList) {
+-                consoleProcessList.forEach(function (pid) {
+-                    try {
+-                        process.kill(pid);
+-                    }
+-                    catch (e) {
+-                        // Ignore if process cannot be found (kill ESRCH error)
+-                    }
+-                });
+-            });
+             this._ptyNative.kill(this._pty, this._useConptyDll);
++            this._inSocket.destroy();
+             this._conoutSocketWorker.dispose();
+         }
+         else {

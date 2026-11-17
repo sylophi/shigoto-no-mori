@@ -1,5 +1,5 @@
-import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { resolve } from "@shigomori/engine/canonicalPath";
+import { samePath } from "@shigomori/contracts/projectPaths";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { type HandlerContext, isRemoteCaller } from "@shared/ipc/transport";
 import type { EffectHandlers } from "@shigomori/contracts/types";
@@ -28,6 +28,7 @@ import {
   dataDirReal,
   dataDirSource,
   defaultDataDir,
+  home,
 } from "@shared/paths";
 
 class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
@@ -113,9 +114,9 @@ export const runtimeHandlers = {
         dataDirReal: dataDirReal(),
         dataDirSource: dataDirSource(),
         // resolve() drops the trailing slash a hand-edited pointer may carry.
-        atDefaultDataDir: resolve(dir) === defaultDataDir(),
+        atDefaultDataDir: samePath(resolve(dir), defaultDataDir()),
         canonicalDataDirName: canonicalDataDirName(),
-        homedir: homedir(),
+        homedir: home(),
       };
     }),
 

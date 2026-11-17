@@ -39,25 +39,25 @@ import {
 import type { GuideStart } from "@shigomori/contracts/modules/guide";
 import type { AgentHarnessStatus } from "@shigomori/contracts/schemas/agents";
 import {
-  cloneSourceCommand,
   GUIDE_LAUNCHERS,
   guideCommand,
-  guideInstructions,
-  SOURCE_URL,
+  type GuideSource,
+  writeGuideFolder,
 } from "./agentGuide.ts";
 import {
   type AgentSession,
   applyAgentEvent,
   parseAgentEvent,
 } from "./agentSessions.ts";
+import { canonicalPath } from "./canonicalPath.ts";
 import { envVar } from "./environment.ts";
 import { installedVersionOf, linuxInstall } from "./linuxInstall.ts";
-import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import * as Launchers from "./Launchers.ts";
 import * as Open from "./Open.ts";
 import * as Paths from "./Paths.ts";
 import { errnoText, isNotFound } from "./platformErrors.ts";
 import * as Registry from "./Registry.ts";
+import * as Shells from "./Shells.ts";
 import * as Worktrees from "./Worktrees.ts";
 import { isDirectory } from "./entries.ts";
 
@@ -144,10 +144,6 @@ export class GuideHarnessMissing extends Schema.TaggedError<GuideHarnessMissing>
     return `${this.label} isn't installed here: there's no \`${this.command}\` on the PATH.`;
   }
 }
-
-// Where the agent a guide opens reads the app's source: a release's tag,
-// cloned from GitHub, or a dev build's own checkout.
-type GuideSource = { readonly tag: string } | { readonly checkout: string };
 
 // A guide to open: the harness and terminal, the session it drives the
 // window on, and the source it reads.
@@ -252,6 +248,7 @@ const make = (binary: string) =>
     const worktrees = yield* Worktrees.Worktrees;
     const open = yield* Open.Open;
     const launchers = yield* Launchers.Launchers;
+    const shells = yield* Shells.Shells;
     // By its real path, so the app (its bundled copy) and a terminal
     // (through the linked command) write the same entry and agree on
     // whether it is current. One not built yet (a dev run) keeps the
@@ -567,10 +564,14 @@ const make = (binary: string) =>
       if (harness === undefined || harness.resume === "") {
         return yield* new CantResume({ harness: ref.harness });
       }
-      yield* open.inTerminal(
-        located,
-        `${harness.resume} ${shellQuote(ref.session)}`,
-      );
+      yield* open.inTerminal(located, {
+        label: harness.label,
+        what: "the session's id",
+        program: harness.resume.split(" ")[0] ?? "",
+        args: [ref.session],
+        line: ({ quote }) =>
+          Effect.succeed(`${harness.resume} ${quote(ref.session)}`),
+      });
     });
 
     // One folder for every guide, so a harness asks to trust it once.
@@ -578,61 +579,43 @@ const make = (binary: string) =>
     // runs from, or a release's tag, cloned again once the app updates
     // (`source-tag` names the tag it holds).
     const guide = Effect.fn("Agents.guide")(function* (input: GuideLaunch) {
+      const label = harnessById(input.harness)?.label ?? input.harness;
       if (
         (yield* launchers.installed(GUIDE_LAUNCHERS[input.harness])) ===
         undefined
       ) {
-        const harness = harnessById(input.harness);
         return yield* new GuideHarnessMissing({
-          label: harness?.label ?? input.harness,
+          label,
           command: input.harness,
         });
       }
+      const { syntax } = yield* shells.interactive;
+      const harnessLine = guideCommand(syntax, { ...input, sm, dataDir });
       const folder = path.join(dataDir, "guide");
-      const source = path.join(folder, "source");
-      // What the folder's `source` is to hold, where the agent reads it
-      // when it doesn't, and what the terminal runs first.
-      const { wanted, sourceUrl, link, before } =
-        "tag" in input.source
-          ? {
-              wanted: input.source.tag,
-              sourceUrl: `${SOURCE_URL}/tree/${input.source.tag}`,
-              link: undefined,
-              before: `${cloneSourceCommand(input.source.tag)}; `,
-            }
-          : {
-              wanted: input.source.checkout,
-              sourceUrl: input.source.checkout,
-              link: input.source.checkout,
-              before: "",
-            };
-      yield* Effect.gen(function* () {
-        yield* fs.makeDirectory(folder, { recursive: true });
-        yield* fs.writeFileString(
-          path.join(folder, "AGENTS.md"),
-          guideInstructions(sourceUrl),
-        );
-        yield* fs.writeFileString(
-          path.join(folder, "CLAUDE.md"),
-          "@AGENTS.md\n",
-        );
-        const tagFile = path.join(folder, "source-tag");
-        const held = yield* fs
-          .readFileString(tagFile)
-          .pipe(Effect.orElseSucceed(() => ""));
-        if (held.trim() !== wanted) {
-          yield* fs.remove(source, { recursive: true, force: true });
-          if (link !== undefined) yield* fs.symlink(link, source);
-          yield* fs.writeFileString(tagFile, `${wanted}\n`);
-        }
-      }).pipe(
-        Effect.mapError(
-          (cause) => new GuideFolderFailed({ path: folder, cause }),
-        ),
-      );
       yield* open.inTerminal(
         folder,
-        `${before}${guideCommand({ ...input, sm, dataDir })}`,
+        {
+          label,
+          what: "the app's paths",
+          program: input.harness,
+          args: harnessLine.args,
+          // The folder is written once the line can be typed, with what
+          // the terminal runs first.
+          line: () =>
+            writeGuideFolder({
+              folder,
+              syntax,
+              source: input.source,
+              configFile: harnessLine.configFile,
+            }).pipe(
+              Effect.provideService(FileSystem.FileSystem, fs),
+              Effect.provideService(Path.Path, path),
+              Effect.mapError(
+                (cause) => new GuideFolderFailed({ path: folder, cause }),
+              ),
+              Effect.map((before) => `${before}${harnessLine.line}`),
+            ),
+        },
         input.terminal,
       );
     });
@@ -662,7 +645,9 @@ const make = (binary: string) =>
             now,
           );
           if (next === undefined || next === "unbind") return;
-          const at = yield* worktrees.here(event.cwd === "" ? cwd : event.cwd);
+          const at = yield* worktrees.here(
+            event.cwd === "" ? cwd : canonicalPath(event.cwd),
+          );
           const current = at.current?.worktree;
           if (current === undefined || !Worktrees.isShelfable(current)) return;
           const { at: _at, ...session } = next;

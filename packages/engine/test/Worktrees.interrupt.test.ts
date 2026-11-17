@@ -7,37 +7,43 @@
 // ref the crash left behind. The removal's tail, git's remove,
 // the forget and the branch, runs whole too, and a removal whose git was
 // killed mid-delete is finished by a forced one. Each step is held by the
-// wrappers in lib/stopAt.ts. The same steps killed outright are the app's
+// wrappers in lib/stopAt.ts, or in node:fs/promises where the engine
+// copies and removes in process. The same steps killed outright are the app's
 // proof `interrupted-workflows`.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import {
-  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
-  realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, realpath, resolve } from "../src/canonicalPath.ts";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as SqlClient from "effect/sql/SqlClient";
-import { afterEach, beforeEach, it, onTestFinished } from "vitest";
+import { afterEach, beforeEach, it, onTestFinished, vi } from "vitest";
 import * as Config from "../src/Config.ts";
 import { errorDocument } from "../src/errorDocument.ts";
+import * as ProcessTable from "../src/ProcessTable.ts";
 import * as Registry from "../src/Registry.ts";
 import * as WorktreeData from "../src/WorktreeData.ts";
 import * as Worktrees from "../src/Worktrees.ts";
+import { readOnly } from "./lib/holds.ts";
 import { type Engine, type Sandbox, sandbox } from "./lib/sandbox.ts";
 import { type Stop, stopWrappers } from "./lib/stopAt.ts";
+
+vi.mock("node:fs/promises", async (actual) =>
+  (await import("./lib/stopAt.ts")).holdingFs(await actual()),
+);
 
 let box: Sandbox;
 let path: string | undefined;
@@ -389,9 +395,22 @@ const deadRecord = (
       })}`,
   );
 
+// A live process for a record to name.
+const sleep = () =>
+  spawn(process.execPath, ["-e", "setTimeout(() => {}, 30_000)"], {
+    stdio: "ignore",
+  });
+
+// A live process's birth, as a move's record names its process.
+const birthOf = (pid: number) =>
+  Effect.gen(function* () {
+    const table = yield* ProcessTable.ProcessTable;
+    return Option.getOrThrow(yield* table.startedAt(pid));
+  });
+
 // A checkout's entry of git's, as a move records it.
 const linkOf = (dir: string) =>
-  realpathSync(
+  realpath(
     resolve(
       dir,
       readFileSync(join(dir, ".git"), "utf8")
@@ -516,7 +535,7 @@ it("a copy across volumes whose delete of the original was cut short is finished
 });
 
 it("a move another live process holds is left to it", async () => {
-  const sleeper = spawn("/bin/sleep", ["30"], { stdio: "ignore" });
+  const sleeper = sleep();
   onTestFinished(() => void sleeper.kill());
   const result = await withFox(({ project, worktree }) =>
     Effect.gen(function* () {
@@ -530,7 +549,7 @@ it("a move another live process holds is left to it", async () => {
         link: linkOf(worktree.path),
         partial: null,
         pid: sleeper.pid ?? 0,
-        started_at: Date.now(),
+        started_at: yield* birthOf(sleeper.pid ?? 0),
       })}`;
       yield* worktrees.resumeMoves;
       const refused = yield* worktrees
@@ -697,7 +716,7 @@ it("a resume leaves a copy this process is making alone", async () => {
 });
 
 it("a move into a folder another move still names is refused", async () => {
-  const sleeper = spawn("/bin/sleep", ["30"], { stdio: "ignore" });
+  const sleeper = sleep();
   onTestFinished(() => void sleeper.kill());
   const result = await withFox(({ project, worktree }) =>
     Effect.gen(function* () {
@@ -713,7 +732,7 @@ it("a move into a folder another move still names is refused", async () => {
         carried: 1,
         partial: null,
         pid: sleeper.pid ?? 0,
-        started_at: Date.now(),
+        started_at: yield* birthOf(sleeper.pid ?? 0),
       })}`;
       const refused = yield* worktrees
         .move({ project, worktree }, otter)
@@ -1096,17 +1115,14 @@ it("an adopt whose removal fails after git let go keeps the replacement, the det
         (row) => row.path === outside,
       );
       assert.ok(external?.detached);
-      chmodSync(stuck, 0o555);
+      const release = readOnly(stuck);
       const failed = yield* worktrees
         .adopt(
           { project, worktree: external },
           { force: false },
           { report: () => Effect.void, color: false },
         )
-        .pipe(
-          Effect.result,
-          Effect.ensuring(Effect.sync(() => chmodSync(stuck, 0o755))),
-        );
+        .pipe(Effect.result, Effect.ensuring(Effect.sync(release)));
       const heads = (yield* worktrees.identities(project)).map((listed) =>
         box.git(listed.path, "rev-parse", "HEAD").trim(),
       );
@@ -1139,17 +1155,14 @@ it("an adopt whose removal leaves the original listed without a HEAD keeps the r
         (row) => row.path === outside,
       );
       assert.ok(external?.detached);
-      chmodSync(logs, 0o555);
+      const release = readOnly(logs);
       const failed = yield* worktrees
         .adopt(
           { project, worktree: external },
           { force: false },
           { report: () => Effect.void, color: false },
         )
-        .pipe(
-          Effect.result,
-          Effect.ensuring(Effect.sync(() => chmodSync(logs, 0o755))),
-        );
+        .pipe(Effect.result, Effect.ensuring(Effect.sync(release)));
       const heads = (yield* worktrees.identities(project)).flatMap((listed) => {
         try {
           return [box.git(listed.path, "rev-parse", "HEAD").trim()];

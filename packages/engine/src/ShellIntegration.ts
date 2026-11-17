@@ -2,8 +2,8 @@
 // what it is), for `sm shell` and the app's Settings alike. The rc file
 // a hook goes in depends on the shell's ZDOTDIR and XDG_CONFIG_HOME:
 // the terminal's are its own environment's, and the app passes its
-// login shell's, which a Finder launch doesn't inherit. Needs the data
-// dir's names and the platform alone, never the store.
+// interactive shell's, which a Finder launch doesn't inherit. Needs the
+// data dir's names and the platform alone, never the store.
 import { tildify } from "@shigomori/contracts/projectPaths";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -13,10 +13,13 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { envVar } from "./environment.ts";
 import * as Paths from "./Paths.ts";
 import {
   CD_FILE_ENV,
+  type ConfigText,
+  encodeConfig,
   fishHookContent,
   type Hook,
   hookPlace,
@@ -74,15 +77,16 @@ export class HookFileError extends Schema.TaggedError<HookFileError>()(
 export type HookShell = {
   readonly zdotdir?: string | undefined;
   readonly configHome?: string | undefined;
-  // The login shell's path, or "" (or `/bin/sh`, Lifecycle's fallback)
-  // for none.
-  readonly loginShell: string;
+  // The program a terminal runs (Shells' interactive): the login shell,
+  // `/bin/sh` without one, and on Windows the PowerShell whose profile
+  // the hook goes in. "" for none.
+  readonly interactiveShell: string;
 };
 
 // The document `shell status --json` prints.
 export type StatusDocument = {
   readonly ok: true;
-  readonly loginShell: ShellKind | "";
+  readonly interactiveShell: ShellKind | "";
   readonly active: boolean;
   readonly shells: ReadonlyArray<{
     readonly shell: ShellKind;
@@ -94,8 +98,8 @@ export type StatusDocument = {
 export class ShellIntegration extends Context.Service<
   ShellIntegration,
   {
-    // The login shell, when it is one sm supports, else "".
-    readonly loginShell: (shell: HookShell) => Effect.Effect<ShellKind | "">;
+    // The interactive shell's kind, when it is one sm supports, else "".
+    readonly shellKind: (shell: HookShell) => Effect.Effect<ShellKind | "">;
     // The status document, and each shell's config home-collapsed, in
     // the same order.
     readonly status: (shell: HookShell) => Effect.Effect<{
@@ -123,15 +127,20 @@ const make = Effect.gen(function* () {
   const paths = yield* Paths.Paths;
   const fs = yield* FileSystem.FileSystem;
   const { basename, dirname, join } = yield* Path.Path;
-  const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+  const platform = yield* Effect.context<
+    FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+  >();
 
   // Where the hooks live, and how a path under home is shown.
   const place = (shell: HookShell) =>
     Effect.gen(function* () {
-      const at = hookPlace(paths, shell.zdotdir ?? (yield* envVar("ZDOTDIR")));
+      const { place: at } = yield* hookPlace(paths, {
+        zdotdir: shell.zdotdir ?? (yield* envVar("ZDOTDIR")),
+        configHome: shell.configHome ?? "",
+        program: shell.interactiveShell,
+      });
       return {
         ...at,
-        configHome: shell.configHome || at.configHome,
         collapse: (target: string) => tildify(target, paths.home),
       };
     });
@@ -152,9 +161,10 @@ const make = Effect.gen(function* () {
       cause,
     });
 
-  const loginShell = (shell: HookShell) =>
+  const shellKind = (shell: HookShell) =>
     Effect.sync((): ShellKind | "" => {
-      const kind = basename(shell.loginShell);
+      const name = basename(shell.interactiveShell).replace(/\.exe$/i, "");
+      const kind = name === "pwsh" ? "powershell" : name;
       return isShellKind(kind) ? kind : "";
     });
 
@@ -165,9 +175,9 @@ const make = Effect.gen(function* () {
       for (const kind of SHELL_KINDS) hooks.push(yield* inspectHook(at, kind));
       const document: StatusDocument = {
         ok: true,
-        loginShell: yield* loginShell(shell),
+        interactiveShell: yield* shellKind(shell),
         active: (yield* envVar(CD_FILE_ENV)) !== "",
-        // Hands off an unreadable file as off an edited one.
+        // Hands off a file it can't read as off an edited one.
         shells: hooks.map(({ shell: kind, path, state }) => ({
           shell: kind,
           path,
@@ -181,7 +191,7 @@ const make = Effect.gen(function* () {
   // never leaves the user's config cut short. An existing file keeps
   // its permissions, and a symlinked one (a dotfiles manager's) stays a
   // link, the file it points at getting the change.
-  const writeHookFile = (at: Place, file: string, content: string) =>
+  const writeHookFile = (at: Place, file: string, content: ConfigText) =>
     Effect.gen(function* () {
       const target = yield* fs
         .realPath(file)
@@ -194,7 +204,7 @@ const make = Effect.gen(function* () {
         dirname(target),
         `.${basename(target)}.tmp-${process.pid}`,
       );
-      yield* fs.writeFileString(temp, content, { mode }).pipe(
+      yield* fs.writeFile(temp, encodeConfig(content), { mode }).pipe(
         // The mode given is masked by the umask on creation.
         Effect.andThen(fs.chmod(temp, mode)),
         Effect.andThen(fs.rename(temp, target)),
@@ -219,15 +229,21 @@ const make = Effect.gen(function* () {
         hook.path,
       );
     }
-    if (kind === "fish") {
-      const dir = dirname(hook.path);
-      yield* fs
-        .makeDirectory(dir, { recursive: true })
-        .pipe(Effect.mapError((cause) => hookError(at, "create", dir, cause)));
-      yield* writeHookFile(at, hook.path, fishHookContent(at.names));
-    } else {
-      yield* writeHookFile(at, hook.path, withHook(at.names, kind, hook.text));
-    }
+    const dir = dirname(hook.path);
+    yield* fs
+      .makeDirectory(dir, { recursive: true })
+      .pipe(Effect.mapError((cause) => hookError(at, "create", dir, cause)));
+    yield* writeHookFile(
+      at,
+      hook.path,
+      kind === "fish"
+        ? { text: fishHookContent(at.names), encoding: "bytes" }
+        : {
+            encoding: "bytes",
+            ...hook.file,
+            text: withHook(at.names, kind, hook.file?.text),
+          },
+    );
     return at.collapse(hook.path);
   }, Effect.provideContext(platform));
 
@@ -250,13 +266,16 @@ const make = Effect.gen(function* () {
                     hookError(at, "remove", hook.path, cause),
                   ),
                 )
-            : writeHookFile(at, hook.path, withoutHook(at.names, hook.text));
+            : writeHookFile(at, hook.path, {
+                ...hook.file,
+                text: withoutHook(at.names, hook.file.text),
+              });
           return Option.some(at.collapse(hook.path));
       }
     });
 
   return ShellIntegration.of({
-    loginShell: Effect.fn("ShellIntegration.loginShell")(loginShell),
+    shellKind: Effect.fn("ShellIntegration.shellKind")(shellKind),
     status: Effect.fn("ShellIntegration.status")((shell: HookShell) =>
       status(shell).pipe(Effect.provideContext(platform)),
     ),

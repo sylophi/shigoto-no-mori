@@ -19,6 +19,7 @@
 // source's was) is registered as it is and landed in, its files
 // untouched.
 import { isCloneableRemote } from "@shigomori/contracts/predicates/remoteUrl";
+import { isWindowsPath } from "@shigomori/contracts/projectPaths";
 import {
   lstat,
   mkdir,
@@ -28,7 +29,8 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute } from "node:path";
+import { join } from "@shigomori/engine/canonicalPath";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -38,8 +40,9 @@ import {
 } from "@shigomori/contracts/modules/sync";
 import * as Git from "@shigomori/engine/Git";
 import { errnoWords } from "@shigomori/engine/platformErrors";
+import { byFamily } from "@shigomori/engine/platform";
 import { pidAlive } from "@shigomori/engine/processes";
-import { expandHome } from "@shared/paths";
+import { expandHome, home } from "@shared/paths";
 import * as EngineConfig from "@shigomori/engine/Config";
 import * as Identity from "@shigomori/engine/Identity";
 import { messageOf } from "@shigomori/engine/errorDocument";
@@ -54,7 +57,6 @@ import {
   projectsContract,
 } from "@shigomori/contracts/modules/projects";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
-import { homedir } from "node:os";
 import { peerEffects } from "@host/ipc/PeerReach";
 import { transferFilesOnce } from "@host/mirror/oneShot";
 import { onlyIgnores } from "@shigomori/contracts/mirrorIgnores";
@@ -225,6 +227,19 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
   // that cannot be made (a file in its place) is the destination
   // check's to name.
   const parent = expandHome(parentDir);
+  // A relative folder is under the host's cwd. A drive sent to macOS or
+  // Linux (`D:/src`, `D:\src`) would read as one, so it is refused
+  // there, and Windows takes only a full path.
+  if (
+    byFamily({
+      posix: isWindowsPath(parent.replaceAll("\\", "/")),
+      windows: !isAbsolute(parent),
+    })
+  ) {
+    return yield* new Git.GitRefusedError({
+      reason: `The folder to clone into must be an absolute path: ${parentDir}`,
+    });
+  }
   yield* Effect.promise(() =>
     mkdir(parent, { recursive: true }).catch(() => {}),
   );
@@ -434,7 +449,7 @@ export const clonePeerProject = Effect.fnUntraced(function* (
         sourcePath: peer.path,
         sourceHome: (yield* peerEffects(runtimeContract, deviceId).info())
           .homedir,
-        destinationHome: homedir(),
+        destinationHome: home(),
         destinationProjects: yield* listedProjects,
       }),
     peer.path,

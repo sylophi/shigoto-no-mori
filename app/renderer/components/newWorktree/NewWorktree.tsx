@@ -264,7 +264,7 @@ function NewWorktreeForm({
   const errorMessage =
     (prMode ? createFromPr.error : create.error)?.message ?? null;
   const destName = folderName || "…";
-  const destPath = destRoot ? `${destRoot}/${destName}` : destName;
+  const destPath = destRoot ? `${destRoot}${destName}` : destName;
 
   return (
     <NewWorktreeFormView

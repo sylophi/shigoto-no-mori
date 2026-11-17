@@ -65,6 +65,20 @@ export const FAKE_LAUNCHERS = [
   { kind: "custom", id: "custom:deploy", label: "Deploy preview" },
 ] as const;
 
+// A Windows PC's, with Windows' own terminal, shell and file manager in
+// place of the Mac's.
+const ON_WINDOWS: Readonly<Record<string, { id: string; label: string }>> = {
+  "app:terminal": { id: "app:windows-terminal", label: "Windows Terminal" },
+  "app:ghostty": { id: "app:powershell", label: "PowerShell" },
+  "app:finder": { id: "app:explorer", label: "File Explorer" },
+};
+const onWindows = <T extends { id: string }>(tool: T): T => ({
+  ...tool,
+  ...ON_WINDOWS[tool.id],
+});
+export const FAKE_WINDOWS_DETECTED = FAKE_DETECTED.map(onWindows);
+export const FAKE_WINDOWS_LAUNCHERS = FAKE_LAUNCHERS.map(onWindows);
+
 // Claude Code's hooks in, Codex's waiting on a fresh install.
 export function fakeAgentHarnesses(home: string): AgentHarnessStatus[] {
   return [
@@ -86,12 +100,16 @@ export function fakeAgentHarnesses(home: string): AgentHarnessStatus[] {
 }
 
 // The CLI linked into ~/.local/bin, on PATH.
-export function fakeCliStatus(home: string): CliStatus {
+export function fakeCliStatus(
+  home: string,
+  placement: CliStatus["placement"] = "link",
+): CliStatus {
   return {
     name: "sm",
     aliasName: "shigomori",
     binDir: `${home}/.local/bin`,
-    linkPath: `${home}/.local/bin/sm`,
+    commandPath: `${home}/.local/bin/sm`,
+    placement,
     state: "installed",
     foreignPaths: [],
     onPath: true,
@@ -100,10 +118,25 @@ export function fakeCliStatus(home: string): CliStatus {
 
 export function fakeShellStatus(home: string): ShellIntegrationStatus {
   return {
-    loginShell: "zsh",
+    interactiveShell: "zsh",
     shells: [
       { shell: "zsh", path: `${home}/.zshrc`, state: "installed" },
       { shell: "bash", path: `${home}/.bashrc`, state: "missing" },
+    ],
+  };
+}
+
+// A Windows PC's: PowerShell, its profile under Documents.
+export function fakeWindowsShellStatus(home: string): ShellIntegrationStatus {
+  return {
+    interactiveShell: "powershell",
+    shells: [
+      { shell: "bash", path: `${home}/.bashrc`, state: "missing" },
+      {
+        shell: "powershell",
+        path: `${home}/Documents/PowerShell/profile.ps1`,
+        state: "missing",
+      },
     ],
   };
 }

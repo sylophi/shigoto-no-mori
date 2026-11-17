@@ -3,8 +3,16 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import { canonicalPath } from "../canonicalPath.ts";
+import type { CheckoutConfig } from "../gitIndex.ts";
 import { parseWorktreeList, splitLines, splitRemoteRef } from "../gitParse.ts";
+import { byFamily } from "../platform.ts";
+import { GitCommandError } from "./documents.ts";
 import type { RunningArea } from "./running.ts";
+
+// Settings a single git command reads over the repository's.
+const configArgs = (config: Readonly<Record<string, string>> = {}) =>
+  Object.entries(config).flatMap(([key, value]) => ["-c", `${key}=${value}`]);
 
 export const makeWorktreeVerbs = ({
   running,
@@ -20,7 +28,7 @@ export const makeWorktreeVerbs = ({
         Effect.map((text) => {
           const trimmed = text.trim();
           if (!trimmed.startsWith("gitdir: ")) return Option.none<string>();
-          const dir = trimmed.slice("gitdir: ".length);
+          const dir = canonicalPath(trimmed.slice("gitdir: ".length));
           return Option.some(
             path.isAbsolute(dir) ? dir : path.join(worktreePath, dir),
           );
@@ -43,11 +51,13 @@ export const makeWorktreeVerbs = ({
       readonly branch: string;
       readonly base?: string | undefined;
       readonly noCheckout?: boolean | undefined;
+      readonly config?: Readonly<Record<string, string>> | undefined;
     }) {
       // A new branch is unpublished: off origin/main, git's default
       // (branch.autoSetupMerge) would track main, where a push of it
       // is refused or lands.
       yield* run(input.repo, [
+        ...configArgs(input.config),
         "worktree",
         "add",
         "--no-track",
@@ -58,6 +68,118 @@ export const makeWorktreeVerbs = ({
         input.path,
         ...(input.base ? [input.base] : []),
       ]);
+    });
+
+    // A setting as git reads it at `cwd`, empty when unset.
+    const configAt = (cwd: string, args: readonly string[]) =>
+      run(cwd, ["config", ...args], { okExitCodes: [1] }).pipe(
+        Effect.map((out) => out.trim()),
+      );
+
+    const checkoutConfig = Effect.fn("Git.checkoutConfig")(function* (
+      checkout: string,
+    ) {
+      const read = (key: string) =>
+        Effect.map(configAt(checkout, ["--get", key]), (value) =>
+          value.toLowerCase(),
+        );
+      // git's bool, a value it refuses to read taken as `fallback`.
+      const bool = (key: string, fallback: boolean) =>
+        configAt(checkout, ["--type=bool", "--get", key]).pipe(
+          Effect.map((value) => (value === "" ? undefined : value === "true")),
+          Effect.catchIf(
+            (error) =>
+              error instanceof GitCommandError && error.exitCode === 128,
+            () => Effect.succeed(fallback),
+          ),
+        );
+      const { autocrlf, eol, symlinks } = yield* Effect.all(
+        {
+          autocrlf: read("core.autocrlf"),
+          eol: read("core.eol"),
+          symlinks: bool("core.symlinks", false),
+        },
+        { concurrency: "unbounded" },
+      );
+      // autocrlf also takes "input", which isn't a bool.
+      const crlf =
+        autocrlf === "input"
+          ? "input"
+          : autocrlf !== "" && (yield* bool("core.autocrlf", true))
+            ? "true"
+            : "false";
+      return {
+        autocrlf: crlf,
+        // git reads core.eol only with autocrlf off.
+        eol:
+          crlf === "true"
+            ? "crlf"
+            : crlf === "input"
+              ? "lf"
+              : eol === "lf" || eol === "crlf"
+                ? eol
+                : byFamily({
+                    posix: "lf",
+                    windows: "crlf",
+                  } as const),
+        symlinks: symlinks ?? true,
+      } satisfies CheckoutConfig;
+    });
+
+    // Settings for `worktree` alone, in its own config.worktree. Turning
+    // the repository's extensions.worktreeConfig on first moves what its
+    // shared config says of the main worktree alone (core.bare when
+    // true, core.worktree) into the main worktree's config.worktree, as
+    // git's documentation asks, or every linked worktree would read them.
+    const setWorktreeConfig = Effect.fn("Git.setWorktreeConfig")(function* (
+      worktree: string,
+      entries: Readonly<Record<string, string>>,
+    ) {
+      const common = canonicalPath(
+        (yield* run(worktree, [
+          "rev-parse",
+          "--path-format=absolute",
+          "--git-common-dir",
+        ])).trim(),
+      );
+      const shared = ["--file", path.join(common, "config")];
+      const main = ["--file", path.join(common, "config.worktree")];
+      const on = yield* configAt(worktree, [
+        ...shared,
+        "--type=bool",
+        "--get",
+        "extensions.worktreeConfig",
+      ]);
+      if (on !== "true") {
+        const bare = yield* configAt(worktree, [
+          ...shared,
+          "--type=bool",
+          "--get",
+          "core.bare",
+        ]);
+        const mainWorktree = yield* configAt(worktree, [
+          ...shared,
+          "--get",
+          "core.worktree",
+        ]);
+        for (const [key, value] of [
+          ["core.bare", bare === "true" ? "true" : ""],
+          ["core.worktree", mainWorktree],
+        ] as const) {
+          if (value === "") continue;
+          yield* run(worktree, ["config", ...main, key, value]);
+          yield* run(worktree, ["config", ...shared, "--unset", key]);
+        }
+        yield* run(worktree, [
+          "config",
+          ...shared,
+          "extensions.worktreeConfig",
+          "true",
+        ]);
+      }
+      for (const [key, value] of Object.entries(entries)) {
+        yield* run(worktree, ["config", "--worktree", key, value]);
+      }
     });
 
     const listRemotes = Effect.fn("Git.listRemotes")(function* (repo: string) {
@@ -114,6 +236,7 @@ export const makeWorktreeVerbs = ({
         readonly ref: string;
         readonly remotes?: readonly string[] | undefined;
         readonly noCheckout?: boolean | undefined;
+        readonly config?: Readonly<Record<string, string>> | undefined;
         // Checked out though another worktree has it, as an adopt's
         // replacement made before the checkout it replaces goes.
         readonly force?: boolean | undefined;
@@ -124,6 +247,7 @@ export const makeWorktreeVerbs = ({
           input.remotes,
         );
         yield* run(input.repo, [
+          ...configArgs(input.config),
           "worktree",
           "add",
           ...(input.noCheckout ? ["--no-checkout"] : []),
@@ -164,6 +288,8 @@ export const makeWorktreeVerbs = ({
       adminDirOf,
       listWorktrees,
       addWorktree,
+      checkoutConfig,
+      setWorktreeConfig,
       listRemotes,
       localBranchExists,
       remoteRefExists,

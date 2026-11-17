@@ -18,6 +18,7 @@ import {
   send,
 } from "@host/lib/control/ops";
 import { access, setAccess } from "@host/lib/control/access";
+import { Terminals } from "@host/lib/terminals/Terminals";
 import {
   mirrorDeleteDone,
   mirrorDeleteStoppedShort,
@@ -32,6 +33,8 @@ export const controlHandlers = {
   stopMirrorForDelete,
   mirrorDeleteDone,
   mirrorDeleteStoppedShort,
+  releaseHolders: (owner) =>
+    Effect.flatMap(Terminals, (terminals) => terminals.closeOf(owner)),
   access,
   setAccess,
 } satisfies EffectHandlers<

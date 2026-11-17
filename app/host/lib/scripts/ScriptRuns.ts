@@ -7,26 +7,23 @@
 // (interactive prompts, vite's "r"/"q" shortcuts, TUIs). node-pty is not
 // a child_process, so this is the wrapper that gives a PTY child the
 // shape of an effect/process one: acquired in a scope, its release the
-// kill chain (./process.ts), its exit an effect to wait on.
+// kill chain (./ProcessTrees.ts), its exit an effect to wait on.
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { type IPty, spawn as spawnPty } from "node-pty";
 import { messageOf } from "@shigomori/engine/errorDocument";
-import * as Lifecycle from "@shigomori/engine/Lifecycle";
-import { signalTree, signalTreeBestEffort } from "./process";
+import * as Shells from "@shigomori/engine/Shells";
+import * as ProcessTrees from "./ProcessTrees";
+import type { Stop } from "./processTrees/tree";
 
-// No process could be started: a missing folder to start in or login
-// shell, or a PTY that could not be allocated. The console shows the
-// message.
+// No process could be started: a missing folder to start in or shell,
+// or a PTY that could not be allocated. The console shows the message.
 export class PtySpawnError extends Schema.TaggedError<PtySpawnError>()(
   "PtySpawnError",
   {
@@ -41,43 +38,50 @@ export class PtySpawnError extends Schema.TaggedError<PtySpawnError>()(
       case "cwd-missing":
         return `Worktree directory is missing: ${this.cwd}`;
       case "shell-missing":
-        return `Login shell not found: ${this.shell}`;
+        return `Shell not found: ${this.shell}`;
       case "failed":
         return "The script's terminal could not be started.";
     }
   }
 }
 
-export interface SpawnOptions {
-  // What the login shell runs, or null for the shell itself,
-  // interactive (a terminal's).
-  readonly command: string | null;
+export type SpawnOptions = {
   readonly cwd: string;
   readonly env: NodeJS.ProcessEnv;
   readonly cols: number;
   readonly rows: number;
-}
+} &
+  // A command line the shell runs, or null for the shell itself,
+  // interactive (a terminal's).
+  (
+    | { readonly shell: Shells.ShShell; readonly command: string }
+    | { readonly shell: Shells.Shell; readonly command: null }
+  );
 
-// How a run is stopped. `wait: false` sends the first signal and
-// moves on: an update's installer is waiting on the app to exit. The
-// first signal is SIGTERM unless `signal` says otherwise: an
-// interactive shell ignores SIGTERM and ends on SIGHUP, as when its
-// terminal window closes.
+// How a run is stopped. `wait: false` asks it to stop and moves on: an
+// update's installer is waiting on the app to exit. The ask is a stop
+// unless `how` says otherwise: an interactive shell ignores a stop and
+// ends on a hangup, as when its terminal window closes.
 export interface Stopping {
   readonly graceMs: number;
   readonly wait: boolean;
-  readonly signal?: NodeJS.Signals;
+  readonly how?: Stop["how"];
 }
 
 // What the layer's close stops a run it finds still open with.
 const DEFAULT_STOPPING: Stopping = { graceMs: 3_000, wait: true };
 
-// How long to wait for a child that survived SIGKILL (kernel-stuck
-// I/O) before giving up. A delete or a quit must not hang behind it.
+// How long an ended tree has to go before it is given up on. A delete
+// or a quit must not hang behind one stuck in the kernel's I/O.
 export const UNKILLABLE_WAIT_MS = 5_000;
 
 export interface PtyHandle {
+  // 0 until the child exists.
   readonly pid: number;
+  // The child exists, or the run is over: at once where the PTY starts
+  // the child in the spawn, and at its first output on Windows, where
+  // ConPTY starts it once its output reader is up.
+  readonly started: Effect.Effect<void>;
   readonly write: (data: string) => void;
   readonly resize: (cols: number, rows: number) => void;
   // Stops and restarts reading the PTY, so a program writing faster
@@ -114,8 +118,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
   opts: SpawnOptions,
   stopping: () => Stopping,
 ) {
-  const { shell, args: shellArgs } = yield* (yield* Lifecycle.Lifecycle)
-    .loginShell;
+  const { program, args } = opts.shell;
   // node-pty's helper does the chdir and execs the shell in the child,
   // and exits 1 without a word if either fails, which would show as a
   // bare "exit 1".
@@ -124,12 +127,12 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
     fs.exists(path).pipe(Effect.orElseSucceed(() => false));
   const missing = !(yield* exists(opts.cwd))
     ? "cwd-missing"
-    : !(yield* exists(shell))
+    : !(yield* exists(program))
       ? "shell-missing"
       : null;
   if (missing !== null) {
     return yield* new PtySpawnError({
-      shell,
+      shell: program,
       cwd: opts.cwd,
       reason: missing,
       cause: undefined,
@@ -138,31 +141,29 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
   // node-pty's env is a plain string map, so the undefined entries
   // NodeJS.ProcessEnv allows are dropped.
   const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(opts.env)) {
+  for (const [key, value] of Object.entries({
+    ...opts.env,
+    ...opts.shell.env,
+  })) {
     if (value !== undefined && !STALE_TERMINAL_ENV.has(key)) {
       env[key] = value;
     }
   }
+  const trees = yield* ProcessTrees.ProcessTrees;
   const exited = yield* Deferred.make<{
     exitCode: number;
     signal: number | undefined;
   }>();
   const exit = Deferred.await(exited);
-  const waitExit = (ms: number) =>
-    exit.pipe(
-      Effect.timeoutOption(Duration.millis(ms)),
-      Effect.map(Option.isSome),
-    );
-  // The PTY child runs in its own session, so its pgid === pid and the
-  // whole tree is signaled through -pid.
+  const started = yield* Deferred.make<void>();
   const child = yield* Effect.acquireRelease(
     Effect.try({
       try: (): IPty => {
         const spawned = spawnPty(
-          shell,
+          program,
           opts.command === null
-            ? [...shellArgs]
-            : [...shellArgs, "-c", opts.command],
+            ? [...args]
+            : [...opts.shell.runArgs(opts.command)],
           {
             name: "xterm-256color",
             cols: opts.cols,
@@ -182,35 +183,51 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
       },
       catch: (cause) =>
         new PtySpawnError({
-          shell,
+          shell: program,
           cwd: opts.cwd,
           reason: "failed",
           cause,
         }),
     }),
-    (spawned) =>
-      Effect.gen(function* () {
-        if (yield* Deferred.isDone(exited)) return;
-        const { graceMs, wait, signal = "SIGTERM" } = stopping();
-        if (!wait) {
-          signalTreeBestEffort(spawned.pid, signal);
-          return;
-        }
-        yield* signalTree(spawned.pid, signal);
-        if (yield* waitExit(graceMs)) return;
-        yield* signalTree(spawned.pid, "SIGKILL");
-        if (yield* waitExit(UNKILLABLE_WAIT_MS)) return;
-        yield* Effect.logWarning(
-          `[scripts] "${opts.command ?? shell}" (pid ${spawned.pid}) survived SIGKILL, giving up on it`,
-        );
-      }),
+    (spawned) => {
+      const tree = {
+        get pid() {
+          return spawned.pid;
+        },
+        ownGroup: true,
+        terminal: {
+          close: () => spawned.kill(),
+          interrupt: () => spawned.write("\x03"),
+        },
+      };
+      return Effect.gen(function* () {
+        if (yield* Deferred.isDone(exited)) return yield* trees.release(tree);
+        const { graceMs, wait, how = "stop" } = stopping();
+        if (!wait) return yield* trees.stopNow(tree);
+        yield* trees.stop(tree, {
+          how,
+          graceMs,
+          endMs: UNKILLABLE_WAIT_MS,
+          exited: exit,
+          name: `"${opts.command ?? program}"`,
+        });
+      });
+    },
   );
   // node-pty reports exit only after the terminal stream has drained
   // (or a short grace period when a backgrounded grandchild still holds
   // the PTY open), so the run's last output never races its exit.
   child.onExit(({ exitCode, signal }) => {
     Deferred.doneUnsafe(exited, Exit.succeed({ exitCode, signal }));
+    Deferred.doneUnsafe(started, Exit.void);
   });
+  if (child.pid > 0) Deferred.doneUnsafe(started, Exit.void);
+  else {
+    const first = child.onData(() => {
+      first.dispose();
+      Deferred.doneUnsafe(started, Exit.void);
+    });
+  }
   const on = (child as IPty & { on: (...args: never[]) => void }).on.bind(
     child,
   ) as (
@@ -218,7 +235,10 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
     listener: (error: NodeJS.ErrnoException) => void,
   ) => void;
   return {
-    pid: child.pid,
+    get pid() {
+      return child.pid;
+    },
+    started: Deferred.await(started),
     write: (data) => child.write(data),
     resize: (cols, rows) => child.resize(cols, rows),
     pause: () => child.pause(),
@@ -259,9 +279,8 @@ export class ScriptRuns extends Context.Service<
 >()("sm/host/ScriptRuns") {}
 
 const make = Effect.gen(function* () {
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const trees = yield* ProcessTrees.ProcessTrees;
   const fs = yield* FileSystem.FileSystem;
-  const lifecycle = yield* Lifecycle.Lifecycle;
   const scope = yield* Effect.scope;
   const open = Effect.fn("ScriptRuns.open")(function* (opts: SpawnOptions) {
     const run = yield* Scope.fork(scope);
@@ -270,9 +289,8 @@ const make = Effect.gen(function* () {
     let stopping = DEFAULT_STOPPING;
     const handle = yield* spawn(opts, () => stopping).pipe(
       Scope.provide(run),
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Effect.provideService(ProcessTrees.ProcessTrees, trees),
       Effect.provideService(FileSystem.FileSystem, fs),
-      Effect.provideService(Lifecycle.Lifecycle, lifecycle),
       Effect.onError(() => Scope.close(run, Exit.void)),
     );
     // The stopping is taken when close is called, not when its effect
@@ -282,8 +300,8 @@ const make = Effect.gen(function* () {
       return Scope.close(run, Exit.void);
     };
     // A run that is over lets go of its scope, so the layer stops
-    // holding it. The release finds the child exited and signals
-    // nothing.
+    // holding it. The release finds the child exited and only lets go
+    // of its tree.
     yield* handle.exit.pipe(
       Effect.andThen(() => close({ graceMs: 0, wait: false })),
       Effect.forkIn(scope),

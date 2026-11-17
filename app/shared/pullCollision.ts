@@ -51,3 +51,11 @@ export function pullBranchInTheWay(
 ): string {
   return `${branch} cannot be created ${where}: a branch named ${inTheWay} is in the way (git allows one of the two). Rename that branch first.`;
 }
+
+// Why a mirror's copy is refused up front: its original tracks
+// symlinks, which the copy's checkout writes as links, and none can be
+// made in `dir`, where the copy would go. `windows` is the copy's
+// device's, where Developer Mode lets an unelevated app make them.
+export function symlinksRefusal(dir: string, windows: boolean): string {
+  return `This worktree tracks symlinks, which can't be made where its copy would go (${dir}).${windows ? " Turn on Developer Mode in that device's Windows settings, then mirror again." : ""}`;
+}

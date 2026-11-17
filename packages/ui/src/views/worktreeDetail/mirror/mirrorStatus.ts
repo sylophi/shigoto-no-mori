@@ -8,6 +8,7 @@
 // The surfaces add "mirror" or the peer's name themselves.
 import {
   isHaltedStatus,
+  mirrorProblemCount,
   type MirrorDaemonStatus,
   type MirrorSession,
   type MirrorStatus,
@@ -108,11 +109,7 @@ export function describeMirror(
   session: MirrorSession,
   context: MirrorContext = {},
 ): MirrorLook {
-  const problems =
-    session.local.problems.length +
-    session.remote.problems.length +
-    session.local.excludedProblems +
-    session.remote.excludedProblems;
+  const problems = mirrorProblemCount(session.local, session.remote);
   const conflicts = session.conflicts.length + session.excludedConflicts;
   // A check after the first pass reads as Live and keeps the watching
   // detail, so the line beside the label holds still through it.

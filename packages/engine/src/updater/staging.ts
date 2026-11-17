@@ -2,12 +2,12 @@
 import type { StagedManifest } from "@shigomori/contracts/schemas/runtime";
 import { StagedManifestSchema } from "@shigomori/contracts/schemas/runtime";
 import * as Effect from "effect/Effect";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as ProcessTable from "../ProcessTable.ts";
 import {
   acquireStagingLock,
   StagingLockUnavailable,
@@ -41,7 +41,7 @@ export const makeStaging = ({
 }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const processTable = yield* ProcessTable.ProcessTable;
     const path = yield* Path.Path;
     const {
       updates: updatesDir,
@@ -57,7 +57,7 @@ export const makeStaging = ({
     // the lock's own reads as its folder's.
     const lock = acquireStagingLock(lockPath).pipe(
       Effect.provideService(FileSystem.FileSystem, fs),
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Effect.provideService(ProcessTable.ProcessTable, processTable),
       Effect.provideService(Path.Path, path),
       Effect.mapError((error) =>
         error instanceof UpdateInProgress ||

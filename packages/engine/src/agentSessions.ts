@@ -3,6 +3,7 @@
 // stores the sessions and reads the events.
 import { createHash } from "node:crypto";
 import type { AgentSession as WireSession } from "@shigomori/contracts/schemas/worktree";
+import { relativeInside } from "@shigomori/contracts/projectPaths";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
@@ -144,9 +145,7 @@ function waitNeed(event: AgentEvent): string {
   for (const key of ["command", "file_path", "url", "path", "pattern"]) {
     let value = text(input[key]);
     if (value === "") continue;
-    if (event.cwd !== "" && value.startsWith(`${cwd}/`)) {
-      value = value.slice(cwd.length + 1);
-    }
+    if (event.cwd !== "") value = relativeInside(value, cwd) ?? value;
     return clipLine(value, AGENT_LINE_MAX);
   }
   return "";

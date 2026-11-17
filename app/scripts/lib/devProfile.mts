@@ -30,6 +30,7 @@ import {
 } from "../../shared/packaging/appName.mts";
 import { cliDataDirName } from "../../shared/packaging/cliDist.mts";
 import { flavorNames } from "@shigomori/engine/flavor";
+import { byFamily, byPlatform } from "@shigomori/engine/platform";
 
 const PROFILES_DIR = join(homedir(), `${cliDataDirName("dev")}-profiles`);
 
@@ -53,14 +54,14 @@ export function devProfilePaths(name: string): DevProfile {
   };
 }
 
-// Electron's userData for the plain dev instance: its appData (macOS's
-// Application Support, Linux's XDG config home) joined with the dev
-// flavor's folder (main/flavor.ts).
+// Electron's userData for the plain dev instance: its appData joined
+// with the dev flavor's folder (main/flavor.ts).
 function devUserDataDir(): string {
-  const appData =
-    process.platform === "darwin"
-      ? join(homedir(), "Library", "Application Support")
-      : process.env["XDG_CONFIG_HOME"] || join(homedir(), ".config");
+  const appData = byPlatform({
+    darwin: join(homedir(), "Library", "Application Support"),
+    linux: process.env["XDG_CONFIG_HOME"] || join(homedir(), ".config"),
+    win32: process.env["APPDATA"] || join(homedir(), "AppData", "Roaming"),
+  });
   return join(appData, flavorNames("dev").userDataDir);
 }
 
@@ -174,13 +175,19 @@ function wipeDevProfile(profile: DevProfile): void {
 }
 
 // The Clerk bridge's token store (main/electron/ClerkTokens.ts), one
-// file in userData. Dev runs under Chromium's mock keychain, so the
-// safeStorage ciphertext is portable between dev instances on one
-// machine.
+// file in userData. Dev runs under Chromium's mock keychain on macOS
+// and keeps tokens raw on Linux, so the file is portable between dev
+// instances on one machine. Windows encrypts it with a key kept in
+// userData's `Local State`, which goes along.
 const TOKEN_STORE_FILE = `${CLERK_TOKEN_STORE}.json`;
+const CLONED_FILES = byFamily({
+  posix: [TOKEN_STORE_FILE],
+  windows: [TOKEN_STORE_FILE, "Local State"],
+});
 
-// The plain dev instance's sign-in, or a throw naming what to do.
-function devLoginSource(): string {
+// Throws, naming what to do, unless the plain dev instance holds a
+// sign-in.
+function requireDevLogin(): void {
   const source = join(devUserDataDir(), TOKEN_STORE_FILE);
   if (!existsSync(source)) {
     throw new Error(
@@ -188,7 +195,6 @@ function devLoginSource(): string {
         "app (`pnpm start`) first.",
     );
   }
-  return source;
 }
 
 // Copies the plain dev instance's Clerk sign-in into the profile: the
@@ -199,9 +205,10 @@ function devLoginSource(): string {
 // revoking its device (the account:signOut IPC, or the account page),
 // never with the window's Sign out button.
 function cloneDevLogin(profile: DevProfile): void {
-  const source = devLoginSource();
   mkdirSync(profile.userData, { recursive: true });
-  copyFileSync(source, join(profile.userData, TOKEN_STORE_FILE));
+  for (const file of CLONED_FILES) {
+    copyFileSync(join(devUserDataDir(), file), join(profile.userData, file));
+  }
   // The app's sign-out paths read this (account status sharedSignIn):
   // a Clerk sign-out in a window holding a clone would end the session
   // for every window that holds it.
@@ -216,7 +223,7 @@ export function applyDevProfileFlags(
   profile: DevProfile,
   args: DevProfileArgs,
 ): void {
-  if (args.cloneLogin) devLoginSource();
+  if (args.cloneLogin) requireDevLogin();
   if (args.fresh) wipeDevProfile(profile);
   if (args.cloneLogin) cloneDevLogin(profile);
 }

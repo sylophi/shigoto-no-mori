@@ -5,7 +5,7 @@ import {
   type ControlAccess,
   controlContract,
 } from "@shigomori/contracts/modules/control";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byHostKind } from "@shigomori/engine/platform";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Argument from "effect/cli/Argument";
@@ -41,11 +41,11 @@ const accessSwitch = (name: string, key: keyof ControlAccess, label: string) =>
 export const accessSwitches = [
   accessSwitch("share", "share", "Share with other devices"),
   accessSwitch("control", "control", "Allow control from other devices"),
-  // The service keeps a Linux host running (`service`).
-  ...byPlatform({
-    darwin: [
+  // The service keeps a headless host running (`service`).
+  ...byHostKind({
+    app: [
       accessSwitch("reachable", "keepReachable", "Keep this device reachable"),
     ],
-    linux: [],
+    headless: [],
   }),
 ];

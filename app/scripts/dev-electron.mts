@@ -84,8 +84,19 @@ process.on("exit", () => rmSync(relaunchMarker, { force: true }));
 
 function launchForge(): ChildProcess {
   return spawn(
-    join(appRoot, "node_modules", ".bin", "electron-forge"),
-    ["start", ...forgeArgs],
+    process.execPath,
+    [
+      join(
+        appRoot,
+        "node_modules",
+        "@electron-forge",
+        "cli",
+        "dist",
+        "electron-forge.js",
+      ),
+      "start",
+      ...forgeArgs,
+    ],
     { cwd: appRoot, stdio: "inherit" },
   );
 }

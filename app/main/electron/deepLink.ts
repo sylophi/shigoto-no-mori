@@ -1,6 +1,9 @@
 // Inbound deep links: `<scheme>://open/<route>` opens a device's page,
 // e.g. shigomori://open/devices/<id>/projects/<id>/worktrees/<id>.
-// macOS hands a link to main (open-url), possibly before any window
+// macOS hands a link to main (open-url). Windows starts the app with the
+// link as an argument: a launch that loses the single-instance lock
+// passes its arguments to the running app (second-instance), and the
+// launch that wins reads its own. Either can come before any window
 // exists or while its renderer is still booting. So the window set
 // holds the link for the window it goes to and nudges it
 // (main/electron/windows.ts), and the renderer takes the link once it
@@ -23,4 +26,12 @@ export function deepLinkRoute(url: string): string | null {
     return null;
   }
   return parsed.pathname;
+}
+
+export function deepLinkRouteIn(argv: readonly string[]): string | null {
+  for (const arg of argv) {
+    const route = deepLinkRoute(arg);
+    if (route !== null) return route;
+  }
+  return null;
 }

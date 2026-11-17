@@ -24,6 +24,17 @@ What a person or a script reads from the engine reads as the 2.x `sm`'s does: a 
 
 The engine runs in the host under Node and in the terminal binary under Bun, so it imports Node's APIs, `effect`, `@effect/*`, `@shigomori/contracts` and `semver`, and nothing else: no Electron, nothing from the app, no Bun global.
 
+## Which platform question to ask
+
+Four questions, whose answers can differ within one window:
+
+- **The OS this process runs on**: `src/platform.ts`, whose opening comment says when a difference gets a module per OS and when a table where it is used (`byFamily`, `byPlatform`).
+- **The desktop app or a headless host**: `byHostKind` in the same module, for what differs by the machine's role.
+- **Whose paths these are**: `packages/ui/src/lib/devicePaths.ts`, which tells a device's paths by their spelling, since a window shows other devices' too.
+- **Whose keyboard and file manager**: `viewerOs` in `packages/ui/src/lib/platform.ts`, the machine the window runs on, which need not be the host's.
+
+On Windows a project's command lines run in Git Bash, so they read as POSIX sh as they do on macOS and Linux, and a terminal runs PowerShell: 7 where it is installed, else the one Windows comes with. That split is by design (`src/Shells.ts`, `src/shells/windows.ts`).
+
 ## Commit points
 
 Each change of state in several steps has one step after which it counts as done. What a crash or an interrupt at another step leaves, and what settles it, is in the entry or its module (`EFFECT.md`, section 5). The engine's are below, by module under `src/`, and the host's are in `app/host/README.md`.
@@ -37,6 +48,6 @@ Each change of state in several steps has one step after which it counts as done
 - **The move into `wt/`** (`WtFolder.ts`): each worktree's move as above. One that can't be made stays stuck, with why and a Retry.
 - **Project removal** (`Registry.ts`, `unregister`): one transaction, its primary's marks, shelf, agent sessions, unshelve time, clone records and icon included.
 - **Project relocate** (`worktrees/relocating.ts`): the new path and what its worktrees kept commit in one transaction.
-- **The updater's swap** (`updater/swap.ts`): one exchange commits it where the filesystem helper can make one, else two renames.
+- **The updater's swap** (`updater/swap.ts`), by each OS's install: on a Mac one exchange commits it where the filesystem helper can make one, else two renames (`updater/bundle.ts`). On Linux the rename of `current` commits it (`updater/versions.ts`), and on Windows `Update.exe --update` (`updater/squirrel.ts`).
 - **Carry-over** (`CarryOver.ts`): each entry is renamed in whole from a staging folder.
 - **The data-folder lock** (`DataDirLock.ts`) makes a data-folder move the one change under way, and says how. The move and its recovery are `src/dataDirMove.ts`, which the host asks with the checks and holds only it can make (`app/host/lib/dataDirMove.ts`).

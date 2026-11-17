@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ShellSyntax } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { attachTerminal } from "@/lib/terminalFeed";
 import { inputPieces } from "@/lib/terminalInput";
@@ -11,7 +12,13 @@ import { useOutside } from "@shigomori/ui/outside.tsx";
 
 // One of the scoped device's terminals, attached for as long as it is
 // on screen.
-export function Terminal({ terminalId }: { terminalId: string }) {
+export function Terminal({
+  terminalId,
+  syntax,
+}: {
+  terminalId: string;
+  syntax: ShellSyntax;
+}) {
   const { api, remote } = useHostScope();
   const page = useApi();
   const { openUrl } = useOutside();
@@ -23,6 +30,7 @@ export function Terminal({ terminalId }: { terminalId: string }) {
   return (
     <TerminalView
       feed={feed}
+      syntax={syntax}
       live={!ended}
       // A keystroke or a size for a shell on its way out is not worth
       // telling: its end shows.

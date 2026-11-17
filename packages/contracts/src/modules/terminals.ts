@@ -20,7 +20,7 @@ const gated = gatedBy("runCommands");
 
 export const terminalsContract = defineContract(
   "terminals",
-  { scope: "host", version: 1 },
+  { scope: "host", version: 2 },
   view("list", VoidSchema, TerminalsSchema, gated),
   invoke(
     "open",

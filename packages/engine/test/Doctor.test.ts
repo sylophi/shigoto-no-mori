@@ -8,16 +8,16 @@ import {
   chmodSync,
   existsSync,
   mkdtempSync,
-  realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, realpath } from "../src/canonicalPath.ts";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Doctor from "../src/Doctor.ts";
+import { readOnly, unlistable } from "./lib/holds.ts";
 import { nativefs } from "./lib/nativefs.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
@@ -124,11 +124,11 @@ it("won't prune while a moved worktree is still unlinked", async () => {
   // git can't write the re-link, so the moved worktree stays unlinked.
   const admin = join(repo, ".git", "worktrees", "feat");
   chmodSync(join(admin, "gitdir"), 0o444);
-  chmodSync(admin, 0o555);
+  const release = readOnly(admin);
   try {
     await run({ fix: true });
   } finally {
-    chmodSync(admin, 0o755);
+    release();
     chmodSync(join(admin, "gitdir"), 0o644);
   }
   // The moved worktree's record can't be deleted here either, so only
@@ -139,18 +139,18 @@ it("won't prune while a moved worktree is still unlinked", async () => {
 
 it("prunes nothing while a managed folder can't be listed", async () => {
   const { base, moved } = movedAndGone();
-  chmodSync(base, 0o311);
+  const release = unlistable(base);
   try {
     await run({ fix: true });
   } finally {
-    chmodSync(base, 0o755);
+    release();
   }
   box.git(moved, "status");
 });
 
 it("prunes nothing it couldn't see when the filesystem helper fails", async () => {
   // A helper that can't lstat, as one that can't run would be.
-  const bin = realpathSync(mkdtempSync(join(tmpdir(), "engine-nativefs-")));
+  const bin = realpath(mkdtempSync(join(tmpdir(), "engine-nativefs-")));
   const broken = join(bin, "nativefs");
   writeFileSync(
     broken,

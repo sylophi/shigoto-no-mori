@@ -17,8 +17,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import { dirname, join } from "../src/canonicalPath.ts";
+import * as NodeServices from "./lib/nodeServices.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -26,6 +26,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import { afterAll, it } from "vitest";
 import * as Paths from "../src/Paths.ts";
 import { nodeStore } from "./lib/nodeStore.ts";
+import { homeEnv } from "./lib/platform.ts";
 
 const root = mkdtempSync(join(tmpdir(), "engine-store-crash-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -75,7 +76,9 @@ write("file-sync/mirror-history.json", {
 
 const configured = (dir: string) =>
   ConfigProvider.layer(
-    ConfigProvider.fromEnv({ env: { HOME: dir, SHIGOMORI_DATA_DIR: dir } }),
+    ConfigProvider.fromEnv({
+      env: { ...homeEnv(dir), SHIGOMORI_DATA_DIR: dir },
+    }),
   );
 
 // Every table but the migrator's own (its times) and the record of the
@@ -114,11 +117,12 @@ const contents = (dir: string) =>
 // The fixture's open of the store in a process of its own, which kills
 // itself just before its `killAt`th event, a statement or a file removal
 // (fixtures/killAt.ts), or none to let it finish. Answers whether it finished,
-// the signal that ended it, and how many events a finished run made.
+// the event its own kill ended it at, and how many events a finished run
+// made.
 const openIn = (dir: string, killAt?: number) =>
   new Promise<{
     readonly finished: boolean;
-    readonly signal: NodeJS.Signals | null;
+    readonly killedAt: number | undefined;
     readonly events: number;
   }>((resolve) => {
     const child = spawn(
@@ -140,9 +144,14 @@ const openIn = (dir: string, killAt?: number) =>
     child.stdout.on("data", (chunk: Buffer) => {
       said += chunk.toString();
     });
-    child.once("close", (code, signal) => {
+    child.once("close", (code) => {
       const events = /^events (\d+)$/m.exec(said)?.[1];
-      resolve({ finished: code === 0, signal, events: Number(events ?? 0) });
+      const killing = /^killing (\d+)$/m.exec(said)?.[1];
+      resolve({
+        finished: code === 0,
+        killedAt: killing === undefined ? undefined : Number(killing),
+        events: Number(events ?? 0),
+      });
     });
   });
 
@@ -168,7 +177,7 @@ it("an import killed anywhere in its run is whole after the next open", async ()
     const dir = copy(`cut-${step}`);
     const killAt = 1 + Math.round((step * (events - 1)) / (steps - 1));
     const cut = await openIn(dir, killAt);
-    assert.equal(cut.signal, "SIGKILL", `not killed at event ${killAt}`);
+    assert.equal(cut.killedAt, killAt, `not killed at event ${killAt}`);
     const after = await contents(dir);
     assert.deepEqual(after.held, reference.held, `killed at event ${killAt}`);
     const left = V2_FILES.filter((file) => existsSync(join(dir, file)));

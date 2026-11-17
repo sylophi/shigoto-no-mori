@@ -25,7 +25,7 @@ import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as NativeFs from "./NativeFs.ts";
-import { copyFailure, copyTree, entryExists } from "./entries.ts";
+import { copyFailure, copyTree, entryExists, linkFolder } from "./entries.ts";
 import { stagingName } from "./worktreeLayout.ts";
 import { pidAlive } from "./processes.ts";
 import * as Git from "./Git.ts";
@@ -233,9 +233,9 @@ const make = Effect.gen(function* () {
       }),
     );
 
-  // A copy-on-write clone of the tree where the volume can, else `cp -R
-  // -P`. The destination must not exist.
-  const cloneOrCopy = (from: string, to: string) =>
+  // A copy-on-write clone of the tree where the volume can, else a copy
+  // (copyTree). The destination must not exist.
+  const cloneOrCopy = (from: string, to: string, landsAt: string) =>
     Effect.gen(function* () {
       const cloned = yield* nativeFs.clone({ from, to }).pipe(
         Stream.runCollect,
@@ -250,7 +250,9 @@ const make = Effect.gen(function* () {
       yield* fs
         .remove(to, { recursive: true, force: true })
         .pipe(Effect.mapError((error) => error.message));
-      yield* copyTree(spawner, from, to).pipe(Effect.mapError(copyFailure));
+      yield* copyTree(spawner, from, to, landsAt).pipe(
+        Effect.mapError(copyFailure),
+      );
     });
 
   // The entry from the first source that has it. Answers the failure,
@@ -291,10 +293,14 @@ const make = Effect.gen(function* () {
           return yield* Effect.fail("Destination already exists");
         }
         if (entry.mode === "symlink" && source.isPrimary) {
-          // Absolute, so the link survives the worktree moving.
-          yield* fs
-            .symlink(from, to)
-            .pipe(Effect.mapError((error) => error.message));
+          // Absolute, so the link survives the worktree moving. A file's
+          // on Windows needs Developer Mode, and without it fails the
+          // entry in Windows' words.
+          yield* isDirectory
+            ? linkFolder(from, to)
+            : fs
+                .symlink(from, to)
+                .pipe(Effect.mapError((error) => error.message));
           return isDirectory ? entry.path : undefined;
         }
         // Copied whole beside the worktree, then renamed in, so an entry
@@ -303,7 +309,7 @@ const make = Effect.gen(function* () {
         yield* fs
           .makeDirectory(path.dirname(staged), { recursive: true })
           .pipe(Effect.mapError((error) => error.message));
-        yield* cloneOrCopy(from, staged);
+        yield* cloneOrCopy(from, staged, to);
         yield* fs
           .rename(staged, to)
           .pipe(Effect.mapError((error) => error.message));

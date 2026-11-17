@@ -1,29 +1,33 @@
 // sm data [move <folder> | reset]: where the data folder lives, and the
 // move Settings' Data location makes, which restarts the host holding
 // it (host/ipc/modules/runtime.ts).
-import { join, resolve } from "node:path";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byHostKind } from "@shigomori/engine/platform";
 import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Control from "../Control.ts";
 import { rest } from "../here.ts";
 import { emit, out, Output, styles } from "../output.ts";
 
-const RESTARTS = byPlatform({
-  darwin: "The app restarts into it.",
-  linux: "The host restarts into it.",
+const RESTARTS = byHostKind({
+  app: "The app restarts into it.",
+  headless: "The host restarts into it.",
 });
 
-const moveTo = (parentDir: string | undefined) =>
+const moveTo = (folder: string | undefined) =>
   Effect.gen(function* () {
     const { json, stdoutColor } = yield* Effect.service(Output);
+    const path = yield* Path.Path;
+    const parentDir = folder === undefined ? undefined : path.resolve(folder);
     const app = (yield* Control.Control).client(runtimeContract);
     const { canonicalDataDirName } = yield* app.info();
     yield* app.moveDataDir({ parentDir });
     const dataDir =
-      parentDir === undefined ? null : join(parentDir, canonicalDataDirName);
+      parentDir === undefined
+        ? null
+        : path.join(parentDir, canonicalDataDirName);
     if (json) return yield* emit({ ok: true, dataDir });
     const moved =
       dataDir === null
@@ -35,7 +39,7 @@ const moveTo = (parentDir: string | undefined) =>
 const move = Command.make(
   "move",
   { folder: Argument.String("folder") },
-  ({ folder }) => moveTo(resolve(folder)),
+  ({ folder }) => moveTo(folder),
 );
 
 const reset = Command.make("reset", { rest }, () => moveTo(undefined));

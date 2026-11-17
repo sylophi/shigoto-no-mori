@@ -1,5 +1,5 @@
 // What every test runner here applies to its own process before a test
-// starts (the vitest configs, the Go tests through testTemp.mts, the
+// starts (the vitest configs, the Go checks in goChecks.mts, the
 // smoke, the scene comparison, the reliability harness and the guide's
 // evaluation), so no test's git can reach this repository however it
 // runs git.
@@ -19,7 +19,7 @@
 import { dirname } from "node:path";
 
 // The one place a test's git still finds this repository from.
-export const repositoryRoot = dirname(import.meta.dirname);
+const repositoryRoot = dirname(import.meta.dirname);
 
 // What isolation sets, which a test's own scrub must keep.
 const ISOLATING = {

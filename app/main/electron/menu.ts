@@ -1,11 +1,13 @@
 // Native application menu. Its items' keys are the focused window's
 // keymap (renderer/hooks/ui/useKeymap.ts), which each window hands over
 // as it binds them (setChords), so an item has none until a window has.
-// Accelerators here fire regardless of which element has focus, and
-// Electron dispatches them through the menu before the renderer sees
-// them.
+// On macOS accelerators here fire regardless of which element has
+// focus, and Electron dispatches them through the menu before the
+// renderer sees them. On Windows the windows show no menu bar
+// (windows.ts) and a key reaches the menu only when the page leaves it.
 import { menuAccelerators, resolveKeymap } from "@shigomori/ui/lib/keymap.ts";
 import { readClientConfigSync } from "./clientConfig";
+import { current as currentPlatform } from "@shigomori/engine/platform";
 import {
   app,
   Menu,
@@ -60,7 +62,7 @@ function shownChords(): Chords {
       : chordsByWindow.get(focusedWindowId)) ??
     menuAccelerators(
       resolveKeymap(readClientConfigSync().keybindings, {
-        mac: true,
+        mac: currentPlatform() === "darwin",
         desktop: true,
       }),
     )
@@ -305,7 +307,7 @@ export function buildAppMenu(): void {
         { role: "minimize" },
         {
           label: "Close",
-          accelerator: "Cmd+W",
+          accelerator: "CmdOrCtrl+W",
           click: (_item, focusedWindow) => {
             if (!focusedWindow) return;
             const wc = (focusedWindow as BrowserWindow).webContents;

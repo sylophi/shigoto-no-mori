@@ -1,11 +1,12 @@
 // Where the command runs among the projects, which every command that
 // names a project starts from. Terrier's trouble is a warning here, as
 // the listing it explains is about to be used.
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute } from "node:path";
 import * as Agents from "@shigomori/engine/Agents";
+import { canonicalPath, resolve } from "@shigomori/engine/canonicalPath";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Terrier from "@shigomori/engine/Terrier";
-import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
+import { isSameOrInside } from "@shigomori/contracts/projectPaths";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -27,10 +28,11 @@ const warning = Effect.gen(function* () {
   );
 });
 
+// Throws once its folder is removed under the shell.
+const currentDir = () => canonicalPath(process.cwd());
+
 // A folder removed under the shell has no cwd, which reads as ".".
-export const cwd = Effect.try(() => process.cwd()).pipe(
-  Effect.orElseSucceed(() => "."),
-);
+export const cwd = Effect.try(currentDir).pipe(Effect.orElseSucceed(() => "."));
 
 const where = Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
   Effect.flatMap(cwd, worktrees.here),
@@ -227,10 +229,10 @@ export const absolute = (raw: string) =>
 // counts too: through a symlinked folder it names the path the shell
 // sees.
 export const cwdInside = (path: string) => {
-  const pwd = process.env.PWD ?? "";
+  const pwd = canonicalPath(process.env.PWD ?? "");
   if (pwd !== "" && isSameOrInside(pwd, path)) return true;
   try {
-    return isSameOrInside(process.cwd(), path);
+    return isSameOrInside(currentDir(), path);
   } catch {
     return false;
   }

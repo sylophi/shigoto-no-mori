@@ -295,9 +295,24 @@ const SyncReceiptSchema = strict(
 );
 export type SyncReceipt = typeof SyncReceiptSchema.Type;
 
+// How a mirror's original reads and writes its files (its core.autocrlf,
+// core.eol with native spelled out, and core.symlinks), which its copy's
+// checkout takes so git on both ends writes the same bytes, and whether
+// its index holds symlinks.
+const SyncCheckoutSchema = strict(
+  Schema.Struct({
+    autocrlf: Schema.Literals(["true", "input", "false"]),
+    eol: Schema.Literals(["lf", "crlf"]),
+    symlinks: Schema.Boolean,
+    tracksSymlinks: Schema.Boolean,
+  }),
+);
+export type SyncCheckout = typeof SyncCheckoutSchema.Type;
+
 // `landBranch` is the branch the copy is created on when it isn't the
 // source's own (a primary's mirror lands on mirror/<branch>). The
-// commits still arrive under `branch`.
+// commits still arrive under `branch`. `checkout` comes with a mirror's
+// copy alone.
 const SyncReceiveWorktreePayloadSchema = strict(
   Schema.Struct({
     identity: Schema.NonEmptyString,
@@ -309,6 +324,7 @@ const SyncReceiveWorktreePayloadSchema = strict(
     ignoreMode: pullFields.ignoreMode,
     ignores: pullFields.ignores,
     cloneInto: pullFields.cloneInto,
+    checkout: Schema.optional(SyncCheckoutSchema),
     channelId: ChannelIdSchema,
   }),
 );

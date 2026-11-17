@@ -20,7 +20,8 @@ import {
 async function boot() {
   const bridge = window.electronBridge;
   if (bridge === undefined) throw new Error("the preload's bridge is missing");
-  const { requestShellPort: _, route, isLab, ...facts } = bridge;
+  const { requestShellPort: _, route, isLab, sidebarSide, ...facts } = bridge;
+  pageRoot().dataset["sidebarSide"] = sidebarSide;
   const client = await startClient(Desktop.layer(bridge));
   disposeWithPage(client);
   // The device id is the host's, read from its store. A host that can't

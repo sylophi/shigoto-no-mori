@@ -10,13 +10,15 @@ import {
   createDesktopClerkBridge,
   serveRendererOverScheme,
 } from "./electron/clerk";
-import { deepLinkRoute } from "./electron/deepLink";
+import { appPlace } from "./electron/appPlace";
+import { deepLinkRoute, deepLinkRouteIn } from "./electron/deepLink";
 import { clerkPublishableKey } from "./electron/account";
 import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { unmountedVolume } from "@shared/unmountedVolume";
 import { finishPendingNuke } from "@shared/nuke";
 import { openPastStuckNuke } from "./electron/nuke";
+import { showInFileManager } from "./electron/fileManager";
 import {
   finishHeadlessNuke,
   headless as headlessNuke,
@@ -46,8 +48,10 @@ import * as Updater from "@shigomori/engine/Updater";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { writeTraceLine } from "./electron/logFile";
 import * as ClerkTokenStorage from "./electron/clerkTokenStorage";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeServices from "@shared/nodeServices";
 import { childDefaults } from "@shigomori/engine/processes";
+import * as ProcessTable from "@shigomori/engine/ProcessTable";
+import { nativefsPath } from "@shared/packaging/bundledBinary.mts";
 import { log } from "@shared/log";
 import * as ShellLayer from "./shellLayer";
 import * as ClientConfig from "./electron/clientConfig";
@@ -75,7 +79,18 @@ import {
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isInstallingUpdate } from "./electron/updater";
 import { takeUpdateEndpointOverrides } from "@shared/updater/endpoints";
-import { current as currentPlatform } from "@shigomori/engine/platform";
+import {
+  byFamily,
+  current as currentPlatform,
+} from "@shigomori/engine/platform";
+import { uppercasePath } from "@shigomori/engine/environment";
+import { handledSquirrelEvent } from "./electron/squirrel";
+
+if (byFamily({ posix: () => false, windows: handledSquirrelEvent })()) {
+  process.exit(0);
+}
+
+uppercasePath();
 
 if (
   app.isPackaged &&
@@ -224,6 +239,7 @@ const runtime = ManagedRuntime.make(
     ),
     // The client config, read before the first window (below).
     Layer.provideMerge(ClientConfig.layer),
+    Layer.provideMerge(ProcessTable.layer(nativefsPath(appPlace()))),
     Layer.provideMerge(childDefaults),
     Layer.provideMerge(NodeServices.layer),
   ),
@@ -257,8 +273,19 @@ function isShuttingDown(): boolean {
 
 setNotificationOpener(openDeepLink);
 
-// Launching the app again while a copy runs is a request to see it.
-app.on("second-instance", () => surfaceWindow());
+// Launching the app again while a copy runs is a request to see it, or
+// the page its link names.
+app.on("second-instance", (_event, argv) => {
+  const route = deepLinkRouteIn(argv);
+  if (route === null) surfaceWindow();
+  else openDeepLink(route);
+});
+
+// A link that launched the app, which opens once the windows are up.
+{
+  const route = deepLinkRouteIn(process.argv);
+  if (route !== null) openDeepLink(route);
+}
 
 // Registered before "ready" so a link that launched the app is not
 // missed.
@@ -344,7 +371,7 @@ app.on("ready", async () => {
       detail:
         `${dataDirOrNone()} could not be created or accessed.\n\n${recovery}\n\n` +
         `${errorMessageOf(err)}`,
-      buttons: pointer !== null ? ["Show in Finder", "Quit"] : ["Quit"],
+      buttons: pointer !== null ? [showInFileManager(), "Quit"] : ["Quit"],
       defaultId: 0,
       cancelId: pointer !== null ? 1 : 0,
     });

@@ -33,6 +33,9 @@
 //   - a one-shot pull never writes the dialer's files onto the listener,
 //     and a replica pass never writes onto the original nor deletes what
 //     its rule leaves out,
+//   - a one-shot that couldn't write a file, either way, hasn't
+//     crossed, and a stop refuses removing a copy holding a file the
+//     original couldn't write or the copy couldn't read,
 //   - a moved worktree re-opens only its own mirrors, at its new path,
 //   - a stop refuses removing a copy unforced while a conflict or git
 //     not in step (or not checked in time) may leave it the only
@@ -51,7 +54,8 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join } from "@shigomori/engine/canonicalPath";
+import { programFile } from "@shigomori/engine/executables";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, it } from "vitest";
 import * as PeerReach from "@host/ipc/PeerReach";
@@ -63,11 +67,12 @@ import {
   isMirrorStopUnconfirmed,
   mirrorContract,
   type MirrorGitStatus,
+  mirrorStopRefusalReason,
 } from "@shigomori/contracts/modules/mirror";
 import type { Project } from "@shigomori/contracts/schemas";
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeServices from "@shared/nodeServices";
 import * as Effect from "effect/Effect";
 import { RemoteCallError } from "@shigomori/contracts/errors";
 import * as Layer from "effect/Layer";
@@ -105,6 +110,7 @@ import {
   standInMirror,
   standInPeers,
 } from "./lib/hostStandIns.mts";
+import { readOnly, unreadable } from "../../packages/engine/test/lib/holds.ts";
 import { runHost } from "./lib/hostRuntime.mts";
 import {
   bootDirectWire,
@@ -140,7 +146,7 @@ const fixture = cliSandbox("sm-mirror-check-", {
   CGO_CFLAGS: "-Wno-deprecated-declarations",
 });
 const { sandbox, smEnv, git, gitOut, addWorktree } = fixture;
-const fileSyncBinary = join(sandbox, "file-sync");
+const fileSyncBinary = join(sandbox, programFile("file-sync"));
 const fileSyncDataDir = join(sandbox, "file-sync-data");
 
 const read = (path: string) => readFileSync(path, "utf8");
@@ -234,7 +240,9 @@ beforeAll(async () => {
   // ---- Fixtures: build the CLI, seed the listener's repo and worktree, the dialer's dir ----
   await Promise.all([
     fixture.buildSm(),
-    execFileP("go", ["build", "-o", fileSyncBinary, "."], {
+    // No VCS stamp, whose git would refuse a checkout another account
+    // owns.
+    execFileP("go", ["build", "-buildvcs=false", "-o", fileSyncBinary, "."], {
       cwd: fileSyncDir,
       env: smEnv,
     }),
@@ -798,6 +806,143 @@ it("replica pass: the copy takes the original's version of a clash and loses wha
     () => daemon.sessions().length === 0,
     "the replica session to be gone",
   );
+});
+
+// A folder `held` on `root` that can't be added to, and in the one on
+// `from` a file for it. Answers its release.
+const holdFolder = (root: string, from: string, file: string) => {
+  mkdirSync(join(root, "held"));
+  mkdirSync(join(from, "held"));
+  writeFileSync(join(from, "held", file), "only here\n");
+  return readOnly(join(root, "held"));
+};
+
+const clearHeld = () => {
+  rmSync(join(dialerRoot, "held"), { recursive: true });
+  rmSync(join(listenerWorktree, "held"), { recursive: true });
+};
+
+it("one-shot transfer: a file the receiving side couldn't write keeps the files from counting as crossed, either way, while a replica still crosses", async () => {
+  // A folder each side can't add to, with a file for it on the other.
+  // What a move brought and couldn't write is still only on its source,
+  // so its teardown must not count it across.
+  standInMirror(inertImpl());
+  const transfer = (direction: "pull" | "push" | "replica") =>
+    runHost(
+      transferFilesOnce(
+        {
+          localRoot: dialerRoot,
+          localWorktreeId: dialerWorktreeId,
+          sourceDeviceId: LISTENER,
+          sourceProjectId: listenerProjectId,
+          sourceWorktreeId: listenerWorktreeId,
+          remoteRoot: listenerWorktree,
+          name: "feature",
+          ignores: ["/skip"],
+          direction,
+        },
+        () => {},
+      ),
+    );
+  const unheld = "1 file couldn't be copied (held/new.txt)";
+
+  const intoDialer = holdFolder(dialerRoot, listenerWorktree, "new.txt");
+  try {
+    assert.deepEqual(await transfer("pull"), {
+      crossed: false,
+      conflicts: 0,
+      error: unheld,
+    });
+  } finally {
+    intoDialer();
+  }
+  assert.equal(existsSync(join(dialerRoot, "held", "new.txt")), false);
+  clearHeld();
+
+  const intoListener = holdFolder(listenerWorktree, dialerRoot, "new.txt");
+  try {
+    assert.deepEqual(await transfer("push"), {
+      crossed: false,
+      conflicts: 0,
+      error: unheld,
+    });
+    // A mirror's first pass: the mirror goes on to show the problem.
+    assert.deepEqual(await transfer("replica"), {
+      crossed: true,
+      conflicts: 0,
+    });
+  } finally {
+    intoListener();
+  }
+  assert.equal(existsSync(join(listenerWorktree, "held", "new.txt")), false);
+  clearHeld();
+  await waitFor(
+    () => daemon.sessions().length === 0,
+    "the one-shot sessions to be gone",
+  );
+});
+
+// A mirror from the dialer to the listener whose `side` reports a problem
+// with `path`, a file only on the copy: the stop is refused and the copy
+// keeps it. The session ends before `release`, so the file stays put.
+const refusedStop = async (
+  side: "local" | "remote",
+  path: string,
+  release: () => void,
+) => {
+  const held = await daemon.create({
+    localRoot: dialerRoot,
+    deviceId: LISTENER,
+    projectId: listenerProjectId,
+    worktreeId: listenerWorktreeId,
+    remoteRoot: listenerWorktree,
+    name: "feature",
+    localWorktreeId: dialerWorktreeId,
+    labels: { [MIRROR_LABEL_MODE]: "mirror" },
+    ignores: ["/skip"],
+  });
+  try {
+    await waitFor(
+      () =>
+        daemon
+          .sessions()
+          .some(
+            (raw) =>
+              raw.session === held &&
+              raw.successfulCycles > 0 &&
+              raw[side].problems.some((problem) => problem.path === path),
+          ),
+      `the ${side} side's problem with ${path}`,
+      30_000,
+    );
+    await assert.rejects(
+      stop({ session: held }),
+      (error) => mirrorStopRefusalReason(error) === "a file couldn't be copied",
+    );
+  } finally {
+    await daemon.terminate(held);
+    release();
+  }
+  assert.equal(read(join(listenerWorktree, ...path.split("/"))), "only here\n");
+};
+
+it("stop: a file only on the copy that the original couldn't write, or the copy couldn't read, refuses removing the copy", async () => {
+  standInMirror({
+    ...inertImpl(),
+    refreshGit: () => Effect.succeed({ status: "synced", detail: "" }),
+  });
+  // Written on the copy into a folder the original can't add to.
+  await refusedStop(
+    "local",
+    "held/only-on-the-copy.txt",
+    holdFolder(dialerRoot, listenerWorktree, "only-on-the-copy.txt"),
+  );
+  clearHeld();
+  // Only on the copy, which can't read it (held open elsewhere, say).
+  const unread = join(listenerWorktree, "unread.txt");
+  writeFileSync(unread, "only here\n");
+  await refusedStop("remote", "unread.txt", unreadable(unread));
+  rmSync(unread);
 });
 
 // A mirror of `original` into the copy `worktreeId` on `deviceId`.

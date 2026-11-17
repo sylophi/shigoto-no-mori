@@ -17,7 +17,9 @@ import { messageOf } from "@shigomori/engine/errorDocument";
 import {
   isHaltedStatus,
   MIRROR_LABEL_MODE,
+  mirrorProblemCount,
 } from "@shigomori/contracts/modules/mirror";
+import { listed, pluralize } from "@shigomori/contracts/words";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import {
@@ -40,6 +42,8 @@ export type TransferFilesResult = {
   error?: string;
 };
 
+type Direction = "pull" | "push" | "replica";
+
 const POLL_MS = 250;
 // The daemon's snapshots trail its answers (file-sync/engine.go
 // throttles them), so a session its create just made can be missing
@@ -54,15 +58,18 @@ const CONNECT_CEILING_MS = 60_000;
 // ceiling is for a session that never settles.
 const SETTLE_CEILING_MS = 30 * 60_000;
 
-function failed(error: string): TransferFilesResult {
-  return { crossed: false, conflicts: 0, error };
+function failed(error: string, conflicts = 0): TransferFilesResult {
+  return { crossed: false, conflicts, error };
 }
 
 // An interrupt (the move's cancel) ends the session where it stands, a
 // create the cancel outran included (the host's sweep is the backstop, by
 // the token). The caller decides what becomes of the worktree.
 export const transferFilesOnce = (
-  input: {
+  {
+    direction = "pull",
+    ...input
+  }: {
     localRoot: string;
     // The local worktree's id, the one label a session must carry:
     // the worktree delete stops whatever runs on it by that label.
@@ -77,7 +84,7 @@ export const transferFilesOnce = (
     // Which way the files flow. Absent, a pull: the peer's come here.
     // A replica pushes and makes the peer's side an exact copy (a
     // mirror start's first pass, host/ipc/modules/mirror.ts).
-    direction?: "pull" | "push" | "replica";
+    direction?: Direction;
   },
   onProgress: (bytes: number, totalBytes: number) => void,
 ): Effect.Effect<TransferFilesResult, never, MirrorEngine | MirrorLedger> =>
@@ -87,7 +94,7 @@ export const transferFilesOnce = (
         ledger.beginTransfer({
           deviceId: input.sourceDeviceId,
           worktreeId: input.sourceWorktreeId,
-          transfer: (input.direction ?? "pull") === "pull" ? "out" : "in",
+          transfer: direction === "pull" ? "out" : "in",
         }),
       ),
       (token) =>
@@ -107,10 +114,10 @@ export const transferFilesOnce = (
                 localWorktreeId: input.localWorktreeId,
                 labels: { [MIRROR_LABEL_MODE]: transferModeFor(token) },
                 ignores: input.ignores,
-                direction: input.direction ?? "pull",
+                direction,
               }),
             ),
-            (session) => waitSettled(daemon, session, onProgress),
+            (session) => waitSettled(daemon, session, direction, onProgress),
             (session) =>
               daemon
                 .terminate(session)
@@ -144,9 +151,31 @@ function settled(raw: MirrorSessionRaw): boolean {
   );
 }
 
+// A file one side couldn't write or read never crossed, so a move's
+// source still holds the only one. A replica is a mirror's first pass,
+// and the mirror goes on to show its problems.
+function outcome(
+  raw: MirrorSessionRaw,
+  direction: Direction,
+): TransferFilesResult {
+  const count = mirrorProblemCount(raw.local, raw.remote);
+  if (direction === "replica" || count === 0) {
+    return { crossed: true, conflicts: raw.conflicts.length };
+  }
+  const paths = [...raw.local.problems, ...raw.remote.problems]
+    .slice(0, 3)
+    .map((problem) => problem.path);
+  const more = count - paths.length;
+  return failed(
+    `${pluralize(count, "file")} couldn't be copied (${listed(more > 0 ? [...paths, `${more} more`] : paths)})`,
+    raw.conflicts.length,
+  );
+}
+
 const waitSettled = (
   daemon: MirrorEngine["Service"],
   session: string,
+  direction: Direction,
   onProgress: (bytes: number, totalBytes: number) => void,
 ) =>
   Effect.gen(function* () {
@@ -208,17 +237,13 @@ const waitSettled = (
             );
           }
         }
-        if (settled(raw)) {
-          return { crossed: true, conflicts: raw.conflicts.length };
-        }
+        if (settled(raw)) return outcome(raw, direction);
       }
       // A poll, by design.
       yield* Effect.sleep(POLL_MS);
     }
     // What the session says now decides, not the ceiling alone.
     const last = yield* findSession(daemon, session);
-    if (last !== undefined && settled(last)) {
-      return { crossed: true, conflicts: last.conflicts.length };
-    }
+    if (last !== undefined && settled(last)) return outcome(last, direction);
     return failed("the transfer did not settle in time");
   });

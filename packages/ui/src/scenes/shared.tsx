@@ -1,6 +1,7 @@
 // The parts every page shares: a project page's frame with its device
 // tabs, the marks for devices, projects, worktrees, villagers and
 // tools, and the two folder pickers.
+import { devicePaths } from "../lib/devicePaths.ts";
 import { defaultBinding } from "../lib/keymap.ts";
 import type { ReactNode } from "react";
 import { DEVICE_ICONS } from "@shigomori/contracts/deviceIcon";
@@ -345,6 +346,7 @@ export function FolderPickerScene() {
               filtered: FOLDERS.map((name) => ({ name, isGitRepo: false })),
               browseTo: noop,
               browseUp: noop,
+              paths: devicePaths(null),
             }}
             onOpenFinder={noop}
           />

@@ -1,15 +1,17 @@
 import type { TerrierReadiness } from "@shigomori/contracts/schemas/terrier";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import { lastSegment } from "@shigomori/contracts/projectPaths";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Config from "./Config.ts";
 import * as Paths from "./Paths.ts";
-import { byPlatform } from "./platform.ts";
+import { byHostKind } from "./platform.ts";
 import { type CommandError, exec, stderrOf } from "./processes.ts";
 import { keptAnswers } from "./keptAnswers.ts";
 import { terrierProjectId } from "./terrierId.ts";
@@ -131,10 +133,7 @@ const parseListing = (
 };
 
 // The last element of a path, as Go's filepath.Base takes it.
-const baseName = (path: string) => {
-  const trimmed = path.replace(/\/+$/, "");
-  return trimmed === "" ? "/" : trimmed.slice(trimmed.lastIndexOf("/") + 1);
-};
+const baseName = (path: string) => lastSegment(path) || "/";
 
 // Why `terrier ls --json` didn't answer, in Go's words for an exit and
 // a kill.
@@ -181,6 +180,7 @@ const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const config = yield* Config.Config;
   const { expandHome, binaryName } = yield* Paths.Paths;
+  const { isAbsolute } = yield* Path.Path;
 
   // What `terrier ls --json` answered, toggle or not. The listing runs
   // before every command, so a wedged terrier is ended.
@@ -206,10 +206,9 @@ const make = Effect.gen(function* () {
     if (listed.kind === "missing") {
       return trouble(
         "on in Settings but `terrier` isn't on PATH, so no terrier projects are listed",
-        byPlatform({
-          darwin:
-            "Install terrier, or turn the toggle off in the app's Settings.",
-          linux: `Install terrier, or turn it off (\`${binaryName} config set terrier false\`).`,
+        byHostKind({
+          app: "Install terrier, or turn the toggle off in the app's Settings.",
+          headless: `Install terrier, or turn it off (\`${binaryName} config set terrier false\`).`,
         }),
       );
     }
@@ -223,7 +222,7 @@ const make = Effect.gen(function* () {
     // directory, which differs between the app and a shell.
     const paths = listed.paths.flatMap((path) => {
       const expanded = expandHome(path);
-      return expanded.startsWith("/") ? [expanded] : [];
+      return isAbsolute(expanded) ? [expanded] : [];
     });
     return { paths, trouble: Option.none() };
   };

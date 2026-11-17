@@ -6,6 +6,7 @@ import type { GitOperationState } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { canonicalPath } from "../canonicalPath.ts";
 import { splitZ } from "../gitParse.ts";
 import { GitRefusedError, stderrOf } from "./documents.ts";
 import { type RunningArea, waitingForIndex } from "./running.ts";
@@ -49,7 +50,9 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
       fs.exists(file).pipe(Effect.orElseSucceed(() => false));
 
     const gitDir = Effect.fn("Git.gitDir")(function* (worktree: string) {
-      return (yield* run(worktree, ["rev-parse", "--absolute-git-dir"])).trim();
+      return canonicalPath(
+        (yield* run(worktree, ["rev-parse", "--absolute-git-dir"])).trim(),
+      );
     });
 
     const conflictedPaths = Effect.fn("Git.conflictedPaths")(function* (

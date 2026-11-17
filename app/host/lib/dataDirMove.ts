@@ -3,16 +3,23 @@
 // goes, the refusals only the host can make, the scripts and the updater
 // held, the copy to another volume, and what holds the folder let go.
 import { installingWords } from "@host/lib/Shell";
-import { cp, mkdir, open, readdir, rmdir } from "node:fs/promises";
-import { dirname, isAbsolute, join } from "node:path";
-import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
-import { callFailureOf, errorMessageOf } from "@shigomori/contracts/errors";
+import { mkdir, rmdir } from "node:fs/promises";
+import {
+  isSameOrInside,
+  trimTrailingSlashes,
+} from "@shigomori/contracts/projectPaths";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as DataDirMove from "@shigomori/engine/dataDirMove";
+import { byFamily } from "@shigomori/engine/platform";
 import { busyRefusal } from "@shared/busy";
+import { fsStep } from "./dataDirMove/files";
+import { posix } from "./dataDirMove/posix";
+import { windows } from "./dataDirMove/windows";
 import { hostCallFailure } from "./Engine";
 import * as Scripts from "./Scripts";
 import {
@@ -25,9 +32,6 @@ import {
   legacyDataDirPointerPath,
 } from "@shared/paths";
 
-// A step on the file system, its failure as it crosses a wire.
-const fsStep = <A>(step: () => Promise<A>) =>
-  Effect.tryPromise({ try: step, catch: callFailureOf });
 // A move refused before anything moved.
 class DataDirMoveError extends Schema.TaggedError<DataDirMoveError>()(
   "DataDirMoveError",
@@ -64,50 +68,8 @@ export const sessionPlace = Effect.try({
     }),
 });
 
-// The tree at `from` copied to `to`, symlinks (carry-over entries) as
-// links rather than followed.
-const copyTree = (from: string, to: string) =>
-  fsStep(() => cp(from, to, { recursive: true, verbatimSymlinks: true }));
-
-// A file or folder flushed to disk (on macOS, past the drive's cache).
-const flush = async (at: string) => {
-  const handle = await open(at, "r");
-  try {
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-};
-
-const entryPath = (entry: {
-  readonly parentPath: string;
-  readonly name: string;
-}) => join(entry.parentPath, entry.name);
-const depth = (folder: string) => folder.split("/").length;
-
-// Every file and folder of the tree at `dir` flushed, each folder after
-// what it holds; a link is its folder's entry, flushed with it.
-const flushTree = (dir: string) =>
-  Effect.gen(function* () {
-    const entries = yield* fsStep(() =>
-      readdir(dir, { recursive: true, withFileTypes: true }),
-    );
-    yield* Effect.forEach(
-      entries.filter((entry) => entry.isFile()).map(entryPath),
-      (file) => fsStep(() => flush(file)),
-      { concurrency: 32, discard: true },
-    );
-    yield* Effect.forEach(
-      [
-        ...entries.filter((entry) => entry.isDirectory()).map(entryPath),
-        dir,
-      ].toSorted((a, b) => depth(b) - depth(a)),
-      (folder) => fsStep(() => flush(folder)),
-      { discard: true },
-    );
-  });
-
-const trimmed = (dir: string) => dir.replace(/\/+$/, "");
+// The copy to another volume and its flush, each OS's own.
+const tree = () => byFamily({ posix, windows });
 
 export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // The new parent, or undefined to reset to the default location.
@@ -140,25 +102,28 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
 ) {
   const { place } = opts;
   const oldDir = place.dataDir;
+  const path = yield* Path.Path;
   const parent =
     parentDir === undefined
-      ? dirname(place.defaultDataDir)
+      ? path.dirname(place.defaultDataDir)
       : expandHome(parentDir);
   // Never resolve against the process cwd: a relative parent would land
   // the data dir somewhere the user never saw.
-  if (!isAbsolute(parent)) {
+  if (!path.isAbsolute(parent)) {
     return yield* new DataDirMoveError({
       reason: `The new parent folder must be an absolute path: ${parentDir}`,
     });
   }
-  const newDir = join(parent, place.dataDirName);
+  const newDir = path.join(parent, place.dataDirName);
   const fs = yield* FileSystem.FileSystem;
   const oldReal = yield* fs
     .realPath(oldDir)
     .pipe(Effect.orElseSucceed(() => oldDir));
-  const spellings = [trimmed(oldDir), trimmed(oldReal)];
+  const spellings = [trimTrailingSlashes(oldDir), trimTrailingSlashes(oldReal)];
   // A rename would move the link and leave its target where it is.
-  const link = yield* fs.readLink(trimmed(oldDir)).pipe(Effect.option);
+  const link = yield* fs
+    .readLink(trimTrailingSlashes(oldDir))
+    .pipe(Effect.option);
   if (Option.isSome(link)) {
     return yield* new DataDirMoveError({
       reason: `The data folder is a link to ${oldReal}. Move that folder instead.`,
@@ -187,7 +152,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     return yield* new DataDirMoveError({ reason: refused });
   }
   yield* fsStep(() => mkdir(parent, { recursive: true }));
-  const newReal = join(
+  const newReal = path.join(
     yield* fs.realPath(parent).pipe(Effect.orElseSucceed(() => parent)),
     place.dataDirName,
   );
@@ -246,12 +211,12 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       // mid-move, as in a nuke.
       holding: (ids) => scripts.deleting(ids, "move"),
       releasing: opts.beforeMove,
-      copy: (from: string, to: string) =>
+      copy: (from: string, to: string, landsAt: string) =>
         Effect.gen(function* () {
           yield* opts.copy === undefined
-            ? DataDirMove.holdingStore(copyTree(from, to))
+            ? DataDirMove.holdingStore(tree().copyTree(from, to, landsAt))
             : opts.copy(from, to);
-          yield* flushTree(to);
+          yield* tree().flushTree(to);
         }),
     },
   ).pipe(Effect.mapError(hostCallFailure));

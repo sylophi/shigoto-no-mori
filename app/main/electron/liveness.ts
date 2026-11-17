@@ -36,6 +36,8 @@ import {
 } from "../core/liveness/rateLimit";
 import { log } from "@shared/log";
 import { names } from "../flavor";
+import { byFamily } from "@shigomori/engine/platform";
+import { setLoginItem as setSquirrelLoginItem } from "./squirrel";
 
 // Inert on a build with no account service: the setting exists so a
 // machine stays available to the account, and its UI is unreachable
@@ -52,6 +54,9 @@ const keepReachableEnabled = (): boolean =>
 // behind either.
 export const setsLoginItem = (): boolean => app.isPackaged && !names.debuggable;
 
+const setLoginItem = (openAtLogin: boolean) =>
+  app.setLoginItemSettings({ openAtLogin });
+
 // (1) Launch-at-login, registered or cleared to match keepReachable and
 // the account: the login item is for staying reachable to an account,
 // so a signed-out device has none (the crash relaunch below keeps the
@@ -67,7 +72,10 @@ function reconcileLaunchAtLogin(): void {
     return;
   }
   try {
-    app.setLoginItemSettings({ openAtLogin: keepReachable });
+    byFamily({
+      posix: setLoginItem,
+      windows: setSquirrelLoginItem,
+    })(keepReachable);
   } catch (error) {
     log.error(
       `[liveness] setLoginItemSettings failed: ${errorMessageOf(error)}`,

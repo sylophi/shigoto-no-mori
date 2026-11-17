@@ -45,6 +45,7 @@ import type {
   MirrorApplyGitStateResult,
 } from "@shigomori/contracts/modules/mirror";
 import type { Project } from "@shigomori/contracts/schemas";
+import { canonicalPath } from "@shigomori/engine/canonicalPath";
 import { clauseOf, messageOf } from "@shigomori/engine/errorDocument";
 import * as Deferred from "effect/Deferred";
 import type * as Duration from "effect/Duration";
@@ -136,9 +137,10 @@ const readHeadFacts = Effect.fnUntraced(function* (worktreePath: string) {
           }),
       ),
     );
-  const [tip = "", headTree = "", ref = "", gitDir = ""] = out
+  const [tip = "", headTree = "", ref = "", absoluteGitDir = ""] = out
     .split("\n")
     .map((line) => line.trim());
+  const gitDir = canonicalPath(absoluteGitDir);
   if (tip === "" || headTree === "" || gitDir === "") {
     return yield* new GitStateError({
       reason: "the worktree has no commits yet",

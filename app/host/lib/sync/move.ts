@@ -8,6 +8,7 @@ import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 import {
   pullBringsIgnoredFiles,
+  type SyncCheckout,
   type SyncPullWorktreePayloadSchema,
   SyncReceiveWorktreeResultSchema,
   type SyncSendWorktreePayloadSchema,
@@ -273,13 +274,13 @@ export const sendWorktree = (
   // The mirror start's send: the one that may take a primary checkout
   // (it lands on the peer as mirror/<branch>, and the session then
   // keeps the pair in step). A plain send moves a worktree, and the
-  // primary is the project itself. The mirror start runs it inside a
-  // move of its own, and hears of the copy as soon as it exists
-  // (`onCopy`, its id).
+  // primary is the project itself. It carries the original's checkout,
+  // which the copy takes. The mirror start runs it inside a move of its
+  // own, and hears of the copy as soon as it exists (`onCopy`, its id).
   {
-    mirror = false,
+    mirror,
     onCopy,
-  }: { mirror?: boolean; onCopy?: (worktreeId: string) => void } = {},
+  }: { mirror?: SyncCheckout; onCopy?: (worktreeId: string) => void } = {},
 ) => {
   const send = sendWorktreeEffect(input, ctx, mirror, onCopy).pipe(
     Effect.scoped,
@@ -292,11 +293,11 @@ export const sendWorktree = (
     Effect.withSpan("Sync.send", {
       attributes: {
         ...moveAttributes("send", input.targetDeviceId),
-        mirror,
+        mirror: mirror !== undefined,
       },
     }),
   );
-  return mirror
+  return mirror !== undefined
     ? send
     : Effect.flatMap(Moves.Moves, (moves) =>
         moves.run(ctx, input.worktreeId, send),
@@ -341,7 +342,7 @@ const sendWorktreeEffect = (
     cloneInto,
   }: typeof SyncSendWorktreePayloadSchema.Type,
   ctx: HandlerContext,
-  mirror: boolean,
+  mirror: SyncCheckout | undefined,
   onCopy: ((worktreeId: string) => void) | undefined,
 ) =>
   Effect.gen(function* () {
@@ -355,7 +356,7 @@ const sendWorktreeEffect = (
     if (worktree.detached || !isRealBranch(worktree.branch)) {
       return yield* new MoveRefusedError({ reason: "not-on-branch" });
     }
-    if (worktree.isPrimary && !mirror) {
+    if (worktree.isPrimary && mirror === undefined) {
       return yield* new MoveRefusedError({ reason: "primary" });
     }
     const { identity } = yield* (yield* Identity.Identity).of(project.path);
@@ -391,6 +392,7 @@ const sendWorktreeEffect = (
                   ignoreMode,
                   ignores,
                   cloneInto,
+                  checkout: mirror,
                   channelId,
                 }),
               ),

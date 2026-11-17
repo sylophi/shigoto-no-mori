@@ -2,9 +2,9 @@
 // scope of its own), whose output streams to the window that started
 // them and any that attached, and which take keystrokes and window
 // sizes back; and the lifecycle scripts the engine runs on the app's
-// behalf, booked here so the console can show and stop them. Each PTY
-// run leads its own session, so a stop takes the whole tree of
-// children the user's command spawned.
+// behalf, booked here so the console can show and stop them. A stop
+// takes the whole tree of children the user's command spawned
+// (./ProcessTrees.ts).
 import { randomUUID } from "node:crypto";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import {
@@ -15,15 +15,13 @@ import {
   type ScriptRunSlot,
 } from "@shigomori/contracts/schemas";
 import { scriptEnvOf, UNATTENDED_ENV } from "@shigomori/contracts/scriptEnv";
+import * as Shells from "@shigomori/engine/Shells";
 import * as Clock from "effect/Clock";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
-import * as Option from "effect/Option";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type { Marks } from "./marks";
 import { OrphanSweep } from "./OrphanSweep";
-import { signalPidTree } from "./process";
+import * as ProcessTrees from "./ProcessTrees";
 import { ScriptChanges } from "./ScriptChanges";
 import { type PtyHandle, ScriptRuns, UNKILLABLE_WAIT_MS } from "./ScriptRuns";
 import {
@@ -130,7 +128,7 @@ function createRunStream(starter: NotifyScriptEvent): RunStream {
 
 // What the kill chain (killRecord) needs of a run. The app's own PTY
 // runs and the engine's lifecycle runs both keep one. They differ in
-// how a signal reaches the tree.
+// what their tree is.
 interface Killable {
   runId: string;
   scriptName: string;
@@ -138,11 +136,10 @@ interface Killable {
   cancelling: boolean;
   done: Promise<void>;
   stream: RunStream;
-  // SIGTERM, then SIGKILL past the grace, then a bounded wait for the
-  // tree to go.
-  stop: (graceMs: number) => Effect.Effect<void>;
-  // One SIGTERM to the tree, not waited on: a hurried quit's.
-  signal: Effect.Effect<void>;
+  // The tree's stop (./ProcessTrees.ts) under the grace.
+  stop: (graceMs: number) => Effect.Effect<unknown>;
+  // The tree asked to end, not waited on: a hurried quit's.
+  stopNow: Effect.Effect<void>;
   // Sends whatever output is pooled for the next frame (see
   // OUTPUT_FLUSH_MS). Anything else that emits into the run's stream
   // must call it first so it lands after the output that preceded it.
@@ -183,12 +180,6 @@ export interface LifecycleRuns {
   readonly end: () => void;
 }
 
-const settledWithin = (done: Promise<void>, ms: number) =>
-  Effect.promise(() => done).pipe(
-    Effect.timeoutOption(Duration.millis(ms)),
-    Effect.map(Option.isSome),
-  );
-
 export const makeRuns = ({
   marks,
   env: baseEnv,
@@ -200,7 +191,8 @@ export const makeRuns = ({
     const scriptRuns = yield* ScriptRuns;
     const sweep = yield* OrphanSweep;
     const { announce } = yield* ScriptChanges;
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const trees = yield* ProcessTrees.ProcessTrees;
+    const shells = yield* Shells.Shells;
     const ptyRuns = new Map<string, RunRecord>();
     const lifecycle = new Map<string, LifecycleRun>();
     // For the records forward, a synchronous callback, makes.
@@ -214,8 +206,8 @@ export const makeRuns = ({
       if (record.cancelling) {
         // Another caller is already escalating. Wait for it, but bounded
         // so an unkillable child doesn't wedge this caller's chain too.
-        yield* settledWithin(
-          record.done,
+        yield* ProcessTrees.exitedWithin(
+          Effect.promise(() => record.done),
           DEFAULT_GRACE_MS + UNKILLABLE_WAIT_MS,
         );
         return;
@@ -230,26 +222,10 @@ export const makeRuns = ({
       yield* record.stop(opts.graceMs ?? DEFAULT_GRACE_MS);
     });
 
-    // The kill chain for a lifecycle script, which leads no group of its
-    // own: its pid and descendants, never its group.
-    const stopPidTree = Effect.fnUntraced(
-      function* (pid: number, done: Promise<void>, graceMs: number) {
-        yield* signalPidTree(pid, "SIGTERM");
-        if (yield* settledWithin(done, graceMs)) return;
-        yield* signalPidTree(pid, "SIGKILL");
-        if (!(yield* settledWithin(done, UNKILLABLE_WAIT_MS))) {
-          yield* Effect.logWarning(
-            `[scripts] lifecycle script (pid ${pid}) survived SIGKILL; giving up on this kill attempt`,
-          );
-        }
-      },
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-    );
-
     // An exit the app cancelled reports null the way a cancelled PTY run
-    // does, so the UI says stopped, not failed (the shell turns SIGTERM
-    // into exit 143). `end` drops the bookings so a pending kill chain
-    // returns and nothing can be signalled at a stale pid.
+    // does, so the UI says stopped, not failed, whatever code the stop
+    // left. `end` drops the bookings so a pending kill chain returns and
+    // nothing can be stopped at a stale pid.
     const lifecycleRuns = Effect.fn("Scripts.lifecycleRuns")(function* (
       notify: NotifyScriptEvent,
     ) {
@@ -273,6 +249,7 @@ export const makeRuns = ({
             const done = new Promise<void>((resolve) => {
               settle = resolve;
             });
+            const tree = { pid, ownGroup: false };
             lifecycle.set(event.runId, {
               runId: event.runId,
               scriptName: runScriptName(event.slot),
@@ -280,13 +257,15 @@ export const makeRuns = ({
               cancelling: false,
               done,
               stream: createRunStream(notify),
-              stop: (graceMs) => stopPidTree(pid, done, graceMs),
-              signal: signalPidTree(pid, "SIGTERM").pipe(
-                Effect.provideService(
-                  ChildProcessSpawner.ChildProcessSpawner,
-                  spawner,
-                ),
-              ),
+              stop: (graceMs) =>
+                trees.stop(tree, {
+                  how: "stop",
+                  graceMs,
+                  endMs: UNKILLABLE_WAIT_MS,
+                  exited: Effect.promise(() => done),
+                  name: "lifecycle script",
+                }),
+              stopNow: trees.stopNow(tree),
               flushOutput: () => {},
               settle,
               projectId: event.projectId,
@@ -304,7 +283,6 @@ export const makeRuns = ({
                     groupLeader: false,
                     projectId: event.projectId,
                     worktreeId: event.worktreeId,
-                    startedAt,
                     command: event.command,
                   },
                   Effect.promise(() => done),
@@ -366,6 +344,7 @@ export const makeRuns = ({
 
       const { pty, close } = yield* scriptRuns
         .open({
+          shell: yield* shells.script,
           command: args.command,
           cwd: args.worktree.path,
           env,
@@ -429,7 +408,7 @@ export const makeRuns = ({
         stream,
         // Closing the run's scope (./ScriptRuns.ts) is its kill chain.
         stop: (graceMs) => close({ graceMs, wait: true }),
-        signal: Effect.suspend(() => close({ graceMs: 0, wait: false })),
+        stopNow: Effect.suspend(() => close({ graceMs: 0, wait: false })),
         flushOutput,
       };
       ptyRuns.set(runId, record);
@@ -451,9 +430,9 @@ export const makeRuns = ({
       // The exit comes after the run's last output (./ScriptRuns.ts), so the
       // renderer never unbinds the runId ahead of it.
       pty.onExit(({ exitCode, signal }) => {
-        // The shell wrapping the user's command turns our SIGTERM into
-        // exit 143, so a cancel reports null: the UI shows "stopped",
-        // not "failed".
+        // A cancel reports null, whatever code the stop left the shell
+        // wrapping the user's command: the UI shows "stopped", not
+        // "failed".
         const wasSignal = signal !== undefined && signal !== 0;
         const reported = record.cancelling || wasSignal ? null : exitCode;
         flushOutput();
@@ -468,6 +447,7 @@ export const makeRuns = ({
       // leaves the next boot something to sweep (./OrphanSweep.ts). After
       // the listeners, since a quick command may finish while the store
       // writes, and the PTY replays nothing.
+      yield* pty.started;
       yield* sweep.record(
         {
           runId,
@@ -475,7 +455,6 @@ export const makeRuns = ({
           groupLeader: true,
           projectId: record.projectId,
           worktreeId: record.worktreeId,
-          startedAt: record.startedAt,
           command: args.command,
         },
         pty.exit,
@@ -597,11 +576,11 @@ export const makeRuns = ({
         (options: { readonly graceMs?: number } = {}) =>
           stopEach(everyRun(), "App quit", options.graceMs),
       ),
-      // One SIGTERM to every run's tree and no waiting, for the
+      // Every run's tree asked to end and none waited on, for the
       // update-install quit: the kill chain would hold up the installer
       // waiting on this process to exit.
-      signalAll: Effect.suspend(() =>
-        Effect.forEach(everyRun(), (record) => record.signal, {
+      stopAllNow: Effect.suspend(() =>
+        Effect.forEach(everyRun(), (record) => record.stopNow, {
           discard: true,
         }),
       ),

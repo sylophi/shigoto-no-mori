@@ -16,11 +16,15 @@ import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
-import { TERMINAL_SCROLLBACK } from "@shigomori/contracts/schemas";
+import {
+  type ShellSyntax,
+  TERMINAL_SCROLLBACK,
+} from "@shigomori/contracts/schemas";
+import { typedLines } from "@shigomori/contracts/typedLines";
 import { Check, Copy } from "lucide-react";
 import { useCopied } from "../../primitives/copy-button.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
-import { isMac } from "../../lib/platform.ts";
+import { viewerOs } from "../../lib/platform.ts";
 import { usersAlone } from "../../lib/usersAlone.ts";
 import { watchTheme } from "../../root.tsx";
 import { TerminalTabToolbar } from "./TerminalTabsView.tsx";
@@ -60,17 +64,6 @@ const SETTLE_MS = 150;
 // DECTCEM: terminal cursor visibility.
 const SHOW_CURSOR = "\x1b[?25h";
 const HIDE_CURSOR = "\x1b[?25l";
-
-// A Mac's ⌘ and ⌥ edits as the line editing keys every shell and TUI
-// reads: to the line's start and end, deleting to its start, and a word
-// back and forward.
-const MAC_EDIT_KEYS: Readonly<Record<string, string>> = {
-  "Meta+ArrowLeft": "\x01",
-  "Meta+ArrowRight": "\x05",
-  "Meta+Backspace": "\x15",
-  "Alt+ArrowLeft": "\x1bb",
-  "Alt+ArrowRight": "\x1bf",
-};
 
 // Everything it shows, scrollback and all, as plain text: a line the
 // grid wrapped joins the one before it, and the blank rows under the
@@ -148,29 +141,51 @@ const scrollByLine = (
   return () => steps !== undefined;
 };
 
-// A dropped path as a shell word, escaped the way a Mac terminal drops
-// one, which a TUI that takes a dropped image (Claude Code) reads back.
-const escapedPath = (path: string): string =>
-  path.replace(/[\s\\'"`$!#&;|*?()[\]{}<>^]/g, "\\$&");
-
 const holdsFiles = (e: DragEvent): boolean =>
   e.dataTransfer.types.includes("Files");
 
-const macEditKey = (e: KeyboardEvent): string | undefined =>
+// A Mac's ⌘ and ⌥ edits, as the line editing keys the shell reads.
+const macEditKey = (
+  e: KeyboardEvent,
+  keys: Readonly<Record<string, string>>,
+): string | undefined =>
   e.ctrlKey || e.shiftKey || e.metaKey === e.altKey
     ? undefined
-    : MAC_EDIT_KEYS[`${e.metaKey ? "Meta" : "Alt"}+${e.key}`];
+    : keys[`${e.metaKey ? "Meta" : "Alt"}+${e.key}`];
+
+// Windows Terminal's copy and paste: Ctrl+C copies a selection and
+// interrupts without one, Ctrl+V pastes, and with Shift they only ever
+// copy and paste. Alt+F4 closes the window, as everywhere on Windows.
+const windowsEditKeys = (term: Terminal, e: KeyboardEvent): boolean => {
+  if (e.altKey && e.key === "F4") return false;
+  if (!e.ctrlKey || e.altKey || e.metaKey) return true;
+  const key = e.key.toLowerCase();
+  // Left to the browser, whose paste event xterm takes.
+  if (key === "v") return false;
+  if (key !== "c") return true;
+  if (!term.hasSelection()) return !e.shiftKey;
+  if (e.type === "keydown") {
+    e.preventDefault();
+    void navigator.clipboard.writeText(term.getSelection());
+    term.clearSelection();
+  }
+  return false;
+};
 
 export function TerminalView({
   feed,
+  syntax,
   live,
   onInput,
   onFit,
   onLink,
   pathOfFile,
+  lineFeedsReturn = false,
 }: {
   // Null where nothing feeds it (a scene).
   feed: TerminalFeed | null;
+  // What its shell reads, which keys and dropped files are typed in.
+  syntax: ShellSyntax;
   // Whether keystrokes reach a shell: false once it has exited.
   live: boolean;
   onInput: (data: string) => void;
@@ -180,11 +195,15 @@ export function TerminalView({
   // Where a dropped file is on the shell's machine, "" where it has
   // none. Without it, a drop does nothing.
   pathOfFile?: (file: File) => string;
+  // Output written to a file rather than a terminal, whose bare line
+  // feeds no terminal turned into new lines.
+  lineFeedsReturn?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   // Proposes the host's size to the process (`claim`: even unchanged).
   const proposeRef = useRef<((claim: boolean) => void) | null>(null);
+  const lines = typedLines[syntax];
   // The latest callbacks, so a new closure from the container does not
   // build a new terminal.
   const input = useEffectEvent(onInput);
@@ -237,13 +256,14 @@ export function TerminalView({
       // Answers the kitty keyboard query (`CSI ? u`), so a program that
       // asks (Claude Code, Codex, Neovim) can tell Shift+Enter from Enter.
       vtExtensions: { kittyKeyboard: true },
+      convertEol: lineFeedsReturn,
     });
     // Other ⌘ chords are the window's (copy, paste, the menu's), which
     // kitty mode would send to the program instead. xterm keeps ⌘A, its
     // select all.
-    if (isMac) {
+    if (viewerOs === "mac") {
       term.attachCustomKeyEventHandler((e) => {
-        const key = macEditKey(e);
+        const key = macEditKey(e, lines.macEditKeys);
         if (key === undefined && !e.metaKey) return true;
         if (e.type === "keydown") {
           if (key !== undefined) {
@@ -255,6 +275,8 @@ export function TerminalView({
         }
         return false;
       });
+    } else if (viewerOs === "windows") {
+      term.attachCustomKeyEventHandler((e) => windowsEditKeys(term, e));
     }
     // Unicode 15 widths with graphemes clustered, as Ghostty and Ink TUIs
     // count them: a ZWJ sequence, flag or VS16 emoji takes two cells.
@@ -376,7 +398,7 @@ export function TerminalView({
       termRef.current = null;
       proposeRef.current = null;
     };
-  }, [feed, fontsIn]);
+  }, [feed, fontsIn, lines, lineFeedsReturn]);
 
   // An exited shell takes no keystrokes: the cursor goes, and focus is
   // handed back, so Tab and the app's bare-key shortcuts work again. One
@@ -420,7 +442,7 @@ export function TerminalView({
       .filter((path) => path !== "");
     if (paths.length === 0) return;
     term.focus();
-    term.paste(`${paths.map(escapedPath).join(" ")} `);
+    term.paste(`${paths.map(lines.dropped).join(" ")} `);
   };
 
   // Padding lives on the wrapper: the fit addon sizes the grid from the

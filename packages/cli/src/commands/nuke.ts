@@ -2,18 +2,23 @@
 // zone with no window. The app this command came with runs "Nuke
 // everything" itself (--sm-nuke, the Danger zone's halves and the start
 // that deletes the files), as only it can revoke the device and turn
-// its login item off: a Mac's bundle, or a Linux install's host, its
-// unit taken out first. Then what a start can't take, as something of
-// the app's is still running through it: the app's own folder (a Linux
-// install's, the install with it), its logs and preferences, the
-// data-folder lock, the config folder once empty, and a Mac's bundle
-// (--keep-app keeps it). A kept app whose start couldn't delete a file
-// keeps its own folder too, the nuke's marker in it, for its next start
-// to finish.
-import { execFileSync, spawnSync } from "node:child_process";
-import { readdirSync, realpathSync, rmdirSync, rmSync } from "node:fs";
+// its login item off: a Mac's bundle, a Windows install's version, or a
+// Linux install's host, its unit taken out first. Then what a start
+// can't take, as something of the app's is still running through it:
+// the app's own folder (a Linux install's, the install with it), its
+// logs and preferences, the data-folder lock, the config folder once
+// empty, and a Mac's bundle or a Windows install (--keep-app keeps it).
+// A kept app whose start couldn't delete a file keeps its own folder
+// too, the nuke's marker in it, for its next start to finish.
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { existsSync, realpathSync, rmSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { footprint, NUKE_EXIT, NUKE_SWITCH } from "@shigomori/engine/footprint";
+import { programFile } from "@shigomori/engine/executables";
+import {
+  NUKE_EXIT,
+  NUKE_SWITCH,
+  removeLeftovers,
+} from "@shigomori/engine/footprint";
 import { type Flavor, flavorNames } from "@shigomori/engine/flavor";
 import * as HostUnit from "@shigomori/engine/hostUnit";
 import {
@@ -24,13 +29,17 @@ import {
 } from "@shigomori/engine/linuxInstall";
 import { childEnv } from "@shigomori/engine/processes";
 import * as Paths from "@shigomori/engine/Paths";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byFamily, byPlatform } from "@shigomori/engine/platform";
+import * as ProcessTable from "@shigomori/engine/ProcessTable";
+import {
+  windowsInstallRoot,
+  windowsUpdateExe,
+} from "@shigomori/engine/windowsInstall";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
-import { errorMessageOf } from "@shigomori/contracts/errors";
 import { ExitCode, UsageError } from "../errors.ts";
 import { rest } from "../here.ts";
 import { note, out } from "../output.ts";
@@ -40,14 +49,16 @@ const GONE_WITHIN_MS = 60_000;
 
 // Whether `done` came to hold within `ms` of awake time, looked at every
 // quarter second.
-const until = (done: () => boolean, ms: number) =>
-  Effect.sync(done).pipe(
+const until = <R>(done: Effect.Effect<boolean, never, R>, ms: number) =>
+  done.pipe(
     Effect.repeat({
       until: (held) => held,
       schedule: Schedule.spaced("250 millis"),
     }),
     Effect.timeoutOption(ms),
-    Effect.map(Option.getOrElse(done)),
+    Effect.flatMap(
+      Option.match({ onNone: () => done, onSome: Effect.succeed }),
+    ),
   );
 
 // The app this command came with, as the nuke drives it, or null for a
@@ -59,13 +70,17 @@ type NukedApp = {
   readonly quit: Effect.Effect<
     boolean,
     Effect.Error<Unit>,
-    Effect.Services<Unit>
+    Effect.Services<Unit> | ProcessTable.ProcessTable
   >;
   // Its helpers gone, which go a moment after it.
-  readonly gone: Effect.Effect<void>;
-  // A Mac's bundle, deleted last but for --keep-app. A Linux install
-  // is in the app's own folder, so it has none.
-  readonly bundle: string | null;
+  readonly gone: Effect.Effect<void, never, ProcessTable.ProcessTable>;
+  // The app's own deletion, last but for --keep-app, and where it is: a
+  // Mac's bundle, or a Windows install. A Linux install is in the app's
+  // own folder, so it has none.
+  readonly removal: {
+    readonly place: string;
+    readonly remove: Effect.Effect<void>;
+  } | null;
 };
 type Unit = ReturnType<typeof HostUnit.uninstallUnit>;
 
@@ -90,6 +105,7 @@ const macApp = (appName: string): NukedApp | null => {
       .map((row) => row.trim())
       .filter((row) => row.replace(/^\d+\s+/, "").startsWith(executable))
       .map((row) => Number.parseInt(row, 10));
+  const closed = Effect.sync(() => runningFrom().length === 0);
   return {
     start: [executable],
     quit: Effect.suspend(() => {
@@ -98,12 +114,21 @@ const macApp = (appName: string): NukedApp | null => {
       for (const pid of open) process.kill(pid, "SIGTERM");
       return open.length === 0
         ? Effect.succeed(true)
-        : until(() => runningFrom().length === 0, QUIT_WITHIN_MS);
+        : until(closed, QUIT_WITHIN_MS);
     }),
-    gone: until(() => runningFrom().length === 0, GONE_WITHIN_MS).pipe(
-      Effect.asVoid,
-    ),
-    bundle,
+    gone: until(closed, GONE_WITHIN_MS).pipe(Effect.asVoid),
+    removal: {
+      place: bundle,
+      remove: Effect.sync(() => {
+        // The URL scheme it registered goes with it.
+        spawnSync(
+          "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+          ["-u", bundle],
+          { stdio: "ignore" },
+        );
+        rmSync(bundle, { recursive: true, force: true });
+      }),
+    },
   };
 };
 
@@ -121,7 +146,41 @@ const linuxApp = (
     start: [join(folder, HOST_RUNTIME), join(folder, HOST_BUNDLE)],
     quit: HostUnit.uninstallUnit(install).pipe(Effect.as(true)),
     gone: Effect.void,
-    bundle: null,
+    removal: null,
+  };
+};
+
+// A Windows install's version, <root>\app-<version>\resources\<name>,
+// its app quit as its windows' close buttons quit it.
+const windowsApp = (appName: string): NukedApp | null => {
+  const resources = dirname(realpathSync(process.execPath));
+  const updateExe = windowsUpdateExe(resources);
+  if (!existsSync(updateExe)) return null;
+  const program = programFile(appName);
+  const closed = Effect.flatMap(ProcessTable.ProcessTable, (table) =>
+    Effect.map(table.running(program), (running) => !running),
+  );
+  return {
+    // The version's own, as Squirrel's launcher doesn't wait for what
+    // it starts.
+    start: [join(dirname(resources), program)],
+    quit: Effect.suspend(() => {
+      spawnSync("taskkill", ["/IM", program], { stdio: "ignore" });
+      return until(closed, QUIT_WITHIN_MS);
+    }),
+    gone: until(closed, GONE_WITHIN_MS).pipe(Effect.asVoid),
+    removal: {
+      place: windowsInstallRoot(resources),
+      // Squirrel's uninstall, as Apps & features starts it: the app's
+      // own (main/electron/squirrel.ts), then the install's folder,
+      // this command's among it, so it runs on once this exits.
+      remove: Effect.sync(() =>
+        spawn(updateExe, ["--uninstall"], {
+          detached: true,
+          stdio: "ignore",
+        }).unref(),
+      ),
+    },
   };
 };
 
@@ -147,16 +206,17 @@ export const nuke = Command.make(
       const nuked = byPlatform({
         darwin: () => macApp(names.appName),
         linux: () => linuxApp(paths.flavor, paths),
+        win32: () => windowsApp(names.appName),
       })();
       if (nuked === null) {
         return yield* new UsageError({
-          problem: `nuke runs from a packaged build's ${paths.binaryName}. A dev build's is in Settings, under Danger zone.`,
+          problem: `nuke runs from ${byFamily({ posix: "a packaged", windows: "an installed" })} build's ${paths.binaryName}. A dev build's is in Settings, under Danger zone.`,
         });
       }
-      if (input.keepApp && nuked.bundle === null) {
+      if (input.keepApp && nuked.removal === null) {
         return yield* new UsageError({
           problem:
-            "--keep-app keeps a Mac's bundle. A Linux install is in the app's own folder, so it goes.",
+            "--keep-app keeps a Mac's bundle or a Windows install. A Linux install is in the app's own folder, so it goes.",
         });
       }
       if (!(yield* nuked.quit)) {
@@ -200,54 +260,20 @@ export const nuke = Command.make(
       }
       yield* nuked.gone;
 
-      const place = footprint(paths.flavor, {
-        home: paths.home,
-        configHome: paths.configHome,
-        dataHome: paths.dataHome,
-        stateHome: paths.stateHome,
-        binHome: "",
-      });
-      for (const { id, path } of place.paths) {
-        if (id === "config") {
-          // Its pointer went with the app's nuke, and its lock just
-          // before. Anything else in it is the owner's.
-          yield* Effect.try(() => {
-            if (readdirSync(path).length === 0) rmdirSync(path);
-          }).pipe(Effect.ignore);
-        } else if (
-          (id === "userData" && !(marked && input.keepApp)) ||
-          id === "logs" ||
-          id === "dataDirLock" ||
-          id === "preferences"
-        ) {
-          // What the app's start couldn't delete, this can't either: said
-          // as the app says it.
-          const failed = yield* Effect.try(() =>
-            rmSync(path, { recursive: true, force: true }),
-          ).pipe(
-            Effect.as(null),
-            Effect.catch((error) =>
-              Effect.succeed(errorMessageOf(error.cause)),
-            ),
-          );
-          if (failed !== null) {
-            left = true;
-            yield* out(`[nuke] left: ${path}: ${failed}`);
-          }
-        }
+      // What the app's start couldn't delete, this can't either: said
+      // as the app says it.
+      for (const { path, why } of removeLeftovers(
+        paths.flavor,
+        paths,
+        marked && input.keepApp,
+      )) {
+        left = true;
+        yield* out(`[nuke] left: ${path}: ${why}`);
       }
-      const { bundle } = nuked;
-      if (bundle !== null && !input.keepApp) {
-        // The URL scheme it registered goes with it.
-        spawnSync(
-          "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
-          ["-u", bundle],
-          { stdio: "ignore" },
-        );
-        rmSync(bundle, { recursive: true, force: true });
-      }
+      const { removal } = nuked;
+      if (removal !== null && !input.keepApp) yield* removal.remove;
       yield* out(
-        `nuked ${names.appName}${bundle === null || input.keepApp ? "" : `, ${bundle} with it`}`,
+        `nuked ${names.appName}${removal === null || input.keepApp ? "" : `, ${removal.place} with it`}`,
       );
       if (left) {
         yield* note(

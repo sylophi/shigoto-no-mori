@@ -7,6 +7,7 @@ import * as Predicate from "effect/Predicate";
 import { CheckoutUnfinished, HookFailed } from "./CloneCheckout.ts";
 import * as Git from "./Git.ts";
 import * as GitHub from "./GitHub.ts";
+import { NoScriptShell } from "./shells/documents.ts";
 import { storeErrorOf } from "./storeErrors.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
@@ -45,6 +46,7 @@ export const clauseOf = (error: unknown): string =>
 const gitWordsOf = (error: Git.GitCommandError): string => {
   if (error.exitCode !== null) return Git.stderrOf(error);
   const cause = error.cause;
+  if (cause instanceof NoScriptShell) return cause.message;
   if (
     !(cause instanceof PlatformError.PlatformError) ||
     !Predicate.isTagged(cause.reason, "NotFound")

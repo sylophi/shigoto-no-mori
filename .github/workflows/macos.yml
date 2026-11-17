@@ -40,7 +40,7 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm run check:cli
 
-      - name: Go tests
+      - name: Go
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm run check:go
 

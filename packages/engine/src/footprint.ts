@@ -6,7 +6,9 @@
 // login item, the device on the hub). So nothing of one build is
 // another's, and nothing of a nuked build stays (the terminal's `nuke`,
 // commands/nuke.ts).
+import { readdirSync, rmdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { type Flavor, flavorNames } from "./flavor.ts";
 import { byPlatform } from "./platform.ts";
 
@@ -18,6 +20,8 @@ export type FootprintPlace = {
   // app's own folders.
   readonly dataHome: string;
   readonly stateHome: string;
+  // APPDATA (Paths), where Windows keeps them.
+  readonly appData: string;
   // Where the terminal command is linked (XDG_BIN_HOME, or ~/.local/bin).
   readonly binHome: string;
 };
@@ -25,9 +29,10 @@ export type FootprintPlace = {
 // The app's own folders outside the data dir: its userData (the
 // single-instance lock, the hub credential, the Clerk tokens) and its
 // logs, where each OS keeps an app's, and on a Mac its preferences.
+// Electron keeps a Windows app's logs in its userData.
 export const appFolders = (
   flavor: Flavor,
-  place: Pick<FootprintPlace, "home" | "dataHome" | "stateHome">,
+  place: Pick<FootprintPlace, "home" | "dataHome" | "stateHome" | "appData">,
 ) => {
   const names = flavorNames(flavor);
   const library = join(place.home, "Library");
@@ -40,6 +45,11 @@ export const appFolders = (
     linux: {
       userData: join(place.dataHome, names.configDir),
       logs: join(place.stateHome, names.configDir),
+      preferences: null,
+    },
+    win32: {
+      userData: join(place.appData, names.userDataDir),
+      logs: join(place.appData, names.userDataDir, "logs"),
       preferences: null,
     },
   });
@@ -108,6 +118,39 @@ export const footprint = (flavor: Flavor, place: FootprintPlace): Footprint => {
     bundleId: names.bundleId,
     scheme: names.scheme,
   };
+};
+
+// What the terminal's nuke deletes once the app's own is done: the
+// app's own folder (but a kept app's that holds the nuke's marker), its
+// logs and preferences, the data-folder lock, and the config folder
+// once empty, as anything else in it is the owner's. What stayed, with
+// why.
+export const removeLeftovers = (
+  flavor: Flavor,
+  place: Omit<FootprintPlace, "binHome">,
+  keepUserData: boolean,
+) => {
+  const left: { readonly path: string; readonly why: string }[] = [];
+  for (const { id, path } of footprint(flavor, { ...place, binHome: "" })
+    .paths) {
+    if (id === "config") {
+      try {
+        if (readdirSync(path).length === 0) rmdirSync(path);
+      } catch {}
+    } else if (
+      (id === "userData" && !keepUserData) ||
+      id === "logs" ||
+      id === "dataDirLock" ||
+      id === "preferences"
+    ) {
+      try {
+        rmSync(path, { recursive: true, force: true });
+      } catch (error) {
+        left.push({ path, why: errorMessageOf(error) });
+      }
+    }
+  }
+  return left;
 };
 
 // The app started to nuke itself with no window (`<binary> nuke`): it

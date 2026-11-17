@@ -190,13 +190,28 @@
     "label": "Terminal",
     "bundleNames": ["Utilities/Terminal.app"]
   },
+  { "id": "windows-terminal", "label": "Windows Terminal", "programs": ["wt"] },
+  {
+    "id": "powershell",
+    "label": "PowerShell",
+    "programs": ["pwsh", "powershell"]
+  },
   {
     "id": "github-desktop",
     "label": "GitHub Desktop",
     "bundleNames": ["GitHub Desktop.app"],
     "cli": "github"
   },
-  { "id": "finder", "label": "Finder", "bundleNames": ["__finder__"] },
+  {
+    "id": "finder",
+    "label": "Finder",
+    "bundleNames": ["__file_manager__"]
+  },
+  {
+    "id": "explorer",
+    "label": "File Explorer",
+    "programs": ["__file_manager__"]
+  },
   { "id": "mu", "label": "Mu", "bundleNames": ["Mu.app"] },
   { "id": "claude-code", "label": "Claude Code", "inTerminal": "claude" },
   { "id": "codex-cli", "label": "Codex CLI", "inTerminal": "codex" },
