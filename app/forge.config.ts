@@ -116,13 +116,12 @@ const dmgVolumeName =
 // list). Only Windows needs a launcher to put the terminal command on
 // PATH (host/lib/cli/launchers.ts). Linux is packaged by
 // scripts/package-linux.mts, not forge.
-const macPackage = {
-  cliLauncher: false,
-  ptyPrebuilds: "darwin-.*",
-  ptyFiles: [NODE_PTY_ADDON, NODE_PTY_SPAWN_HELPER],
-};
 const osPackage = byFamily({
-  posix: macPackage,
+  posix: {
+    cliLauncher: false,
+    ptyPrebuilds: "darwin-.*",
+    ptyFiles: [NODE_PTY_ADDON, NODE_PTY_SPAWN_HELPER],
+  },
   windows: {
     cliLauncher: true,
     ptyPrebuilds: "win32-[^/]+(/conpty\\.node)?",

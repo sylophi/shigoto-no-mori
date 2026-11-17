@@ -16,8 +16,6 @@ export type BrowseListing = {
   readonly isLoading: boolean;
   readonly error: Error | null;
   readonly filtered: DirectoryListing["entries"];
-  // Whether there is a folder above the listed one.
-  readonly canBrowseUp: boolean;
   readonly browseTo: (name: string) => void;
   readonly browseUp: () => void;
 };
