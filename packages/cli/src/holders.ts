@@ -1,5 +1,5 @@
-// The app runs this device's terminals, so a delete from the terminal,
-// or a move on Windows, asks it to let go of the worktree first (the
+// The app runs this device's terminals, so on Windows a delete or a
+// move from the terminal asks it to let go of the worktree first (the
 // engine's Holders), but for the app's terminal this process runs in,
 // whose end would end this one. With no app running, nothing holds it,
 // and an app that can't answer leaves the delete or the move as no app
