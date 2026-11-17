@@ -154,8 +154,10 @@ const create = async (
 // A script that records its pid and runs until stopped, the way a dev
 // server holds its worktree, running `onStop` in it as it goes: on its
 // way out, which a stop reaches on every OS (Windows sends no SIGTERM).
-// It waits in one long sleep: a Ctrl+C typed while Git Bash starts a
-// child reaches the shell but not the child, which it then waits on.
+// zsh skips its EXIT trap when a signal ends it, so SIGTERM and SIGHUP
+// exit instead. It waits in one long sleep: a Ctrl+C typed while Git
+// Bash starts a child reaches the shell but not the child, which it
+// then waits on.
 const runIn = (
   project: Project,
   worktree: Worktree,
@@ -165,7 +167,7 @@ const runIn = (
   runHost(
     Effect.flatMap(Scripts.Scripts, (scripts) =>
       scripts.start({
-        command: `trap '${onStop}' EXIT; echo ${SCRIPT_PID} > '${pidFile}'; while :; do sleep 1000; done`,
+        command: `trap '${onStop}' EXIT; trap 'exit 0' TERM HUP; echo ${SCRIPT_PID} > '${pidFile}'; while :; do sleep 1000; done`,
         slot: { kind: "package", name: "serve" },
         worktree: {
           id: worktree.id,
