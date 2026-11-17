@@ -37,6 +37,7 @@ import {
   patchedPorts,
 } from "@shigomori/contracts/schemas";
 import { cloneFolderName } from "@shared/cloneUrl";
+import { symlinksRefusal } from "@shared/pullCollision";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import {
   createSharedSettingsCopy,
@@ -1675,6 +1676,20 @@ async function fakeMirrorStartTo(
   );
   if (!target || !emit || !project?.identity || !sourceWorktree) {
     throw new Error("[fake-host] no such worktree to mirror");
+  }
+  // ?mirrorRefused=1: the copy's device can't make the symlinks the
+  // original tracks, and its landing refuses before anything lands.
+  if (new URLSearchParams(location.search).get("mirrorRefused") === "1") {
+    await sleep(600);
+    const disk = fakeDisks[input.targetDeviceId];
+    const windows = disk !== undefined && onWindows(disk);
+    const base = `${disk?.home ?? "/Users/rin"}/.sm/wt/${project.name}`;
+    throw new RemoteCallError({
+      text: `The other device answered: ${symlinksRefusal(
+        windows ? base.replaceAll("/", "\\") : base,
+        windows,
+      )}`,
+    });
   }
   // The rule is the session's, not the send's: a mirror start brings
   // the files through its own session, so the landing poses no files

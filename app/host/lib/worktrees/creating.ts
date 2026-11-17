@@ -18,6 +18,7 @@ import {
 } from "@shigomori/contracts/schemas";
 import { codeOf } from "@shigomori/engine/errorDocument";
 import * as Git from "@shigomori/engine/Git";
+import type { CheckoutConfig } from "@shigomori/engine/gitIndex";
 import type * as Registry from "@shigomori/engine/Registry";
 import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import * as Deferred from "effect/Deferred";
@@ -54,6 +55,9 @@ export type CreateInput = {
   // still run): a mirror or transplant told not to set the copy up.
   readonly skipSetup?: boolean | undefined;
   readonly ignoredFilesFollow?: readonly string[] | undefined;
+  // How its checkout reads and writes its files (a mirror's copy takes
+  // its original's).
+  readonly checkoutConfig?: CheckoutConfig | undefined;
 };
 
 export type CreateFailure =
@@ -88,6 +92,7 @@ const createIn =
           skipSetup: input.skipSetup,
           clone: input.cloneFiles !== false,
           ignoredFilesFollow: input.ignoredFilesFollow,
+          checkoutConfig: input.checkoutConfig,
         },
         reporter,
       ),

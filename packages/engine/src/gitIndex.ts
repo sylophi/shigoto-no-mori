@@ -252,14 +252,20 @@ export const CONVERSION_ATTRS = [
   "crlf",
 ] as const;
 
-// The config a checkout's conversions read.
+// The config a checkout's conversions read, as git takes it there.
 export type CheckoutConfig = {
-  // "true", "input" or "false".
-  readonly autocrlf: string;
-  // "crlf", "lf", "native" or empty.
-  readonly eol: string;
+  readonly autocrlf: "true" | "input" | "false";
+  // Native spelled out as the line ending git on this OS writes for it.
+  readonly eol: "lf" | "crlf";
   readonly symlinks: boolean;
 };
+
+// The same config as git's own settings.
+export const checkoutConfigEntries = (config: CheckoutConfig) => ({
+  "core.autocrlf": config.autocrlf,
+  "core.eol": config.eol,
+  "core.symlinks": String(config.symlinks),
+});
 
 // Paths whose checkout runs through something other than copying the
 // blob out: a filter (LFS), ident, a working-tree encoding, or line

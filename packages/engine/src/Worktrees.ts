@@ -16,6 +16,7 @@ import type * as PlatformError from "effect/PlatformError";
 import { type AgentSession } from "./agentSessions.ts";
 import type { CheckoutUnfinished, HookFailed } from "./CloneCheckout.ts";
 import * as Git from "./Git.ts";
+import type { CheckoutConfig } from "./gitIndex.ts";
 import * as Lifecycle from "./Lifecycle.ts";
 import type { PortInfo, PortPoolConfig } from "./ports.ts";
 import * as Registry from "./Registry.ts";
@@ -255,6 +256,10 @@ export class Worktrees extends Context.Service<
         readonly clone?: boolean | undefined;
         // A move's files step follows (CarryOver.apply).
         readonly ignoredFilesFollow?: ReadonlyArray<string> | undefined;
+        // How its checkout reads and writes its files, over the
+        // repository's, for as long as it exists (a mirror's copy takes
+        // its original's).
+        readonly checkoutConfig?: CheckoutConfig | undefined;
       },
       reporter: Reporter,
     ) => Effect.Effect<

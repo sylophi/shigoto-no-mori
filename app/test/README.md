@@ -19,6 +19,10 @@ file here, and `lib/` holds what they share.
   once the copy holds it, and a cancelled one keeps nothing that could.
 - `mirror.mts`, `mirror-engine.mts`: a mirror never deletes or
   overwrites what isn't its own.
+- `mirror-checkout.mts`: a mirror's copy holds its original's bytes
+  whichever kind of device each end is (line endings, symlinks), git
+  reads both ends as clean, and the copy's device's other worktrees keep
+  their own config.
 - `control.mts`: an unmirror removes the copy only once the follower
   holds it, and never the original.
 
