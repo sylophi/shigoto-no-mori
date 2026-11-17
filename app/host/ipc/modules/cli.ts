@@ -2,8 +2,8 @@ import { cliContract } from "@shigomori/contracts/modules/cli";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import { requireCliBinary } from "@host/lib/cli/binary";
 import {
-  cliLinkStatus,
-  installCliLinks,
+  cliStatus,
+  installCli,
   uninstallCliEverything,
 } from "@host/lib/cli/install";
 import {
@@ -55,12 +55,12 @@ const runDoctor = (fix: boolean) =>
   });
 
 export const cliHandlers = {
-  status: () => cliLinkStatus,
-  install: ({ force }) => installCliLinks(force),
+  status: () => cliStatus,
+  install: ({ force }) => installCli(force),
   // Only ever removes what shigomori made (links it owns, hooks it
   // wrote), so a foreign occupant survives this unchanged and the
   // returned status says so.
-  uninstall: () => Effect.andThen(uninstallCliEverything, cliLinkStatus),
+  uninstall: () => Effect.andThen(uninstallCliEverything, cliStatus),
   shellStatus: () => shellIntegrationStatus,
   shellInstall: () => installShellIntegration,
   shellUninstall: () => uninstallShellIntegration,

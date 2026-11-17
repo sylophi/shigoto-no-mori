@@ -7,6 +7,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { programFile } from "@shigomori/engine/executables";
+import { NATIVEFS_BINARY_NAME, NATIVEFS_DIST_DIR } from "./goHelpersDist.mts";
 
 export type AppPlace = {
   readonly packaged: boolean;
@@ -44,3 +45,7 @@ export function bundledBinaryResolver(
     return candidate;
   };
 }
+
+// The filesystem helper (goHelpersDist.mts).
+export const nativefsPath = (place: AppPlace): string =>
+  bundledBinaryPath(place, NATIVEFS_DIST_DIR, NATIVEFS_BINARY_NAME);

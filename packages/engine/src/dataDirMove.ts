@@ -592,11 +592,13 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     Effect.scoped(
       Effect.flatMap(fs.open(at, { flag }), (handle) => handle.sync),
     );
-  const flushed = (at: string, kind: "file" | "folder") =>
+  const flushedFile = (at: string) =>
+    synced(at, byPlatform({ darwin: "r", linux: "r", win32: "r+" } as const));
+  const flushedFolder = (at: string) =>
     byPlatform({
       darwin: synced(at, "r"),
       linux: synced(at, "r"),
-      win32: kind === "file" ? synced(at, "r+") : Effect.void,
+      win32: Effect.void,
     });
   const underFrom = (at: string) =>
     move.spellings.find((dir) => isSameOrInside(at, dir));
@@ -641,7 +643,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     if (!move.toDefault) {
       yield* fs.makeDirectory(path.dirname(pointerFile), { recursive: true });
       yield* fs.writeFileString(pointerTmp, `${to}\n`);
-      yield* flushed(pointerTmp, "file");
+      yield* flushedFile(pointerTmp);
       pointerStaged = true;
     }
     yield* retireStore;
@@ -750,8 +752,8 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
         .rename(partial, to)
         .pipe(Effect.andThen(landed), Effect.uninterruptible);
     }
-    yield* flushed(path.dirname(to), "folder");
-    if (sameVolume) yield* flushed(path.dirname(from), "folder");
+    yield* flushedFolder(path.dirname(to));
+    if (sameVolume) yield* flushedFolder(path.dirname(from));
 
     // Renamed in, so no reader sees a half-written path, and committed
     // before the old copy goes. Moving to the default removes the pointer
@@ -775,7 +777,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     if (legacyPointerFile !== null) {
       yield* fs.remove(legacyPointerFile, { force: true });
     }
-    yield* flushed(path.dirname(pointerFile), "folder");
+    yield* flushedFolder(path.dirname(pointerFile));
     // The store this process holds is the old place's: the first engine
     // graph to come up at the new place (not the doctor's) removes the old
     // tree, the journal, and lets it write.

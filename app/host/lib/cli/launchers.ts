@@ -3,11 +3,9 @@
 // folder on the user's PATH (nativefs user-path). A dev run, or a
 // packaged one that isn't installed, has no install to put the command
 // in.
-import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { programFile } from "@shigomori/engine/executables";
 import {
   windowsCliBinDir,
@@ -19,35 +17,28 @@ import { cliAliasName, cliBinaryName } from "@shared/packaging/cliDist.mts";
 import {
   CLI_LAUNCHER_BINARY_NAME,
   CLI_LAUNCHER_DIST_DIR,
-  NATIVEFS_BINARY_NAME,
-  NATIVEFS_DIST_DIR,
 } from "@shared/packaging/goHelpersDist.mts";
-import { removeCliLaunchers } from "@shared/cliLaunchers";
+import {
+  addToUserPath,
+  onUserPath,
+  removeCliLaunchers,
+} from "@shared/cliLaunchers";
 import { log } from "@shared/log";
 import type { CliPlacement, Facts } from "./placement";
-
-const run = promisify(execFile);
 
 const isInstalled = (facts: Facts) =>
   facts.packaged && existsSync(windowsUpdateExe(facts.resourcesPath));
 
+const launcherOf = (facts: Facts, name: string) =>
+  join(windowsCliBinDir(facts.resourcesPath), programFile(name));
+
 const launchersOf = (facts: Facts) =>
   [cliBinaryName(facts.flavor), cliAliasName(facts.flavor)].map((name) =>
-    join(windowsCliBinDir(facts.resourcesPath), programFile(name)),
+    launcherOf(facts, name),
   );
 
 const shippedLauncher = (facts: Facts) =>
   bundledBinaryPath(facts, CLI_LAUNCHER_DIST_DIR, CLI_LAUNCHER_BINARY_NAME);
-
-const userPath = (facts: Facts, verb: "has" | "add") =>
-  run(bundledBinaryPath(facts, NATIVEFS_DIST_DIR, NATIVEFS_BINARY_NAME), [
-    "user-path",
-    verb,
-    windowsCliBinDir(facts.resourcesPath),
-  ]);
-
-const onUserPath = async (facts: Facts) =>
-  (await userPath(facts, "has")).stdout.trim() === "true";
 
 async function status(facts: Facts): Promise<CliStatus> {
   const launchers = launchersOf(facts);
@@ -59,7 +50,8 @@ async function status(facts: Facts): Promise<CliStatus> {
     name: cliBinaryName(facts.flavor),
     aliasName: cliAliasName(facts.flavor),
     binDir: windowsCliBinDir(facts.resourcesPath),
-    linkPath: launchers[0] ?? "",
+    linkPath: launcherOf(facts, cliBinaryName(facts.flavor)),
+    placement: "launcher",
     foreignPaths: [],
     onPath,
     state: onPath ? "installed" : "missing",
@@ -82,7 +74,7 @@ async function install(facts: Facts): Promise<CliStatus> {
     );
   }
   await placeLaunchers(facts);
-  await userPath(facts, "add");
+  await addToUserPath(facts);
   return status(facts);
 }
 

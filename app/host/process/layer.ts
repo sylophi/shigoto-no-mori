@@ -38,7 +38,7 @@ import * as Villagers from "@host/lib/VillagerData";
 import * as Worktrees from "@host/lib/Worktrees";
 import * as GitWatcher from "@host/lib/GitWatcher";
 import * as BackgroundFetch from "@host/lib/BackgroundFetch";
-import { repairCliLinks } from "@host/lib/cli/install";
+import { repairCli } from "@host/lib/cli/install";
 import * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
 import * as Moves from "@host/lib/sync/Moves";
 import * as MoveQueue from "@host/lib/sync/MoveQueue";
@@ -319,11 +319,10 @@ const below = (options: Parameters<typeof layer>[0]) =>
     Layer.provideMerge(logged("the store's changes", StoreChanges.layer)),
     Layer.provideMerge(gitWatcher),
     Layer.provideMerge(BackgroundFetch.layer),
-    // Installing the CLI link is a Settings action. A start only
-    // repairs an installed link whose target moved (an app update,
-    // another checkout).
+    // Installing the CLI is a Settings action. A start only repairs an
+    // install whose target moved (an app update, another checkout).
     Layer.provideMerge(
-      starts("the CLI link repair", () => void repairCliLinks(hostFacts())),
+      starts("the CLI repair", () => void repairCli(hostFacts())),
     ),
     Layer.provideMerge(
       logged("the synced project settings", ProjectSettingsSync.layer),

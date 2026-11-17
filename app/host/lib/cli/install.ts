@@ -3,9 +3,9 @@
 //
 // Install and uninstall are user actions in Settings (the cli IPC
 // module); the app never installs on its own. The only launch-time
-// behavior is repairCliLinks: silently repointing a link the user
-// already installed when its target moved, so an existing install
-// keeps working across app updates and relocations.
+// behavior is repairCli: silently putting back an install the user
+// already made when its target moved, so it keeps working across app
+// updates and relocations.
 import { byPlatform } from "@shigomori/engine/platform";
 import { cliBinaryOf } from "./binary";
 import { callFailureOf } from "@shigomori/contracts/errors";
@@ -20,15 +20,15 @@ import type { Facts } from "./placement";
 const placement = () =>
   byPlatform({ darwin: links, linux: links, win32: launchers });
 
-// The links' state, and their install, for the handlers. A refusal
+// The install's state, and the install, for the handlers. A refusal
 // crosses the wire in its own words.
-export const cliLinkStatus = Effect.flatMap(HostFacts.HostFacts, (facts) =>
+export const cliStatus = Effect.flatMap(HostFacts.HostFacts, (facts) =>
   Effect.tryPromise({
     try: () => placement().status(facts),
     catch: callFailureOf,
   }),
 );
-export const installCliLinks = (force: boolean) =>
+export const installCli = (force: boolean) =>
   Effect.flatMap(HostFacts.HostFacts, (facts) =>
     Effect.tryPromise({
       try: () => placement().install(facts, force),
@@ -56,6 +56,6 @@ export const uninstallCliEverything = Effect.gen(function* () {
   return yield* hooks;
 });
 
-export async function repairCliLinks(facts: Facts): Promise<void> {
+export async function repairCli(facts: Facts): Promise<void> {
   await placement().repair(facts);
 }

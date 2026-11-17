@@ -161,7 +161,7 @@ function DefaultSidebarHeader({
       className={cn(
         "v1-only flex items-center gap-2",
         hasLocalHost
-          ? "h-11.5 px-3 pl-[92px] sidebar-right:pr-[calc(var(--caption-room)+--spacing(2))] sidebar-right:pl-4"
+          ? "h-11.5 px-3 pl-[92px] sidebar-right:pr-caption sidebar-right:pl-4"
           : "h-13 px-4",
       )}
       style={hasLocalHost ? dragRegion("drag") : undefined}

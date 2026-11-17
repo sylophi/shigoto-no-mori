@@ -244,7 +244,7 @@ export const makeRuns = ({
       yield* trees.end(tree);
       if (!(yield* settledWithin(done, UNKILLABLE_WAIT_MS))) {
         yield* Effect.logWarning(
-          `[scripts] lifecycle script (pid ${pid}) survived SIGKILL; giving up on this kill attempt`,
+          `[scripts] lifecycle script (pid ${pid}) outlived its kill, giving up on this kill attempt`,
         );
       }
     });

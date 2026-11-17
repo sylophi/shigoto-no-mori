@@ -71,7 +71,7 @@ export interface Stopping {
 // What the layer's close stops a run it finds still open with.
 const DEFAULT_STOPPING: Stopping = { graceMs: 3_000, wait: true };
 
-// How long to wait for a child that survived SIGKILL (kernel-stuck
+// How long to wait for a child that outlived its kill (kernel-stuck
 // I/O) before giving up. A delete or a quit must not hang behind it.
 export const UNKILLABLE_WAIT_MS = 5_000;
 
@@ -213,7 +213,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
         yield* trees.end(tree);
         if (yield* waitExit(UNKILLABLE_WAIT_MS)) return;
         yield* Effect.logWarning(
-          `[scripts] "${opts.command ?? program}" (pid ${spawned.pid}) survived SIGKILL, giving up on it`,
+          `[scripts] "${opts.command ?? program}" (pid ${spawned.pid}) outlived its kill, giving up on it`,
         );
       }).pipe(Effect.ensuring(trees.release(tree)));
     },

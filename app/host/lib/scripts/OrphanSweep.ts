@@ -60,7 +60,7 @@ const killOrphan = Effect.fnUntraced(function* (record: RecordedScript) {
   const died = yield* waitForExit(record.pid, ORPHAN_GRACE_MS);
   if (!died) {
     yield* Effect.logWarning(
-      `[scripts] orphaned pid ${record.pid} survived SIGKILL, leaving it alone`,
+      `[scripts] orphaned pid ${record.pid} outlived its kill, leaving it alone`,
     );
   }
   return died;

@@ -6,8 +6,7 @@ import * as Effect from "effect/Effect";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Processes from "@shigomori/engine/processes";
 import { descendantsIn } from "../descendants";
-
-type Tree = { readonly pid: number; readonly ownGroup: boolean };
+import type { Tree } from "./tree";
 
 const SIGNALS = { stop: "SIGTERM", hangup: "SIGHUP" } as const;
 

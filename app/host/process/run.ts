@@ -21,12 +21,11 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import type { HostFacts as Facts } from "@shared/hostFacts";
 import { log } from "@shared/log";
-import { bundledBinaryPath } from "@shared/packaging/bundledBinary.mts";
-import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
 import {
-  NATIVEFS_BINARY_NAME,
-  NATIVEFS_DIST_DIR,
-} from "@shared/packaging/goHelpersDist.mts";
+  bundledBinaryPath,
+  nativefsPath,
+} from "@shared/packaging/bundledBinary.mts";
+import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
 import * as Migration from "@shigomori/engine/Migration";
 import * as DeviceId from "@host/lib/config/DeviceId";
 import * as HostFacts from "@host/lib/HostFacts";
@@ -147,11 +146,7 @@ export async function runHost<E>(root: {
   // a boot that stalls later must not leave it running too. Awaited
   // before the graph, whose Tunnel writes the file again. The pid file is
   // in the shell's own data so it outlives the host that wrote it.
-  const nativefs = bundledBinaryPath(
-    facts,
-    NATIVEFS_DIST_DIR,
-    NATIVEFS_BINARY_NAME,
-  );
+  const nativefs = nativefsPath(facts);
   const reaped = Effect.runPromise(
     reapOrphanedConnector(join(facts.userDataPath, TUNNEL_PID_FILE)).pipe(
       Effect.provide(

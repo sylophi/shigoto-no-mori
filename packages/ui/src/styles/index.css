@@ -44,6 +44,11 @@
    buttons at its top right, which take --caption-room. */
 @custom-variant sidebar-right (&:is([data-sidebar-side="right"] *));
 
+/* A title-bar row's right padding, clear of the caption buttons. */
+@utility pr-caption {
+  padding-right: calc(var(--caption-room) + --spacing(2));
+}
+
 /* Disabled controls keep pointer events so the not-allowed cursor and
    title tooltips work (see the base-layer cursor rule below). In turn,
    `hover:` must never style a disabled element, or dead controls light

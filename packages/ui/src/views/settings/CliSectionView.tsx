@@ -3,7 +3,7 @@ import { Download, Trash2 } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
 import { SectionIntro } from "../../primitives/section-heading.tsx";
 import { StatusDot } from "../../primitives/status-dot.tsx";
-import { isWindowsDevice, shownPath } from "../../lib/devicePaths.ts";
+import { shownPath } from "../../lib/devicePaths.ts";
 import { shellName } from "@shigomori/contracts/shellName";
 import type {
   CliStatus,
@@ -13,9 +13,9 @@ import type {
 const CLI_ABOUT =
   "The Shigoto no Mori CLI lets you (or a coding agent) create, list, merge, and delete this app's worktrees from any shell.";
 
-// Install/uninstall of the CLI symlink lives here, not in a launch
-// prompt: the app runs its bundled binary directly and never needs the
-// link, so this is purely "do you want the command in your shell".
+// Install/uninstall of the CLI lives here, not in a launch prompt: the
+// app runs its bundled binary directly and never needs the command on
+// PATH, so this is purely "do you want the command in your shell".
 //
 // Host-scoped: the links and rc files belong to whichever device the
 // section is mounted for, so a peer's section installs on the peer. A
@@ -33,11 +33,11 @@ export function CliSectionView({
   // The device's home, for the paths.
   home: string | null;
   busy: boolean;
-  // Installs the link, replacing what is there when `force`.
+  // Installs the command, replacing what is there when `force`.
   onInstall: (force: boolean) => void;
   onUninstall: () => void;
-  // Shell integration (ShellIntegrationBlock), offered once the link
-  // is installed and on PATH.
+  // Shell integration (ShellIntegrationBlock), offered once the
+  // command is installed and on PATH.
   shell: ReactNode;
 }) {
   const { name, state, onPath, foreignPaths } = status;
@@ -56,7 +56,7 @@ export function CliSectionView({
     <section className="space-y-3">
       <SectionIntro title="Command line tool">
         {CLI_ABOUT}{" "}
-        {isWindowsDevice(home, status.binDir) ? (
+        {status.placement === "launcher" ? (
           <>
             Installing puts the {commands} commands in {binDir} and adds it to
             your PATH.
