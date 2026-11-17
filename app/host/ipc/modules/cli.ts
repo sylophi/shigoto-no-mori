@@ -25,7 +25,7 @@ import * as Effect from "effect/Effect";
 const DOCTOR_TIMEOUT_MS = 60_000;
 
 // The doctor's checklist, told about this install: the app's version,
-// the bundled `sm`, and the login shell's ZDOTDIR alone for the
+// the bundled `sm`, and the interactive shell's ZDOTDIR alone for the
 // shell-hook check's .zshrc. XDG_CONFIG_HOME also places the data dir
 // pointer, and the doctor must inspect the data dir the app runs on,
 // not the one a shell would find. `fix` applies every repair: the

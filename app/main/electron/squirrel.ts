@@ -1,8 +1,8 @@
 // A Squirrel.Windows install: <root>\Update.exe, this exe in
-// <root>\app-<version>\, a folder every update replaces, and a launcher
+// <root>\app-<version>\, a folder every update replaces, and a stub
 // <root>\<exe> that starts the newest version with the arguments it was
 // given. What Windows keeps a path to (the shortcuts, the scheme, the
-// login item) names the launcher.
+// login item) names the stub.
 import { spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
@@ -21,19 +21,19 @@ const root = windowsInstallRoot(process.resourcesPath);
 const exe = path.basename(process.execPath);
 const updateExe = windowsUpdateExe(process.resourcesPath);
 
-// The exe that starts the app: the launcher in an install, else this one.
-const launcherPath = (): string =>
+// The exe that starts the app: the stub in an install, else this one.
+const stubPath = (): string =>
   existsSync(updateExe) ? path.join(root, exe) : process.execPath;
 
 // The renderer's scheme, which the Clerk bridge (clerk.ts) registers to
 // this exe alone, registered to what starts the app. In a dev run that
 // exe is Electron's own, which opens the app's folder given before the
-// link. In an install it is the launcher, as this exe is in a version
+// link. In an install it is the stub, as this exe is in a version
 // folder the next update deletes.
 export function registerScheme(): void {
   const scheme = rendererSchemeName(flavor);
   if (app.isPackaged) {
-    app.setAsDefaultProtocolClient(scheme, launcherPath());
+    app.setAsDefaultProtocolClient(scheme, stubPath());
   } else {
     app.setAsDefaultProtocolClient(scheme, process.execPath, [
       app.getAppPath(),
@@ -41,9 +41,9 @@ export function registerScheme(): void {
   }
 }
 
-// Launch at login, by the launcher.
+// Launch at login, by the stub.
 export function setLoginItem(openAtLogin: boolean): void {
-  app.setLoginItemSettings({ openAtLogin, path: launcherPath() });
+  app.setLoginItemSettings({ openAtLogin, path: stubPath() });
 }
 
 const startMenu = () =>
@@ -99,7 +99,7 @@ export function handledSquirrelEvent(): boolean {
     case "--squirrel-uninstall":
       spawnSync(updateExe, [`--removeShortcut=${exe}`]);
       removeNotificationShortcut();
-      app.removeAsDefaultProtocolClient(scheme, launcherPath());
+      app.removeAsDefaultProtocolClient(scheme, stubPath());
       app.setLoginItemSettings({ openAtLogin: false });
       removeCliLaunchers(appPlace());
       return true;
