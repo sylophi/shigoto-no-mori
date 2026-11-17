@@ -2,7 +2,6 @@ import type { ForgeConfig } from "@electron-forge/shared-types";
 import { MakerDMG } from "@electron-forge/maker-dmg";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
-import { PublisherGithub } from "@electron-forge/publisher-github";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
@@ -14,7 +13,6 @@ import { CLI_DIST_DIR, cliBinaryName } from "./shared/packaging/cliDist.mts";
 import { version } from "./package.json";
 import {
   APP_REPO,
-  APP_REPO_NAME,
   APP_REPO_OWNER,
   flavorNames,
 } from "@shigomori/engine/flavor";
@@ -349,14 +347,6 @@ const config: ForgeConfig = {
       },
       ["win32"],
     ),
-  ],
-  publishers: [
-    new PublisherGithub({
-      // Derived, not restated: publishing to a repo the CLI's updater
-      // doesn't poll would look exactly like "no updates ever appear".
-      repository: { owner: APP_REPO_OWNER, name: APP_REPO_NAME },
-      draft: false,
-    }),
   ],
   plugins: [
     new VitePlugin({

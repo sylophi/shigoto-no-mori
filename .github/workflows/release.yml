@@ -5,11 +5,62 @@ on:
   release:
     types: [published]
 
+# Only the job that attaches the assets, and the one that moves
+# web-client-prod, write.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  # The tag's gates, ahead of the three builds. They build the commit
+  # checked here, as a tag can be moved while they wait.
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Each build sets package.json's version from the tag, and that
+      # version names the assets the updaters compare.
+      - name: Require a semver tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [[ ! "${TAG#v}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Tag '$TAG' isn't semver (expected e.g. v0.17.0)."
+            exit 1
+          fi
+
+      # A full release must point at a commit on main, so one cannot be
+      # cut from a side branch by accident. A PRERELEASE may be tagged
+      # anywhere (a test build cut from a feature branch) and is signed
+      # like any other: only this repo's admin can publish a release and
+      # a fork's workflows never see the signing secrets, so an on-main
+      # rule for prereleases would only have produced test builds
+      # Gatekeeper refuses to open.
+      - name: Require a full release to be on main
+        env:
+          PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          if [[ "$PRERELEASE" == "true" ]]; then
+            echo "Prerelease: building the tagged commit as is."
+            exit 0
+          fi
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "A full release tag must point to a commit on origin/main. Mark the release as a prerelease to build from another branch."
+            exit 1
+          fi
+
+      - id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   release-mac:
+    needs: tag
     # Apple Silicon runner, the one arch we ship.
     runs-on: macos-latest
     # The Electron app lives in app/, so every shell step runs from there.
@@ -29,30 +80,8 @@ jobs:
       # its commit sha, never by loosening it back to a tag.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: ${{ github.event.release.tag_name }}
-          fetch-depth: 0
+          ref: ${{ needs.tag.outputs.sha }}
           persist-credentials: false
-
-      # Every build is signed and notarized. A full release must point
-      # at a commit on main, so one cannot be cut from a side branch by
-      # accident. A PRERELEASE may be tagged anywhere (a test build cut
-      # from a feature branch) and is signed like any other: only this
-      # repo's admin can publish a release and a fork's workflows never
-      # see these secrets, so an on-main rule for prereleases would only
-      # have produced test builds Gatekeeper refuses to open.
-      - name: Require a full release to be on main
-        env:
-          PRERELEASE: ${{ github.event.release.prerelease }}
-        run: |
-          if [[ "$PRERELEASE" == "true" ]]; then
-            echo "Prerelease: building the tagged commit as is."
-            exit 0
-          fi
-          git fetch --no-tags origin main
-          if ! git merge-base --is-ancestor HEAD origin/main; then
-            echo "A full release tag must point to a commit on origin/main. Mark the release as a prerelease to build from another branch."
-            exit 1
-          fi
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
@@ -71,23 +100,14 @@ jobs:
       # CFBundleVersion) and Electron's app.getVersion() both come from
       # package.json at packaging time. Patch it from the release tag so
       # the displayed version always matches the tag, without anyone
-      # having to remember to bump package.json before tagging. A
-      # non-semver tag (e.g. "v0.17", "latest") fails the run: building
-      # with the placeholder 0.0.0 version makes the publisher create a
-      # v0.0.0 release instead of populating the tagged one. Before the
-      # install: a manifest changed after it makes the next `pnpm exec`
-      # install the workspace again, which can fail on the hoisted tree
-      # it already laid ("Directory not empty").
+      # having to remember to bump package.json before tagging. Before
+      # the install: a manifest changed after it makes the next `pnpm
+      # exec` install the workspace again, which can fail on the hoisted
+      # tree it already laid ("Directory not empty").
       - name: Sync package.json version with tag
         env:
           TAG: ${{ github.event.release.tag_name }}
-        run: |
-          VERSION="${TAG#v}"
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Tag '$TAG' isn't semver (expected e.g. v0.17.0). Refusing to build with the placeholder 0.0.0 version."
-            exit 1
-          fi
-          npm pkg set version="$VERSION"
+        run: npm pkg set version="${TAG#v}"
 
       - name: Install dependencies
         working-directory: .
@@ -145,7 +165,7 @@ jobs:
           SM_DEVICE_HUB_URL: ${{ vars.SM_DEVICE_HUB_URL }}
           SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
           SM_ACCOUNT_WEB_ORIGIN: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
-        run: pnpm exec electron-forge publish --dry-run
+        run: pnpm exec electron-forge make
 
       - name: Verify signing and notarization
         run: |
@@ -181,17 +201,30 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: node scripts/smoke-app.mts "$APP_PATH"
 
-      - name: Upload assets to release
+      # The dmg and the zip forge's makers write (forge.config.ts), with
+      # the dots GitHub puts in place of the spaces in an uploaded name.
+      - name: Name the assets
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: pnpm exec electron-forge publish --from-dry-run
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          mkdir out/assets
+          cp "out/make/Shigoto no Mori-${TAG#v}-arm64.dmg" "out/assets/Shigoto.no.Mori-${TAG#v}-arm64.dmg"
+          cp "out/make/zip/darwin/arm64/Shigoto no Mori-darwin-arm64-${TAG#v}.zip" "out/assets/Shigoto.no.Mori-darwin-arm64-${TAG#v}.zip"
 
-  # The Linux package (app/scripts/package-linux.mts), once the Mac job
-  # has passed the tag's gates. On the oldest runner: node-pty's addon
-  # and the file-sync engine link against its glibc (2.35), and run only
-  # on that or newer.
+      # Handed to the attach job and kept a day, since the release holds
+      # the real copies.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: assets-mac
+          path: app/out/assets/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # The Linux package (app/scripts/package-linux.mts). On the oldest
+  # runner: node-pty's addon and the file-sync engine link against its
+  # glibc (2.35), and run only on that or newer.
   release-linux:
-    needs: release-mac
+    needs: tag
     runs-on: ubuntu-22.04
     defaults:
       run:
@@ -199,14 +232,13 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ needs.tag.outputs.sha }}
           persist-credentials: false
 
       - uses: ./.github/actions/setup-toolchains
 
-      # The Mac job refused a tag that isn't semver. Before the install,
-      # as there, so this runs on the runner image's npm: setup-node comes
-      # with install-workspace.
+      # Before the install, as in the Mac job, so this runs on the runner
+      # image's npm: setup-node comes with install-workspace.
       - name: Sync package.json version with tag
         env:
           TAG: ${{ github.event.release.tag_name }}
@@ -257,17 +289,17 @@ jobs:
           cat host.log
           grep -q "\[host\] up on" host.log
 
-      - name: Upload the package to the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$TAG" "out/make/shigomori-linux-x64-${TAG#v}.tar.gz" --clobber
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: assets-linux
+          path: app/out/make/shigomori-linux-x64-*.tar.gz
+          if-no-files-found: error
+          retention-days: 1
 
   # The Windows installer and the package its updates install
-  # (forge.config.ts, MakerSquirrel), once the Mac job has passed the
-  # tag's gates. Unsigned for now.
+  # (forge.config.ts, MakerSquirrel). Unsigned for now.
   release-windows:
-    needs: release-mac
+    needs: tag
     runs-on: windows-latest
     timeout-minutes: 30
     defaults:
@@ -279,7 +311,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ needs.tag.outputs.sha }}
           persist-credentials: false
 
       - uses: ./.github/actions/setup-toolchains
@@ -296,9 +328,6 @@ jobs:
         working-directory: .
         run: pnpm run postinstall
 
-      # Make, not forge's publish: for a numbered prerelease publish
-      # lists a package file make never writes (Squirrel's version is
-      # padded), so the upload below names the assets itself.
       - name: Build the installer
         env:
           SM_DEVICE_HUB_URL: ${{ vars.SM_DEVICE_HUB_URL }}
@@ -343,10 +372,35 @@ jobs:
           cp "$MADE"/*-full.nupkg "out/assets/shigomori-win32-x64-${TAG#v}.nupkg"
           cp "$MADE"/*Setup.exe "out/assets/Shigoto.no.Mori-${TAG#v}-x64-Setup.exe"
 
-      - name: Upload the assets to the release
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: assets-windows
+          path: app/out/assets/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # The release gets its assets only once every build has passed its
+  # gates, so it never holds some platforms and not others. The download
+  # checks each build's artifact, as one archive, against the digest
+  # recorded when it was uploaded, and fails on a mismatch.
+  attach:
+    needs: [release-mac, release-linux, release-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: assets-*
+          path: assets
+          merge-multiple: true
+
+      - name: Attach the assets to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" out/assets/* --clobber
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" assets/* --clobber
 
   # Vercel deploys app.shigomori.com from web-client-prod
   # (hub/README.md). The ref update refuses a non-fast-forward, so a
@@ -354,9 +408,11 @@ jobs:
   # job token triggers no workflow run, but Vercel's GitHub app still
   # sees the push.
   web-client-prod:
-    needs: release-mac
+    needs: attach
     if: github.event.release.prerelease == false
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Fast-forward web-client-prod to the release
         env:

@@ -136,8 +136,8 @@ export const isFlavor = (text: string): text is Flavor =>
   isBuild(text) || isTestFlavor(text);
 
 // The app's repo on GitHub, which every flavor's releases are published
-// to (forge.config.ts) and read from: the update feeds, the changelog
-// and the guide's source link.
+// to and read from: the update feeds, the changelog and the guide's
+// source link.
 export const APP_REPO_OWNER = "sylophi";
-export const APP_REPO_NAME = "shigoto-no-mori";
+const APP_REPO_NAME = "shigoto-no-mori";
 export const APP_REPO = `${APP_REPO_OWNER}/${APP_REPO_NAME}`;
