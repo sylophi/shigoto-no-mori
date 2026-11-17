@@ -91,8 +91,7 @@ const make = (binaryPath: () => string | null) =>
           env: options.env,
           extendEnv: true,
           stdin: options.stdin,
-          // The daemon halts its sessions on SIGTERM. One that hangs at
-          // it must not hold the quit.
+          // One that hangs at its end must not hold the quit.
           forceKillAfter: "2 seconds",
         }),
       );

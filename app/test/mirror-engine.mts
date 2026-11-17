@@ -84,6 +84,8 @@ async function harness(answer: (request: Request) => Answer) {
     FileSync.FileSync.of({
       spawn: (_args, { stdin }) =>
         Effect.gen(function* () {
+          // The child's exit, at the end of its stdin.
+          const exit = yield* Deferred.make<number>();
           yield* stdin.pipe(
             Stream.decodeText(),
             Stream.splitLines,
@@ -95,10 +97,9 @@ async function harness(answer: (request: Request) => Answer) {
               }),
             ),
             Effect.ignore,
+            Effect.andThen(Deferred.succeed(exit, 0)),
             Effect.forkScoped,
           );
-          // The child's exit.
-          const exit = yield* Deferred.make<number>();
           return ChildProcessSpawner.makeHandle({
             pid: ChildProcessSpawner.ProcessId(2),
             exitCode: Deferred.await(exit).pipe(
