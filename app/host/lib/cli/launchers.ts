@@ -6,6 +6,7 @@
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { canonicalPath } from "@shigomori/engine/canonicalPath";
 import { programFile } from "@shigomori/engine/executables";
 import {
   windowsCliBinDir,
@@ -49,8 +50,8 @@ async function status(facts: Facts): Promise<CliStatus> {
   return {
     name: cliBinaryName(facts.flavor),
     aliasName: cliAliasName(facts.flavor),
-    binDir: windowsCliBinDir(facts.resourcesPath),
-    commandPath: launcherOf(facts, cliBinaryName(facts.flavor)),
+    binDir: canonicalPath(windowsCliBinDir(facts.resourcesPath)),
+    commandPath: canonicalPath(launcherOf(facts, cliBinaryName(facts.flavor))),
     placement: "launcher",
     foreignPaths: [],
     onPath,
