@@ -1,17 +1,16 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { once } from "node:events";
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "../src/canonicalPath.ts";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
-import { afterEach, beforeEach, it, onTestFinished } from "vitest";
+import { afterEach, beforeEach, it } from "vitest";
 import * as Git from "../src/Git.ts";
 import { Holders } from "../src/Holders.ts";
 import { MirrorsOnDelete } from "../src/MirrorsOnDelete.ts";
 import * as Registry from "../src/Registry.ts";
 import * as Worktrees from "../src/Worktrees.ts";
+import { heldIn } from "./lib/holds.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox;
@@ -227,21 +226,11 @@ it("a delete its checks refuse never stops the worktree's mirror", async () => {
   assert.ok(existsSync(loose));
 });
 
-// A process working in the worktree, and the app's side of
-// Holders, which ends it and notes whom it was asked for and
-// whether the worktree's files were there then.
 const removingHeld = async (
   located: Worktrees.Located,
   options: { readonly force: boolean },
 ) => {
-  const held = spawn(process.execPath, ["-e", "setInterval(() => {}, 1e9)"], {
-    cwd: located.worktree.path,
-    stdio: "ignore",
-  });
-  onTestFinished(() => {
-    held.kill();
-  });
-  const told: Array<{ owner: object; filesThere: boolean }> = [];
+  const { holders, told, settle } = heldIn(located.worktree.path);
   const removed = await box.engine(
     Effect.flatMap(Effect.service(Worktrees.Worktrees), (worktrees) =>
       worktrees.remove(
@@ -249,34 +238,9 @@ const removingHeld = async (
         { ...options, keepBranch: false, skipCleanup: true },
         silent,
       ),
-    ).pipe(
-      Effect.provideService(
-        Holders,
-        Holders.of({
-          release: (owner) =>
-            Effect.promise(
-              () =>
-                new Promise<void>((resolve) => {
-                  told.push({
-                    owner,
-                    filesThere: existsSync(located.worktree.path),
-                  });
-                  held.once("exit", () => resolve());
-                  held.kill();
-                }),
-            ),
-        }),
-      ),
-    ),
+    ).pipe(Effect.provideService(Holders, holders)),
   );
-  // Ended before the sandbox goes, as Windows deletes no folder it works
-  // in.
-  const alive = held.exitCode === null && held.signalCode === null;
-  if (alive) {
-    held.kill();
-    await once(held, "exit");
-  }
-  return { removed, told, alive };
+  return { removed, told, alive: await settle() };
 };
 
 // Windows deletes no folder a process works in.

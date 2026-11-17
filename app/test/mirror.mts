@@ -55,6 +55,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "@shigomori/engine/canonicalPath";
+import { programFile } from "@shigomori/engine/executables";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, it } from "vitest";
 import * as PeerReach from "@host/ipc/PeerReach";
@@ -109,7 +110,6 @@ import {
   standInMirror,
   standInPeers,
 } from "./lib/hostStandIns.mts";
-import { EXE } from "../../packages/engine/test/lib/nativefs.ts";
 import { readOnly, unreadable } from "../../packages/engine/test/lib/holds.ts";
 import { runHost } from "./lib/hostRuntime.mts";
 import {
@@ -146,7 +146,7 @@ const fixture = cliSandbox("sm-mirror-check-", {
   CGO_CFLAGS: "-Wno-deprecated-declarations",
 });
 const { sandbox, smEnv, git, gitOut, addWorktree } = fixture;
-const fileSyncBinary = join(sandbox, `file-sync${EXE}`);
+const fileSyncBinary = join(sandbox, programFile("file-sync"));
 const fileSyncDataDir = join(sandbox, "file-sync-data");
 
 const read = (path: string) => readFileSync(path, "utf8");

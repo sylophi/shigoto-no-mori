@@ -149,8 +149,7 @@ const openIn = (dir: string, killAt?: number) =>
       const killing = /^killing (\d+)$/m.exec(said)?.[1];
       resolve({
         finished: code === 0,
-        killedAt:
-          code === 0 || killing === undefined ? undefined : Number(killing),
+        killedAt: killing === undefined ? undefined : Number(killing),
         events: Number(events ?? 0),
       });
     });

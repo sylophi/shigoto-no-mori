@@ -10,9 +10,10 @@ on:
 permissions:
   contents: read
 
-# Baked into each build, since a packaged app sees only build-time env.
-# Repository Actions variables, not secrets.
 env:
+  TAG: ${{ github.event.release.tag_name }}
+  # Baked into each build, since a packaged app sees only build-time env.
+  # Repository Actions variables, not secrets.
   SM_DEVICE_HUB_URL: ${{ vars.SM_DEVICE_HUB_URL }}
   SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
   SM_ACCOUNT_WEB_ORIGIN: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
@@ -35,8 +36,6 @@ jobs:
       # Each build sets package.json's version from the tag, and that
       # version names the assets the updaters compare.
       - name: Require a semver tag
-        env:
-          TAG: ${{ github.event.release.tag_name }}
         run: |
           if [[ ! "${TAG#v}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "Tag '$TAG' isn't semver (expected e.g. v0.17.0)."
@@ -113,8 +112,6 @@ jobs:
       # exec` install the workspace again, which can fail on the hoisted
       # tree it already laid ("Directory not empty").
       - name: Sync package.json version with tag
-        env:
-          TAG: ${{ github.event.release.tag_name }}
         run: npm pkg set version="${TAG#v}"
 
       - name: Install dependencies
@@ -182,8 +179,6 @@ jobs:
       # installer, so one that cannot start strands every install on
       # this release.
       - name: Run the signed terminal command
-        env:
-          TAG: ${{ github.event.release.tag_name }}
         run: |
           SM="$PWD/$APP_PATH/Contents/Resources/sm"
           SMOKE="$PWD/scripts/smoke-sm.sh"
@@ -207,8 +202,6 @@ jobs:
       # The dmg and the zip forge's makers write (forge.config.ts), with
       # the dots GitHub puts in place of the spaces in an uploaded name.
       - name: Name the assets
-        env:
-          TAG: ${{ github.event.release.tag_name }}
         run: |
           mkdir out/assets
           cp "out/make/Shigoto no Mori-${TAG#v}-arm64.dmg" "out/assets/Shigoto.no.Mori-${TAG#v}-arm64.dmg"
@@ -243,8 +236,6 @@ jobs:
       # Before the install, as in the Mac job, so this runs on the runner
       # image's npm: setup-node comes with install-workspace.
       - name: Sync package.json version with tag
-        env:
-          TAG: ${{ github.event.release.tag_name }}
         run: npm pkg set version="${TAG#v}"
 
       # The postinstall compiles node-pty's addon. Scripts are off for
@@ -263,8 +254,6 @@ jobs:
       # command, node-pty's addon loaded by the shipped node, and the
       # host up.
       - name: Run the package
-        env:
-          TAG: ${{ github.event.release.tag_name }}
         run: |
           PKG="$PWD/out/linux/shigomori-linux-x64-${TAG#v}"
           SMOKE="$PWD/scripts/smoke-sm.sh"
@@ -304,8 +293,6 @@ jobs:
       run:
         shell: bash
         working-directory: app
-    env:
-      TAG: ${{ github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -392,7 +379,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ github.event.release.tag_name }}
         run: gh release upload "$TAG" assets/* --clobber
 
   # Vercel deploys app.shigomori.com from web-client-prod
@@ -410,7 +396,6 @@ jobs:
       - name: Fast-forward web-client-prod to the release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
           SHA: ${{ github.sha }}
         run: |
           STATUS="$(gh api "repos/$GITHUB_REPOSITORY/compare/web-client-prod...$SHA" --jq .status)"

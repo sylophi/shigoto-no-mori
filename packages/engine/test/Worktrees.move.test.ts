@@ -4,18 +4,16 @@
 // whose id holds one leaves it (real git on a sandbox data dir). And a
 // move ends what the app runs in the worktree only on Windows.
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { once } from "node:events";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "../src/canonicalPath.ts";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-import { afterEach, beforeEach, it, onTestFinished } from "vitest";
+import { afterEach, beforeEach, it } from "vitest";
 import { Holders } from "../src/Holders.ts";
 import * as Registry from "../src/Registry.ts";
 import * as Worktrees from "../src/Worktrees.ts";
 import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
-import { unreadable } from "./lib/holds.ts";
+import { heldIn, unreadable } from "./lib/holds.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox;
@@ -308,43 +306,18 @@ it("lets go of what the app runs in a worktree before a move only on Windows", a
       });
     }),
   )) as Worktrees.Located;
-  const held = spawn(process.execPath, ["-e", "setInterval(() => {}, 1e9)"], {
-    cwd: located.worktree.path,
-    stdio: "ignore",
-  });
-  onTestFinished(() => {
-    held.kill();
-  });
+  const { holders, told, settle } = heldIn(located.worktree.path);
   const to = join(dirname(located.worktree.path), "vixen");
-  const told: Array<object> = [];
   const moved = (await box.engine(
     Effect.flatMap(Effect.service(Worktrees.Worktrees), (worktrees) =>
       worktrees.move(located, to),
-    ).pipe(
-      Effect.provideService(
-        Holders,
-        Holders.of({
-          release: (owner) =>
-            Effect.promise(async () => {
-              told.push(owner);
-              held.kill();
-              await once(held, "exit");
-            }),
-        }),
-      ),
-    ),
+    ).pipe(Effect.provideService(Holders, holders)),
   )) as { worktree?: { path: string } };
-  // Ended before the sandbox goes, as Windows deletes no folder it works
-  // in.
-  const alive = held.exitCode === null && held.signalCode === null;
-  if (alive) {
-    held.kill();
-    await once(held, "exit");
-  }
+  const alive = await settle();
   assert.equal(moved.worktree?.path, to);
   const windows = process.platform === "win32";
   assert.deepEqual(
-    told,
+    told.map(({ owner }) => owner),
     windows
       ? [{ projectId: located.project.id, worktreeId: located.worktree.id }]
       : [],
