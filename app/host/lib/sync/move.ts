@@ -5,9 +5,6 @@
 // (Moves.remember, receipts.ts).
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import {
   pullBringsIgnoredFiles,
@@ -35,10 +32,7 @@ import {
   peerWorktreesFor,
 } from "@host/ipc/PeerReach";
 import { EngineChanges } from "@host/lib/Engine";
-import * as Git from "@shigomori/engine/Git";
-import { splitZ } from "@shigomori/engine/gitParse";
 import * as Identity from "@shigomori/engine/Identity";
-import { byPlatform } from "@shigomori/engine/platform";
 import { findProjectAndWorktree } from "@host/lib/projects";
 import { followDescription } from "@host/lib/sync/worktreeDescription";
 import * as Moves from "@host/lib/sync/Moves";
@@ -70,54 +64,6 @@ class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
 const decodeReceiveWorktreeResult = Schema.decodeUnknownSync(
   SyncReceiveWorktreeResultSchema,
 );
-
-// A script whose #! line ends in CRLF, which a shell outside Windows
-// reads as part of the interpreter's name.
-const crlfShebang = (file: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const head = yield* (yield* fs.open(file, { flag: "r" })).readAlloc(256);
-    return Option.exists(head, (bytes) =>
-      /^#![^\n]*\r\n/.test(Buffer.from(bytes).toString("latin1")),
-    );
-  }).pipe(
-    Effect.scoped,
-    Effect.orElseSucceed(() => false),
-  );
-
-// How a mirror's original reads and writes its files, which its copy
-// takes, and whether its scripts would start on Windows alone. Only a
-// Windows checkout gives them CRLF where the repo doesn't.
-const checkoutOf = Effect.fnUntraced(function* (worktreePath: string) {
-  const git = yield* Git.Git;
-  const path = yield* Path.Path;
-  const [config, index] = yield* Effect.all(
-    [
-      git.checkoutConfig(worktreePath),
-      git.run(worktreePath, [
-        "ls-files",
-        "-z",
-        "--format=%(objectmode) %(path)",
-      ]),
-    ],
-    { concurrency: 2 },
-  );
-  const entries = splitZ(index);
-  const scripts = entries
-    .filter((entry) => entry.startsWith("100755 "))
-    .map((entry) => path.join(worktreePath, entry.slice(7)));
-  return {
-    checkout: {
-      ...config,
-      tracksSymlinks: entries.some((entry) => entry.startsWith("120000 ")),
-    } satisfies SyncCheckout,
-    crlfScripts: yield* byPlatform({
-      darwin: Effect.succeed(false),
-      linux: Effect.succeed(false),
-      win32: Effect.map(Effect.findFirst(scripts, crlfShebang), Option.isSome),
-    }),
-  };
-});
 
 // A move's running commentary, keyed by the source worktree id (the
 // only id the caller holds until the create lands). Frames are
@@ -328,13 +274,13 @@ export const sendWorktree = (
   // The mirror start's send: the one that may take a primary checkout
   // (it lands on the peer as mirror/<branch>, and the session then
   // keeps the pair in step). A plain send moves a worktree, and the
-  // primary is the project itself. The mirror start runs it inside a
-  // move of its own, and hears of the copy as soon as it exists
-  // (`onCopy`, its id).
+  // primary is the project itself. It carries the original's checkout,
+  // which the copy takes. The mirror start runs it inside a move of its
+  // own, and hears of the copy as soon as it exists (`onCopy`, its id).
   {
-    mirror = false,
+    mirror,
     onCopy,
-  }: { mirror?: boolean; onCopy?: (worktreeId: string) => void } = {},
+  }: { mirror?: SyncCheckout; onCopy?: (worktreeId: string) => void } = {},
 ) => {
   const send = sendWorktreeEffect(input, ctx, mirror, onCopy).pipe(
     Effect.scoped,
@@ -347,11 +293,11 @@ export const sendWorktree = (
     Effect.withSpan("Sync.send", {
       attributes: {
         ...moveAttributes("send", input.targetDeviceId),
-        mirror,
+        mirror: mirror !== undefined,
       },
     }),
   );
-  return mirror
+  return mirror !== undefined
     ? send
     : Effect.flatMap(Moves.Moves, (moves) =>
         moves.run(ctx, input.worktreeId, send),
@@ -396,7 +342,7 @@ const sendWorktreeEffect = (
     cloneInto,
   }: typeof SyncSendWorktreePayloadSchema.Type,
   ctx: HandlerContext,
-  mirror: boolean,
+  mirror: SyncCheckout | undefined,
   onCopy: ((worktreeId: string) => void) | undefined,
 ) =>
   Effect.gen(function* () {
@@ -410,7 +356,7 @@ const sendWorktreeEffect = (
     if (worktree.detached || !isRealBranch(worktree.branch)) {
       return yield* new MoveRefusedError({ reason: "not-on-branch" });
     }
-    if (worktree.isPrimary && !mirror) {
+    if (worktree.isPrimary && mirror === undefined) {
       return yield* new MoveRefusedError({ reason: "primary" });
     }
     const { identity } = yield* (yield* Identity.Identity).of(project.path);
@@ -419,7 +365,6 @@ const sendWorktreeEffect = (
     }
     const branch = worktree.branch;
     const landBranch = pullLandingBranch(worktree);
-    const original = mirror ? yield* checkoutOf(worktree.path) : undefined;
 
     // The landing, on the peer, asking back over the link. An interrupt
     // resets the link, which the peer's landing runs under.
@@ -447,7 +392,7 @@ const sendWorktreeEffect = (
                   ignoreMode,
                   ignores,
                   cloneInto,
-                  checkout: original?.checkout,
+                  checkout: mirror,
                   channelId,
                 }),
               ),
@@ -509,7 +454,6 @@ const sendWorktreeEffect = (
     );
     return {
       source: worktree,
-      crlfScripts: original?.crlfScripts ?? false,
       result: { ...landed, ...(files === undefined ? {} : { files }) },
     };
   });

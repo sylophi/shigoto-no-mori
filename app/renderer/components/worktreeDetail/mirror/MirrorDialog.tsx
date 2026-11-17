@@ -16,7 +16,6 @@
 import type { ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
 import { pullLandingBranch } from "@shigomori/contracts/git/branches";
-import { isWindowsPath } from "@shigomori/contracts/projectPaths";
 import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
@@ -267,10 +266,7 @@ function MirrorFlow({
             sourceDeviceLabel={sourceDeviceLabel}
             thisDeviceLabel={thisDeviceLabel}
             dirtyApplied={!mirror.data.captured || mirror.data.dirtyApplied}
-            crlfScripts={
-              mirror.data.crlfScripts &&
-              !isWindowsPath(mirror.data.worktree.path)
-            }
+            crlfScripts={mirror.data.crlfScripts}
             onDone={finish}
           />
         </RunnerScope>
