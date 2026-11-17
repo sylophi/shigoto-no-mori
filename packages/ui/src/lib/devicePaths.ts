@@ -49,15 +49,11 @@ const WINDOWS: DevicePaths = {
     isWindowsPath(path) || (isAnchoredPath(path) && !path.startsWith("/")),
 };
 
-function isWindowsDevice(home: string | null | undefined, path = ""): boolean {
-  return isWindowsPath(home || path);
-}
-
 export function devicePaths(
   home: string | null | undefined,
   path = "",
 ): DevicePaths {
-  return isWindowsDevice(home, path) ? WINDOWS : POSIX;
+  return isWindowsPath(home || path) ? WINDOWS : POSIX;
 }
 
 // A path as the screen shows it, in full.

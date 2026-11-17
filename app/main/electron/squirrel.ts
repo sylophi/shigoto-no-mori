@@ -8,14 +8,18 @@ import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
 import { app, shell } from "electron";
 import { APP_REPO_OWNER } from "@shigomori/engine/flavor";
+import {
+  windowsInstallRoot,
+  windowsUpdateExe,
+} from "@shigomori/engine/windowsInstall";
 import { removeCliLaunchers } from "@shared/cliLaunchers";
 import { rendererSchemeName } from "@shared/packaging/rendererScheme.mts";
 import { flavor, names } from "../flavor";
 import { appPlace } from "./appPlace";
 
-const root = path.dirname(path.dirname(process.execPath));
+const root = windowsInstallRoot(process.resourcesPath);
 const exe = path.basename(process.execPath);
-const updateExe = path.join(root, "Update.exe");
+const updateExe = windowsUpdateExe(process.resourcesPath);
 
 // The exe that starts the app: the launcher in an install, else this one.
 const launcherPath = (): string =>

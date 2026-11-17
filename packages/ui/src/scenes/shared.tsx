@@ -347,7 +347,6 @@ export function FolderPickerScene() {
               browseTo: noop,
               browseUp: noop,
               paths: devicePaths(null),
-              canBrowseUp: true,
             }}
             onOpenFinder={noop}
           />

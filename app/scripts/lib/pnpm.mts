@@ -4,7 +4,4 @@ import { startable } from "@shigomori/engine/batchFiles";
 import { byFamily } from "@shigomori/engine/platform";
 
 export const pnpm = (args: ReadonlyArray<string>) =>
-  byFamily({
-    posix: { command: "pnpm", args, shell: false },
-    windows: startable("pnpm.cmd", args),
-  });
+  startable(byFamily({ posix: "pnpm", windows: "pnpm.cmd" }), args);

@@ -224,7 +224,6 @@ export function AddProjectScene() {
                 browseTo: noop,
                 browseUp: noop,
                 paths: devicePaths(null),
-                canBrowseUp: true,
               }}
               registeredNames={new Set(["shigoto-no-mori"])}
               targetIsGitRepo={false}

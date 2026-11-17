@@ -26,7 +26,10 @@ export function useBrowseListing({
   setQuery,
   setHighlighted,
   enabled = true,
-}: UseBrowseListingOptions): BrowseListing {
+}: UseBrowseListingOptions): BrowseListing & {
+  // Whether there is a folder above the listed one.
+  readonly canBrowseUp: boolean;
+} {
   const paths = devicePaths(useRuntimeInfo().data?.homedir, query);
   const browseDir = getBrowseDirectoryPath(query);
   const leafFilter = hasTrailingSlash(query) ? "" : getBrowseLeafSegment(query);

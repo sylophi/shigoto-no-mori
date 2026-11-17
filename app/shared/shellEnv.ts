@@ -30,48 +30,47 @@ type Env = Record<string, string>;
 // launch environment whichever way the app was started, and the PATH
 // the shell's startup files build on. SHELL is set below, and the
 // launcher's own shell-session leftovers (PWD, SHLVL) are not kept.
-const launcherOf = () =>
-  byPlatform({
-    // launchd's, for a Finder-launched app. Its PATH is the one
-    // path_helper in /etc/zprofile builds on.
-    darwin: {
-      keys: [
-        "HOME",
-        "USER",
-        "LOGNAME",
-        "TMPDIR",
-        "SSH_AUTH_SOCK",
-        "XPC_FLAGS",
-        "XPC_SERVICE_NAME",
-        "COMMAND_MODE",
-        "OSLogRateLimit",
-        "__CFBundleIdentifier",
-        // CoreFoundation's, set in every process on this platform.
-        "__CF_USER_TEXT_ENCODING",
-      ],
-      path: "/usr/bin:/bin:/usr/sbin:/sbin",
-    },
-    // The systemd user manager's, for a unit, the base folders the host
-    // finds its own in among them (Paths). Its PATH is systemd's own.
-    linux: {
-      keys: [
-        "HOME",
-        "USER",
-        "LOGNAME",
-        "LANG",
-        "XDG_RUNTIME_DIR",
-        "XDG_CONFIG_HOME",
-        "XDG_DATA_HOME",
-        "XDG_STATE_HOME",
-        "DBUS_SESSION_BUS_ADDRESS",
-        "SSH_AUTH_SOCK",
-      ],
-      path: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-    },
-    // None: Explorer starts an app with the user's whole environment,
-    // and Windows has no login shell to rebuild it from.
-    win32: null,
-  });
+const LAUNCHER = byPlatform({
+  // launchd's, for a Finder-launched app. Its PATH is the one
+  // path_helper in /etc/zprofile builds on.
+  darwin: {
+    keys: [
+      "HOME",
+      "USER",
+      "LOGNAME",
+      "TMPDIR",
+      "SSH_AUTH_SOCK",
+      "XPC_FLAGS",
+      "XPC_SERVICE_NAME",
+      "COMMAND_MODE",
+      "OSLogRateLimit",
+      "__CFBundleIdentifier",
+      // CoreFoundation's, set in every process on this platform.
+      "__CF_USER_TEXT_ENCODING",
+    ],
+    path: "/usr/bin:/bin:/usr/sbin:/sbin",
+  },
+  // The systemd user manager's, for a unit, the base folders the host
+  // finds its own in among them (Paths). Its PATH is systemd's own.
+  linux: {
+    keys: [
+      "HOME",
+      "USER",
+      "LOGNAME",
+      "LANG",
+      "XDG_RUNTIME_DIR",
+      "XDG_CONFIG_HOME",
+      "XDG_DATA_HOME",
+      "XDG_STATE_HOME",
+      "DBUS_SESSION_BUS_ADDRESS",
+      "SSH_AUTH_SOCK",
+    ],
+    path: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+  },
+  // None: Explorer starts an app with the user's whole environment,
+  // and Windows has no login shell to rebuild it from.
+  win32: null,
+});
 
 // The app's and the CLI's own contract, never a shell profile's to
 // set: a Finder launch never saw a profile's SHIGOMORI_* and still
@@ -285,11 +284,10 @@ function replaceProcessEnv(env: Env): void {
 // layer graph, which inherits the environment it rebuilds, so it
 // brings the platform's services along itself.
 export async function applyUserShellEnv(): Promise<void> {
-  const launcher = launcherOf();
-  if (launcher === null) return;
+  if (LAUNCHER === null) return;
   const launchEnv = { ...process.env };
   const shell = Effect.runSync(loginShell(launchEnv));
-  const base = launchBaseEnv(launcher, launchEnv, shell);
+  const base = launchBaseEnv(LAUNCHER, launchEnv, shell);
   const captured =
     shell === null
       ? null

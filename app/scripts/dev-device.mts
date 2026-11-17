@@ -23,9 +23,8 @@ import { pnpm } from "./lib/pnpm.mts";
 import { descendantsIn } from "../host/lib/scripts/descendants.ts";
 import { rendererDevServerAnswers } from "./lib/portsEnvFile.mts";
 
-const FORWARDED = ["SIGINT", "SIGTERM"] as const;
 const forwarded = byFamily({
-  posix: FORWARDED,
+  posix: ["SIGINT", "SIGTERM"] as const,
   windows: [],
 });
 
