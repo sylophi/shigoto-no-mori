@@ -1777,7 +1777,13 @@ async function fakeMirrorStartTo(
       mirrorChanged();
     }
   })();
-  return { ...landed, session: session.session };
+  return {
+    ...landed,
+    session: session.session,
+    // ?crlfScripts=1: the original's scripts have CRLF #! lines.
+    crlfScripts:
+      new URLSearchParams(location.search).get("crlfScripts") === "1",
+  };
 }
 
 async function fakeSyncPull(

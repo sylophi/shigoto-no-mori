@@ -153,6 +153,10 @@ Poses ride the URL:
 - `?mirrorRefused=1`: every mirror start refused by the copy's device,
   which can't make the symlinks the original tracks, in the words its
   landing gives (with `?windows=`, the Windows ones).
+- `?crlfScripts=1`: every mirror start's original tracks scripts with
+  Windows line endings, as a Windows checkout gives them, for the Live
+  step's line about them on a copy that isn't on Windows (with
+  `?windows=sm`, Studio Mac the original).
 - `?mirrored=1`: a mirror running from boot (Studio Mac's
   `brave-badger` with a copy on MacBook), for the surfaces that list
   mirrors (the Live page, the sidebar's fold).

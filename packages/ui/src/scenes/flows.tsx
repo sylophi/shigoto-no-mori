@@ -562,6 +562,7 @@ export function FlowStepsScene() {
             sourceDeviceLabel={HERE.label}
             thisDeviceLabel={MACBOOK.label}
             dirtyApplied={false}
+            crlfScripts={false}
             onDone={noop}
           />
         </FlowDialog>
