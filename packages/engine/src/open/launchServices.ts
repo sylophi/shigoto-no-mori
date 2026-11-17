@@ -4,7 +4,6 @@ import { typedLines } from "@shigomori/contracts/typedLines";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import { flavorNames } from "../flavor.ts";
-import * as Launchers from "../Launchers.ts";
 import * as Paths from "../Paths.ts";
 import { openEnvArgs } from "../relaunchEnv.ts";
 import type { CommandsArea } from "./commands.ts";
@@ -73,7 +72,6 @@ const DEFAULT_TERMINAL = "terminal";
 export const makeLaunchServices = ({ ran, run }: CommandsArea) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
-    const launchers = yield* Launchers.Launchers;
     const paths = yield* Paths.Paths;
     const { appName, bundleId } = flavorNames(paths.flavor);
 
@@ -99,18 +97,13 @@ export const makeLaunchServices = ({ ran, run }: CommandsArea) =>
       // The command line in a new window of the chosen terminal app,
       // driven by AppleScript.
       inTerminalApp: Effect.fnUntraced(
-        function* (label, command, folder, chosen, entries) {
-          const installed =
+        function* (label, command, folder, chosen, installed) {
+          const app =
             TERMINAL_SCRIPTS[chosen] === undefined
               ? undefined
-              : entries === undefined
-                ? yield* launchers.installed(chosen)
-                : entries.find(
-                    (entry) =>
-                      entry.kind === "detected" && entry.app.id === chosen,
-                  );
-          const id = installed === undefined ? DEFAULT_TERMINAL : chosen;
-          const terminal = installed?.label ?? "Terminal";
+              : yield* installed(chosen);
+          const id = app === undefined ? DEFAULT_TERMINAL : chosen;
+          const terminal = app?.label ?? "Terminal";
           const { code, output } = yield* ran("osascript", [
             "-e",
             TERMINAL_SCRIPTS[id] ?? "",
