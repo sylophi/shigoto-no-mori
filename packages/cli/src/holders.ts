@@ -1,9 +1,9 @@
-// The app runs this device's terminals, so a delete or a move from the
-// terminal asks it to let go of the worktree first (the engine's
-// Holders), but for the app's terminal this process runs in, whose end
-// would end this one. With no app running, nothing holds it, and an app
-// that can't answer leaves the delete or the move as no app would: one
-// that something still holds fails on that.
+// The app runs this device's terminals, so a delete from the terminal,
+// or a move on Windows, asks it to let go of the worktree first (the
+// engine's Holders), but for the app's terminal this process runs in,
+// whose end would end this one. With no app running, nothing holds it,
+// and an app that can't answer leaves the delete or the move as no app
+// would: one that something still holds fails on that.
 import {
   controlContract,
   TERMINAL_ID_ENV,

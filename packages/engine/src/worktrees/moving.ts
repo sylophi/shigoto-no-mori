@@ -378,10 +378,15 @@ export const makeMoving = ({
             yield* fs
               .makeDirectory(path.dirname(to), { recursive: true })
               .pipe(Effect.orDie);
-            // What the app runs there lets go first, as for a delete.
-            yield* releaseHolders({
-              projectId: project.id,
-              worktreeId: worktree.id,
+            // Windows moves no folder a process works in, so what the app
+            // runs there lets go first, as for a delete.
+            yield* byPlatform({
+              darwin: Effect.void,
+              linux: Effect.void,
+              win32: releaseHolders({
+                projectId: project.id,
+                worktreeId: worktree.id,
+              }),
             });
             const moved = yield* git
               .run(project.path, ["worktree", "move", "--", worktree.path, to])

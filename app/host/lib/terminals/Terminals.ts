@@ -330,8 +330,9 @@ export class Terminals extends Context.Service<
       gone: (projectId: string) => boolean,
     ) => Effect.Effect<void>;
     // Closes the terminals of a worktree, or of every worktree of a
-    // project, none saved for the next start: what its delete or move
-    // takes. `spare` is the one an `sm` asking for it runs in, kept.
+    // project, none saved for the next start: what its delete, or its
+    // move on Windows, takes. `spare` is the one an `sm` asking for it
+    // runs in, kept.
     readonly closeOf: (owner: {
       readonly projectId: string;
       readonly worktreeId?: string;

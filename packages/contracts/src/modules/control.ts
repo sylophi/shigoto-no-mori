@@ -308,9 +308,9 @@ export const controlContract = defineContract(
     VoidSchema,
     { gated: true },
   ),
-  // A delete or a move from the terminal: what the app runs in the
-  // worktree, or without `worktreeId` in the whole project, lets go
-  // first (the engine's Holders), but for the app's terminal `spare`,
+  // A delete from the terminal, or a move on Windows: what the app runs
+  // in the worktree, or without `worktreeId` in the whole project, lets
+  // go first (the engine's Holders), but for the app's terminal `spare`,
   // the one the caller runs in (TERMINAL_ID_ENV).
   invoke(
     "releaseHolders",
