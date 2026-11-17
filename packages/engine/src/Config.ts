@@ -22,7 +22,6 @@ import {
   syncedProjectSettingValue,
   withSharedSetting,
 } from "@shigomori/contracts/sharedSettings";
-import { isAnchoredPath } from "@shigomori/contracts/projectPaths";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -43,7 +42,7 @@ import {
   savedConfigDoc,
   settingKeys,
 } from "./configDoc.ts";
-import { canonicalPath } from "./canonicalPath.ts";
+import { canonicalPath, isAnchoredHere } from "./canonicalPath.ts";
 import catalog from "./data/launcher-catalog.json" with { type: "json" };
 import * as Git from "./Git.ts";
 import * as Identity from "./Identity.ts";
@@ -479,7 +478,7 @@ const parseValue = (
         return invalid("enum");
       if (key.name !== "customWorktreePath") return Effect.succeed(raw);
       const path = canonicalPath(raw);
-      return isAnchoredPath(path)
+      return isAnchoredHere(path)
         ? Effect.succeed(path)
         : invalid("absolutePath");
     }
