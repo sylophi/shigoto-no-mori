@@ -10,6 +10,7 @@ import { afterEach, beforeEach, it } from "vitest";
 import * as Paths from "../src/Paths.ts";
 import { JOURNAL } from "../src/dataDirMoveJournal.ts";
 import { readOnly } from "./lib/holds.ts";
+import { homeEnv } from "./lib/platform.ts";
 
 let home: string;
 beforeEach(() => {
@@ -23,9 +24,7 @@ const resolve = () =>
       Paths.layer("prod").pipe(
         Layer.provide(NodeServices.layer),
         Layer.provide(
-          ConfigProvider.layer(
-            ConfigProvider.fromEnv({ env: { HOME: home, USERPROFILE: home } }),
-          ),
+          ConfigProvider.layer(ConfigProvider.fromEnv({ env: homeEnv(home) })),
         ),
       ),
     ),

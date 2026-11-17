@@ -1,6 +1,6 @@
 // The one owner of every test run's temp files. Each runner here (the
-// vitest configs, the smoke, the scene comparison, and the Go tests
-// through `node test/testTemp.mts`) takes a run folder,
+// vitest configs, the smoke, the scene comparison, and the Go checks,
+// goChecks.mts) takes a run folder,
 // `<temp>/sm-test/<family>/<id>/`, and points the temp dir and
 // XDG_CONFIG_HOME at it before any test starts, so whatever a test, the
 // code under it or a process it spawns puts in the temp dir or the
@@ -10,7 +10,6 @@
 // `pnpm test`) leaves a folder whose pid file names only dead
 // processes, and the next run of any family sweeps it, at its start
 // and at its end.
-import { spawnSync } from "node:child_process";
 import {
   appendFileSync,
   chmodSync,
@@ -29,7 +28,6 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { isolateGit } from "./gitIsolation.ts";
 
 const RUN = "SM_TEST_RUN";
 const ROOT = "SM_TEST_ROOT";
@@ -227,18 +225,4 @@ function entries(dir: string): string[] {
   } catch {
     return [];
   }
-}
-
-// `node test/testTemp.mts <family> <command> [args...]` runs a command in a
-// run folder of its own, for a suite with no runner of ours (go test).
-if (import.meta.main) {
-  const [family, command, ...args] = process.argv.slice(2);
-  if (family === undefined || command === undefined) {
-    console.error("usage: node test/testTemp.mts <family> <command> [args...]");
-    process.exit(2);
-  }
-  ownTestTemp(family);
-  isolateGit();
-  const { status } = spawnSync(command, args, { stdio: "inherit" });
-  process.exitCode = status ?? 1;
 }

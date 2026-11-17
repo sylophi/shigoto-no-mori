@@ -46,6 +46,10 @@ export const readProcesses = (
     }),
   );
 
+// Both sides come from the one stamp Windows keeps, and it hands a freed
+// pid out again within moments.
+const sameBirth = (recorded: number, live: number) => recorded === live;
+
 export const makeNativefs = (helper: string) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -128,5 +132,5 @@ export const makeNativefs = (helper: string) =>
       return busy;
     }, withSpawner);
 
-    return { startedAt, listed, identify, running, held };
+    return { startedAt, sameBirth, listed, identify, running, held };
   });

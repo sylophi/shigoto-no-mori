@@ -26,12 +26,14 @@ import { dirname, join, realpath, resolve } from "../src/canonicalPath.ts";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as SqlClient from "effect/sql/SqlClient";
 import { afterEach, beforeEach, it, onTestFinished, vi } from "vitest";
 import * as Config from "../src/Config.ts";
 import { errorDocument } from "../src/errorDocument.ts";
+import * as ProcessTable from "../src/ProcessTable.ts";
 import * as Registry from "../src/Registry.ts";
 import * as WorktreeData from "../src/WorktreeData.ts";
 import * as Worktrees from "../src/Worktrees.ts";
@@ -399,6 +401,13 @@ const sleep = () =>
     stdio: "ignore",
   });
 
+// A live process's birth, as a move's record names its process.
+const birthOf = (pid: number) =>
+  Effect.gen(function* () {
+    const table = yield* ProcessTable.ProcessTable;
+    return Option.getOrThrow(yield* table.startedAt(pid));
+  });
+
 // A checkout's entry of git's, as a move records it.
 const linkOf = (dir: string) =>
   realpath(
@@ -540,7 +549,7 @@ it("a move another live process holds is left to it", async () => {
         link: linkOf(worktree.path),
         partial: null,
         pid: sleeper.pid ?? 0,
-        started_at: Date.now(),
+        started_at: yield* birthOf(sleeper.pid ?? 0),
       })}`;
       yield* worktrees.resumeMoves;
       const refused = yield* worktrees
@@ -723,7 +732,7 @@ it("a move into a folder another move still names is refused", async () => {
         carried: 1,
         partial: null,
         pid: sleeper.pid ?? 0,
-        started_at: Date.now(),
+        started_at: yield* birthOf(sleeper.pid ?? 0),
       })}`;
       const refused = yield* worktrees
         .move({ project, worktree }, otter)

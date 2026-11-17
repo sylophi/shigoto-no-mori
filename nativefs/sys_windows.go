@@ -2,11 +2,19 @@ package main
 
 import (
 	"errors"
+	"io"
 	"os"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
+
+var osVerbs = map[string]func(args []string, stdout, stderr io.Writer) int{
+	"processes": listProcesses,
+	"end":       endProcesses,
+	"job":       runInJob,
+	"user-path": userPath,
+}
 
 // The errno names callers read, for the Windows errors that mean them,
 // as Node names them.

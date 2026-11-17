@@ -22,6 +22,7 @@ import * as Paths from "../src/Paths.ts";
 import * as Store from "../src/Store.ts";
 import { JOURNAL, retireStore } from "../src/dataDirMoveJournal.ts";
 import { nodeStore, openNode } from "./lib/nodeStore.ts";
+import { homeEnv } from "./lib/platform.ts";
 
 const execFileP = promisify(execFile);
 
@@ -46,7 +47,7 @@ const storeLayer = (dir: string) =>
     Layer.provide(
       ConfigProvider.layer(
         ConfigProvider.fromEnv({
-          env: { HOME: dir, USERPROFILE: dir, SHIGOMORI_DATA_DIR: dir },
+          env: { ...homeEnv(dir), SHIGOMORI_DATA_DIR: dir },
         }),
       ),
     ),
@@ -58,7 +59,7 @@ const platformAt = (dir: string) =>
     Layer.provide(
       ConfigProvider.layer(
         ConfigProvider.fromEnv({
-          env: { HOME: dir, USERPROFILE: dir, SHIGOMORI_DATA_DIR: dir },
+          env: { ...homeEnv(dir), SHIGOMORI_DATA_DIR: dir },
         }),
       ),
     ),

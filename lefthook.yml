@@ -64,8 +64,7 @@ pre-commit:
           - name: cli
             glob: "{packages/cli/**,packages/engine/src/**,packages/engine/test/lib/**,packages/contracts/**,nativefs/**,test/**}"
             run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm run check:cli
-          # The file-sync engine (continuous worktree mirroring) is its own
-          # Go module, tested on its own.
-          - name: file-sync-test
-            glob: "{file-sync/**,test/**}"
-            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE CGO_CFLAGS=-Wno-deprecated-declarations node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON test/testTemp.mts go go test -C file-sync ./...
+          # The Go modules, vetted and tested (test/goChecks.mts).
+          - name: go
+            glob: "{file-sync/**,nativefs/**,cli-launcher/**,test/**}"
+            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm run check:go

@@ -9,23 +9,13 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, realpath } from "../src/canonicalPath.ts";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
-import {
-  afterEach,
-  beforeEach,
-  it,
-  onTestFinished,
-  type TestContext,
-} from "vitest";
+import { afterEach, beforeEach, it, onTestFinished } from "vitest";
 import * as Doctor from "../src/Doctor.ts";
 import * as Registry from "../src/Registry.ts";
 import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
 import * as WtFolder from "../src/WtFolder.ts";
+import { whereV2Ran } from "./lib/platform.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
-
-// v2 never ran on Windows, so no v2 worktree is there to move, and the
-// move asks lsof, which Windows lacks, what runs in one.
-const whereV2Ran = ({ skip }: TestContext) =>
-  skip(process.platform === "win32", "v2 never ran on Windows");
 
 let box: Sandbox;
 beforeEach(() => {

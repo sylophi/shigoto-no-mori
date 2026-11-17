@@ -19,7 +19,7 @@ export type RunningScript = {
   readonly groupLeader: boolean;
   readonly projectId: string;
   readonly worktreeId: string;
-  // Epoch ms, stamped just after the spawn.
+  // Its birth as the process table read it once it ran.
   readonly startedAt: number;
   readonly command: string;
 };
@@ -122,11 +122,11 @@ const commandMatches = (recorded: string, live: string) => {
 const isSameProcess = (
   record: RunningScript,
   live: ProcessTable.LiveProcess | undefined,
+  sameBirth: (recorded: number, live: number) => boolean,
 ) =>
   live !== undefined &&
   (live.leadsGroup === undefined || record.groupLeader === live.leadsGroup) &&
-  Math.abs(live.startedAt - record.startedAt) <=
-    ProcessTable.BIRTH_TOLERANCE_MS &&
+  sameBirth(record.startedAt, live.startedAt) &&
   commandMatches(record.command, live.command);
 
 // The recorded scripts still running as the processes they recorded:
@@ -137,10 +137,9 @@ export const survivors = Effect.fnUntraced(function* (
   records: ReadonlyArray<RunningScript>,
 ) {
   if (records.length === 0) return [];
-  const table = yield* (yield* ProcessTable.ProcessTable).listed(
-    records.map(({ pid }) => pid),
-  );
+  const table = yield* ProcessTable.ProcessTable;
+  const live = yield* table.listed(records.map(({ pid }) => pid));
   return records.filter((record) =>
-    isSameProcess(record, table.get(record.pid)),
+    isSameProcess(record, live.get(record.pid), table.sameBirth),
   );
 });

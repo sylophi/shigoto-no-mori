@@ -31,7 +31,7 @@
     "check:engine": "pnpm -F @shigomori/engine test",
     "check:cli": "pnpm -F @shigomori/cli test",
     "check:proofs": "pnpm -C app test",
-    "check:go": "CGO_CFLAGS=-Wno-deprecated-declarations node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON test/testTemp.mts go go test -C file-sync ./... && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON test/testTemp.mts go go test -C nativefs ./..."
+    "check:go": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON test/goChecks.mts"
   },
   "devDependencies": {
     "@effect/language-service": "0.87.4",

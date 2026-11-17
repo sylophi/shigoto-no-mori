@@ -10,14 +10,10 @@ import { type CommandError, pidAlive } from "./processes.ts";
 import { makeNativefs } from "./processTable/nativefs.ts";
 import { makePs } from "./processTable/ps.ts";
 
-// A record's birth when the process that wrote it couldn't read its own.
+// A record's birth when the table couldn't read it. stillRunning counts
+// it as the same process, so nothing takes over the work of an owner it
+// can't tell is gone.
 export const UNKNOWN_BIRTH = 0;
-
-// How far a birth the table reports may be from a recorded one of the
-// same process: ps counts in whole seconds, and a spawn is stamped just
-// after it returns. Generous enough for a loaded machine, still orders
-// of magnitude tighter than any plausible pid reuse.
-export const BIRTH_TOLERANCE_MS = 5_000;
 
 export type LiveProcess = {
   // Epoch ms, to the second or finer.
@@ -33,6 +29,9 @@ export class ProcessTable extends Context.Service<
     // When `pid` was born, in epoch milliseconds to the second or
     // finer. None when it can't be read.
     readonly startedAt: (pid: number) => Effect.Effect<Option.Option<number>>;
+    // Whether a birth this table reads now is the one a record took
+    // from it, to the table's precision.
+    readonly sameBirth: (recorded: number, live: number) => boolean;
     // Whether the process that recorded itself as `pid`, born at
     // `startedAt`, still runs.
     readonly stillRunning: (
@@ -73,9 +72,9 @@ const make = (nativefs: string) =>
     });
 
     // A live pid born at another time is another process the system
-    // handed the number to since. A birth unknown on either side counts as
-    // the same process, so nothing takes over the work of an owner it
-    // can't tell is gone.
+    // handed the number to since. One whose birth the table can't read
+    // counts as the same process while the pid lives: a short one may be
+    // gone by the read.
     const stillRunning = Effect.fn("ProcessTable.stillRunning")(function* (
       pid: number,
       startedAt: number,
@@ -83,10 +82,9 @@ const make = (nativefs: string) =>
       if (pid < 2 || !(yield* pidAlive(pid))) return false;
       if (startedAt === UNKNOWN_BIRTH) return true;
       const started = yield* table.startedAt(pid);
-      return (
-        Option.isNone(started) ||
-        Math.abs(started.value - startedAt) <= BIRTH_TOLERANCE_MS
-      );
+      return Option.isSome(started)
+        ? table.sameBirth(startedAt, started.value)
+        : yield* pidAlive(pid);
     });
 
     return ProcessTable.of({ ...table, stillRunning });

@@ -3,6 +3,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import type { LiveProcess } from "../ProcessTable.ts";
 import { exec } from "../processes.ts";
 
 const MONTHS = [
@@ -53,12 +54,6 @@ const PS_BIRTH_ENV = { TZ: "UTC", LC_ALL: "C" };
 const PS_LINE =
   /^\s*(\d+)\s+(\d+)\s+(\w{3}\s+\w{3}\s+\d+\s+\d+:\d+:\d+\s+\d{4})\s+(.*)$/;
 
-type LiveProcess = {
-  readonly startedAt: number;
-  readonly command: string;
-  readonly leadsGroup: boolean;
-};
-
 const parseProcessTable = (stdout: string) => {
   const table = new Map<number, LiveProcess>();
   for (const line of stdout.split("\n")) {
@@ -75,6 +70,11 @@ const parseProcessTable = (stdout: string) => {
   }
   return table;
 };
+
+// ps counts in whole seconds. A few of them, still far tighter than any
+// pid reuse here, where pids climb before they wrap.
+const sameBirth = (recorded: number, live: number) =>
+  Math.abs(live - recorded) <= 5_000;
 
 export const makePs = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -148,5 +148,5 @@ export const makePs = Effect.gen(function* () {
     );
   }, withSpawner);
 
-  return { startedAt, listed, identify, running, held };
+  return { startedAt, sameBirth, listed, identify, running, held };
 });
