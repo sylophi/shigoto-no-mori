@@ -69,11 +69,7 @@ export const sessionPlace = Effect.try({
 });
 
 // The copy to another volume and its flush, each OS's own.
-const { copyTree, flushTree } = byPlatform({
-  darwin: posix,
-  linux: posix,
-  win32: windows,
-});
+const tree = () => byPlatform({ darwin: posix, linux: posix, win32: windows });
 
 export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // The new parent, or undefined to reset to the default location.
@@ -218,9 +214,9 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       copy: (from: string, to: string) =>
         Effect.gen(function* () {
           yield* opts.copy === undefined
-            ? DataDirMove.holdingStore(copyTree(from, to))
+            ? DataDirMove.holdingStore(tree().copyTree(from, to))
             : opts.copy(from, to);
-          yield* flushTree(to);
+          yield* tree().flushTree(to);
         }),
     },
   ).pipe(Effect.mapError(hostCallFailure));

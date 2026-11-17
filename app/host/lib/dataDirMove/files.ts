@@ -25,18 +25,17 @@ export const entryPath = (entry: {
 
 // Every file of the tree at `dir` flushed by `flush`, and the tree's
 // entries.
-export const flushFiles = (
+export const flushFiles = Effect.fnUntraced(function* (
   dir: string,
   flush: (file: string) => Promise<void>,
-) =>
-  Effect.gen(function* () {
-    const entries = yield* fsStep(() =>
-      readdir(dir, { recursive: true, withFileTypes: true }),
-    );
-    yield* Effect.forEach(
-      entries.filter((entry) => entry.isFile()).map(entryPath),
-      (file) => fsStep(() => flush(file)),
-      { concurrency: 32, discard: true },
-    );
-    return entries;
-  });
+) {
+  const entries = yield* fsStep(() =>
+    readdir(dir, { recursive: true, withFileTypes: true }),
+  );
+  yield* Effect.forEach(
+    entries.filter((entry) => entry.isFile()).map(entryPath),
+    (file) => fsStep(() => flush(file)),
+    { concurrency: 32, discard: true },
+  );
+  return entries;
+});

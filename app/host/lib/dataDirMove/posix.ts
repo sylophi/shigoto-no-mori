@@ -15,16 +15,15 @@ export const posix = {
 
   // Every file and folder, each folder after what it holds. A link is
   // its folder's entry, flushed with it.
-  flushTree: (dir: string) =>
-    Effect.gen(function* () {
-      const entries = yield* flushFiles(dir, flush);
-      yield* Effect.forEach(
-        [
-          ...entries.filter((entry) => entry.isDirectory()).map(entryPath),
-          dir,
-        ].toSorted((a, b) => depth(b) - depth(a)),
-        (folder) => fsStep(() => flush(folder)),
-        { discard: true },
-      );
-    }),
+  flushTree: Effect.fnUntraced(function* (dir: string) {
+    const entries = yield* flushFiles(dir, flush);
+    yield* Effect.forEach(
+      [
+        ...entries.filter((entry) => entry.isDirectory()).map(entryPath),
+        dir,
+      ].toSorted((a, b) => depth(b) - depth(a)),
+      (folder) => fsStep(() => flush(folder)),
+      { discard: true },
+    );
+  }),
 };

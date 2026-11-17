@@ -13,22 +13,22 @@ import {
 
 const run = promisify(execFile);
 
-const userPath = (place: AppPlace, verb: "has" | "add" | "remove") => [
+const userPathArgs = (place: AppPlace, verb: "has" | "add" | "remove") => [
   "user-path",
   verb,
   windowsCliBinDir(place.resourcesPath),
 ];
 
 export const onUserPath = async (place: AppPlace) =>
-  (await run(nativefsPath(place), userPath(place, "has"))).stdout.trim() ===
+  (await run(nativefsPath(place), userPathArgs(place, "has"))).stdout.trim() ===
   "true";
 
 export const addToUserPath = (place: AppPlace) =>
-  run(nativefsPath(place), userPath(place, "add"));
+  run(nativefsPath(place), userPathArgs(place, "add"));
 
 export function removeCliLaunchers(place: AppPlace): void {
   const binDir = windowsCliBinDir(place.resourcesPath);
-  const edit = spawnSync(nativefsPath(place), userPath(place, "remove"));
+  const edit = spawnSync(nativefsPath(place), userPathArgs(place, "remove"));
   // Kept while PATH still names it, so Settings still shows it installed.
   if (edit.status !== 0) return;
   // A launcher a terminal is running stays until the install's folder

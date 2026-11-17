@@ -593,11 +593,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       Effect.flatMap(fs.open(at, { flag }), (handle) => handle.sync),
     );
   const flushedFile = (at: string) =>
-    byPlatform({
-      darwin: synced(at, "r"),
-      linux: synced(at, "r"),
-      win32: synced(at, "r+"),
-    });
+    synced(at, byPlatform({ darwin: "r", linux: "r", win32: "r+" } as const));
   const flushedFolder = (at: string) =>
     byPlatform({
       darwin: synced(at, "r"),
