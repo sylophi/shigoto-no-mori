@@ -10,7 +10,7 @@ import * as Launchers from "../Launchers.ts";
 import * as Shells from "../Shells.ts";
 import type { CommandsArea } from "./commands.ts";
 import type { Desktop } from "./desktop.ts";
-import { LaunchFailed } from "./documents.ts";
+import { LaunchFailed, NoWindowsApp } from "./documents.ts";
 
 const WINDOWS_TERMINAL = "windows-terminal";
 
@@ -146,5 +146,6 @@ export const makeWindowsShell = ({ run, onScreen }: CommandsArea) =>
           );
         },
       ),
+      openOwnApp: Effect.fail(new NoWindowsApp()),
     } satisfies Desktop;
   });

@@ -9,7 +9,7 @@ import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
-import { findExecutable, findForScriptShell } from "./executables.ts";
+import { findExecutable } from "./executables.ts";
 import { packageScripts } from "./packageJson.ts";
 import {
   findJustfile,
@@ -19,6 +19,7 @@ import {
   parseMakefile,
   type Runner,
 } from "./scriptFiles.ts";
+import * as Shells from "./Shells.ts";
 import * as Usage from "./Usage.ts";
 import { entryExists, isDirectory } from "./entries.ts";
 
@@ -270,6 +271,7 @@ const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const usage = yield* Usage.Usage;
+  const shells = yield* Shells.Shells;
   const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
   // The manager a package.json's lockfile picks, npm without one.
@@ -489,7 +491,7 @@ const make = Effect.gen(function* () {
     const { script, extra } = found;
     const tool = script.runner ?? manager;
     const program = yield* (
-      input.inShell ? findForScriptShell : findExecutable
+      input.inShell ? shells.findForScript : findExecutable
     )(tool);
     if (Option.isNone(program)) {
       return yield* refused("no-tool", {

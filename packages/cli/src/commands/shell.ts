@@ -10,8 +10,9 @@ import * as Shells from "@shigomori/engine/Shells";
 import {
   CD_FILE_ENV,
   cdDirective,
-  hookPlace,
+  hookNames,
   isShellKind,
+  reloadCommand,
   SHELL_KINDS,
   wrapperSnippet,
 } from "@shigomori/engine/shellHook";
@@ -31,18 +32,13 @@ import { childEnv } from "@shigomori/engine/processes";
 import { pickProject, pickWorktree } from "../pickers.ts";
 
 // The terminal's shell: its own ZDOTDIR and XDG_CONFIG_HOME, and the
-// login shell a terminal runs.
-const terminalShell = Effect.gen(function* () {
+// interactive shell a terminal runs.
+const interactiveShell = Effect.gen(function* () {
   const { program } = yield* (yield* Shells.Shells).interactive;
-  return { loginShell: program };
+  return { interactiveShell: program };
 });
 
 const shellChoice = SHELL_KINDS.join("|");
-
-// The wrapper's names, which init prints.
-const names = Effect.gen(function* () {
-  return hookPlace(yield* Paths.Paths, "").names;
-});
 
 const init = Command.make(
   "init",
@@ -56,7 +52,8 @@ const init = Command.make(
         });
       }
       // The snippet ends its own last line.
-      yield* out(wrapperSnippet(yield* names, shell).replace(/\n$/, ""));
+      const names = hookNames(yield* Paths.Paths);
+      yield* out(wrapperSnippet(names, shell).replace(/\n$/, ""));
     }),
 );
 
@@ -68,15 +65,15 @@ const installCommand = Command.make(
       const { binaryName, json, stderrColor } = yield* Effect.service(Output);
       const usage = `Usage: ${binaryName} shell install [<${shellChoice}>]`;
       const integration = yield* ShellIntegration.ShellIntegration;
-      const terminal = yield* terminalShell;
+      const terminal = yield* interactiveShell;
       const kind = Option.isSome(shell)
         ? shell.value
-        : yield* integration.loginShell(terminal);
+        : yield* integration.shellKind(terminal);
       if (!isShellKind(kind)) {
         return yield* new UsageError({
           problem: Option.isSome(shell)
             ? `Unsupported shell ${JSON.stringify(kind)}. ${usage}`
-            : `Couldn't tell your login shell. Usage: ${binaryName} shell install <${shellChoice}>`,
+            : `Couldn't tell your interactive shell. Usage: ${binaryName} shell install <${shellChoice}>`,
         });
       }
       const target = yield* integration.install(kind, terminal);
@@ -87,13 +84,9 @@ const installCommand = Command.make(
       yield* note(
         `Hooked ${cyan(binaryName)} shell integration into ${cyan(target)}.`,
       );
-      const reload =
-        kind === "powershell"
-          ? ". $PROFILE.CurrentUserAllHosts"
-          : `exec ${kind}`;
       yield* note(
         dim(
-          `Takes effect in new shells. Run \`${reload}\` to reload this one.`,
+          `Takes effect in new shells. Run \`${reloadCommand(kind)}\` to reload this one.`,
         ),
       );
     }),
@@ -106,7 +99,7 @@ const uninstallCommand = Command.make("uninstall", {}, () =>
     const { json, stderrColor } = yield* Effect.service(Output);
     const { cyan, dim, yellow } = styles(stderrColor);
     const integration = yield* ShellIntegration.ShellIntegration;
-    const terminal = yield* terminalShell;
+    const terminal = yield* interactiveShell;
     let removedAny = false;
     let failed = false;
     for (const removed of yield* integration.uninstall(terminal)) {
@@ -140,7 +133,7 @@ const statusCommand = Command.make("status", {}, () =>
     const { json, binaryName, stdoutColor } = yield* Effect.service(Output);
     const { document: found, shown } =
       yield* (yield* ShellIntegration.ShellIntegration).status(
-        yield* terminalShell,
+        yield* interactiveShell,
       );
     if (json) return yield* emit(found);
     const { dim, green, yellow } = styles(stdoutColor);
@@ -153,14 +146,16 @@ const statusCommand = Command.make("status", {}, () =>
       renderTable(
         ["shell", "hook", "config"],
         found.shells.map(({ shell, state }, index) => [
-          `${shellName(shell)}${shell === found.loginShell ? " *" : ""}`,
+          `${shellName(shell)}${shell === found.interactiveShell ? " *" : ""}`,
           label[state],
           dim(shown[index] ?? ""),
         ]),
         stdoutColor,
       ),
     );
-    if (found.loginShell !== "") yield* out(dim("* login shell"));
+    if (found.interactiveShell !== "") {
+      yield* out(dim("* interactive shell"));
+    }
     if (found.active)
       return yield* out(`Active in this session: ${green("yes")}`);
     yield* found.shells.some(({ state }) => state === "installed")
@@ -173,7 +168,7 @@ const statusCommand = Command.make("status", {}, () =>
   }),
 );
 
-// Needs Paths, the login shell and the platform alone, never the
+// Needs Paths, the interactive shell and the platform alone, never the
 // store: init runs in every new shell.
 export const shellCommand = Command.make("shell").pipe(
   Command.withSubcommands([
@@ -187,7 +182,7 @@ export const shellCommand = Command.make("shell").pipe(
 // --- sm cd ---
 
 // Moves the user's shell into a worktree: through the wrapper's
-// directive file when it gave one, else by starting the login shell
+// directive file when it gave one, else by starting the interactive shell
 // there, whose exit sm passes on.
 export const enter = (name: string, target: string, cdFile: string) =>
   Effect.gen(function* () {

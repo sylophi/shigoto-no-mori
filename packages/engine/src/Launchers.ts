@@ -47,15 +47,15 @@ export type CatalogEntry = {
 // being listed.
 export type RowEntry = LauncherEntry;
 
-// A launcher with what launching it takes: an installed app with the
-// bundle or tool it was found by, or a custom command line.
+// A launcher with what launching it takes: an installed app with what
+// it was found by, or a custom command line.
 export type Launchable =
   | (RowEntry & {
       readonly kind: "detected";
       readonly app: CatalogApp;
-      // The first bundle or program found (FILE_MANAGER for the
-      // desktop's), if any.
-      readonly bundle: string | undefined;
+      // What opens it: the first bundle or program found (FILE_MANAGER
+      // for the desktop's), if any.
+      readonly target: string | undefined;
       readonly cliOnPath: boolean;
     })
   | (RowEntry & { readonly kind: "custom"; readonly command: string });
@@ -229,8 +229,8 @@ const make = Effect.gen(function* () {
       app.inTerminal !== undefined,
   );
 
-  // The bundle or program an app was found by, in its own order.
-  const bundleOf = (app: CatalogApp) =>
+  // What an app was found by, in its own order.
+  const targetOf = (app: CatalogApp) =>
     Effect.gen(function* () {
       for (const place of placesOf(app)) {
         if (place === FILE_MANAGER) return fileManager ? place : undefined;
@@ -248,10 +248,10 @@ const make = Effect.gen(function* () {
   // What an installed app was found by.
   const foundBy = (app: CatalogApp) =>
     Effect.gen(function* () {
-      const bundle = yield* bundleOf(app);
+      const target = yield* targetOf(app);
       const cliOnPath = app.cli !== undefined && (yield* onPath(app.cli));
-      return bundle !== undefined || cliOnPath || (yield* toolOnPath(app))
-        ? { app, bundle, cliOnPath }
+      return target !== undefined || cliOnPath || (yield* toolOnPath(app))
+        ? { app, target, cliOnPath }
         : undefined;
     });
 

@@ -127,9 +127,8 @@ Poses ride the URL:
 - `?fresh=1`: Studio Mac a fresh install with no project, for the
   home a fresh install opens on.
 - `?windows=sm,mb`: the devices on Windows, by the same keys, with
-  their paths on drive `C:`, Windows launchers and the command line
-  tool not yet installable. The folder picker browses up from a drive
-  to the drives. With `sm`, this window poses a Windows viewer too
+  their paths on drive `C:` and Windows launchers. The folder picker
+  browses up from a drive to the drives. With `sm`, this window poses a Windows viewer too
   (its keys, its file manager and its sidebar on the right).
 - `?notSharing=mb,mini`: the devices with sharing off, by the same
   keys, which then serve this page nothing.

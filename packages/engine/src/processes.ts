@@ -121,20 +121,6 @@ const text = <E>(stream: Stream.Stream<Uint8Array, E>) =>
 // <stderr file> command ...args`.
 export const FILES_SCRIPT = 'err=$1; shift; "$@" >>"$0" 2>>"$err"; echo $?';
 
-// Git Bash's sh rewrites an argument that reads as a POSIX path (a
-// commit message `/fix the docs`) for a program not its own, as git is.
-// One named in MSYS2_ARG_CONV_EXCL, a list of prefixes, stays as it is.
-// The hooks the command runs inherit it, and still have their own
-// rewritten unless one starts as one of these.
-const keptArguments = (args: ReadonlyArray<string>) =>
-  byPlatform({
-    darwin: {},
-    linux: {},
-    win32: {
-      MSYS2_ARG_CONV_EXCL: args.filter((arg) => arg.includes("/")).join(";"),
-    },
-  });
-
 // A command with its output in files, not pipes, read at its exit to
 // the size each had then: for one that runs the person's hooks. What a
 // hook leaves in the background (a post-checkout `pnpm install &`)
@@ -180,7 +166,7 @@ export const captureToFiles = (
           stdin: options.stdin ?? "ignore",
           stderr: "ignore",
           ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-          env: { ...options.env, ...keptArguments([command, ...args]) },
+          env: { ...options.env, ...sh.env },
           extendEnv: true,
         }),
       );

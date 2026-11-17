@@ -3,7 +3,7 @@
 import * as Effect from "effect/Effect";
 import type { CommandsArea } from "./commands.ts";
 import type { Desktop } from "./desktop.ts";
-import { LaunchFailed } from "./documents.ts";
+import { LaunchFailed, NoAppWindow } from "./documents.ts";
 
 // Linux finds its apps on PATH alone (Launchers), never at a path.
 const noApp = (label: string) =>
@@ -25,4 +25,5 @@ export const makeXdg = ({ onScreen }: CommandsArea) =>
           said: `Linux has no terminal app for sm to open, so run \`${command}\` in a terminal of your own`,
         }),
       ),
+    openOwnApp: Effect.fail(new NoAppWindow()),
   } satisfies Desktop);

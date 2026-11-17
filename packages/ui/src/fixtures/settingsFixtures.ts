@@ -108,7 +108,7 @@ export function fakeCliStatus(
     name: "sm",
     aliasName: "shigomori",
     binDir: `${home}/.local/bin`,
-    linkPath: `${home}/.local/bin/sm`,
+    commandPath: `${home}/.local/bin/sm`,
     placement,
     state: "installed",
     foreignPaths: [],
@@ -118,7 +118,7 @@ export function fakeCliStatus(
 
 export function fakeShellStatus(home: string): ShellIntegrationStatus {
   return {
-    loginShell: "zsh",
+    interactiveShell: "zsh",
     shells: [
       { shell: "zsh", path: `${home}/.zshrc`, state: "installed" },
       { shell: "bash", path: `${home}/.bashrc`, state: "missing" },
@@ -129,7 +129,7 @@ export function fakeShellStatus(home: string): ShellIntegrationStatus {
 // A Windows PC's: PowerShell, its profile under Documents.
 export function fakeWindowsShellStatus(home: string): ShellIntegrationStatus {
   return {
-    loginShell: "powershell",
+    interactiveShell: "powershell",
     shells: [
       { shell: "bash", path: `${home}/.bashrc`, state: "missing" },
       {

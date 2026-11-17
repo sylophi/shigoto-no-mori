@@ -120,15 +120,13 @@ const make = Effect.gen(function* () {
       lifecycleScriptName(slot),
     );
     const spawned = Effect.gen(function* () {
-      const { program, args, env: shellEnv } = yield* shells.script;
+      const scriptShell = yield* shells.script;
       // A POSIX shell opens the file and becomes the script shell with
-      // it as stdout and stderr, whatever shell that is.
+      // it as stdout and stderr, whatever shell that is. The script
+      // shell takes its arguments as they are, so sh.env is left out.
       const sh = yield* shells.containedSh('exec "$@" >>"$0" 2>&1', [
         output,
-        program,
-        ...args,
-        "-c",
-        input.command,
+        ...scriptShell.runCommand(input.command),
       ]);
       yield* fs.makeDirectory(
         scriptOutputDir(paths.dataDir, context.worktree.id),
@@ -147,7 +145,7 @@ const make = Effect.gen(function* () {
           detached: false,
           extendEnv: true,
           env: {
-            ...shellEnv,
+            ...scriptShell.env,
             ...scriptEnvOf(context, lifecycleScriptName(slot)),
             ...UNATTENDED_ENV,
             COLUMNS: "120",

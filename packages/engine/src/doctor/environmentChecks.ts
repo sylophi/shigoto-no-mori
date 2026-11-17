@@ -28,7 +28,6 @@ import {
 } from "../windowsInstall.ts";
 import * as Shells from "../Shells.ts";
 import {
-  askPowerShell,
   CD_FILE_ENV,
   hookPlace,
   inspectHook,
@@ -398,18 +397,15 @@ export const makeEnvironmentChecks = ({
     const checkShellHook = (input: RunInput) =>
       Effect.gen(function* () {
         const line = check("Environment", "shell-hook", "shell hook");
-        const powerShell = yield* askPowerShell(
-          (yield* shells.interactive).program,
-        ).pipe(
+        const { place, policy } = yield* hookPlace(paths, {
+          zdotdir: input.zdotdir ?? zdotdir,
+          configHome: "",
+          program: (yield* shells.interactive).program,
+        }).pipe(
           Effect.provideService(
             ChildProcessSpawner.ChildProcessSpawner,
             spawner,
           ),
-        );
-        const place = hookPlace(
-          paths,
-          input.zdotdir ?? zdotdir,
-          powerShell.profile,
         );
         const installed: ShellKind[] = [];
         const edited: ShellKind[] = [];
@@ -419,7 +415,11 @@ export const makeEnvironmentChecks = ({
           if (hook.state === "installed") {
             installed.push(kind);
             if (!hook.current) stale.push(kind);
-          } else if (hook.state === "modified" || hook.state === "unreadable") {
+          } else if (
+            hook.state === "modified" ||
+            hook.state === "unreadable" ||
+            hook.state === "no-profile"
+          ) {
             edited.push(kind);
           }
         }
@@ -438,11 +438,10 @@ export const makeEnvironmentChecks = ({
         // Windows PowerShell's default policy on a desktop.
         if (
           installed.includes("powershell") &&
-          (powerShell.policy === "Restricted" ||
-            powerShell.policy === "AllSigned")
+          (policy === "Restricted" || policy === "AllSigned")
         ) {
           return line.warn(
-            `PowerShell's execution policy is ${powerShell.policy}, so it doesn't load the hook from its profile`,
+            `PowerShell's execution policy is ${policy}, so it doesn't load the hook from its profile`,
             "Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` to let it load your profile.",
           );
         }

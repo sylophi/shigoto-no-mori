@@ -3,6 +3,7 @@
 // Each open counts toward the row's order. And opening one of its files
 // in the editor the device settings name.
 import { scriptEnvOf } from "@shigomori/contracts/scriptEnv";
+import type { ShellSyntax } from "@shigomori/contracts/schemas";
 import type { TerminalId } from "@shigomori/contracts/schemas/launchers";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -15,12 +16,9 @@ import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Config from "./Config.ts";
 import * as Launchers from "./Launchers.ts";
-import { flavorNames } from "./flavor.ts";
 import * as Paths from "./Paths.ts";
-import { openEnvArgs } from "./relaunchEnv.ts";
 import { errnoText, isAbsent } from "./platformErrors.ts";
-import { cmdReadsIn, isBatchFile } from "./batchFiles.ts";
-import { findForPowerShell, isRunnable } from "./executables.ts";
+import { isRunnable } from "./executables.ts";
 import { byPlatform } from "./platform.ts";
 import * as Shells from "./Shells.ts";
 import { typedLines } from "@shigomori/contracts/typedLines";
@@ -28,7 +26,12 @@ import * as Usage from "./Usage.ts";
 import * as Worktrees from "./Worktrees.ts";
 import { makeCommands } from "./open/commands.ts";
 import type { Desktop } from "./open/desktop.ts";
-import { LaunchFailed } from "./open/documents.ts";
+import {
+  type AppNotOpened,
+  LaunchFailed,
+  type NoAppWindow,
+  type NoWindowsApp,
+} from "./open/documents.ts";
 import { makeLaunchServices } from "./open/launchServices.ts";
 import { makeWindowsShell } from "./open/windowsShell.ts";
 import { makeXdg } from "./open/xdg.ts";
@@ -71,40 +74,10 @@ export class NotAFile extends Schema.TaggedError<NotAFile>()("NotAFile", {
   }
 }
 
-// The app wouldn't open: not installed, or `open` refused.
-export class AppNotOpened extends Schema.TaggedError<AppNotOpened>()(
-  "AppNotOpened",
-  { appName: Schema.String, cause: Schema.Defect() },
-) {
-  override get message(): string {
-    return `Couldn't open ${this.appName}. Is the app installed?`;
-  }
-}
-
 // The dev build has no installed app: it runs from a checkout.
 export class NoDevApp extends Schema.TaggedError<NoDevApp>()("NoDevApp", {}) {
   override get message(): string {
     return "This is the dev CLI, and the dev app isn't installed. Run `pnpm dev` in a checkout instead.";
-  }
-}
-
-// On Linux the app is its host alone, with no window to open.
-export class NoAppWindow extends Schema.TaggedError<NoAppWindow>()(
-  "NoAppWindow",
-  {},
-) {
-  override get message(): string {
-    return "On Linux the app is its host, with no window to open: open this machine from the app on another device.";
-  }
-}
-
-// Where the installed app is on Windows comes with its installer.
-export class NoWindowsApp extends Schema.TaggedError<NoWindowsApp>()(
-  "NoWindowsApp",
-  {},
-) {
-  override get message(): string {
-    return "sm can't open the app on Windows yet. Open it from the Start menu.";
   }
 }
 
@@ -143,6 +116,20 @@ export class AppTerminal extends Context.Service<
   }
 >()("sm/engine/AppTerminal") {}
 
+// `program` run with `args`, typed as `line` writes them for the
+// terminal's shell, once that shell is known to hand them over as they
+// are (Shells' untypable). `what` names the arguments in the message
+// when it doesn't.
+export type TypedCommand<E> = {
+  readonly label: string;
+  readonly what: string;
+  readonly program: string;
+  readonly args: ReadonlyArray<string>;
+  readonly line: (
+    lines: (typeof typedLines)[ShellSyntax],
+  ) => Effect.Effect<string, E>;
+};
+
 export class Open extends Context.Service<
   Open,
   {
@@ -151,25 +138,14 @@ export class Open extends Context.Service<
       located: Worktrees.Located,
       tool: string,
     ) => Effect.Effect<Launchers.Launchable, UnknownLauncher | LaunchFailed>;
-    // Runs a command line in the user's chosen terminal, or `terminal`
-    // when given, in a folder or a worktree (which the app's own
-    // terminal can take).
-    readonly inTerminal: (
+    // Runs a command in the user's chosen terminal, or `terminal` when
+    // given, in a folder or a worktree (which the app's own terminal can
+    // take).
+    readonly inTerminal: <E>(
       where: string | Worktrees.Located,
-      command: string,
+      command: TypedCommand<E>,
       terminal?: TerminalId,
-    ) => Effect.Effect<void, LaunchFailed>;
-    // Fails when the terminal's shell would hand `program` `args` in a
-    // way that lets one run a command: PowerShell hands a batch file
-    // each argument for cmd to read, quoted only around a space, so one
-    // with a character cmd reads (cmdReadsIn) can't go to one. `what`
-    // names the arguments in the message.
-    readonly typable: (
-      label: string,
-      what: string,
-      program: string,
-      args: ReadonlyArray<string>,
-    ) => Effect.Effect<void, LaunchFailed>;
+    ) => Effect.Effect<void, LaunchFailed | E>;
     // Opens a worktree's file, absolute or relative to its root, in the
     // editor the device settings name, or with its default app while
     // that is unset or no longer installed. Answers the file's path.
@@ -189,8 +165,7 @@ const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const paths = yield* Paths.Paths;
-  const { flavor } = paths;
+  const { flavor } = yield* Paths.Paths;
   const launchers = yield* Launchers.Launchers;
   const shells = yield* Shells.Shells;
   const worktrees = yield* Worktrees.Worktrees;
@@ -265,22 +240,21 @@ const make = Effect.gen(function* () {
           const context = yield* worktrees.scriptContext(located);
           return yield* Effect.scoped(
             Effect.gen(function* () {
-              const { program, args, env: shellEnv } = yield* shells.script;
+              const script = yield* shells.script;
+              const sh = yield* shells.sh;
               const handle = yield* spawner.spawn(
                 ChildProcess.make(
-                  yield* shells.sh,
-                  Shells.shArgs(`"$0" "$@" </dev/null >/dev/null 2>&1 &`, [
-                    program,
-                    ...args,
-                    "-c",
-                    entry.command,
-                  ]),
+                  sh.program,
+                  sh.runArgs(
+                    `"$0" "$@" </dev/null >/dev/null 2>&1 &`,
+                    script.runCommand(entry.command),
+                  ),
                   {
                     cwd: where,
                     detached: true,
                     extendEnv: true,
                     env: {
-                      ...shellEnv,
+                      ...script.env,
                       ...scriptEnvOf(context, entry.label),
                       SHIGOMORI_WORKSPACE_PATH: where,
                     },
@@ -319,11 +293,11 @@ const make = Effect.gen(function* () {
             const { code } = yield* ran(app.cli, [where]);
             if (code === 0) return;
           }
-          const bundle = entry.bundle;
-          if (bundle === Launchers.FILE_MANAGER) {
+          const { target } = entry;
+          if (target === Launchers.FILE_MANAGER) {
             return yield* onScreen(entry.label, [where]);
           }
-          if (bundle === undefined) {
+          if (target === undefined) {
             return yield* new LaunchFailed({
               label: entry.label,
               said: `No installed app found for ${app.label}.`,
@@ -332,11 +306,11 @@ const make = Effect.gen(function* () {
           if (app.openArgs !== undefined && app.openArgs.length > 0) {
             return yield* desktop.startApp(
               entry.label,
-              bundle,
+              target,
               app.openArgs.map((arg) => arg.replaceAll("{path}", where)),
             );
           }
-          return yield* desktop.openApp(entry.label, bundle, where);
+          return yield* desktop.openApp(entry.label, target, where);
         }
       }
     });
@@ -359,34 +333,27 @@ const make = Effect.gen(function* () {
     return entry;
   });
 
-  const inTerminalAt = Effect.fn("Open.inTerminal")(function* (
+  // `terminalLabel` names the terminal in a failure to open it.
+  const typedInTerminal = <E>(
+    terminalLabel: string,
     where: string | Worktrees.Located,
-    command: string,
+    { label, what, program, args, line }: TypedCommand<E>,
     terminal?: TerminalId,
-  ) {
-    yield* inTerminal("the terminal", command, where, undefined, terminal);
-  });
-
-  const typable = Effect.fn("Open.typable")(function* (
-    label: string,
-    what: string,
-    program: string,
-    args: ReadonlyArray<string>,
-  ) {
-    if ((yield* shells.interactive).syntax !== "powershell") return;
-    const read = args.map(cmdReadsIn).find((c) => c !== undefined);
-    if (read === undefined) return;
-    const found = yield* findForPowerShell(program).pipe(
-      Effect.provideService(FileSystem.FileSystem, fs),
-      Effect.provideService(Path.Path, path),
-    );
-    if (Option.isSome(found) && isBatchFile(found.value)) {
-      return yield* new LaunchFailed({
-        label,
-        said: `${program} is a batch file (${found.value}), and ${what} can't be passed to it, since cmd would read its ${JSON.stringify(read)}.`,
-      });
-    }
-  });
+  ) =>
+    Effect.gen(function* () {
+      const refused = yield* shells.untypable(program, args, what);
+      if (Option.isSome(refused)) {
+        return yield* new LaunchFailed({ label, said: refused.value });
+      }
+      const { syntax } = yield* shells.interactive;
+      yield* inTerminal(
+        terminalLabel,
+        yield* line(typedLines[syntax]),
+        where,
+        undefined,
+        terminal,
+      );
+    });
 
   const edit = Effect.fn("Open.edit")(function* (
     located: Worktrees.Located,
@@ -424,13 +391,13 @@ const make = Effect.gen(function* () {
     const { app } = entry;
     if (app.inTerminal !== undefined) {
       const program = app.inTerminal.trim().split(/\s+/)[0] ?? "";
-      yield* typable(label, "the file's name", program, [absolute]);
-      const { syntax } = yield* shells.interactive;
-      yield* inTerminal(
+      yield* typedInTerminal(label, located, {
         label,
-        `${program} ${typedLines[syntax].path(absolute)}`,
-        located,
-      );
+        what: "the file's name",
+        program,
+        args: [absolute],
+        line: (lines) => Effect.succeed(`${program} ${lines.path(absolute)}`),
+      });
       return absolute;
     }
     // The worktree goes along, so the file opens in the window that has
@@ -438,62 +405,34 @@ const make = Effect.gen(function* () {
     if (app.cli !== undefined && entry.cliOnPath) {
       if ((yield* ran(app.cli, [where, absolute])).code === 0) return absolute;
     }
-    const bundle = entry.bundle;
-    if (bundle === undefined || bundle === Launchers.FILE_MANAGER) {
+    const { target } = entry;
+    if (target === undefined || target === Launchers.FILE_MANAGER) {
       return yield* new LaunchFailed({
         label,
         said: `No installed app found for ${app.label}.`,
       });
     }
-    yield* desktop.openApp(label, bundle, absolute);
+    yield* desktop.openApp(label, target, absolute);
     return absolute;
-  });
-
-  // The installed app's bundle, opened by its id, which still finds it
-  // renamed or moved.
-  const openBundle = Effect.gen(function* () {
-    const code = yield* Effect.scoped(
-      Effect.flatMap(
-        spawner.spawn(
-          ChildProcess.make(
-            "open",
-            [
-              ...openEnvArgs({
-                dataDir:
-                  paths.dataDirSource === "env" ? paths.dataDir : undefined,
-              }),
-              "-b",
-              flavorNames(flavor).bundleId,
-            ],
-            { stdin: "ignore" },
-          ),
-        ),
-        (handle) => handle.exitCode,
-      ),
-    ).pipe(
-      Effect.mapError(
-        (cause) =>
-          new AppNotOpened({ appName: flavorNames(flavor).appName, cause }),
-      ),
-    );
-    if (code !== 0) {
-      return yield* new AppNotOpened({
-        appName: flavorNames(flavor).appName,
-        cause: `exit status ${code}`,
-      });
-    }
   });
 
   const app = Effect.gen(function* () {
     if (flavor === "dev") return yield* new NoDevApp();
-    return yield* byPlatform({
-      darwin: openBundle,
-      linux: Effect.fail(new NoAppWindow()),
-      win32: Effect.fail(new NoWindowsApp()),
-    });
+    return yield* desktop.openOwnApp;
   }).pipe(Effect.withSpan("Open.app"));
 
-  return Open.of({ open, inTerminal: inTerminalAt, typable, edit, app });
+  return Open.of({
+    open,
+    inTerminal: Effect.fn("Open.inTerminal")(function* <E>(
+      where: string | Worktrees.Located,
+      command: TypedCommand<E>,
+      terminal?: TerminalId,
+    ) {
+      yield* typedInTerminal("the terminal", where, command, terminal);
+    }),
+    edit,
+    app,
+  });
 });
 
 export const layer = Layer.effect(Open, make);

@@ -72,7 +72,7 @@ export function CliSectionView({
         <div className="flex flex-wrap items-center gap-3">
           <StatusDot tone="emerald" label="Installed" />
           <span className="font-mono text-sm text-muted-foreground select-text">
-            {shownPath(status.linkPath, home)}
+            {shownPath(status.commandPath, home)}
           </span>
           <Button
             variant="outline"
@@ -181,7 +181,9 @@ export function ShellIntegrationView({
   // Enabled or removed from here: open terminals keep the old behavior.
   changed: boolean;
 }) {
-  const login = status.shells.find((s) => s.shell === status.loginShell);
+  const interactive = status.shells.find(
+    (s) => s.shell === status.interactiveShell,
+  );
   const enabledAnywhere = status.shells.some((s) => s.state === "installed");
 
   return (
@@ -193,21 +195,21 @@ export function ShellIntegrationView({
         removable block to your shell&apos;s config file.
       </p>
 
-      {status.loginShell === null ? (
+      {status.interactiveShell === null ? (
         <p className="text-xs text-muted-foreground">
           Your login shell isn&apos;t one integration supports (
           {status.shells.map((s) => shellName(s.shell)).join(", ")}). Run{" "}
           <span className="font-mono select-text">{name} shell install</span>{" "}
           from the shell you use.
         </p>
-      ) : login?.state === "installed" ? (
+      ) : interactive?.state === "installed" ? (
         <div className="flex flex-wrap items-center gap-3">
           <StatusDot
             tone="emerald"
-            label={`Enabled for ${shellName(login.shell)}`}
+            label={`Enabled for ${shellName(interactive.shell)}`}
           />
           <span className="font-mono text-sm text-muted-foreground select-text">
-            {shownPath(login.path, home)}
+            {shownPath(interactive.path, home)}
           </span>
           <Button
             variant="outline"
@@ -219,12 +221,14 @@ export function ShellIntegrationView({
             Remove
           </Button>
         </div>
-      ) : login?.state === "modified" ? (
+      ) : interactive?.state === "modified" ? (
         <p className="text-xs text-muted-foreground">
           <span className="text-amber-500">
             The integration block in{" "}
-            <span className="font-mono">{shownPath(login.path, home)}</span> was
-            edited,
+            <span className="font-mono">
+              {shownPath(interactive.path, home)}
+            </span>{" "}
+            was edited,
           </span>{" "}
           so it won&apos;t be touched from here. Restore or remove it, then
           enable again.
@@ -238,7 +242,7 @@ export function ShellIntegrationView({
             onClick={onEnable}
           >
             <Download />
-            Enable for {shellName(status.loginShell)}
+            Enable for {shellName(status.interactiveShell)}
           </Button>
           {enabledAnywhere && (
             <span className="text-xs text-muted-foreground">

@@ -2,12 +2,31 @@
 // terminals alike.
 import { loginShellOf } from "@shigomori/contracts/loginShell";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { envVar } from "../environment.ts";
+import { findExecutable } from "../executables.ts";
+
+// `program` started with `args`, as a POSIX sh.
+const shShell = (program: string, args: ReadonlyArray<string>) => ({
+  program,
+  args,
+  env: {},
+  runArgs: (script: string, scriptArgs: ReadonlyArray<string> = []) => [
+    ...args,
+    "-c",
+    script,
+    ...scriptArgs,
+  ],
+  runCommand: (script: string) => [program, ...args, "-c", script],
+});
 
 export const makeLogin = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
   // The user's login shell (contracts' loginShellOf), run as one (no -i)
   // so .zprofile sets PATH up without zsh's interactive init. The
@@ -35,21 +54,32 @@ export const makeLogin = Effect.gen(function* () {
         account: accountShell,
       });
       return found === ""
-        ? { program: "/bin/sh", args: [], env: {} }
-        : { program: found, args: ["-l"], env: {} };
+        ? { shell: shShell("/bin/sh", []), login: false }
+        : { shell: shShell(found, ["-l"]), login: true };
     }),
   );
 
-  const sh = "/bin/sh";
+  const sh = shShell("/bin/sh", []);
   return {
-    script: loginShell,
-    interactive: Effect.map(loginShell, (shell) => ({
-      ...shell,
+    script: Effect.map(loginShell, ({ shell }) => shell),
+    findForScript: (name: string) =>
+      findExecutable(name).pipe(Effect.provideContext(platform)),
+    interactive: Effect.map(loginShell, ({ shell, login }) => ({
+      program: shell.program,
+      args: shell.args,
+      env: shell.env,
       syntax: "posix" as const,
+      login,
     })),
+    // A POSIX shell hands a program its arguments as they are.
+    untypable: () => Effect.succeed(Option.none<string>()),
     sh: Effect.succeed(sh),
     // Signals reach the tree here (ProcessTrees), so sh runs as it is.
     containedSh: (script: string, args: ReadonlyArray<string>) =>
-      Effect.succeed({ program: sh, args: ["-c", script, ...args] }),
+      Effect.succeed({
+        program: sh.program,
+        args: sh.runArgs(script, args),
+        env: {},
+      }),
   };
 });

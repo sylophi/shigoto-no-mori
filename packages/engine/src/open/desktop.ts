@@ -4,7 +4,12 @@
 // Terminal and PowerShell (windowsShell.ts).
 import type * as Effect from "effect/Effect";
 import type * as Launchers from "../Launchers.ts";
-import type { LaunchFailed } from "./documents.ts";
+import type {
+  AppNotOpened,
+  LaunchFailed,
+  NoAppWindow,
+  NoWindowsApp,
+} from "./documents.ts";
 
 export type Desktop = {
   // Opens `target` in the app found at `found`, or in a copy of it the
@@ -36,4 +41,9 @@ export type Desktop = {
     chosen: string,
     entries?: ReadonlyArray<Launchers.Launchable>,
   ) => Effect.Effect<void, LaunchFailed>;
+  // Opens (or brings forward) this build's installed app.
+  readonly openOwnApp: Effect.Effect<
+    void,
+    AppNotOpened | NoAppWindow | NoWindowsApp
+  >;
 };

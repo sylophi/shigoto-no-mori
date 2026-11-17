@@ -6,7 +6,6 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import { isBatchFile } from "./batchFiles.ts";
 import { envVar } from "./environment.ts";
 import { byPlatform } from "./platform.ts";
 
@@ -28,7 +27,7 @@ const windowsExtensions = Effect.map(envVar("PATHEXT"), (exts) =>
 );
 
 // The extensions Windows runs a file by, lower-cased. None elsewhere.
-const pathExtensions = () =>
+export const pathExtensions = () =>
   byPlatform({
     darwin: noExtensions,
     linux: noExtensions,
@@ -102,44 +101,3 @@ export const findOn = Effect.fn("findOn")(function* (
 // The program's full path, none when PATH has no such program.
 export const findExecutable = (name: string) =>
   Effect.flatMap(envVar("PATH"), (searched) => findOn(searched, name));
-
-// The file PowerShell runs for a bare name: PATH's directories in order,
-// and in each a script before PATHEXT's extensions in their order.
-export const findForPowerShell = Effect.fnUntraced(function* (name: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const exts = [".ps1", ...(yield* windowsExtensions)];
-  for (const dir of (yield* envVar("PATH")).split(";")) {
-    if (dir === "") continue;
-    for (const ext of exts) {
-      const candidate = path.join(dir, `${name}${ext}`);
-      if (yield* fs.exists(candidate).pipe(Effect.orElseSucceed(() => false))) {
-        return Option.some(candidate);
-      }
-    }
-  }
-  return Option.none<string>();
-});
-
-// A package manager's batch file has an sh script beside it, which Git
-// Bash runs for the bare name, and which a Ctrl+C ends without cmd's
-// "Terminate batch job" prompt.
-const findForGitBash = Effect.fnUntraced(function* (name: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const found = yield* findExecutable(name);
-  if (Option.isNone(found) || !isBatchFile(found.value)) return found;
-  const script = found.value.slice(0, -path.extname(found.value).length);
-  const info = yield* fs.stat(script).pipe(Effect.option);
-  return Option.isSome(info) && info.value.type === "File"
-    ? Option.some(script)
-    : found;
-});
-
-// The file a line in the script shell (shells/) runs for a bare name.
-export const findForScriptShell = (name: string) =>
-  byPlatform({
-    darwin: findExecutable(name),
-    linux: findExecutable(name),
-    win32: findForGitBash(name),
-  });

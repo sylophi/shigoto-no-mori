@@ -113,13 +113,13 @@ async function linkStatus(facts: Facts): Promise<CliStatus> {
     name: cliBinaryName(facts.flavor),
     aliasName: cliAliasName(facts.flavor),
     binDir,
-    linkPath: linkPath(facts.flavor),
+    commandPath: linkPath(facts.flavor),
     placement: "link" as const,
     foreignPaths: [] as string[],
     onPath: isOnPath(binDir),
   };
   // Both links must be healthy before Settings claims "Installed":
-  // inspect each and report the worst state, with linkPath pointing at
+  // inspect each and report the worst state, with commandPath pointing at
   // the offending link so the foreign/stale copy names the right path.
   const severity = { installed: 0, missing: 1, stale: 2, foreign: 3 } as const;
   const links = await Promise.all(
@@ -132,7 +132,7 @@ async function linkStatus(facts: Facts): Promise<CliStatus> {
     }),
   );
   let state: keyof typeof severity = "installed";
-  let worstLink = base.linkPath;
+  let worstLink = base.commandPath;
   for (const entry of links) {
     if (severity[entry.state] > severity[state]) {
       state = entry.state;
@@ -142,7 +142,7 @@ async function linkStatus(facts: Facts): Promise<CliStatus> {
   const foreignPaths = links
     .filter((entry) => entry.state === "foreign")
     .map((entry) => entry.link);
-  return { ...base, linkPath: worstLink, foreignPaths, state };
+  return { ...base, commandPath: worstLink, foreignPaths, state };
 }
 
 function stateOfOwnership(
@@ -189,7 +189,7 @@ async function installLinks(facts: Facts, force: boolean): Promise<CliStatus> {
   const status = await linkStatus(facts);
   if (status.state === "foreign" && !force) {
     throw new Error(
-      `${status.linkPath} already exists and wasn't created by ` +
+      `${status.commandPath} already exists and wasn't created by ` +
         "Shigoto no Mori. Remove it first if you want the app to " +
         "manage the link.",
     );
