@@ -81,9 +81,6 @@ func snapshot() (map[uint32]*process, error) {
 		if parent, ok := table[p.Parent]; !ok || parent.created.Nanoseconds() >= p.created.Nanoseconds() {
 			p.Parent = 0
 		}
-		if host, ok := table[consoleHostOf(p)]; ok && consoleHosts[strings.ToLower(host.Name)] {
-			p.Console = host.Pid
-		}
 	}
 	return table, nil
 }
@@ -157,6 +154,9 @@ func listProcesses(args []string, stdout, stderr io.Writer) int {
 	}
 	lines := make(chan any, len(table))
 	for _, p := range table {
+		if host, ok := table[consoleHostOf(p)]; ok && consoleHosts[strings.ToLower(host.Name)] {
+			p.Console = host.Pid
+		}
 		if named[p.Pid] {
 			if command, ok := commandLine(p); ok {
 				p.Command = &command
