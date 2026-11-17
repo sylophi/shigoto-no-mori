@@ -63,11 +63,15 @@ function removeNotificationShortcut(): void {
   const shortcut = path.join(startMenu(), `${names.appName}.lnk`);
   if (!existsSync(shortcut)) return;
   const clsid = shell.readShortcutLink(shortcut).toastActivatorClsid;
-  spawnSync("reg", [
-    "delete",
-    `HKCU\\Software\\Classes\\CLSID\\${clsid}`,
-    "/f",
-  ]);
+  // Without a class to name, the delete would take every class the
+  // user has.
+  if (clsid) {
+    spawnSync("reg", [
+      "delete",
+      `HKCU\\Software\\Classes\\CLSID\\${clsid}`,
+      "/f",
+    ]);
+  }
   rmSync(shortcut);
 }
 
