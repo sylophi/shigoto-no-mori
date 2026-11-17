@@ -414,11 +414,7 @@ export const makeEnvironmentChecks = ({
           if (hook.state === "installed") {
             installed.push(kind);
             if (!hook.current) stale.push(kind);
-          } else if (
-            hook.state === "modified" ||
-            hook.state === "unreadable" ||
-            hook.state === "no-profile"
-          ) {
+          } else if (hook.state === "modified" || hook.state === "unreadable") {
             edited.push(kind);
           }
         }

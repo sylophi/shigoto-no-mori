@@ -181,10 +181,7 @@ const make = Effect.gen(function* () {
         shells: hooks.map(({ shell: kind, path, state }) => ({
           shell: kind,
           path,
-          state:
-            state === "unreadable" || state === "no-profile"
-              ? "modified"
-              : state,
+          state: state === "unreadable" ? "modified" : state,
         })),
       };
       return { document, shown: hooks.map(({ path }) => at.collapse(path)) };
@@ -225,9 +222,6 @@ const make = Effect.gen(function* () {
     if (hook.state === "unreadable") {
       return yield* hookError(at, "read", hook.path, hook.error);
     }
-    if (hook.state === "no-profile") {
-      return yield* hookError(at, "read", hook.path);
-    }
     if (hook.state === "modified") {
       return yield* hookError(
         at,
@@ -261,8 +255,6 @@ const make = Effect.gen(function* () {
           return Option.none<string>();
         case "unreadable":
           return yield* hookError(at, "read", hook.path, hook.error);
-        case "no-profile":
-          return yield* hookError(at, "read", hook.path);
         case "modified":
           return yield* hookError(at, "left", hook.path);
         case "installed":

@@ -6,7 +6,6 @@ import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as Launchers from "../Launchers.ts";
 import * as Shells from "../Shells.ts";
 import type { CommandsArea } from "./commands.ts";
 import type { Desktop } from "./desktop.ts";
@@ -41,7 +40,6 @@ export const makeWindowsShell = ({ run, onScreen }: CommandsArea) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const path = yield* Path.Path;
-    const launchers = yield* Launchers.Launchers;
     const shells = yield* Shells.Shells;
 
     // Started detached, so it has no console of ours (nor a window for
@@ -124,17 +122,11 @@ export const makeWindowsShell = ({ run, onScreen }: CommandsArea) =>
       // terminal's shell, or in a PowerShell window where PowerShell is
       // chosen or Windows Terminal isn't installed.
       inTerminalApp: Effect.fnUntraced(
-        function* (label, command, folder, chosen, entries) {
+        function* (label, command, folder, chosen, installed) {
           const terminal =
             chosen === "powershell"
               ? undefined
-              : entries === undefined
-                ? yield* launchers.installed(WINDOWS_TERMINAL)
-                : entries.find(
-                    (entry) =>
-                      entry.kind === "detected" &&
-                      entry.app.id === WINDOWS_TERMINAL,
-                  );
+              : yield* installed(WINDOWS_TERMINAL);
           if (terminal === undefined) {
             return yield* powerShellWindow(label, folder, command);
           }

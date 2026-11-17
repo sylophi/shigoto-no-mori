@@ -204,8 +204,9 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
     // host's unit runs. On Windows its program has to be the app's.
     const appAlive = (pid: number) =>
       byPlatform({
-        darwin: run("ps", ["-o", "comm=", "-p", String(pid)], "stdout").pipe(
-          Effect.map((ps) => ps.ok && ps.output.includes(appExecutable)),
+        darwin: Effect.map(
+          processTable.identify(pid),
+          Option.exists(({ name }) => name.includes(appExecutable)),
         ),
         linux: Effect.map(
           unit,

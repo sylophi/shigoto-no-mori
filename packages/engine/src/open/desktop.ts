@@ -3,7 +3,6 @@
 // its screen opener (xdg.ts), Windows' through its shell, Windows
 // Terminal and PowerShell (windowsShell.ts).
 import type * as Effect from "effect/Effect";
-import type * as Launchers from "../Launchers.ts";
 import type {
   AppNotOpened,
   LaunchFailed,
@@ -33,13 +32,15 @@ export type Desktop = {
     runnable: boolean,
   ) => Effect.Effect<void, LaunchFailed>;
   // Runs `command` in `folder` in the terminal app `chosen` names.
-  // `entries` are the launchers already read, if any.
+  // `installed` finds an installed terminal app by its id.
   readonly inTerminalApp: (
     label: string,
     command: string,
     folder: string,
     chosen: string,
-    entries?: ReadonlyArray<Launchers.Launchable>,
+    installed: (
+      id: string,
+    ) => Effect.Effect<{ readonly label: string } | undefined>,
   ) => Effect.Effect<void, LaunchFailed>;
   // Opens (or brings forward) this build's installed app.
   readonly openOwnApp: Effect.Effect<

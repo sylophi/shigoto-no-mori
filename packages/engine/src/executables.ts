@@ -2,6 +2,7 @@
 // under one of PATH's directories this process may execute.
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
+import { delimiter } from "node:path";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -13,10 +14,8 @@ import { byFamily } from "./platform.ts";
 export const programFile = (name: string) =>
   name + byFamily({ posix: "", windows: ".exe" });
 
-const pathSeparator = () => byFamily({ posix: ":", windows: ";" });
-
 export const joinSearchPath = (dirs: ReadonlyArray<string>) =>
-  dirs.join(pathSeparator());
+  dirs.join(delimiter);
 
 const noExtensions = Effect.succeed<ReadonlyArray<string>>([]);
 const windowsExtensions = Effect.map(envVar("PATHEXT"), (exts) =>
@@ -49,7 +48,7 @@ export const candidatesOnPath = Effect.fnUntraced(function* (
     ...(yield* pathExtensions()).map((ext) => `${name}${ext}`),
   ];
   return searched
-    .split(pathSeparator())
+    .split(delimiter)
     .flatMap((dir) =>
       fileNames.map((fileName) => path.join(dir === "" ? "." : dir, fileName)),
     );

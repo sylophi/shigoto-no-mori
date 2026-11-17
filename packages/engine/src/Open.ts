@@ -222,7 +222,14 @@ const make = Effect.gen(function* () {
         command,
         folder,
         chosen,
-        entries,
+        (id) =>
+          entries === undefined
+            ? launchers.installed(id)
+            : Effect.succeed(
+                entries.find(
+                  (entry) => entry.kind === "detected" && entry.app.id === id,
+                ),
+              ),
       );
     });
 

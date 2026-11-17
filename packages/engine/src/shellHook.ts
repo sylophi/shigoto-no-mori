@@ -381,12 +381,12 @@ export type Hook = { readonly shell: ShellKind; readonly path: string } &
     // Markers around content we didn't write, or a fish drop-in that
     // isn't ours.
     | { readonly state: "modified" }
+    // A file that couldn't be read, or none when PowerShell didn't say
+    // where its profile is (no `error` then).
     | {
         readonly state: "unreadable";
-        readonly error: PlatformError.PlatformError;
+        readonly error: PlatformError.PlatformError | undefined;
       }
-    // A PowerShell that didn't say where its profile is.
-    | { readonly state: "no-profile" }
     // Ours, and `current` when it is what this build writes.
     | {
         readonly state: "installed";
@@ -399,7 +399,9 @@ export const inspectHook = (place: HookPlace, kind: ShellKind) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const at = { shell: kind, path: yield* hookPath(place, kind) };
-    if (at.path === "") return { ...at, state: "no-profile" } satisfies Hook;
+    if (at.path === "") {
+      return { ...at, state: "unreadable", error: undefined } satisfies Hook;
+    }
     const read = yield* fs.readFile(at.path).pipe(Effect.result);
     if (Result.isFailure(read)) {
       return isNotFound(read.failure)

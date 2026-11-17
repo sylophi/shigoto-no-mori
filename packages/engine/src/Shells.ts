@@ -71,14 +71,7 @@ export class Shells extends Context.Service<
     readonly containedSh: (
       script: string,
       args: ReadonlyArray<string>,
-    ) => Effect.Effect<
-      {
-        readonly program: string;
-        readonly args: ReadonlyArray<string>;
-        readonly env: Readonly<Record<string, string>>;
-      },
-      NoScriptShell
-    >;
+    ) => Effect.Effect<Shell, NoScriptShell>;
   }
 >()("sm/engine/Shells") {}
 
