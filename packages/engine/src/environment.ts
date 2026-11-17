@@ -17,6 +17,7 @@ export const uppercasePath = () =>
     posix: () => {},
     windows: () => {
       const path = process.env["PATH"];
+      if (path === undefined) return;
       delete process.env["PATH"];
       process.env["PATH"] = path;
     },
