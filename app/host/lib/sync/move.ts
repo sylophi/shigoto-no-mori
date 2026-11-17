@@ -8,6 +8,7 @@ import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 import {
   pullBringsIgnoredFiles,
+  type SyncCheckout,
   type SyncPullWorktreePayloadSchema,
   SyncReceiveWorktreeResultSchema,
   type SyncSendWorktreePayloadSchema,
@@ -31,6 +32,7 @@ import {
   peerWorktreesFor,
 } from "@host/ipc/PeerReach";
 import { EngineChanges } from "@host/lib/Engine";
+import * as Git from "@shigomori/engine/Git";
 import * as Identity from "@shigomori/engine/Identity";
 import { findProjectAndWorktree } from "@host/lib/projects";
 import { followDescription } from "@host/lib/sync/worktreeDescription";
@@ -63,6 +65,23 @@ class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
 const decodeReceiveWorktreeResult = Schema.decodeUnknownSync(
   SyncReceiveWorktreeResultSchema,
 );
+
+// How a mirror's original reads and writes its files, which its copy
+// takes.
+const checkoutOf = Effect.fnUntraced(function* (worktreePath: string) {
+  const git = yield* Git.Git;
+  const [config, modes] = yield* Effect.all(
+    [
+      git.checkoutConfig(worktreePath),
+      git.run(worktreePath, ["ls-files", "--format=%(objectmode)"]),
+    ],
+    { concurrency: 2 },
+  );
+  return {
+    ...config,
+    tracksSymlinks: modes.split("\n").includes("120000"),
+  } satisfies SyncCheckout;
+});
 
 // A move's running commentary, keyed by the source worktree id (the
 // only id the caller holds until the create lands). Frames are
@@ -364,6 +383,7 @@ const sendWorktreeEffect = (
     }
     const branch = worktree.branch;
     const landBranch = pullLandingBranch(worktree);
+    const checkout = mirror ? yield* checkoutOf(worktree.path) : undefined;
 
     // The landing, on the peer, asking back over the link. An interrupt
     // resets the link, which the peer's landing runs under.
@@ -391,6 +411,7 @@ const sendWorktreeEffect = (
                   ignoreMode,
                   ignores,
                   cloneInto,
+                  checkout,
                   channelId,
                 }),
               ),

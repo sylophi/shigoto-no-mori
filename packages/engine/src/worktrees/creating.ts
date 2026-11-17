@@ -16,6 +16,7 @@ import * as CloneCheckout from "../CloneCheckout.ts";
 import type { Source } from "../CarryOver.ts";
 import { findExecutable } from "../executables.ts";
 import * as Git from "../Git.ts";
+import { type CheckoutConfig, checkoutConfigEntries } from "../gitIndex.ts";
 import { splitRemoteRef } from "../gitParse.ts";
 import * as Layout from "../Layout.ts";
 import * as Lifecycle from "../Lifecycle.ts";
@@ -303,6 +304,9 @@ export const makeCreating = ({
         // The worktree this one replaces (an adopt's), which still holds
         // its name and branch until it goes.
         readonly replacing?: string | undefined;
+        // How its checkout reads and writes its files, over the
+        // repository's (a mirror's copy takes its original's).
+        readonly checkoutConfig?: CheckoutConfig | undefined;
       },
     ) =>
       Effect.gen(function* () {
@@ -377,6 +381,10 @@ export const makeCreating = ({
             })
           : Option.none<Source>();
         const noCheckout = Option.isSome(source);
+        const checkoutConfig =
+          input.checkoutConfig === undefined
+            ? undefined
+            : checkoutConfigEntries(input.checkoutConfig);
         // The branch the add makes: a new one, or in checkout mode the local
         // branch it tracks a remote base with.
         const branch = input.checkout
@@ -395,6 +403,7 @@ export const makeCreating = ({
             remotes,
             noCheckout,
             force: input.replacing !== undefined,
+            config: checkoutConfig,
           });
         } else {
           yield* git.addWorktree({
@@ -403,24 +412,33 @@ export const makeCreating = ({
             branch,
             base: input.base === "" ? undefined : input.base,
             noCheckout,
+            config: checkoutConfig,
           });
+        }
+        // The add goes again, and the branch it made, as git undoes its
+        // own failed checkout.
+        const undo = git
+          .run(project.path, ["worktree", "remove", "--force", place])
+          .pipe(
+            Effect.andThen(
+              branch === ""
+                ? Effect.void
+                : git.run(project.path, ["branch", "-D", branch]),
+            ),
+            Effect.ignore,
+          );
+        // Kept for as long as the worktree is, since its files are in
+        // that form. Set before a clone, which reads it.
+        if (checkoutConfig !== undefined) {
+          yield* git
+            .setWorktreeConfig(place, checkoutConfig)
+            .pipe(Effect.onError(() => undo));
         }
         let cloned: Cloned | undefined;
         if (Option.isSome(source)) {
           // Nothing checked out (the clone and git's own checkout both
-          // failed, or the run was interrupted midway): the add goes again,
-          // and the branch it made, as git undoes its own failed checkout. A
+          // failed, or the run was interrupted midway) undoes the add. A
           // failed hook leaves the worktree, as git leaves it.
-          const undo = git
-            .run(project.path, ["worktree", "remove", "--force", place])
-            .pipe(
-              Effect.andThen(
-                branch === ""
-                  ? Effect.void
-                  : git.run(project.path, ["branch", "-D", branch]),
-              ),
-              Effect.ignore,
-            );
           const outcome = yield* cloneCheckout
             .finish({ source: source.value.path, worktree: place })
             .pipe(
@@ -475,6 +493,7 @@ export const makeCreating = ({
           | undefined;
         readonly clone?: boolean | undefined;
         readonly ignoredFilesFollow?: ReadonlyArray<string> | undefined;
+        readonly checkoutConfig?: CheckoutConfig | undefined;
       },
       reporter: Reporter,
     ) {
@@ -495,6 +514,7 @@ export const makeCreating = ({
         base: input.base ?? "",
         checkout: input.checkout ?? false,
         clone: input.clone ?? true,
+        checkoutConfig: input.checkoutConfig,
       });
       // Only a worktree that is new takes the autoPullNew setting's mark.
       const [autoPullNew, primaryOnly] = yield* Effect.all([

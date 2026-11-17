@@ -13,4 +13,4 @@ export const CORE_VERSION = 21;
 
 // A mirror runs on sync's calls (its follower takes the bundles sync
 // receives), so the two change as one.
-export const MIRROR_VERSION = 1;
+export const MIRROR_VERSION = 2;

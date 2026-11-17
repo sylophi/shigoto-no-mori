@@ -150,6 +150,9 @@ Poses ride the URL:
 - `?mirrorEngine=running|starting|stopped|unavailable`: every
   device's mirror engine (default `running`), for the reason the
   Mirror buttons give when it can't take a start.
+- `?mirrorRefused=1`: every mirror start refused by the copy's device,
+  which can't make the symlinks the original tracks, in the words its
+  landing gives (with `?windows=`, the Windows ones).
 - `?mirrored=1`: a mirror running from boot (Studio Mac's
   `brave-badger` with a copy on MacBook), for the surfaces that list
   mirrors (the Live page, the sidebar's fold).
