@@ -37,11 +37,11 @@ export const installCli = (force: boolean) =>
 
 // The whole teardown, shared by the Settings uninstall action and
 // "Nuke everything": shell hooks first, while the binary is still
-// reachable, then the links. A hook failure must not strand the links,
-// so unlinking always runs. The failure then surfaces afterwards
-// rather than being swallowed: a hook left behind is inert (its guard
-// line no-ops once the command is gone), yet the user should hear it
-// stayed.
+// reachable, then the command. A hook failure must not strand the
+// command, so its removal always runs. The failure then surfaces
+// afterwards rather than being swallowed: a hook left behind is inert
+// (its guard line no-ops once the command is gone), yet the user should
+// hear it stayed.
 export const uninstallCliEverything = Effect.gen(function* () {
   const facts = yield* HostFacts.HostFacts;
   // No binary means the hook-removal spawn can't run. The guarded hook
@@ -55,6 +55,4 @@ export const uninstallCliEverything = Effect.gen(function* () {
   return yield* hooks;
 });
 
-export async function repairCli(facts: Facts): Promise<void> {
-  await placement().repair(facts);
-}
+export const repairCli = (facts: Facts) => placement().repair(facts);
