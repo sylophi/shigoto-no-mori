@@ -17,8 +17,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import * as NodeServices from "@shared/nodeServices";
 import type { DataDirSource } from "@shigomori/engine/Paths";
-import { expandHome as expandHomeIn } from "@shigomori/contracts/projectPaths";
-import { canonicalPath, onDrive } from "@shigomori/engine/canonicalPath";
+import { canonicalPath, expandHomeAt } from "@shigomori/engine/canonicalPath";
 import * as Paths from "@shigomori/engine/Paths";
 import { byPlatform } from "@shigomori/engine/platform";
 import type { Flavor } from "@shigomori/engine/flavor";
@@ -171,7 +170,7 @@ export function home(): string {
 }
 
 export function expandHome(path: string): string {
-  return onDrive(expandHomeIn(home(), canonicalPath(path)), resolve);
+  return expandHomeAt(home(), path);
 }
 
 export function toAbsolute(path: string): string {

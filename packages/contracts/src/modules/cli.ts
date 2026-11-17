@@ -9,6 +9,9 @@ const CliStatusSchema = Schema.Struct({
   aliasName: Schema.String,
   binDir: Schema.String,
   linkPath: Schema.String,
+  // A link into binDir (macOS, Linux), or a launcher in binDir with
+  // binDir added to PATH (Windows).
+  placement: Schema.Literals(["link", "launcher"]),
   state: Schema.Literals(["installed", "stale", "missing", "foreign"]),
   // So the replace consent can name each file it would overwrite.
   foreignPaths: Schema.Array(Schema.String),
@@ -63,7 +66,7 @@ const gated = gatedBy("changeApp");
 
 export const cliContract = defineContract(
   "cli",
-  { scope: "host", version: 1 },
+  { scope: "host", version: 2 },
   invoke("status", VoidSchema, CliStatusSchema, gated),
   invoke(
     "install",

@@ -114,6 +114,7 @@ async function linkStatus(facts: Facts): Promise<CliStatus> {
     aliasName: cliAliasName(facts.flavor),
     binDir,
     linkPath: linkPath(facts.flavor),
+    placement: "link" as const,
     foreignPaths: [] as string[],
     onPath: isOnPath(binDir),
   };

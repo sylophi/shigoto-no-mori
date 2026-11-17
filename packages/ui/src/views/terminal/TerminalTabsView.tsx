@@ -96,7 +96,7 @@ export function TerminalTabsView({
           "relative flex shrink-0 flex-wrap items-center gap-x-2",
           ["pr-3", "pr-9", "pr-16", "pr-23"][buttons],
           titleBar
-            ? "pt-[7px] pl-[92px] sidebar-right:pt-0 sidebar-right:pr-[calc(var(--caption-room)+--spacing(2))] sidebar-right:pl-3"
+            ? "pt-[7px] pl-[92px] sidebar-right:pt-0 sidebar-right:pr-caption sidebar-right:pl-3"
             : "pl-3",
           onHide ? "phone:pr-9" : "phone:pr-3",
         )}

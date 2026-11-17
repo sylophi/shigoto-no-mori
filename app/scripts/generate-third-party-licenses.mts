@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
-import { exec, execFile } from "node:child_process";
+import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { lstat, readdir, readFile, mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { appRoot, repoRoot } from "./lib/appRoot.mts";
+import { pnpm } from "./lib/pnpm.mts";
 
 import {
   CLOUDFLARED_LICENSE,
@@ -41,7 +42,6 @@ const OUT_DIR =
 const JSON_OUT = join(OUT_DIR, "third-party-licenses.json");
 const TEXT_OUT = join(OUT_DIR, "THIRD-PARTY-LICENSES.txt");
 
-const execP = promisify(exec);
 const execFileP = promisify(execFile);
 
 // The Bun CI compiles the terminal sm with (.github/actions/setup-toolchains).
@@ -212,13 +212,22 @@ type Listed = {
 // included.
 async function shippedPackages(): Promise<Set<string>> {
   const listings = await Promise.all(
-    NPM_ROOTS.map((root) =>
-      // Through a shell, as pnpm is a .cmd script on Windows.
-      execP(
-        `pnpm --filter ./${relative(repoRoot, root)} list --prod --json --depth Infinity`,
-        { cwd: repoRoot, maxBuffer: 256 * 1024 * 1024 },
-      ),
-    ),
+    NPM_ROOTS.map((root) => {
+      const list = pnpm([
+        "--filter",
+        `./${relative(repoRoot, root)}`,
+        "list",
+        "--prod",
+        "--json",
+        "--depth",
+        "Infinity",
+      ]);
+      return execFileP(list.command, list.args, {
+        cwd: repoRoot,
+        shell: list.shell,
+        maxBuffer: 256 * 1024 * 1024,
+      });
+    }),
   );
   const shipped = new Set<string>();
   const walk = (deps: Record<string, Listed> | undefined) => {

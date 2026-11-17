@@ -51,11 +51,7 @@ import * as ClerkTokenStorage from "./electron/clerkTokenStorage";
 import * as NodeServices from "@shared/nodeServices";
 import { childDefaults } from "@shigomori/engine/processes";
 import * as ProcessTable from "@shigomori/engine/ProcessTable";
-import { bundledBinaryPath } from "@shared/packaging/bundledBinary.mts";
-import {
-  NATIVEFS_BINARY_NAME,
-  NATIVEFS_DIST_DIR,
-} from "@shared/packaging/goHelpersDist.mts";
+import { nativefsPath } from "@shared/packaging/bundledBinary.mts";
 import { log } from "@shared/log";
 import * as ShellLayer from "./shellLayer";
 import * as ClientConfig from "./electron/clientConfig";
@@ -238,11 +234,7 @@ const runtime = ManagedRuntime.make(
     ),
     // The client config, read before the first window (below).
     Layer.provideMerge(ClientConfig.layer),
-    Layer.provideMerge(
-      ProcessTable.layer(
-        bundledBinaryPath(appPlace(), NATIVEFS_DIST_DIR, NATIVEFS_BINARY_NAME),
-      ),
-    ),
+    Layer.provideMerge(ProcessTable.layer(nativefsPath(appPlace()))),
     Layer.provideMerge(childDefaults),
     Layer.provideMerge(NodeServices.layer),
   ),

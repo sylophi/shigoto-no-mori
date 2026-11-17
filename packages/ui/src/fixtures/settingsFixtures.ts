@@ -100,12 +100,16 @@ export function fakeAgentHarnesses(home: string): AgentHarnessStatus[] {
 }
 
 // The CLI linked into ~/.local/bin, on PATH.
-export function fakeCliStatus(home: string): CliStatus {
+export function fakeCliStatus(
+  home: string,
+  placement: CliStatus["placement"] = "link",
+): CliStatus {
   return {
     name: "sm",
     aliasName: "shigomori",
     binDir: `${home}/.local/bin`,
     linkPath: `${home}/.local/bin/sm`,
+    placement,
     state: "installed",
     foreignPaths: [],
     onPath: true,

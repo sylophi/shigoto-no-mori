@@ -213,7 +213,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
         yield* trees.end(tree);
         if (yield* waitExit(UNKILLABLE_WAIT_MS)) return;
         yield* Effect.logWarning(
-          `[scripts] "${opts.command ?? program}" (pid ${spawned.pid}) survived SIGKILL, giving up on it`,
+          `[scripts] "${opts.command ?? program}" (pid ${spawned.pid}) outlived its kill, giving up on it`,
         );
       }).pipe(Effect.ensuring(trees.release(tree)));
     },

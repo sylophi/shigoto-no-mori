@@ -14,12 +14,7 @@ import * as Effect from "effect/Effect";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { readProcesses } from "@shigomori/engine/processTable/nativefs";
 import { exec } from "@shigomori/engine/processes";
-
-type Tree = {
-  readonly pid: number;
-  readonly closeTerminal?: () => void;
-  readonly interrupt?: () => void;
-};
+import type { Tree } from "./tree";
 
 const close = (tree: Tree) =>
   Effect.try(() => tree.closeTerminal?.()).pipe(Effect.ignore);

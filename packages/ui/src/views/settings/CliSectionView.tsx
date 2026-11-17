@@ -3,7 +3,7 @@ import { Download, Trash2 } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
 import { SectionIntro } from "../../primitives/section-heading.tsx";
 import { StatusDot } from "../../primitives/status-dot.tsx";
-import { isWindowsDevice, shownPath } from "../../lib/devicePaths.ts";
+import { shownPath } from "../../lib/devicePaths.ts";
 import { shellName } from "@shigomori/contracts/shellName";
 import type {
   CliStatus,
@@ -56,7 +56,7 @@ export function CliSectionView({
     <section className="space-y-3">
       <SectionIntro title="Command line tool">
         {CLI_ABOUT}{" "}
-        {isWindowsDevice(home, status.binDir) ? (
+        {status.placement === "launcher" ? (
           <>
             Installing puts the {commands} commands in {binDir} and adds it to
             your PATH.

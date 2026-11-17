@@ -62,6 +62,7 @@
       "aliasName": " ",
       "binDir": "",
       "linkPath": "",
+      "placement": "launcher",
       "state": "missing",
       "foreignPaths": ["\\"],
       "onPath": false
@@ -102,6 +103,7 @@
       "aliasName": "0",
       "binDir": "",
       "linkPath": "-1",
+      "placement": "link",
       "state": "missing",
       "foreignPaths": [],
       "onPath": true
@@ -113,6 +115,7 @@
       "aliasName": "-1",
       "binDir": "0",
       "linkPath": "\"",
+      "placement": "launcher",
       "state": "stale",
       "foreignPaths": ["", ""],
       "onPath": false

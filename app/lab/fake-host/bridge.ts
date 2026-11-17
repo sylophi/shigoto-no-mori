@@ -815,7 +815,8 @@ function hostHandlersFor(
       return worktree;
     },
     "agents:status": () => agentHarnesses,
-    "cli:status": () => fakeCliStatus(disk.home),
+    "cli:status": () =>
+      fakeCliStatus(disk.home, onWindows(disk) ? "launcher" : "link"),
     "cli:shellStatus": () => shellStatus,
     "cli:shellInstall": () => (shellStatus = setShellHooks(shellStatus, true)),
     "cli:shellUninstall": () =>

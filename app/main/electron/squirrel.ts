@@ -18,8 +18,29 @@ const exe = path.basename(process.execPath);
 const updateExe = path.join(root, "Update.exe");
 
 // The exe that starts the app: the launcher in an install, else this one.
-export const launcherPath = (): string =>
+const launcherPath = (): string =>
   existsSync(updateExe) ? path.join(root, exe) : process.execPath;
+
+// The renderer's scheme, which the Clerk bridge (clerk.ts) registers to
+// this exe alone, registered to what starts the app. In a dev run that
+// exe is Electron's own, which opens the app's folder given before the
+// link. In an install it is the launcher, as this exe is in a version
+// folder the next update deletes.
+export function registerScheme(): void {
+  const scheme = rendererSchemeName(flavor);
+  if (app.isPackaged) {
+    app.setAsDefaultProtocolClient(scheme, launcherPath());
+  } else {
+    app.setAsDefaultProtocolClient(scheme, process.execPath, [
+      app.getAppPath(),
+    ]);
+  }
+}
+
+// Launch at login, by the launcher.
+export function setLoginItem(openAtLogin: boolean): void {
+  app.setLoginItemSettings({ openAtLogin, path: launcherPath() });
+}
 
 const startMenu = () =>
   path.join(app.getPath("appData"), "Microsoft\\Windows\\Start Menu\\Programs");
@@ -54,7 +75,7 @@ export function handledSquirrelEvent(): boolean {
   switch (process.argv[1]) {
     case "--squirrel-install":
       spawnSync(updateExe, [`--createShortcut=${exe}`]);
-      app.setAsDefaultProtocolClient(scheme, launcherPath());
+      registerScheme();
       return true;
     case "--squirrel-updated": {
       // Only the shortcuts still there, so one the user deleted stays
@@ -68,7 +89,7 @@ export function handledSquirrelEvent(): boolean {
           `--shortcut-locations=${kept.join(",")}`,
         ]);
       }
-      app.setAsDefaultProtocolClient(scheme, launcherPath());
+      registerScheme();
       return true;
     }
     case "--squirrel-uninstall":

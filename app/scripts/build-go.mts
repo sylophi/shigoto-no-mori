@@ -11,6 +11,7 @@
 // Run: pnpm file-sync:build, pnpm nativefs:build, pnpm cli-launcher:build
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
+import { programFile } from "@shigomori/engine/executables";
 import { buildFlavor } from "../shared/packaging/buildFlavor.mts";
 import { cliBinaryName } from "../shared/packaging/cliDist.mts";
 import {
@@ -53,8 +54,7 @@ const helper = HELPERS[name];
 if (helper === undefined) {
   throw new Error(`Usage: build-go.mts <${Object.keys(HELPERS).join("|")}>`);
 }
-const exe = process.platform === "win32" ? ".exe" : "";
-const outfile = join(appRoot, helper.outfile + exe);
+const outfile = join(appRoot, programFile(helper.outfile));
 
 execFileSync(
   "go",

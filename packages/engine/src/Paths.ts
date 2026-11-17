@@ -7,8 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { expandHome as expandHomeIn } from "@shigomori/contracts/projectPaths";
-import { canonicalPath, onDrive } from "./canonicalPath.ts";
+import { canonicalPath, expandHomeAt } from "./canonicalPath.ts";
 import { type Flavor, flavorNames } from "./flavor.ts";
 import { rescueStrandedMove } from "./dataDirMoveJournal.ts";
 import { isAbsent, isNotFound } from "./platformErrors.ts";
@@ -112,8 +111,7 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
       byPlatform({ darwin: "HOME", linux: "HOME", win32: "USERPROFILE" }),
     ).pipe(Config.withDefault(".")),
   );
-  const expandHome = (target: string) =>
-    onDrive(expandHomeIn(home, canonicalPath(target)), path.resolve);
+  const expandHome = (target: string) => expandHomeAt(home, target);
 
   // A directory a pointer may aim at: one that doesn't exist yet, is
   // empty, or already holds sm's state, so a pointer at ~/Documents

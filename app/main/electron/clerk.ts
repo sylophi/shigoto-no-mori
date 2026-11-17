@@ -15,14 +15,14 @@
 import { flavor } from "../flavor";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { app, net, protocol } from "electron";
+import { net, protocol } from "electron";
 import { createClerkBridge } from "@clerk/electron";
 import type { TokenStorage } from "@clerk/electron";
 import { clerkTokenStorage } from "./clerkTokenStorage";
 import { clerkFrontendHost } from "@shigomori/contracts/accountServiceConfig";
 import { rendererContentPolicy } from "./contentPolicy";
-import { launcherPath } from "./squirrel";
-import { current as currentPlatform } from "@shigomori/engine/platform";
+import { registerScheme } from "./squirrel";
+import { byPlatform } from "@shigomori/engine/platform";
 import {
   RENDERER_SCHEME_HOST,
   rendererSchemeName,
@@ -75,18 +75,7 @@ export function createDesktopClerkBridge(): { cleanup: () => void } {
     storage: memoizedTokenStorage(),
     renderer: { scheme: rendererScheme(), host: RENDERER_SCHEME_HOST },
   });
-  // The bridge registers the scheme to this executable alone, which on
-  // Windows is the wrong one. In a dev run it is Electron's own, opening
-  // no app: Windows takes the app's folder as an argument before the
-  // link, and the other systems ignore it. In an install it is in a
-  // version folder the next update deletes.
-  if (!app.isPackaged) {
-    app.setAsDefaultProtocolClient(rendererScheme(), process.execPath, [
-      app.getAppPath(),
-    ]);
-  } else if (currentPlatform() === "win32") {
-    app.setAsDefaultProtocolClient(rendererScheme(), launcherPath());
-  }
+  byPlatform({ darwin: () => {}, linux: () => {}, win32: registerScheme })();
   return bridge;
 }
 

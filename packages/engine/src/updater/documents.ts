@@ -53,7 +53,7 @@ export class NotInBundle extends Schema.TaggedError<NotInBundle>()(
   {},
 ) {
   override get message(): string {
-    return "This binary isn't running from the installed app bundle, so there is nothing to update.";
+    return "This binary isn't running from an installed app, so there is nothing to update.";
   }
 }
 
