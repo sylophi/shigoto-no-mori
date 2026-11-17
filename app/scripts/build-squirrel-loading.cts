@@ -3,12 +3,9 @@
 //
 //   pnpm squirrel:loading
 //
-// Painted like the dmg's art (lib/artWindow.cts), from
-// scripts/squirrel-loading.html. Re-run this after a doubutsu palette
-// change. ffmpeg, which has to be on PATH, makes the GIF from the
-// frames.
-import type { ArtWindow } from "./lib/artWindow.cts";
-
+// Painted from scripts/squirrel-loading.html (lib/artWindow.mts).
+// Re-run this after a doubutsu palette change. ffmpeg, which has to be
+// on PATH, makes the GIF from the frames.
 const {
   spawnSync,
 }: typeof import("node:child_process") = require("node:child_process");
@@ -19,17 +16,19 @@ const {
 }: typeof import("node:fs") = require("node:fs");
 const { tmpdir }: typeof import("node:os") = require("node:os");
 const { dirname, join }: typeof import("node:path") = require("node:path");
-const { paintArt, capture }: ArtWindow = require("./lib/artWindow.cts");
+const {
+  paintArt,
+  capture,
+}: typeof import("./lib/artWindow.mts") = require("./lib/artWindow.mts");
 
 const OUT = join(dirname(__dirname), "assets", "squirrel-loading.gif");
-const SIZE = { width: 420, height: 232 };
 
 // One loop of the stripes at the app's own pace (ac-stripe-slide's
-// 0.6s), in 20 fps steps.
-const FRAMES = 12;
+// 0.6s).
 const FPS = 20;
+const FRAMES = 0.6 * FPS;
 
-paintArt("squirrel-loading.html", SIZE, async (win) => {
+paintArt("squirrel-loading.html", { width: 420, height: 232 }, async (win) => {
   await win.webContents.executeJavaScript("document.fonts.ready");
   const frames = mkdtempSync(join(tmpdir(), "squirrel-loading-"));
   try {
@@ -41,7 +40,7 @@ paintArt("squirrel-loading.html", SIZE, async (win) => {
       writeFileSync(
         join(frames, `${String(frame).padStart(2, "0")}.png`),
         // oxlint-disable-next-line no-await-in-loop -- as above
-        await capture(win, SIZE, frame === 0 ? 400 : 60),
+        await capture(win, frame === 0 ? 400 : 60),
       );
     }
     // One palette for the whole loop and no dither, so what holds still

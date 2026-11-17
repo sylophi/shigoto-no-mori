@@ -45,13 +45,15 @@
  *    and live in its runtime-loaded UI bundle -- re-verify by eye when
  *    the Clerk packages move.
  *
- * 5. One consumer links this file on its own:
- *    scripts/dmg-background.html, the dmg installer artwork, which
- *    renders against the leaf-wallpaper ::before, the header/footer
- *    band rule and the --doubutsu-* tokens. It is a committed png, so a
- *    broken hook there is invisible until someone opens a release, and
- *    a palette edit means rendering it again
- *    (scripts/build-dmg-background.cts).
+ * 5. The installer artwork links this file on its own:
+ *    scripts/dmg-background.html for the dmg and
+ *    scripts/squirrel-loading.html for the Windows installer, which
+ *    render against the leaf-wallpaper ::before, the header/footer
+ *    band rule and the --doubutsu-* tokens. Both are committed images,
+ *    so a broken hook there is invisible until someone opens a
+ *    release, and a palette edit means rendering them again
+ *    (scripts/build-dmg-background.cts,
+ *    scripts/build-squirrel-loading.cts).
  *
  * 6. Tailwind utility names (stable public API):
  *    .uppercase, .tracking-wide/-wider/-widest, .font-normal/-medium/
@@ -145,9 +147,10 @@
      elevation above, and the sliding stripe pattern below. Both resolve
      their var()s on the element, so the dark block's edge/stripe values
      flow through without a second definition. The installer artwork
-     (scripts/dmg-background.html) renders against these too, which is
-     what keeps its arrow and its cards on the same recipe as the app's
-     hover stripes and floating surfaces. */
+     (scripts/dmg-background.html, scripts/squirrel-loading.html)
+     renders against these too, which is what keeps its arrow, its bar
+     and its cards on the same recipe as the app's hover stripes and
+     floating surfaces. */
   --doubutsu-sticker-shadow: 0 5px 0 0 var(--doubutsu-edge);
   /* The small one, for a piece standing off a floating surface. */
   --doubutsu-sticker-shadow-sm: 0 2px 0 0 var(--doubutsu-edge);

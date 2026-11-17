@@ -3,31 +3,26 @@
 // so the artwork follows the rules the app ships rather than copies
 // that can drift.
 //
-// CommonJS, unlike the rest of scripts/: an ESM main process never sees
-// Electron's `ready` event fire (app.whenReady() simply never settles),
-// so an art script and this have to be .cts. An ESM module one needs
-// comes in by dynamic import.
-import type { BrowserWindow as Window } from "electron";
+// The script that runs under electron has to be CommonJS (.cts): an
+// ESM main process never sees Electron's `ready` event fire
+// (app.whenReady() simply never settles). It can require this.
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
+import electron, { type BrowserWindow } from "electron";
 
-const {
-  spawnSync,
-}: typeof import("node:child_process") = require("node:child_process");
-const { dirname, join }: typeof import("node:path") = require("node:path");
-const electron: typeof import("electron") | string = require("electron");
-
-const SCRIPTS = dirname(__dirname);
+const SCRIPTS = join(import.meta.dirname, "..");
 
 // Loads scripts/<page> at the given size, hands the window to `paint`,
 // and exits the process with how that went.
-function paintArt(
+export function paintArt(
   page: string,
   size: { readonly width: number; readonly height: number },
-  paint: (win: Window) => Promise<void>,
+  paint: (win: BrowserWindow) => Promise<void>,
 ): void {
   // A terminal launched from an Electron app (any agent harness, say)
   // exports ELECTRON_RUN_AS_NODE=1, which makes the electron binary
-  // behave as plain node. `require("electron")` then hands back a path
-  // string instead of the api, and nothing here works. Relaunch with it
+  // behave as plain node. "electron" then hands back a path string
+  // instead of the api, and nothing here works. Relaunch with it
   // cleared rather than failing with a puzzling TypeError.
   if (typeof electron === "string") {
     const { status } = spawnSync(process.execPath, process.argv.slice(1), {
@@ -73,24 +68,16 @@ function paintArt(
     });
 }
 
-// The page as it stands, at exactly this size. The wait is for the
-// webfont and the paint to settle. resize is a no-op while the scale
-// factor above holds, and keeps the output pinned to the requested
-// size if that ever stops being true.
-async function capture(
-  win: Window,
-  size: { readonly width: number; readonly height: number },
+// The page as it stands, once the webfont and the paint have had
+// `settleMs` to settle, at the window's size. The resize resamples
+// even at that size, so the committed art holds its pixels only with
+// it in.
+export async function capture(
+  win: BrowserWindow,
   settleMs: number,
 ): Promise<Buffer> {
   await new Promise((resolve) => setTimeout(resolve, settleMs));
+  const [width = 0, height = 0] = win.getContentSize();
   const image = await win.webContents.capturePage();
-  return image.resize({ ...size, quality: "best" }).toPNG();
+  return image.resize({ width, height, quality: "best" }).toPNG();
 }
-
-module.exports = { paintArt, capture };
-// What a require of this hands back, which TypeScript can't read off
-// the line above.
-export type ArtWindow = {
-  readonly paintArt: typeof paintArt;
-  readonly capture: typeof capture;
-};
