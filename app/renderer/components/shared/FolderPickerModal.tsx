@@ -29,7 +29,7 @@ export function FolderPickerModal({
   title?: string;
   confirmLabel?: string;
   // One line under the input explaining what the picked folder is for.
-  // Also shown by the native dialog (its message) when Finder is used.
+  // Also shown by the native dialog (its message).
   hint?: string;
   onPick: (path: string) => void;
   onClose: () => void;
@@ -102,7 +102,7 @@ export function FolderPickerModal({
   };
 
   const openFinder = async () => {
-    // Open Finder where the picker is, not at ~.
+    // Opens where the picker is, not at ~.
     const defaultPath = listing?.path;
     let picked: string | null;
     try {

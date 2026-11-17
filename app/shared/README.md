@@ -17,7 +17,7 @@ is here is the app's own.
   `layerLatch.ts`, `hostFacts.ts`, `cliLaunchers.ts`: what the host and
   the shell both compile (the data dir, the login shell's environment,
   the logger and tracer, the layer helpers, the facts the shell hands
-  its host, taking the terminal command off PATH on Windows).
+  its host, the terminal command's place on the Windows PATH).
 - `account/`: enrollment and the credential store both shells use.
 - `log.ts`: the app's `logger`, which writes Effect code's `Effect.log*`
   lines, and `log` for Promise code, so a line from either reads the

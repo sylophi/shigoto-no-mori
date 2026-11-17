@@ -1,12 +1,13 @@
-// The host's interactive shells. Each terminal is a login shell under a
-// PTY (../scripts/ScriptRuns.ts), a resource in a scope of its own under the
-// layer's: closing it is closing that scope, whose release is the kill
-// chain. A terminal belongs to a worktree, which it starts in with the
-// environment the worktree's scripts get and closes with, until it is
-// moved to another of its project's. Its main
-// screen and folder are saved (SavedTerminals) a moment after its
-// output changes and again as it closes, so after a quit or a crash the
-// next start opens a fresh shell there under that screen.
+// The host's interactive shells. Each terminal is this device's
+// interactive shell (Shells) under a PTY (../scripts/ScriptRuns.ts), a
+// resource in a scope of its own under the layer's: closing it is
+// closing that scope, whose release is the kill chain. A terminal
+// belongs to a worktree, which it starts in with the environment the
+// worktree's scripts get and closes with, until it is moved to another
+// of its project's. Its main screen and folder are saved
+// (SavedTerminals) a moment after its output changes and again as it
+// closes, so after a quit or a crash the next start opens a fresh shell
+// there under that screen.
 //
 // Its output goes out in chunks, numbered by `seq`, to every client
 // attached, through a bounded PubSub: a client that falls behind holds

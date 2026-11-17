@@ -57,9 +57,9 @@ const runDoctor = (fix: boolean) =>
 export const cliHandlers = {
   status: () => cliStatus,
   install: ({ force }) => installCli(force),
-  // Only ever removes what shigomori made (links it owns, hooks it
-  // wrote), so a foreign occupant survives this unchanged and the
-  // returned status says so.
+  // Only ever removes what shigomori made (the command it placed,
+  // hooks it wrote), so a foreign occupant survives this unchanged and
+  // the returned status says so.
   uninstall: () => Effect.andThen(uninstallCliEverything, cliStatus),
   shellStatus: () => shellIntegrationStatus,
   shellInstall: () => installShellIntegration,

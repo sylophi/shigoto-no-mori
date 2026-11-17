@@ -17,7 +17,7 @@ const CLI_ABOUT =
 // app runs its bundled binary directly and never needs the command on
 // PATH, so this is purely "do you want the command in your shell".
 //
-// Host-scoped: the links and rc files belong to whichever device the
+// Host-scoped: the command and rc files belong to whichever device the
 // section is mounted for, so a peer's section installs on the peer. A
 // peer refuses the status read without the command grant, and the
 // section then renders nothing rather than toasting a permission state.
