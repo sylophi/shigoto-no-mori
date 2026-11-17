@@ -162,8 +162,8 @@ export const startMirrorTo = (
               reason: `The files could not be brought in step: ${replica.error ?? "unknown error"}`,
             });
           }
-          // Short of it (a peer on a build without the call) the copy
-          // is still right, and only some of its files read changed.
+          // The copy's files are right either way: without this some of
+          // them only read changed, which is no reason to fail the start.
           yield* peerMirrorFor(input.targetDeviceId)
             .clearStaleSizes({ projectId: copy.projectId, worktreeId: copy.id })
             .pipe(

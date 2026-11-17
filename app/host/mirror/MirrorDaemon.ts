@@ -8,9 +8,9 @@
 // ends the child. The last snapshot stands through a restart, read as
 // stale until the next run sends its own. The engine never outlives
 // this process: besides the layer's close, it exits when its stdin
-// closes and on seeing its parent pid change (file-sync/main.go,
-// watchParent), so a host that dies uncleanly takes its daemon and
-// every serve child down with it.
+// closes and when it sees this process gone (file-sync, watchParent),
+// so a host that dies uncleanly takes its daemon and every serve child
+// down with it.
 //
 // Electron-free on purpose: the binary comes through the FileSync
 // service, so the mirror check drives this exact supervisor against a

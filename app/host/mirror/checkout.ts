@@ -50,9 +50,6 @@ export const readOriginal = Effect.fnUntraced(function* (worktreePath: string) {
     { concurrency: 2 },
   );
   const entries = splitZ(index);
-  const scripts = entries
-    .filter((entry) => entry.startsWith("100755 "))
-    .map((entry) => path.join(worktreePath, entry.slice(7)));
   return {
     checkout: {
       ...config,
@@ -61,7 +58,11 @@ export const readOriginal = Effect.fnUntraced(function* (worktreePath: string) {
     crlfScripts: yield* byFamily({
       posix: Effect.succeed(false),
       windows: Effect.map(
-        Effect.findFirst(scripts, crlfShebang),
+        Effect.findFirst(entries, (entry) =>
+          entry.startsWith("100755 ")
+            ? crlfShebang(path.join(worktreePath, entry.slice(7)))
+            : Effect.succeed(false),
+        ),
         Option.isSome,
       ),
     }),

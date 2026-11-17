@@ -79,11 +79,16 @@ import {
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isInstallingUpdate } from "./electron/updater";
 import { takeUpdateEndpointOverrides } from "@shared/updater/endpoints";
-import { current as currentPlatform } from "@shigomori/engine/platform";
+import {
+  byFamily,
+  current as currentPlatform,
+} from "@shigomori/engine/platform";
 import { uppercasePath } from "@shigomori/engine/environment";
 import { handledSquirrelEvent } from "./electron/squirrel";
 
-if (currentPlatform() === "win32" && handledSquirrelEvent()) process.exit(0);
+if (byFamily({ posix: () => false, windows: handledSquirrelEvent })()) {
+  process.exit(0);
+}
 
 uppercasePath();
 
