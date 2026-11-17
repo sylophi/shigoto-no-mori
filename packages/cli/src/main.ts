@@ -120,7 +120,7 @@ const sm = Command.make("sm").pipe(
     loaded(launchersCommand),
     shellCommand.pipe(
       Command.provide(
-        Layer.mergeAll(ShellIntegration.layer, Shells.layer(nativefs())).pipe(
+        Layer.mergeAll(ShellIntegration.layer, Shells.layer(nativefs)).pipe(
           Layer.provide(childDefaults),
           Layer.provideMerge(Paths.layer(flavor)),
         ),
@@ -166,7 +166,7 @@ const sm = Command.make("sm").pipe(
     dataCommand.pipe(Command.provide(services)),
     nuke.pipe(
       Command.provide(
-        Layer.merge(Paths.layer(flavor), ProcessTable.layer(nativefs())),
+        Layer.merge(Paths.layer(flavor), ProcessTable.layer(nativefs)),
       ),
     ),
     serviceCommand.pipe(Command.provide(Paths.layer(flavor))),

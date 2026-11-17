@@ -12,9 +12,6 @@ import { styles, type Styles } from "./output.ts";
 // A usage line, the description beside it, and the detail below it.
 type Item = readonly [usage: string, desc: string, detail: string];
 
-const POSIX_SHELL_INSTALL =
-  "A guarded eval line in .zshrc/.bashrc (marker-fenced) or a fish conf.d drop-in. Defaults to your login shell.";
-
 type Names = ReturnType<typeof flavorNames>;
 
 const catalog = (names: Names) => {
@@ -440,7 +437,8 @@ const catalog = (names: Names) => {
         "shell install [<shell>]",
         "Hook shell integration into your shell config",
         byFamily({
-          posix: POSIX_SHELL_INSTALL,
+          posix:
+            "A guarded eval line in .zshrc/.bashrc (marker-fenced) or a fish conf.d drop-in. Defaults to your login shell.",
           windows:
             "A guarded eval line in the PowerShell profile or .zshrc/.bashrc (marker-fenced), or a fish conf.d drop-in. Defaults to PowerShell, which terminals run here.",
         }),

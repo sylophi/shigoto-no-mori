@@ -1,7 +1,8 @@
 // Where a project's new worktrees go, as path math: the managed root
 // under the data dir, the in-project folder, a custom base, and the
 // project's own external drive. The engine places worktrees by it and
-// the renderer previews them by it, so it is posix strings only.
+// the renderer previews them by it, so it works on strings alone,
+// spelled as projectPaths.ts spells them.
 
 import {
   cleanPath,

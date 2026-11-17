@@ -5,8 +5,6 @@
 // filename character on POSIX. How paths are spelled, and where they are
 // made so: packages/engine/src/canonicalPath.ts.
 
-const TRAILING_SEPS = /\/+$/;
-
 export function hasTrailingSlash(value: string): boolean {
   return value.endsWith("/");
 }
@@ -34,7 +32,7 @@ export function appendBrowsePathSegment(
 }
 
 export function getBrowseParentPath(currentPath: string): string | null {
-  const trimmed = currentPath.replace(TRAILING_SEPS, "");
+  const trimmed = trimTrailingSlashes(currentPath);
   if (trimmed === "~" || pathRoot(`${trimmed}/`) === `${trimmed}/`) return null;
   const idx = trimmed.lastIndexOf("/");
   if (idx < 0) return null;
@@ -55,7 +53,7 @@ export function normalizeForSubmit(value: string): string {
   const trimmed = value.trim();
   if (trimmed !== "" && trimmed === pathRoot(trimmed))
     return cleanPath(trimmed);
-  return trimmed.replace(TRAILING_SEPS, "");
+  return trimTrailingSlashes(trimmed);
 }
 
 // The helpers below take a path as the engine spells it: `/` separated
@@ -76,7 +74,7 @@ function pathRoot(path: string): string {
 export const isWindowsPath = (path: string) => pathRoot(`${path}/`).length > 1;
 
 export function trimTrailingSlashes(path: string): string {
-  return path.replace(TRAILING_SEPS, "");
+  return path.replace(/\/+$/, "");
 }
 
 // Whether two paths name the same folder. Windows' file systems ignore
