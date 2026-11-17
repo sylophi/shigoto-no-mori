@@ -25,10 +25,10 @@
 import { realpathSync } from "node:fs";
 import * as NodePath from "node:path";
 import { expandHome } from "@shigomori/contracts/projectPaths";
-import { byPlatform } from "./platform.ts";
+import { byFamily } from "./platform.ts";
 
 export const canonicalPath = (raw: string): string =>
-  byPlatform({ darwin: posixPath, linux: posixPath, win32: windowsPath })(raw);
+  byFamily({ posix: posixPath, windows: windowsPath })(raw);
 
 export const join = (...paths: ReadonlyArray<string>) =>
   canonicalPath(NodePath.join(...paths));
@@ -42,10 +42,9 @@ export const resolve = (...paths: ReadonlyArray<string>) =>
 // (canonicalPlatform.ts).
 export const realpath = (path: string) =>
   canonicalPath(
-    byPlatform({
-      darwin: realpathSync,
-      linux: realpathSync,
-      win32: realpathSync.native,
+    byFamily({
+      posix: realpathSync,
+      windows: realpathSync.native,
     })(path),
   );
 
@@ -56,10 +55,9 @@ const posixPath = (raw: string) => raw.replace(/^\/+/, "/");
 // spelled with it.
 export const expandHomeAt = (home: string, typed: string) => {
   const path = expandHome(home, canonicalPath(typed));
-  return byPlatform({
-    darwin: () => path,
-    linux: () => path,
-    win32: () => (/^\/(?!\/)/.test(path) ? resolve(path) : path),
+  return byFamily({
+    posix: () => path,
+    windows: () => (/^\/(?!\/)/.test(path) ? resolve(path) : path),
   })();
 };
 

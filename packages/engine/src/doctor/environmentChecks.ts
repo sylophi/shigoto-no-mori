@@ -20,7 +20,7 @@ import { unitState } from "../hostUnit.ts";
 import { installedVersionOf, linuxInstall } from "../linuxInstall.ts";
 import { appFoldersOf } from "../Launchers.ts";
 import * as Paths from "../Paths.ts";
-import { byPlatform } from "../platform.ts";
+import { byFamily, byPlatform } from "../platform.ts";
 import {
   windowsCliBinDir,
   windowsInstallRoot,
@@ -326,10 +326,9 @@ export const makeEnvironmentChecks = ({
     // The file a PATH entry runs: on Windows, a launcher in this binary's
     // install runs this binary.
     const resolvedOf = (candidate: string, executable: string) => {
-      const runs = byPlatform({
-        darwin: candidate,
-        linux: candidate,
-        win32: samePath(
+      const runs = byFamily({
+        posix: candidate,
+        windows: samePath(
           path.dirname(candidate),
           canonicalPath(windowsCliBinDir(path.dirname(executable))),
         )

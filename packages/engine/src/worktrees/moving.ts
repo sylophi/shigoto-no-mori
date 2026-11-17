@@ -25,7 +25,7 @@ import { findExecutable } from "../executables.ts";
 import * as Git from "../Git.ts";
 import { releaseHolders } from "../Holders.ts";
 import { copyTree } from "../entries.ts";
-import { byPlatform } from "../platform.ts";
+import { byFamily } from "../platform.ts";
 import * as ProcessTable from "../ProcessTable.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
@@ -43,10 +43,9 @@ import type { RemovingArea } from "./removing.ts";
 // How git words the rename(2) that can't cross volumes (EXDEV): its C
 // library's text for the error, the only trace of the code it leaves.
 const crossDevice = () =>
-  byPlatform({
-    darwin: "cross-device link",
-    linux: "cross-device link",
-    win32: "improper link",
+  byFamily({
+    posix: "cross-device link",
+    windows: "improper link",
   });
 
 type MovingRow = {

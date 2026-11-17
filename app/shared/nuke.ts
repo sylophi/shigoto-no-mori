@@ -23,7 +23,7 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { DEV_PROFILES_DIR } from "@shared/packaging/appName.mts";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byFamily } from "@shigomori/engine/platform";
 import {
   dataDir,
   dataDirPointerPath,
@@ -114,10 +114,9 @@ export function writeNukeMarker(
 
 // Chromium's single-instance lock in userData.
 const isLockFile = (entry: string) =>
-  byPlatform({
-    darwin: entry.startsWith("Singleton"),
-    linux: entry.startsWith("Singleton"),
-    win32: entry === "lockfile",
+  byFamily({
+    posix: entry.startsWith("Singleton"),
+    windows: entry === "lockfile",
   });
 
 // What a start that found a marker couldn't delete, and why, or null

@@ -88,7 +88,7 @@ import type * as Scope from "effect/Scope";
 import * as SqlClient from "effect/sql/SqlClient";
 import type * as Types from "effect/Types";
 import { DataDirLock } from "./DataDirLock.ts";
-import { byPlatform } from "./platform.ts";
+import { byFamily } from "./platform.ts";
 import { dirtyRef } from "./Dirty.ts";
 import {
   JOURNAL,
@@ -593,12 +593,11 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       Effect.flatMap(fs.open(at, { flag }), (handle) => handle.sync),
     );
   const flushedFile = (at: string) =>
-    synced(at, byPlatform({ darwin: "r", linux: "r", win32: "r+" } as const));
+    synced(at, byFamily({ posix: "r", windows: "r+" } as const));
   const flushedFolder = (at: string) =>
-    byPlatform({
-      darwin: synced(at, "r"),
-      linux: synced(at, "r"),
-      win32: Effect.void,
+    byFamily({
+      posix: synced(at, "r"),
+      windows: Effect.void,
     });
   const underFrom = (at: string) =>
     move.spellings.find((dir) => isSameOrInside(at, dir));
@@ -738,10 +737,9 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       Effect.catchIf(crossesVolumes, () => Effect.succeed(false)),
       Effect.uninterruptible,
     );
-    const sameVolume = yield* byPlatform({
-      darwin: rename,
-      linux: rename,
-      win32: Effect.succeed(false),
+    const sameVolume = yield* byFamily({
+      posix: rename,
+      windows: Effect.succeed(false),
     });
     if (!sameVolume) {
       const partial = `${to}.partial-${suffix}`;

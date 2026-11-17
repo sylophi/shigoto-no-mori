@@ -36,7 +36,7 @@ import {
 } from "../core/liveness/rateLimit";
 import { log } from "@shared/log";
 import { names } from "../flavor";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byFamily } from "@shigomori/engine/platform";
 import { setLoginItem as setSquirrelLoginItem } from "./squirrel";
 
 // Inert on a build with no account service: the setting exists so a
@@ -72,10 +72,9 @@ function reconcileLaunchAtLogin(): void {
     return;
   }
   try {
-    byPlatform({
-      darwin: setLoginItem,
-      linux: setLoginItem,
-      win32: setSquirrelLoginItem,
+    byFamily({
+      posix: setLoginItem,
+      windows: setSquirrelLoginItem,
     })(keepReachable);
   } catch (error) {
     log.error(

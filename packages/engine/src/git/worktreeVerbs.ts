@@ -6,7 +6,7 @@ import * as Path from "effect/Path";
 import { canonicalPath } from "../canonicalPath.ts";
 import type { CheckoutConfig } from "../gitIndex.ts";
 import { parseWorktreeList, splitLines, splitRemoteRef } from "../gitParse.ts";
-import { byPlatform } from "../platform.ts";
+import { byFamily } from "../platform.ts";
 import { GitCommandError } from "./documents.ts";
 import type { RunningArea } from "./running.ts";
 
@@ -118,10 +118,9 @@ export const makeWorktreeVerbs = ({
               ? "lf"
               : eol === "lf" || eol === "crlf"
                 ? eol
-                : byPlatform({
-                    darwin: "lf",
-                    linux: "lf",
-                    win32: "crlf",
+                : byFamily({
+                    posix: "lf",
+                    windows: "crlf",
                   } as const),
         symlinks: symlinks ?? true,
       } satisfies CheckoutConfig;

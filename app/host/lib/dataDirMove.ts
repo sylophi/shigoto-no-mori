@@ -15,7 +15,7 @@ import * as Path from "effect/Path";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as DataDirMove from "@shigomori/engine/dataDirMove";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byFamily } from "@shigomori/engine/platform";
 import { busyRefusal } from "@shared/busy";
 import { fsStep } from "./dataDirMove/files";
 import { posix } from "./dataDirMove/posix";
@@ -69,7 +69,7 @@ export const sessionPlace = Effect.try({
 });
 
 // The copy to another volume and its flush, each OS's own.
-const tree = () => byPlatform({ darwin: posix, linux: posix, win32: windows });
+const tree = () => byFamily({ posix, windows });
 
 export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // The new parent, or undefined to reset to the default location.

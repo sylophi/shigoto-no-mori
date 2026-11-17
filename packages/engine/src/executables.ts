@@ -7,13 +7,13 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { envVar } from "./environment.ts";
-import { byPlatform } from "./platform.ts";
+import { byFamily } from "./platform.ts";
 
 // The file a program of ours is built as.
 export const programFile = (name: string) =>
-  name + byPlatform({ darwin: "", linux: "", win32: ".exe" });
+  name + byFamily({ posix: "", windows: ".exe" });
 
-const pathSeparator = () => byPlatform({ darwin: ":", linux: ":", win32: ";" });
+const pathSeparator = () => byFamily({ posix: ":", windows: ";" });
 
 export const joinSearchPath = (dirs: ReadonlyArray<string>) =>
   dirs.join(pathSeparator());
@@ -28,10 +28,9 @@ const windowsExtensions = Effect.map(envVar("PATHEXT"), (exts) =>
 
 // The extensions Windows runs a file by, lower-cased. None elsewhere.
 export const pathExtensions = () =>
-  byPlatform({
-    darwin: noExtensions,
-    linux: noExtensions,
-    win32: windowsExtensions,
+  byFamily({
+    posix: noExtensions,
+    windows: windowsExtensions,
   });
 
 const hasExtension = (exts: ReadonlyArray<string>, file: string) =>
@@ -63,7 +62,7 @@ export const isRunnable = (file: string, mode: number) => {
   const byExtension = Effect.map(windowsExtensions, (exts) =>
     hasExtension(exts, file),
   );
-  return byPlatform({ darwin: byMode, linux: byMode, win32: byExtension });
+  return byFamily({ posix: byMode, windows: byExtension });
 };
 
 // The program's full path on `searched`, none when it has no such
@@ -85,10 +84,9 @@ export const findOn = Effect.fn("findOn")(function* (
     // WindowsApps entry), which still runs.
     const byExtension = Effect.succeed(hasExtension(exts, candidate));
     const runnable =
-      (yield* byPlatform({
-        darwin: isFile(candidate),
-        linux: isFile(candidate),
-        win32: byExtension,
+      (yield* byFamily({
+        posix: isFile(candidate),
+        windows: byExtension,
       })) &&
       (yield* Effect.tryPromise(() => access(candidate, constants.X_OK)).pipe(
         Effect.isSuccess,

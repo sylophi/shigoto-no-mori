@@ -30,7 +30,7 @@ import {
 } from "../../shared/packaging/appName.mts";
 import { cliDataDirName } from "../../shared/packaging/cliDist.mts";
 import { flavorNames } from "@shigomori/engine/flavor";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byFamily, byPlatform } from "@shigomori/engine/platform";
 
 const PROFILES_DIR = join(homedir(), `${cliDataDirName("dev")}-profiles`);
 
@@ -180,10 +180,9 @@ function wipeDevProfile(profile: DevProfile): void {
 // instances on one machine. Windows encrypts it with a key kept in
 // userData's `Local State`, which goes along.
 const TOKEN_STORE_FILE = `${CLERK_TOKEN_STORE}.json`;
-const CLONED_FILES = byPlatform({
-  darwin: [TOKEN_STORE_FILE],
-  linux: [TOKEN_STORE_FILE],
-  win32: [TOKEN_STORE_FILE, "Local State"],
+const CLONED_FILES = byFamily({
+  posix: [TOKEN_STORE_FILE],
+  windows: [TOKEN_STORE_FILE, "Local State"],
 });
 
 // Throws, naming what to do, unless the plain dev instance holds a

@@ -6,7 +6,7 @@
 // behavior is repairCli: silently putting back an install the user
 // already made when its target moved, so it keeps working across app
 // updates and relocations.
-import { byPlatform } from "@shigomori/engine/platform";
+import { byFamily } from "@shigomori/engine/platform";
 import { cliBinaryOf } from "./binary";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
@@ -17,8 +17,7 @@ import { launchers } from "./launchers";
 import { links } from "./links";
 import type { Facts } from "./placement";
 
-const placement = () =>
-  byPlatform({ darwin: links, linux: links, win32: launchers });
+const placement = () => byFamily({ posix: links, windows: launchers });
 
 // The install's state, and the install, for the handlers. A refusal
 // crosses the wire in its own words.

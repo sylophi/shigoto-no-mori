@@ -1,10 +1,12 @@
 # Cutting a prerelease
 
-The `Release` workflow (`../.github/workflows/release.yml`) builds and
-smokes a release for macOS, Linux and Windows once it is published,
-signing and notarizing the Mac's. These gates come
-first, on the machine that cuts, at the tip about to be tagged and in
-this order. A failure at any of them stops the cut.
+The `Release` workflow (`../.github/workflows/release.yml`) runs once
+a release is published. Its `tag` job checks the tag, then the macOS,
+Linux and Windows builds run side by side, each smoking what it built,
+the Mac's signed and notarized. Its `attach` job adds their assets to
+the release only once all three have passed. These gates come first,
+on the machine that cuts, at the tip about to be tagged and in this
+order. A failure at any of them stops the cut.
 
 ## 1. The tip as a packaged lab build
 
@@ -25,8 +27,8 @@ instance refuses a test flavor's origin.
 
 The previous prerelease, installed on this machine and signed in, takes
 the tip through Settings' "Restart to update" and comes back on it,
-signed in. The tip has no release until it is tagged, and the release
-job builds only once one is published, so the installed app is offered
+signed in. The tip has no release until it is tagged, and the
+workflow builds only once one is published, so the installed app is offered
 a local build of it. From `app/`, with the signing identity set for
 both the package and the smoke:
 

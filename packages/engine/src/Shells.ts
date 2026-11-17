@@ -5,7 +5,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Option from "effect/Option";
-import { byPlatform } from "./platform.ts";
+import { byFamily } from "./platform.ts";
 import type { NoScriptShell } from "./shells/documents.ts";
 import { makeLogin } from "./shells/login.ts";
 import { makeWindows } from "./shells/windows.ts";
@@ -86,10 +86,9 @@ export class Shells extends Context.Service<
 const make = (nativefs: string) =>
   Effect.gen(function* () {
     return Shells.of(
-      yield* byPlatform({
-        darwin: makeLogin,
-        linux: makeLogin,
-        win32: makeWindows(nativefs),
+      yield* byFamily({
+        posix: makeLogin,
+        windows: makeWindows(nativefs),
       }),
     );
   });

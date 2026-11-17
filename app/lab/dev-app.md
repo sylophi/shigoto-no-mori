@@ -25,7 +25,7 @@ one place (`main/flavor.ts`), which hands it to the host.
 | On a project's drive  | `/Volumes/<drive>/.sm/wt`                       | `/Volumes/<drive>/.smd/wt`                                               |
 | Data dir pointer file | `~/.config/shigomori/data-dir`                  | `~/.config/shigomori-dev/data-dir`                                       |
 | userData (macOS)      | `~/Library/Application Support/Shigoto no Mori` | `~/Library/Application Support/Shigoto no Mori (dev)`                    |
-| Logs                  | `~/Library/Logs/Shigoto no Mori/`               | `~/Library/Logs/Shigoto no Mori (Dev)/`, a profile's with ` [<profile>]` |
+| Logs (macOS)          | `~/Library/Logs/Shigoto no Mori/`               | `~/Library/Logs/Shigoto no Mori (Dev)/`, a profile's with ` [<profile>]` |
 | Keychain item         | `Shigoto no Mori Safe Storage`                  | none on macOS (mock keychain)                                            |
 | file-sync state       | `<data dir>/file-sync`                          | `<data dir>/file-sync`                                                   |
 | Single-instance lock  | in its userData                                 | in its userData                                                          |

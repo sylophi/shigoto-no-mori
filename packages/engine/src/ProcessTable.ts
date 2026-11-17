@@ -5,7 +5,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { byPlatform } from "./platform.ts";
+import { byFamily } from "./platform.ts";
 import { type CommandError, pidAlive } from "./processes.ts";
 import { makeNativefs } from "./processTable/nativefs.ts";
 import { makePs } from "./processTable/ps.ts";
@@ -65,10 +65,9 @@ export class ProcessTable extends Context.Service<
 // `nativefs` is the helper that reads the table on Windows.
 const make = (nativefs: string) =>
   Effect.gen(function* () {
-    const table = yield* byPlatform({
-      darwin: makePs,
-      linux: makePs,
-      win32: makeNativefs(nativefs),
+    const table = yield* byFamily({
+      posix: makePs,
+      windows: makeNativefs(nativefs),
     });
 
     // A live pid born at another time is another process the system

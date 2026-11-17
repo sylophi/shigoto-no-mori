@@ -3,7 +3,7 @@ import { access, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byFamily } from "@shigomori/engine/platform";
 import { toAbsolute } from "@shared/paths";
 
 async function listDirectory(path: string) {
@@ -56,10 +56,10 @@ async function listDrives() {
 export const listFolder = (path: string) =>
   Effect.tryPromise({
     try: () =>
-      byPlatform({
-        darwin: listDirectory,
-        linux: listDirectory,
-        win32: (at: string) => (at === "/" ? listDrives() : listDirectory(at)),
+      byFamily({
+        posix: listDirectory,
+        windows: (at: string) =>
+          at === "/" ? listDrives() : listDirectory(at),
       })(path),
     catch: callFailureOf,
   });

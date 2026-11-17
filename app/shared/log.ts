@@ -2,7 +2,7 @@
 // Effect (EFFECT.md, section 3), which writes the same lines without
 // running an effect. A line goes to the console at its level, with a
 // failure's cause after the message. In the desktop main process
-// electron-log owns the console and writes it to ~/Library/Logs
+// electron-log owns the console and writes it to the app's logs folder
 // (main/electron/logFile.ts). In a renderer the console is the
 // devtools'.
 import * as Cause from "effect/Cause";

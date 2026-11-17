@@ -29,6 +29,19 @@ Every side logs through `shared/log.ts`: Effect code with `Effect.log*`,
 which its `logger` writes, and Promise code with `log`, into the
 console and the trace.
 
+## On Windows
+
+Developing on Windows needs Git for Windows, since a project's scripts
+and the engine's sh run in its Git Bash, and PowerShell 7 or Windows
+PowerShell, which terminals run. The build needs Node, pnpm, Go (for
+`file-sync/`, `nativefs/` and `cli-launcher/`) and Bun (for the
+terminal `sm`), as on the other OSes. Install scripts are off, so run
+`pnpm run postinstall` after `pnpm install`. Windows has the desktop
+app only, with no headless host or service, on x64, and its builds are
+unsigned. The builds are in `lab/dev-app.md`, device windows in
+`lab/devices.md`, which notes Windows' own steps, and the release in
+`lab/release.md`.
+
 ## Layout
 
 One UI, two shells. The desktop window and the browser tab render the

@@ -8,7 +8,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { byPlatform } from "./platform.ts";
+import { byFamily } from "./platform.ts";
 
 // A worktree, or without `worktreeId` every one of the project.
 type Owner = { readonly projectId: string; readonly worktreeId?: string };
@@ -19,10 +19,9 @@ export class Holders extends Context.Service<
 >()("sm/engine/Holders") {}
 
 export const releaseHolders = (owner: Owner) =>
-  byPlatform({
-    darwin: Effect.void,
-    linux: Effect.void,
-    win32: Effect.flatMap(Effect.serviceOption(Holders), (holders) =>
+  byFamily({
+    posix: Effect.void,
+    windows: Effect.flatMap(Effect.serviceOption(Holders), (holders) =>
       Option.isNone(holders) ? Effect.void : holders.value.release(owner),
     ),
   });

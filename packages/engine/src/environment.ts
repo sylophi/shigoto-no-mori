@@ -1,7 +1,7 @@
 // Reading the process's environment through Effect's Config.
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import { byPlatform } from "./platform.ts";
+import { byFamily } from "./platform.ts";
 
 // An environment variable, empty when unset.
 export const envVar = (name: string) =>
@@ -13,10 +13,9 @@ export const envVar = (name: string) =>
 // PATH, the one set over copies, is renamed upper case once at start.
 // The rest keep theirs, as Git Bash reads names by case.
 export const uppercasePath = () =>
-  byPlatform({
-    darwin: () => {},
-    linux: () => {},
-    win32: () => {
+  byFamily({
+    posix: () => {},
+    windows: () => {
       const path = process.env["PATH"];
       delete process.env["PATH"];
       process.env["PATH"] = path;

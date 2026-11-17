@@ -19,7 +19,7 @@ import * as Stream from "effect/Stream";
 import { startOnWindows } from "./batchFiles.ts";
 import { findOn } from "./executables.ts";
 import { keptAnswers } from "./keptAnswers.ts";
-import { byPlatform } from "./platform.ts";
+import { byFamily } from "./platform.ts";
 import { isMissingProgram } from "./platformErrors.ts";
 import * as Shells from "./Shells.ts";
 import { CD_FILE_ENV } from "./shellHook.ts";
@@ -89,10 +89,9 @@ export const childDefaults = Layer.effect(
   ChildProcessSpawner.ChildProcessSpawner,
   Effect.gen(function* () {
     const inner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const spawn = yield* byPlatform({
-      darwin: Effect.succeed(inner.spawn),
-      linux: Effect.succeed(inner.spawn),
-      win32: windowsSpawner(inner),
+    const spawn = yield* byFamily({
+      posix: Effect.succeed(inner.spawn),
+      windows: windowsSpawner(inner),
     });
     return ChildProcessSpawner.make((command) => spawn(withDefaults(command)));
   }),
@@ -270,10 +269,9 @@ export const readToExit = <A, E, R>(
     const endGroup = handle
       .kill({ forceKillAfter: KILL_GRACE })
       .pipe(Effect.ignore);
-    yield* byPlatform({
-      darwin: endGroup,
-      linux: endGroup,
-      win32: Effect.void,
+    yield* byFamily({
+      posix: endGroup,
+      windows: Effect.void,
     });
     return { read: yield* Fiber.join(reading), code: Number(code) };
   });
