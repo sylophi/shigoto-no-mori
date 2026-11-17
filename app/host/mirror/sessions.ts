@@ -162,6 +162,18 @@ export const startMirrorTo = (
               reason: `The files could not be brought in step: ${replica.error ?? "unknown error"}`,
             });
           }
+          // Short of it (a peer on a build without the call) the copy
+          // is still right, and only some of its files read changed.
+          yield* peerMirrorFor(input.targetDeviceId)
+            .clearStaleSizes({ projectId: copy.projectId, worktreeId: copy.id })
+            .pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning(
+                  "[mirror] could not clear the copy's stale index sizes:",
+                  cause,
+                ),
+              ),
+            );
           // A session the open made is ended again if the start was
           // cancelled before it was in.
           return yield* Effect.acquireRelease(
