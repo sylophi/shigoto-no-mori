@@ -17,6 +17,8 @@ export type Row = {
   // On Windows the image's name, and the command line only for the
   // pids a table was asked to name.
   command: string;
+  // On Windows the pid of its console's host, absent for none.
+  console?: number;
 };
 
 const windows = process.platform === "win32";
@@ -79,6 +81,7 @@ type Listed = {
   birth: number;
   name: string;
   command?: string;
+  console?: number;
 };
 
 function nativefsTable(named: ReadonlyArray<number> = []): Map<number, Row> {
@@ -89,7 +92,9 @@ function nativefsTable(named: ReadonlyArray<number> = []): Map<number, Row> {
   const rows = new Map<number, Row>();
   for (const line of lines) {
     if (line.trim() === "") continue;
-    const { pid, parent, birth, name, command } = JSON.parse(line) as Listed;
+    const { pid, parent, birth, name, command, console } = JSON.parse(
+      line,
+    ) as Listed;
     if (pid === self) continue;
     rows.set(pid, {
       ppid: parent,
@@ -97,6 +102,7 @@ function nativefsTable(named: ReadonlyArray<number> = []): Map<number, Row> {
       zombie: false,
       start: birth,
       command: command ?? name,
+      console,
     });
   }
   return rows;

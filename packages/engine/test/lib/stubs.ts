@@ -38,10 +38,12 @@ export const writeStub = (dir: string, name: string, script: string) => {
   );
 };
 
+const tools: Record<string, string> = {};
 // Where a real tool is, for a stub to hand on to: as sh finds it.
 export const realTool = (tool: string) =>
-  process.platform === "win32"
-    ? execFileSync(gitBashSh(), ["-c", `command -v ${tool}`], {
-        encoding: "utf8",
-      }).trim()
-    : execFileSync("/usr/bin/which", [tool], { encoding: "utf8" }).trim();
+  (tools[tool] ??=
+    process.platform === "win32"
+      ? execFileSync(gitBashSh(), ["-c", `command -v ${tool}`], {
+          encoding: "utf8",
+        }).trim()
+      : execFileSync("/usr/bin/which", [tool], { encoding: "utf8" }).trim());

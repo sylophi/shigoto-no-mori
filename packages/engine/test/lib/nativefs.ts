@@ -14,11 +14,10 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { isolatedGitEnv } from "../../../../test/gitIsolation.ts";
+import { programFile } from "../../src/executables.ts";
 
 const dir = join(import.meta.dirname, "..", "..", "..", "..", "nativefs");
 let built: string | undefined;
-
-export const EXE = process.platform === "win32" ? ".exe" : "";
 
 export function nativefs(): string {
   if (built !== undefined) return built;
@@ -37,7 +36,7 @@ export function nativefs(): string {
   const binary = join(
     tmpdir(),
     `nativefs-${hash.digest("hex").slice(0, 16)}`,
-    `nativefs${EXE}`,
+    programFile("nativefs"),
   );
   if (!existsSync(binary)) {
     mkdirSync(dirname(binary), { recursive: true });

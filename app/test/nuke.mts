@@ -21,15 +21,9 @@ import { basename } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterAll, beforeAll, it } from "vitest";
 import { readOnly } from "../../packages/engine/test/lib/holds.ts";
-import { isSameOrInside } from "../../packages/contracts/src/projectPaths.ts";
-import {
-  canonicalPath,
-  join,
-} from "../../packages/engine/src/canonicalPath.ts";
-import {
-  footprint,
-  removeLeftovers,
-} from "../../packages/engine/src/footprint.ts";
+import { isSameOrInside } from "@shigomori/contracts/projectPaths";
+import { canonicalPath, join } from "@shigomori/engine/canonicalPath";
+import { footprint, removeLeftovers } from "@shigomori/engine/footprint";
 import { runHost } from "./lib/hostRuntime.mts";
 import { cliSandbox } from "./lib/cliSandbox.mts";
 import {
@@ -303,12 +297,7 @@ it("keeps each build's footprint its own: no path of one is or holds another's",
       id,
       path: canonicalPath(path),
     }));
-    const userData = join(
-      place.home,
-      "AppData",
-      "Roaming",
-      "Shigoto no Mori (lab)",
-    );
+    const userData = join(place.appData, "Shigoto no Mori (lab)");
     assert.deepEqual(
       lab.filter(({ id }) => ["userData", "logs", "preferences"].includes(id)),
       [

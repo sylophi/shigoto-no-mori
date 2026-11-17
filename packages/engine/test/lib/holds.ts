@@ -1,8 +1,12 @@
 // What a test makes refuse what it needs refused, by the means each OS
 // has: a mode on macOS and Linux, entries denying everyone in the ACL on
 // Windows, whose modes deny the owner nothing. Each answers its release.
-import { execFileSync } from "node:child_process";
-import { chmodSync, statSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
+import { chmodSync, existsSync, statSync } from "node:fs";
+import * as Effect from "effect/Effect";
+import { onTestFinished } from "vitest";
+import { Holders } from "../../src/Holders.ts";
 
 const deny = (at: string, ...rights: ReadonlyArray<string>) => {
   for (const right of rights) {
@@ -35,3 +39,36 @@ export const readOnly = (folder: string): (() => void) =>
 // leads.
 export const unlistable = (folder: string): (() => void) =>
   process.platform === "win32" ? deny(folder, "(RD)") : chmod(folder, 0o311);
+
+// A process working in `dir`, and the app's side of Holders, which ends
+// it and notes whom it was asked for and whether `dir` was there then.
+// `settle` ends it before the sandbox goes, as Windows deletes no folder
+// a process works in, and answers whether it was still running.
+export const heldIn = (dir: string) => {
+  const held = spawn(process.execPath, ["-e", "setInterval(() => {}, 1e9)"], {
+    cwd: dir,
+    stdio: "ignore",
+  });
+  onTestFinished(() => {
+    held.kill();
+  });
+  const end = async () => {
+    const exited = once(held, "exit");
+    held.kill();
+    await exited;
+  };
+  const told: Array<{ owner: object; filesThere: boolean }> = [];
+  const holders = Holders.of({
+    release: (owner) =>
+      Effect.promise(async () => {
+        told.push({ owner, filesThere: existsSync(dir) });
+        await end();
+      }),
+  });
+  const settle = async () => {
+    const alive = held.exitCode === null && held.signalCode === null;
+    if (alive) await end();
+    return alive;
+  };
+  return { holders, told, settle };
+};
