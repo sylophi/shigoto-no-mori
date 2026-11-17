@@ -122,7 +122,11 @@ export const startMirrorTo = (
       ctx,
       input.worktreeId,
       Effect.gen(function* () {
-        const { source, result: sent } = yield* sendWorktree(sendInput, ctx, {
+        const {
+          source,
+          crlfScripts,
+          result: sent,
+        } = yield* sendWorktree(sendInput, ctx, {
           mirror: true,
           onCopy: noteCopy,
         });
@@ -188,7 +192,7 @@ export const startMirrorTo = (
           "started",
           summarizeIgnores(ignoreMode, ignores),
         );
-        return { ...sent, session };
+        return { ...sent, session, crlfScripts };
       }).pipe(
         Effect.onError(() =>
           Effect.sync(() => ledger.forgetStarting(input.worktreeId)),

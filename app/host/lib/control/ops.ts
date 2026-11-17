@@ -401,7 +401,11 @@ export const send = settled<"send">((input, ctx) =>
         : {}),
     };
     if (mirror) {
-      const { session, ...sent } = yield* startMirrorTo(payload, ctx);
+      const {
+        session,
+        crlfScripts: _crlfScripts,
+        ...sent
+      } = yield* startMirrorTo(payload, ctx);
       return {
         done: { ...sent, device, copySide: "remote" as const, session },
       };
@@ -519,7 +523,11 @@ export const bring = settled<"bring">((input, ctx) =>
       if (running !== undefined) {
         return { done: yield* alreadyMirrored(running, undefined) };
       }
-      const { session, ...pulled } = yield* startMirrorFrom(
+      const {
+        session,
+        crlfScripts: _crlfScripts,
+        ...pulled
+      } = yield* startMirrorFrom(
         {
           sourceDeviceId: found.device.deviceId,
           sourceProjectId: found.projectId,

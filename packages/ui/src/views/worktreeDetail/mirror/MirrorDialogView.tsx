@@ -7,6 +7,7 @@ import { Chip } from "../../../primitives/chip-button.tsx";
 import { SectionHeading } from "../../../primitives/section-heading.tsx";
 import { type StatusTone, StatusDot } from "../../../primitives/status-dot.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
+import { Warning } from "../../../primitives/warning.tsx";
 import { cn } from "../../../lib/utils.ts";
 import { CARD } from "../flow/FlowChromeView.tsx";
 import { DialogBody, DialogFooter } from "../../../primitives/dialog.tsx";
@@ -77,6 +78,7 @@ export function MirrorLiveView({
   sourceDeviceLabel,
   thisDeviceLabel,
   dirtyApplied,
+  crlfScripts,
   onDone,
 }: {
   branch: string;
@@ -89,6 +91,9 @@ export function MirrorLiveView({
   // The device holding the copy, and the words for that.
   thisDeviceLabel: string;
   dirtyApplied: boolean;
+  // The copy's scripts carry the Windows original's CRLF, and the
+  // copy's device isn't Windows.
+  crlfScripts: boolean;
   onDone: () => void;
 }) {
   return (
@@ -118,6 +123,12 @@ export function MirrorLiveView({
               )}
             </div>
           </div>
+          {crlfScripts && (
+            <Warning>
+              Scripts in this worktree have Windows line endings and won't run
+              on {thisDeviceLabel} unless the repo keeps them LF.
+            </Warning>
+          )}
         </section>
       </DialogBody>
       {/* One way out, to the copy's page (finish). */}

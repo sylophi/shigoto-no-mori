@@ -16,6 +16,7 @@
 import type { ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
 import { pullLandingBranch } from "@shigomori/contracts/git/branches";
+import { isWindowsPath } from "@shigomori/contracts/projectPaths";
 import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
@@ -171,6 +172,7 @@ function MirrorFlow({
     captured: boolean;
     dirtyApplied: boolean;
     session: string;
+    crlfScripts: boolean;
   }>;
   onClose: () => void;
 }) {
@@ -265,6 +267,10 @@ function MirrorFlow({
             sourceDeviceLabel={sourceDeviceLabel}
             thisDeviceLabel={thisDeviceLabel}
             dirtyApplied={!mirror.data.captured || mirror.data.dirtyApplied}
+            crlfScripts={
+              mirror.data.crlfScripts &&
+              !isWindowsPath(mirror.data.worktree.path)
+            }
             onDone={finish}
           />
         </RunnerScope>
@@ -304,6 +310,7 @@ function MirrorLive({
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
   dirtyApplied: boolean;
+  crlfScripts: boolean;
   onDone: () => void;
 }) {
   const { sessions, daemon, daemonFailure } = useMirrors();
