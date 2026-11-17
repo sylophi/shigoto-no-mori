@@ -19,10 +19,16 @@ import { CopyFailed } from "./documents.ts";
 // and its last write. A link to a folder by its absolute path is made
 // again as a junction, which needs no privilege. A junction holds only
 // an absolute path (pnpm links node_modules with them), so one into the
-// tree is pointed into the copy, as a relative link would be. Any other
+// tree is pointed into the copy where it lands (`landsAt`, which every
+// caller renames it to), as a relative link would be. Any other
 // link is a symbolic link, which needs Developer Mode or an elevated
 // process, and without it fails the copy.
-export const copyEntries = (from: string, to: string, keepTimes: boolean) => {
+export const copyEntries = (
+  from: string,
+  to: string,
+  landsAt: string,
+  keepTimes: boolean,
+) => {
   const step = <A>(run: () => Promise<A>) =>
     Effect.tryPromise({
       try: run,
@@ -51,7 +57,7 @@ export const copyEntries = (from: string, to: string, keepTimes: boolean) => {
         const at =
           inside.startsWith("..") || isAbsolute(inside)
             ? named
-            : join(to, inside);
+            : join(landsAt, inside);
         return yield* step(() => symlink(at, target, "junction"));
       }
       if (!info.isDirectory()) {

@@ -235,7 +235,7 @@ const make = Effect.gen(function* () {
 
   // A copy-on-write clone of the tree where the volume can, else a copy
   // (copyTree). The destination must not exist.
-  const cloneOrCopy = (from: string, to: string) =>
+  const cloneOrCopy = (from: string, to: string, landsAt: string) =>
     Effect.gen(function* () {
       const cloned = yield* nativeFs.clone({ from, to }).pipe(
         Stream.runCollect,
@@ -250,7 +250,9 @@ const make = Effect.gen(function* () {
       yield* fs
         .remove(to, { recursive: true, force: true })
         .pipe(Effect.mapError((error) => error.message));
-      yield* copyTree(spawner, from, to).pipe(Effect.mapError(copyFailure));
+      yield* copyTree(spawner, from, to, landsAt).pipe(
+        Effect.mapError(copyFailure),
+      );
     });
 
   // The entry from the first source that has it. Answers the failure,
@@ -307,7 +309,7 @@ const make = Effect.gen(function* () {
         yield* fs
           .makeDirectory(path.dirname(staged), { recursive: true })
           .pipe(Effect.mapError((error) => error.message));
-        yield* cloneOrCopy(from, staged);
+        yield* cloneOrCopy(from, staged, to);
         yield* fs
           .rename(staged, to)
           .pipe(Effect.mapError((error) => error.message));

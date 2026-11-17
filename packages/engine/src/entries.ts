@@ -43,20 +43,21 @@ export const mtimeOf = (info: FileSystem.File.Info) =>
 export const copyFailure = (error: CopyFailed): string =>
   errorMessageOf(error.cause);
 
-// A tree copied to a destination that isn't there, a link as a link.
-// `keepTimes` keeps the times and modes too, which a volume that can't
-// hold them fails.
+// A tree copied to a destination that isn't there, to be renamed to
+// `landsAt`, a link as a link. `keepTimes` keeps the times and modes
+// too, which a volume that can't hold them fails.
 export const copyTree = (
   spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
   from: string,
   to: string,
+  landsAt: string,
   options: { readonly keepTimes?: boolean } = {},
 ) => {
   const keepTimes = options.keepTimes === true;
   const cp = () => cpTree(spawner, from, to, keepTimes);
   return byFamily({
     posix: cp,
-    windows: () => copyEntries(from, to, keepTimes),
+    windows: () => copyEntries(from, to, landsAt, keepTimes),
   })();
 };
 

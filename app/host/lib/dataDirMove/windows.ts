@@ -30,7 +30,11 @@ export const windows = {
   // The store's shared-memory index stays behind: SQLite holds it locked
   // while the store is open, and builds it again from the WAL when the
   // copy opens.
-  copyTree: Effect.fnUntraced(function* (from: string, to: string) {
+  copyTree: Effect.fnUntraced(function* (
+    from: string,
+    to: string,
+    landsAt: string,
+  ) {
     yield* fsStep(() => mkdir(to));
     yield* exec("icacls", [
       to,
@@ -43,9 +47,12 @@ export const windows = {
     yield* Effect.forEach(
       names.filter((name) => name !== "store.db-shm"),
       (name) =>
-        Entries.copyEntries(join(from, name), join(to, name), true).pipe(
-          Effect.mapError(callFailureOf),
-        ),
+        Entries.copyEntries(
+          join(from, name),
+          join(to, name),
+          join(landsAt, name),
+          true,
+        ).pipe(Effect.mapError(callFailureOf)),
       { discard: true },
     );
   }),

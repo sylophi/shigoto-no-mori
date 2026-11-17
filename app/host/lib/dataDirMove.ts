@@ -211,10 +211,10 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       // mid-move, as in a nuke.
       holding: (ids) => scripts.deleting(ids, "move"),
       releasing: opts.beforeMove,
-      copy: (from: string, to: string) =>
+      copy: (from: string, to: string, landsAt: string) =>
         Effect.gen(function* () {
           yield* opts.copy === undefined
-            ? DataDirMove.holdingStore(tree().copyTree(from, to))
+            ? DataDirMove.holdingStore(tree().copyTree(from, to, landsAt))
             : opts.copy(from, to);
           yield* tree().flushTree(to);
         }),

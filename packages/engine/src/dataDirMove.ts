@@ -568,10 +568,11 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     // What holds the folder let go (step 7).
     readonly releasing: Effect.Effect<void, E, R>;
     // The tree at `from` copied into `to` and flushed whole, holding the
-    // store with `holdingStore` (step 8).
+    // store with `holdingStore` (step 8). It is renamed to `landsAt` after.
     readonly copy: (
       from: string,
       to: string,
+      landsAt: string,
     ) => Effect.Effect<void, E, R | SqlClient.SqlClient>;
   },
 ) {
@@ -745,7 +746,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       const partial = `${to}.partial-${suffix}`;
       journal.partial = partial;
       yield* journalHere;
-      yield* hooks.copy(from, partial);
+      yield* hooks.copy(from, partial, to);
       yield* fs
         .rename(partial, to)
         .pipe(Effect.andThen(landed), Effect.uninterruptible);
