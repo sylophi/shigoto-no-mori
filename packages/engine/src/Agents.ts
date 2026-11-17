@@ -39,12 +39,10 @@ import {
 import type { GuideStart } from "@shigomori/contracts/modules/guide";
 import type { AgentHarnessStatus } from "@shigomori/contracts/schemas/agents";
 import {
-  cloneSourceCommand,
   GUIDE_LAUNCHERS,
-  GUIDE_MCP_CONFIG_FILE,
   guideCommand,
-  guideInstructions,
-  SOURCE_URL,
+  type GuideSource,
+  writeGuideFolder,
 } from "./agentGuide.ts";
 import {
   type AgentSession,
@@ -54,7 +52,6 @@ import {
 import { canonicalPath } from "./canonicalPath.ts";
 import { envVar } from "./environment.ts";
 import { installedVersionOf, linuxInstall } from "./linuxInstall.ts";
-import { typedLines } from "@shigomori/contracts/typedLines";
 import * as Launchers from "./Launchers.ts";
 import * as Open from "./Open.ts";
 import * as Paths from "./Paths.ts";
@@ -62,7 +59,7 @@ import { errnoText, isNotFound } from "./platformErrors.ts";
 import * as Registry from "./Registry.ts";
 import * as Shells from "./Shells.ts";
 import * as Worktrees from "./Worktrees.ts";
-import { isDirectory, linkFolder, mtimeOf } from "./entries.ts";
+import { isDirectory } from "./entries.ts";
 
 // A session as its harness and id name it.
 export type SessionRef = {
@@ -148,10 +145,6 @@ export class GuideHarnessMissing extends Schema.TaggedError<GuideHarnessMissing>
   }
 }
 
-// Where the agent a guide opens reads the app's source: a release's tag,
-// cloned from GitHub, or a dev build's own checkout.
-type GuideSource = { readonly tag: string } | { readonly checkout: string };
-
 // A guide to open: the harness and terminal, the session it drives the
 // window on, and the source it reads.
 export type GuideLaunch = GuideStart & {
@@ -231,8 +224,6 @@ export class Agents extends Context.Service<
     >;
   }
 >()("sm/engine/Agents") {}
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const find = (bound: Registry.BoundSessions, ref: SessionRef) => {
   for (const [id, list] of bound) {
@@ -573,17 +564,14 @@ const make = (binary: string) =>
       if (harness === undefined || harness.resume === "") {
         return yield* new CantResume({ harness: ref.harness });
       }
-      yield* open.typable(
-        harness.label,
-        "the session's id",
-        harness.resume.split(" ")[0] ?? "",
-        [ref.session],
-      );
-      const { syntax } = yield* shells.interactive;
-      yield* open.inTerminal(
-        located,
-        `${harness.resume} ${typedLines[syntax].quote(ref.session)}`,
-      );
+      yield* open.inTerminal(located, {
+        label: harness.label,
+        what: "the session's id",
+        program: harness.resume.split(" ")[0] ?? "",
+        args: [ref.session],
+        line: ({ quote }) =>
+          Effect.succeed(`${harness.resume} ${quote(ref.session)}`),
+      });
     });
 
     // One folder for every guide, so a harness asks to trust it once.
@@ -603,89 +591,31 @@ const make = (binary: string) =>
       }
       const { syntax } = yield* shells.interactive;
       const harnessLine = guideCommand(syntax, { ...input, sm, dataDir });
-      yield* open.typable(
-        label,
-        "the app's paths",
-        input.harness,
-        harnessLine.args,
-      );
       const folder = path.join(dataDir, "guide");
-      const source = path.join(folder, "source");
-      // What the folder's `source` is to hold, and where the agent reads
-      // it when it doesn't.
-      const { wanted, sourceUrl, link } =
-        "tag" in input.source
-          ? {
-              wanted: input.source.tag,
-              sourceUrl: `${SOURCE_URL}/tree/${input.source.tag}`,
-              link: undefined,
-            }
-          : {
-              wanted: input.source.checkout,
-              sourceUrl: input.source.checkout,
-              link: input.source.checkout,
-            };
-      // What the terminal runs first.
-      const before = yield* Effect.gen(function* () {
-        yield* fs.makeDirectory(folder, { recursive: true });
-        yield* fs.writeFileString(
-          path.join(folder, "AGENTS.md"),
-          guideInstructions(sourceUrl),
-        );
-        yield* fs.writeFileString(
-          path.join(folder, "CLAUDE.md"),
-          "@AGENTS.md\n",
-        );
-        const tagFile = path.join(folder, "source-tag");
-        const held = yield* fs
-          .readFileString(tagFile)
-          .pipe(Effect.orElseSucceed(() => ""));
-        if (held.trim() !== wanted) {
-          yield* fs.remove(source, { recursive: true, force: true });
-          if (link !== undefined) yield* linkFolder(link, source);
-          yield* fs.writeFileString(tagFile, `${wanted}\n`);
-        }
-        const { configFile } = harnessLine;
-        if (configFile !== undefined) {
-          // A day is long past any claude's start, and leaves the
-          // folder a day's configs at most. A guide started alongside
-          // may remove one first.
-          const now = yield* Clock.currentTimeMillis;
-          for (const name of yield* fs.readDirectory(folder)) {
-            if (!GUIDE_MCP_CONFIG_FILE.test(name)) continue;
-            const file = path.join(folder, name);
-            yield* fs.stat(file).pipe(
-              Effect.flatMap((info) =>
-                now - mtimeOf(info) > DAY_MS
-                  ? fs.remove(file, { force: true })
-                  : Effect.void,
-              ),
-              Effect.ignore,
-            );
-          }
-          yield* fs.writeFileString(
-            path.join(folder, configFile.name),
-            configFile.content,
-          );
-        }
-        // The release the terminal clones `source` from.
-        if (!("tag" in input.source)) return "";
-        if (syntax === "powershell") {
-          if (yield* fs.exists(source)) return "";
-          yield* fs.remove(path.join(folder, "source.partial"), {
-            recursive: true,
-            force: true,
-          });
-        }
-        return `${cloneSourceCommand(syntax, input.source.tag, folder)}; `;
-      }).pipe(
-        Effect.mapError(
-          (cause) => new GuideFolderFailed({ path: folder, cause }),
-        ),
-      );
       yield* open.inTerminal(
         folder,
-        `${before}${harnessLine.line}`,
+        {
+          label,
+          what: "the app's paths",
+          program: input.harness,
+          args: harnessLine.args,
+          // The folder is written once the line can be typed, with what
+          // the terminal runs first.
+          line: () =>
+            writeGuideFolder({
+              folder,
+              syntax,
+              source: input.source,
+              configFile: harnessLine.configFile,
+            }).pipe(
+              Effect.provideService(FileSystem.FileSystem, fs),
+              Effect.provideService(Path.Path, path),
+              Effect.mapError(
+                (cause) => new GuideFolderFailed({ path: folder, cause }),
+              ),
+              Effect.map((before) => `${before}${harnessLine.line}`),
+            ),
+        },
         input.terminal,
       );
     });

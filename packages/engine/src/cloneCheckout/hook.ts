@@ -116,7 +116,8 @@ export const makeHook = Effect.gen(function* () {
         if (Option.isNone(commands)) continue;
         const values = splitZ(commands.value);
         const command = values.at(-1) ?? "";
-        failed = yield* run(sh, ["-c", `${command} "$@"`, command, ...args]);
+        const [program = "", ...shArgs] = sh.runCommand(`${command} "$@"`);
+        failed = yield* run(program, [...shArgs, command, ...args]);
       }
       if (first === undefined && Option.isSome(failed)) first = failed.value;
     }

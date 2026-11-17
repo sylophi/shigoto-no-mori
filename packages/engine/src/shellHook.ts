@@ -20,7 +20,7 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as PlatformError from "effect/PlatformError";
+import type * as PlatformError from "effect/PlatformError";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Result from "effect/Result";
@@ -238,17 +238,40 @@ export type HookPlace = {
   readonly profile: string;
 };
 
+export const hookNames = (paths: Paths["Service"]): HookNames => ({
+  binary: paths.binaryName,
+  alias: flavorNames(paths.flavor).alias,
+});
+
+// Where the hooks live for a terminal's shell, by its ZDOTDIR, its
+// XDG_CONFIG_HOME ("" for this process's) and its program (Shells'
+// interactive), and the execution policy that program gave if it is
+// PowerShell.
 export const hookPlace = (
   paths: Paths["Service"],
-  zdotdir: string,
-  profile = "",
-): HookPlace => ({
-  names: { binary: paths.binaryName, alias: flavorNames(paths.flavor).alias },
-  home: paths.home,
-  configHome: paths.configHome,
-  zdotdir,
-  profile,
-});
+  shell: {
+    readonly zdotdir: string;
+    readonly configHome: string;
+    readonly program: string;
+  },
+) =>
+  Effect.map(
+    askPowerShell(shell.program),
+    ({ profile, policy }): { place: HookPlace; policy: string } => ({
+      place: {
+        names: hookNames(paths),
+        home: paths.home,
+        configHome: shell.configHome || paths.configHome,
+        zdotdir: shell.zdotdir,
+        profile,
+      },
+      policy,
+    }),
+  );
+
+// What reloads a running shell's config, the hook with it.
+export const reloadCommand = (kind: ShellKind) =>
+  kind === "powershell" ? ". $PROFILE.CurrentUserAllHosts" : `exec ${kind}`;
 
 const noPowerShell = { profile: "", policy: "" };
 
@@ -257,7 +280,7 @@ const noPowerShell = { profile: "", policy: "" };
 // Documents can be redirected (OneDrive), and the execution policy that
 // decides whether a profile loads at all. Both "" elsewhere, or when it
 // doesn't answer.
-export const askPowerShell = (program: string) =>
+const askPowerShell = (program: string) =>
   byPlatform({
     darwin: Effect.succeed(noPowerShell),
     linux: Effect.succeed(noPowerShell),
@@ -364,6 +387,8 @@ export type Hook = { readonly shell: ShellKind; readonly path: string } &
         readonly state: "unreadable";
         readonly error: PlatformError.PlatformError;
       }
+    // A PowerShell that didn't say where its profile is.
+    | { readonly state: "no-profile" }
     // Ours, and `current` when it is what this build writes.
     | {
         readonly state: "installed";
@@ -376,18 +401,8 @@ export const inspectHook = (place: HookPlace, kind: ShellKind) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const at = { shell: kind, path: yield* hookPath(place, kind) };
-    // A PowerShell that didn't say where its profile is.
-    const read = yield* (
-      at.path === ""
-        ? Effect.fail(
-            PlatformError.badArgument({
-              module: "shellHook",
-              method: "inspectHook",
-              description: "no PowerShell profile",
-            }),
-          )
-        : fs.readFile(at.path)
-    ).pipe(Effect.result);
+    if (at.path === "") return { ...at, state: "no-profile" } satisfies Hook;
+    const read = yield* fs.readFile(at.path).pipe(Effect.result);
     if (Result.isFailure(read)) {
       return isNotFound(read.failure)
         ? ({ ...at, state: "missing", file: undefined } satisfies Hook)

@@ -47,8 +47,8 @@ const hookPlaceOf = (output: string) => {
   return Option.some({ zdotdir, configHome });
 };
 
-// The login shell as the engine's shell integration needs it: which
-// shell it is and where its config lives. A probe that answered is kept
+// The interactive shell as the engine's shell integration needs it:
+// which shell it is and where its config lives. A probe that answered is kept
 // an hour (a profile edit moves it), one that didn't is asked again;
 // until one answers, the shell's config is looked for where it goes by
 // default.
@@ -90,14 +90,14 @@ export const layer = Layer.effect(
     );
     return HookShell.of({
       read: Effect.gen(function* () {
-        const { program, args } = yield* shells.interactive;
+        const { program, login } = yield* shells.interactive;
         // Not a login shell (/bin/sh when none is named, PowerShell on
         // Windows): no login config to probe.
-        if (!args.includes("-l")) return { zdotdir: "", loginShell: program };
+        if (!login) return { zdotdir: "", interactiveShell: program };
         const place = yield* probes.get(program).pipe(Effect.option);
         return Option.match(place, {
-          onNone: () => ({ zdotdir: "", loginShell: program }),
-          onSome: (found) => ({ ...found, loginShell: program }),
+          onNone: () => ({ zdotdir: "", interactiveShell: program }),
+          onSome: (found) => ({ ...found, interactiveShell: program }),
         });
       }),
     });
@@ -130,21 +130,22 @@ export const shellIntegrationStatus = onShell((integration, shell) =>
   Effect.map(
     integration.status(shell),
     ({ document }): ShellIntegrationStatus => ({
-      loginShell: document.loginShell === "" ? null : document.loginShell,
+      interactiveShell:
+        document.interactiveShell === "" ? null : document.interactiveShell,
       shells: document.shells,
     }),
   ),
 );
 
 // Settings never asks for an unsupported shell: the status it renders
-// already reported loginShell null.
+// already reported interactiveShell null.
 export const installShellIntegration = Effect.gen(function* () {
   const kind = yield* onShell((integration, shell) =>
-    integration.loginShell(shell),
+    integration.shellKind(shell),
   );
   if (kind === "") {
     return yield* new ShellHookError({
-      reason: "Couldn't determine your login shell.",
+      reason: "Couldn't determine your interactive shell.",
     });
   }
   yield* onShell((integration, shell) => integration.install(kind, shell));

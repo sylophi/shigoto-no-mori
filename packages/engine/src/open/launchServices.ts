@@ -3,10 +3,13 @@
 import { typedLines } from "@shigomori/contracts/typedLines";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
+import { flavorNames } from "../flavor.ts";
 import * as Launchers from "../Launchers.ts";
+import * as Paths from "../Paths.ts";
+import { openEnvArgs } from "../relaunchEnv.ts";
 import type { CommandsArea } from "./commands.ts";
 import type { Desktop } from "./desktop.ts";
-import { LaunchFailed } from "./documents.ts";
+import { AppNotOpened, LaunchFailed } from "./documents.ts";
 
 // How each terminal runs a command line, as an AppleScript taking it as
 // its one argument: into a new window, or into the first one a terminal
@@ -71,6 +74,8 @@ export const makeLaunchServices = ({ ran, run }: CommandsArea) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
     const launchers = yield* Launchers.Launchers;
+    const paths = yield* Paths.Paths;
+    const { appName, bundleId } = flavorNames(paths.flavor);
 
     return {
       openApp: (label, found, target) =>
@@ -120,5 +125,22 @@ export const makeLaunchServices = ({ ran, run }: CommandsArea) =>
           return yield* new LaunchFailed({ label, said });
         },
       ),
+      // The installed app's bundle, opened by its id, which still finds
+      // it renamed or moved.
+      openOwnApp: Effect.gen(function* () {
+        const { code, output } = yield* ran("open", [
+          ...openEnvArgs({
+            dataDir: paths.dataDirSource === "env" ? paths.dataDir : undefined,
+          }),
+          "-b",
+          bundleId,
+        ]);
+        if (code !== 0) {
+          return yield* new AppNotOpened({
+            appName,
+            cause: code === -1 ? output : `exit status ${code}`,
+          });
+        }
+      }),
     } satisfies Desktop;
   });

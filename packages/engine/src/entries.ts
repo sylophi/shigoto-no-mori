@@ -2,28 +2,19 @@
 // copying a tree as `cp` does, linking a folder and removing an empty
 // one. The calls Effect's FileSystem lacks (rmdir, a link's type, lstat)
 // are Node's, as in executables.ts.
-import {
-  constants,
-  copyFile,
-  lstat,
-  mkdir,
-  readdir,
-  readlink,
-  rmdir,
-  stat,
-  symlink,
-  utimes,
-} from "node:fs/promises";
-import { isAbsolute, join, relative } from "node:path";
+import { rmdir, symlink } from "node:fs/promises";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import type * as FileSystem from "effect/FileSystem";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { CopyFailed } from "./entries/documents.ts";
+import { copyEntries } from "./entries/windows.ts";
 import { byPlatform } from "./platform.ts";
 import { exec } from "./processes.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+
+export { copyEntries } from "./entries/windows.ts";
 
 // Whether anything is at a path: a file, a folder, or a symlink, a
 // dangling one included.
@@ -47,16 +38,6 @@ export const mtimeOf = (info: FileSystem.File.Info) =>
     onNone: () => 0,
     onSome: (date) => date.getTime(),
   });
-
-// A copy that didn't finish. cp's own words are the cause.
-export class CopyFailed extends Schema.TaggedError<CopyFailed>()("CopyFailed", {
-  to: Schema.String,
-  cause: Schema.Defect(),
-}) {
-  override get message(): string {
-    return `Couldn't copy to ${this.to}.`;
-  }
-}
 
 // What the copy said, for a report that carries it.
 export const copyFailure = (error: CopyFailed): string =>
@@ -106,60 +87,6 @@ const cpTree = (
       Effect.fail(new CopyFailed({ to, cause })),
     ),
   );
-
-// Windows has no cp: the tree is copied an entry at a time, so a cancel
-// lands between two. A file keeps its attributes (git's read-only
-// objects stay read-only) and its last write. A link to a folder by its
-// absolute path is made again as a junction, which needs no privilege.
-// A junction holds only an absolute path (pnpm links node_modules with
-// them), so one into the tree is pointed into the copy, as a relative
-// link would be. Any other link is a symbolic link, which needs
-// Developer Mode or an elevated process, and without it fails the copy.
-export const copyEntries = (from: string, to: string, keepTimes: boolean) => {
-  const step = <A>(run: () => Promise<A>) =>
-    Effect.tryPromise({
-      try: run,
-      catch: (cause) => new CopyFailed({ to, cause }),
-    });
-  const entry = (
-    source: string,
-    target: string,
-  ): Effect.Effect<void, CopyFailed> =>
-    Effect.gen(function* () {
-      const info = yield* step(() => lstat(source));
-      if (info.isSymbolicLink()) {
-        const named = yield* step(() => readlink(source));
-        const folder = yield* Effect.promise(() =>
-          stat(source).then(
-            (found) => found.isDirectory(),
-            () => false,
-          ),
-        );
-        if (!folder || !isAbsolute(named)) {
-          return yield* step(() =>
-            symlink(named, target, folder ? "dir" : "file"),
-          );
-        }
-        const inside = relative(from, named);
-        const at =
-          inside.startsWith("..") || isAbsolute(inside)
-            ? named
-            : join(to, inside);
-        return yield* step(() => symlink(at, target, "junction"));
-      }
-      if (!info.isDirectory()) {
-        return yield* step(() =>
-          copyFile(source, target, constants.COPYFILE_EXCL),
-        );
-      }
-      yield* step(() => mkdir(target));
-      for (const name of yield* step(() => readdir(source))) {
-        yield* entry(join(source, name), join(target, name));
-      }
-      if (keepTimes) yield* step(() => utimes(target, info.atime, info.mtime));
-    });
-  return entry(from, to);
-};
 
 // A link at `at` to the folder `target`: on Windows a junction, which
 // needs none of the privilege a symbolic link does there.

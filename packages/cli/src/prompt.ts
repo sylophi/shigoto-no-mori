@@ -26,11 +26,11 @@ export const runEditor = (editor: string, file: string) =>
     // In the script shell's environment, which has the tools an editor's
     // launcher script calls.
     const { env } = yield* shells.script;
-    const ran = spawnSync(
-      yield* shells.sh,
-      Shells.shArgs(`${editor} "$0"`, [file]),
-      { stdio: "inherit", env: { ...childEnv(process.env), ...env } },
-    );
+    const sh = yield* shells.sh;
+    const ran = spawnSync(sh.program, sh.runArgs(`${editor} "$0"`, [file]), {
+      stdio: "inherit",
+      env: { ...childEnv(process.env), ...env },
+    });
     return ran.status === 0
       ? undefined
       : `${editor} failed: ${ran.error?.message ?? `exit status ${String(ran.status)}`}`;

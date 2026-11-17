@@ -4,12 +4,16 @@
 // every usage line. Help is data, and layout and color are computed.
 import type { flavorNames } from "@shigomori/engine/flavor";
 import { byHostKind, byPlatform } from "@shigomori/engine/platform";
+import { SHELL_KINDS } from "@shigomori/engine/shellHook";
 import { commandName, projectVerb } from "./aliases.ts";
 import { splitAtDashes } from "./argv.ts";
 import { styles, type Styles } from "./output.ts";
 
 // A usage line, the description beside it, and the detail below it.
 type Item = readonly [usage: string, desc: string, detail: string];
+
+const POSIX_SHELL_INSTALL =
+  "A guarded eval line in .zshrc/.bashrc (marker-fenced) or a fish conf.d drop-in. Defaults to your login shell.";
 
 type Names = ReturnType<typeof flavorNames>;
 
@@ -34,7 +38,17 @@ const catalog = (names: Names) => {
           '--catalog lists every tool the app knows instead, installed or not, with no project needed: --json prints {ok, apps: [{kind: "detected", id: "app:<id>", label, available}]}, sorted by label case-insensitively.',
       ],
       ...byHostKind<{ app: Item[]; headless: Item[] }>({
-        app: [["app", "Open the Shigoto no Mori app", ""]],
+        app: [
+          [
+            "app",
+            "Open the Shigoto no Mori app",
+            byPlatform({
+              darwin: "",
+              linux: "",
+              win32: "Not on Windows: open it from the Start menu.",
+            }),
+          ],
+        ],
         headless: [
           [
             "login",
@@ -426,7 +440,12 @@ const catalog = (names: Names) => {
       [
         "shell install [<shell>]",
         "Hook shell integration into your shell config",
-        "A guarded eval line in .zshrc/.bashrc (marker-fenced) or a fish conf.d drop-in. Defaults to your login shell.",
+        byPlatform({
+          darwin: POSIX_SHELL_INSTALL,
+          linux: POSIX_SHELL_INSTALL,
+          win32:
+            "A guarded eval line in the PowerShell profile or .zshrc/.bashrc (marker-fenced), or a fish conf.d drop-in. Defaults to PowerShell, which terminals run here.",
+        }),
       ],
       [
         "shell uninstall",
@@ -435,7 +454,7 @@ const catalog = (names: Names) => {
       ],
       ["shell status", "Show hook and session state", ""],
       [
-        "shell init <zsh|bash|fish>",
+        `shell init <${SHELL_KINDS.join("|")}>`,
         "Print the wrapper the hook evals",
         "A function shadowing the command: it runs the real binary, then cd's to the path the binary reports.",
       ],

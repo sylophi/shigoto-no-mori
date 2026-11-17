@@ -9,8 +9,13 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { cmdReadsIn, isBatchFile } from "../batchFiles.ts";
 import { envVar } from "../environment.ts";
-import { findExecutable, joinSearchPath } from "../executables.ts";
+import {
+  findExecutable,
+  joinSearchPath,
+  pathExtensions,
+} from "../executables.ts";
 import { NoScriptShell } from "./documents.ts";
 
 // `nativefs` is the helper a contained sh runs under.
@@ -39,11 +44,12 @@ export const makeWindows = Effect.fnUntraced(function* (nativefs: string) {
     }),
   );
 
+  const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+
   const powerShell = yield* Effect.cached(
     Effect.gen(function* () {
       const pwsh = yield* findExecutable("pwsh").pipe(
-        Effect.provideService(FileSystem.FileSystem, fs),
-        Effect.provideService(Path.Path, path),
+        Effect.provideContext(platform),
       );
       const program = Option.isSome(pwsh)
         ? pwsh.value
@@ -59,11 +65,24 @@ export const makeWindows = Effect.fnUntraced(function* (nativefs: string) {
         args: ["-NoLogo"],
         env: {},
         syntax: "powershell" as const,
+        login: false,
       };
     }),
   );
 
-  const sh = Effect.map(gitBash, ({ usrBin }) => path.join(usrBin, "sh.exe"));
+  // One of Git Bash's, started with nothing before its script.
+  const shShell = (program: string, env: Readonly<Record<string, string>>) => ({
+    program,
+    args: [],
+    env,
+    runArgs: (script: string, args: ReadonlyArray<string> = []) =>
+      gitBashShArgs(script, args),
+    runCommand: (script: string) => [program, "-c", script],
+  });
+
+  const sh = Effect.map(gitBash, ({ usrBin }) =>
+    shShell(path.join(usrBin, "sh.exe"), {}),
+  );
 
   return {
     // Not a login shell: a Mac's reads its profile for the PATH there,
@@ -72,27 +91,87 @@ export const makeWindows = Effect.fnUntraced(function* (nativefs: string) {
     // named, and its programs and the POSIX tools first on PATH.
     script: Effect.gen(function* () {
       const { environment, usrBin } = yield* gitBash;
-      return {
-        program: path.join(usrBin, "bash.exe"),
-        args: [],
-        env: {
-          MSYSTEM: path.basename(environment).toUpperCase(),
-          PATH: joinSearchPath([
-            path.join(environment, "bin"),
-            usrBin,
-            yield* envVar("PATH"),
-          ]),
-        },
-      };
+      return shShell(path.join(usrBin, "bash.exe"), {
+        MSYSTEM: path.basename(environment).toUpperCase(),
+        PATH: joinSearchPath([
+          path.join(environment, "bin"),
+          usrBin,
+          yield* envVar("PATH"),
+        ]),
+      });
     }),
+    findForScript: (name: string) =>
+      findForGitBash(name).pipe(Effect.provideContext(platform)),
     interactive: powerShell,
+    // PowerShell hands a batch file each argument for cmd to read,
+    // quoted only around a space, so one with a character cmd reads
+    // (cmdReadsIn) can't go to one.
+    untypable: Effect.fnUntraced(function* (
+      program: string,
+      args: ReadonlyArray<string>,
+      what: string,
+    ) {
+      const read = args.map(cmdReadsIn).find((c) => c !== undefined);
+      if (read === undefined) return Option.none<string>();
+      const found = yield* findForPowerShell(program).pipe(
+        Effect.provideContext(platform),
+      );
+      return Option.isSome(found) && isBatchFile(found.value)
+        ? Option.some(
+            `${program} is a batch file (${found.value}), and ${what} can't be passed to it, since cmd would read its ${JSON.stringify(read)}.`,
+          )
+        : Option.none<string>();
+    }),
     sh,
+    // Git Bash's sh rewrites an argument that reads as a POSIX path (a
+    // commit message `/fix the docs`) for a program not its own, as git
+    // is. One named in MSYS2_ARG_CONV_EXCL, a list of prefixes, stays as
+    // it is. What the program runs inherits it, and still has its own
+    // rewritten unless one starts as one of these.
     containedSh: (script: string, args: ReadonlyArray<string>) =>
-      Effect.map(sh, (program) => ({
+      Effect.map(sh, ({ program }) => ({
         program: nativefs,
         args: ["job", program, ...gitBashShArgs(script, args)],
+        env: {
+          MSYS2_ARG_CONV_EXCL: args
+            .filter((arg) => arg.includes("/"))
+            .join(";"),
+        },
       })),
   };
+});
+
+// A package manager's batch file has an sh script beside it, which Git
+// Bash runs for the bare name, and which a Ctrl+C ends without cmd's
+// "Terminate batch job" prompt.
+const findForGitBash = Effect.fnUntraced(function* (name: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const found = yield* findExecutable(name);
+  if (Option.isNone(found) || !isBatchFile(found.value)) return found;
+  const script = found.value.slice(0, -path.extname(found.value).length);
+  const info = yield* fs.stat(script).pipe(Effect.option);
+  return Option.isSome(info) && info.value.type === "File"
+    ? Option.some(script)
+    : found;
+});
+
+// The file PowerShell runs for a bare name: PATH's directories in order,
+// and in each a script before PATHEXT's extensions in their order.
+const findForPowerShell = Effect.fnUntraced(function* (name: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const exts = [".ps1", ...(yield* pathExtensions())];
+  for (const dir of (yield* envVar("PATH")).split(";")) {
+    if (dir === "") continue;
+    for (const ext of exts) {
+      const candidate = path.join(dir, `${name}${ext}`);
+      if (yield* fs.exists(candidate).pipe(Effect.orElseSucceed(() => false))) {
+        return Option.some(candidate);
+      }
+    }
+  }
+  return Option.none<string>();
 });
 
 // Git Bash's sh reads its own command line from the one Windows hands
@@ -103,7 +182,7 @@ export const makeWindows = Effect.fnUntraced(function* (nativefs: string) {
 // bash's BASH_ARGV0), each quoted for sh. Inside quotes sh reads two
 // backslashes as one where Node writes them as they are, except before
 // a quote or at the end, so those runs go doubled.
-export const gitBashShArgs = (
+const gitBashShArgs = (
   script: string,
   args: ReadonlyArray<string>,
 ): ReadonlyArray<string> => {

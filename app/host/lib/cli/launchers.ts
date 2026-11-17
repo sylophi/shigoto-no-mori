@@ -50,7 +50,7 @@ async function status(facts: Facts): Promise<CliStatus> {
     name: cliBinaryName(facts.flavor),
     aliasName: cliAliasName(facts.flavor),
     binDir: windowsCliBinDir(facts.resourcesPath),
-    linkPath: launcherOf(facts, cliBinaryName(facts.flavor)),
+    commandPath: launcherOf(facts, cliBinaryName(facts.flavor)),
     placement: "launcher",
     foreignPaths: [],
     onPath,

@@ -483,7 +483,7 @@ function hostHandlersFor(
         worktreeId,
         openedAt: Date.now(),
         busy: false,
-        syntax: "posix",
+        syntax: onWindows(disk) ? "powershell" : "posix",
       },
     ];
     return terminalId;
@@ -1401,7 +1401,7 @@ function setShellHooks(
     shells: status.shells.map((hook) => ({
       ...hook,
       state:
-        install && hook.shell === status.loginShell
+        install && hook.shell === status.interactiveShell
           ? "installed"
           : !install && hook.state === "installed"
             ? "missing"

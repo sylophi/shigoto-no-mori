@@ -47,15 +47,15 @@ export type CatalogEntry = {
 // being listed.
 export type RowEntry = LauncherEntry;
 
-// A launcher with what launching it takes: an installed app with the
-// bundle or tool it was found by, or a custom command line.
+// A launcher with what launching it takes: an installed app with what
+// it was found by, or a custom command line.
 export type Launchable =
   | (RowEntry & {
       readonly kind: "detected";
       readonly app: CatalogApp;
-      // The first bundle or program found (FILE_MANAGER for the
-      // desktop's), if any.
-      readonly bundle: string | undefined;
+      // What opens it: the first bundle (a Mac's) or program (Windows')
+      // found, or FILE_MANAGER for the desktop's, if any.
+      readonly target: string | undefined;
       readonly cliOnPath: boolean;
     })
   | (RowEntry & { readonly kind: "custom"; readonly command: string });
@@ -169,11 +169,12 @@ export const FILE_MANAGER = "__file_manager__";
 
 const catalogApps: ReadonlyArray<CatalogApp> = catalog;
 
-// Where an app is looked for on this OS.
+// Where an app is looked for on this OS. Linux finds its apps by their
+// command line tools alone.
 const placesOf = (app: CatalogApp) =>
   byPlatform({
     darwin: app.bundleNames,
-    linux: app.bundleNames,
+    linux: [],
     win32: app.programs,
   }) ?? [];
 
@@ -187,7 +188,6 @@ const make = Effect.gen(function* () {
   const settings = yield* EngineConfig.Config;
   const usage = yield* Usage.Usage;
   const appFolders = appFoldersOf(path, home);
-  const fileManager = byPlatform({ darwin: true, linux: false, win32: true });
   // The provider the engine was built with, not the caller's: a fiber
   // with none set reads a copy of the environment taken once.
   const configProvider = yield* ConfigProvider.ConfigProvider;
@@ -229,11 +229,11 @@ const make = Effect.gen(function* () {
       app.inTerminal !== undefined,
   );
 
-  // The bundle or program an app was found by, in its own order.
-  const bundleOf = (app: CatalogApp) =>
+  // What an app was found by, in its own order.
+  const targetOf = (app: CatalogApp) =>
     Effect.gen(function* () {
       for (const place of placesOf(app)) {
-        if (place === FILE_MANAGER) return fileManager ? place : undefined;
+        if (place === FILE_MANAGER) return place;
         const found = yield* foundAt(place);
         if (found !== undefined) return found;
       }
@@ -248,10 +248,10 @@ const make = Effect.gen(function* () {
   // What an installed app was found by.
   const foundBy = (app: CatalogApp) =>
     Effect.gen(function* () {
-      const bundle = yield* bundleOf(app);
+      const target = yield* targetOf(app);
       const cliOnPath = app.cli !== undefined && (yield* onPath(app.cli));
-      return bundle !== undefined || cliOnPath || (yield* toolOnPath(app))
-        ? { app, bundle, cliOnPath }
+      return target !== undefined || cliOnPath || (yield* toolOnPath(app))
+        ? { app, target, cliOnPath }
         : undefined;
     });
 

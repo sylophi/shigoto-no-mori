@@ -47,16 +47,18 @@ export class PtySpawnError extends Schema.TaggedError<PtySpawnError>()(
   }
 }
 
-export interface SpawnOptions {
-  readonly shell: Shells.Shell;
-  // What the shell runs, or null for the shell itself, interactive (a
-  // terminal's).
-  readonly command: string | null;
+export type SpawnOptions = {
   readonly cwd: string;
   readonly env: NodeJS.ProcessEnv;
   readonly cols: number;
   readonly rows: number;
-}
+} &
+  // A command line the shell runs, or null for the shell itself,
+  // interactive (a terminal's).
+  (
+    | { readonly shell: Shells.ShShell; readonly command: string }
+    | { readonly shell: Shells.Shell; readonly command: null }
+  );
 
 // How a run is stopped. `wait: false` asks it to stop and moves on: an
 // update's installer is waiting on the app to exit. The ask is a stop
@@ -169,7 +171,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
           program,
           opts.command === null
             ? [...args]
-            : [...args, ...Shells.shArgs(opts.command, [])],
+            : [...opts.shell.runArgs(opts.command)],
           {
             name: "xterm-256color",
             cols: opts.cols,
