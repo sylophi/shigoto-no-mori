@@ -24,6 +24,7 @@ import * as HostPushes from "@host/lib/HostPushes";
 import { dataDir } from "@shared/paths";
 import { findProjectAndWorktree } from "@host/lib/projects";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
+import { clearStaleSizes } from "./checkout";
 import { applyGitState, readGitState, watchIndexFile } from "./gitState";
 import { log } from "@shared/log";
 import { MirrorError } from "./MirrorEngine";
@@ -192,4 +193,14 @@ export const applyServedGitState = ({
       });
     }
     return result;
+  });
+
+export const clearServedStaleSizes = ({
+  projectId,
+  worktreeId,
+}: MirrorWorktreePayload) =>
+  Effect.gen(function* () {
+    const { worktree } = yield* findProjectAndWorktree(projectId, worktreeId);
+    yield* refuseHeld(yield* MirrorLedger, worktree.id);
+    yield* clearStaleSizes(worktree.path);
   });

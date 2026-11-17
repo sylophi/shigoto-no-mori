@@ -16,6 +16,10 @@
 //     end keep that, with the bytes carried to the other end as the
 //     engine would,
 //   - a file committed on the copy is the blob the original would stage,
+//   - a file a Windows original holds with bytes its checkout wouldn't
+//     write (LF where it writes CRLF) reads clean on the copy, and the
+//     original's staged and unstaged changes read there as they do on
+//     the original,
 //   - the copy's device's other worktrees keep their own config,
 //   - a copy whose device's checkout is the original's own writes
 //     nothing into its repository's config.
@@ -46,7 +50,10 @@ import { afterAll, beforeAll, it } from "vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as PlatformError from "effect/PlatformError";
-import type { MirrorSessionRaw } from "@shigomori/contracts/modules/mirror";
+import {
+  mirrorContract,
+  type MirrorSessionRaw,
+} from "@shigomori/contracts/modules/mirror";
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
@@ -76,7 +83,8 @@ afterAll(async () => {
 });
 
 // The mirror engine's stand-in: every session it is asked for is in
-// step at once.
+// step at once, and a start's replica pass writes the original's bytes
+// at every tracked path over what the copy's checkout wrote.
 const sessions = new Map<string, MirrorSessionRaw>();
 let next = 0;
 standInMirror(
@@ -84,6 +92,18 @@ standInMirror(
     sessions: Effect.sync(() => [...sessions.values()]),
     create: (input) =>
       Effect.sync(() => {
+        if (input.direction === "replica") {
+          for (const file of execFileSync("git", ["ls-files", "-z"], {
+            cwd: input.localRoot,
+            encoding: "utf8",
+          })
+            .split("\0")
+            .filter(Boolean)) {
+            if (!lstatSync(join(input.localRoot, file)).isSymbolicLink()) {
+              carry(input.localRoot, input.remoteRoot, file);
+            }
+          }
+        }
         next += 1;
         const session = `sync_checkout${next}`;
         sessions.set(
@@ -235,6 +255,7 @@ beforeAll(async () => {
       ],
       [worktreesContract, worktreesHandlers],
       [worktreeDataContract, worktreeDataHandlers],
+      [mirrorContract, mirrorHandlers],
     ],
   });
   listener.setAccepts(true);
@@ -438,6 +459,34 @@ for (const [originalKind, copyKind] of [
     await commitsAlike(originalPath, copy);
   });
 }
+
+it("a windows original's file whose bytes on disk aren't what git would write reads clean on the copy, and the original's uncommitted changes read on the copy as they do there", async () => {
+  await setKind(sourceRepo, "windows");
+  await setKind(targetRepo, "mac");
+  const originalPath = await original("lf-on-disk", "main");
+  writeFileSync(join(originalPath, "lf.txt"), "lf\nonly\n");
+  await git(originalPath, ["add", "lf.txt"]);
+  await git(originalPath, ["commit", "-qm", "lf"]);
+  writeFileSync(join(originalPath, "a.txt"), "one\ntwo\nthree\n");
+  writeFileSync(join(originalPath, "staged.txt"), "staged\n");
+  await git(originalPath, ["add", "staged.txt"]);
+  const want = " M a.txt\nA  staged.txt";
+  assert.equal(await status(originalPath), want);
+
+  const { worktree } = await start(originalPath);
+  const copy = worktree.path;
+  for (const file of ["lf.txt", "a.txt", "staged.txt"]) {
+    assert.equal(entryAt(copy, file), entryAt(originalPath, file), file);
+  }
+  assert.equal(await status(copy), want);
+  for (const args of [["diff"], ["diff", "--cached"]]) {
+    assert.equal(
+      await gitOut(copy, ...args),
+      await gitOut(originalPath, ...args),
+      args.join(" "),
+    );
+  }
+});
 
 it("a mac original's tracked symlink is a link on the copy where this OS makes links, and the start is refused where it can't", async () => {
   await setKind(sourceRepo, "mac");

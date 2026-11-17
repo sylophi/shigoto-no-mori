@@ -3,6 +3,8 @@
 // mirror starts (sessions.ts), and the copy's landing
 // (host/lib/sync/landing.ts) refuses the links its device can't make
 // and gives the copy's worktree what its repo wouldn't give it alone.
+// Once the original's files are over it, the copy's index is told
+// their sizes (clearStaleSizes).
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -115,4 +117,40 @@ export const copyCheckoutConfig = Effect.fnUntraced(function* (
     own.symlinks === checkout.symlinks
     ? undefined
     : checkout;
+});
+
+// The copy's checkout recorded the size of each file as git wrote it,
+// and the original's bytes the mirror wrote over it can differ in size
+// with the same content: a file the original holds with LF where its
+// checkout writes CRLF. git reads a tracked file whose size differs
+// from the recorded one as modified without looking at its content, a
+// refresh included, until it hashes the file again. So the paths git
+// reads as changed by their stat alone are hashed again, which stages
+// nothing: their content is the index's already. A submodule is never
+// one, and `git diff` may be told to hide it.
+export const clearStaleSizes = Effect.fnUntraced(function* (
+  worktreePath: string,
+) {
+  const git = yield* Git.Git;
+  const [byStat, byContent] = yield* Effect.all(
+    [
+      git.run(worktreePath, [
+        "diff-files",
+        "--name-only",
+        "--ignore-submodules",
+        "-z",
+      ]),
+      git.run(worktreePath, ["diff", "--name-only", "-z"]),
+    ],
+    { concurrency: 2 },
+  );
+  const changed = new Set(splitZ(byContent));
+  const stale = splitZ(byStat).filter((file) => !changed.has(file));
+  if (stale.length === 0) return;
+  yield* git.withIndexLock(
+    worktreePath,
+    git.run(worktreePath, ["update-index", "-z", "--stdin"], {
+      stdin: stale.map((file) => `${file}\0`).join(""),
+    }),
+  );
 });

@@ -693,6 +693,14 @@ export const mirrorContract = defineContract(
     MirrorApplyGitStateResultSchema,
     gatedBy("changeCode"),
   ),
+  // The copy's index told the sizes of the original's files written
+  // over its checkout's (host/mirror/checkout.ts).
+  invoke(
+    "clearStaleSizes",
+    MirrorWorktreePayloadSchema,
+    VoidSchema,
+    gatedBy("changeCode"),
+  ),
   // Carries the list, since a busy mirror fires several times a second.
   // Bare when the host has none to send, and a reader re-asks.
   push("changed", Schema.UndefinedOr(MirrorListResultSchema), {

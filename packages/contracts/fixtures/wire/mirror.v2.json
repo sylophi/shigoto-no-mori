@@ -109,6 +109,12 @@
       "starting": []
     }
   },
+  "mirror:clearStaleSizes": {
+    "payload": {
+      "projectId": "\n",
+      "worktreeId": "db1a5ad23ae8"
+    }
+  },
   "mirror:gitChanged": {
     "payload": {
       "projectId": "P",
