@@ -10,6 +10,14 @@ on:
 permissions:
   contents: read
 
+# Baked into each build, since a packaged app sees only build-time env.
+# Repository Actions variables, not secrets.
+env:
+  SM_DEVICE_HUB_URL: ${{ vars.SM_DEVICE_HUB_URL }}
+  SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
+  SM_ACCOUNT_WEB_ORIGIN: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
+  SM_ACCOUNT_CLERK_OAUTH_CLIENT_ID: ${{ vars.SM_ACCOUNT_CLERK_OAUTH_CLIENT_ID }}
+
 jobs:
   # The tag's gates, ahead of the three builds. They build the commit
   # checked here, as a tag can be moved while they wait.
@@ -160,11 +168,6 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # Baked into the bundle, since a packaged app sees only
-          # build-time env. Repository Actions variables, not secrets.
-          SM_DEVICE_HUB_URL: ${{ vars.SM_DEVICE_HUB_URL }}
-          SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
-          SM_ACCOUNT_WEB_ORIGIN: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
         run: pnpm exec electron-forge make
 
       - name: Verify signing and notarization
@@ -254,11 +257,6 @@ jobs:
         run: pnpm run postinstall
 
       - name: Build the package
-        env:
-          SM_DEVICE_HUB_URL: ${{ vars.SM_DEVICE_HUB_URL }}
-          SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
-          SM_ACCOUNT_WEB_ORIGIN: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
-          SM_ACCOUNT_CLERK_OAUTH_CLIENT_ID: ${{ vars.SM_ACCOUNT_CLERK_OAUTH_CLIENT_ID }}
         run: pnpm run package:linux
 
       # The package as it ships, on an empty data dir: the terminal
@@ -329,11 +327,6 @@ jobs:
         run: pnpm run postinstall
 
       - name: Build the installer
-        env:
-          SM_DEVICE_HUB_URL: ${{ vars.SM_DEVICE_HUB_URL }}
-          SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
-          SM_ACCOUNT_WEB_ORIGIN: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
-          SM_ACCOUNT_CLERK_OAUTH_CLIENT_ID: ${{ vars.SM_ACCOUNT_CLERK_OAUTH_CLIENT_ID }}
         run: pnpm run make
 
       # The terminal command on an empty data dir, then the installer

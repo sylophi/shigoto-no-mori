@@ -28,6 +28,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { dirname, join } from "@shigomori/engine/canonicalPath";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -46,7 +47,9 @@ import {
   waitFor,
 } from "./lib/checkKit.mts";
 import { nativefs } from "../../packages/engine/test/lib/nativefs.ts";
+import { whereV2Ran } from "../../packages/engine/test/lib/platform.ts";
 import { addProject, builtSm, hostEngine } from "./lib/smBinary.mts";
+import { processTable } from "../../test/processTable.mts";
 import { own, pidIn } from "../../test/testProcesses.mts";
 import { readProcesses } from "@shigomori/engine/processTable/nativefs";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
@@ -161,6 +164,25 @@ async function endConsoleOf(pid: number | undefined) {
       .filter((row) => row.console === host)
       .map((row) => `${row.pid}:${row.birth}`),
   ]);
+}
+
+// The moves on record in `dataDir`, each beside the live process its pid
+// names now, so a record read as still running shows why.
+async function movingRecords(dataDir: string) {
+  const db = new DatabaseSync(join(dataDir, "store.db"), { readOnly: true });
+  const records = db
+    .prepare("SELECT to_path, pid, started_at FROM moving")
+    .all() as Array<{ to_path: string; pid: number; started_at: number }>;
+  db.close();
+  const live = processTable();
+  return JSON.stringify(
+    records.map(({ to_path, pid, started_at }) => ({
+      to_path,
+      pid,
+      started_at,
+      live: live.get(pid)?.start ?? null,
+    })),
+  );
 }
 
 // A data dir for one recovery path, the terminal sm on it.
@@ -353,12 +375,15 @@ it("the app's start finishes or undoes each move a crash cut short", async () =>
   const cuts = await cutMoves(place);
   await cutRemoval(place);
   const report = decodeReport((await place.sm("doctor")).docs.at(-1));
-  assert.equal(
-    report.checks.filter((check) => check.id === "project-interrupted-moves")
-      .length,
-    CUT.filter((cut) => cut.committed !== true).length,
-    "the doctor reports each cut-short move",
-  );
+  const reported = report.checks.filter(
+    (check) => check.id === "project-interrupted-moves",
+  ).length;
+  const cutShort = CUT.filter((cut) => cut.committed !== true).length;
+  if (reported !== cutShort) {
+    assert.fail(
+      `the doctor reports ${reported} of ${cutShort} cut-short moves: ${await movingRecords(place.dataDir)}`,
+    );
+  }
   const engine = await hostEngine(
     place.dataDir,
     join(dirname(builtSm()), "nativefs"),
@@ -407,12 +432,8 @@ async function v2DataDir(place: ReturnType<typeof dataDirFor>) {
   return { v2, wt: join(place.dataDir, "wt", "repo") };
 }
 
-it("the migration's move into wt/ killed at each step is finished by the next run", async ({
-  skip,
-}) => {
-  // v2 never ran on Windows, so no v2 worktree is there to move, and the
-  // move asks lsof, which Windows lacks, what runs in one.
-  skip(process.platform === "win32", "v2 never ran on Windows");
+it("the migration's move into wt/ killed at each step is finished by the next run", async (ctx) => {
+  whereV2Ran(ctx);
   const stops: ReadonlyArray<(v2: string) => Stop> = [
     () => ({ tool: "git", when: "before", match: "worktree move" }),
     () => ({ tool: "git", when: "after", match: "worktree move" }),

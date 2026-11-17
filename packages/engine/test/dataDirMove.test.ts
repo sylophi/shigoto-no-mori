@@ -37,6 +37,7 @@ import * as Registry from "../src/Registry.ts";
 import * as WorktreeData from "../src/WorktreeData.ts";
 import * as Worktrees from "../src/Worktrees.ts";
 import { openNode } from "./lib/nodeStore.ts";
+import { homeEnv } from "./lib/platform.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox;
@@ -126,9 +127,7 @@ const lockAtHome = (home: string) =>
     Layer.provideMerge(Paths.layer("dev")),
     Layer.provide(NodeServices.layer),
     Layer.provide(
-      ConfigProvider.layer(
-        ConfigProvider.fromEnv({ env: { HOME: home, USERPROFILE: home } }),
-      ),
+      ConfigProvider.layer(ConfigProvider.fromEnv({ env: homeEnv(home) })),
     ),
   );
 

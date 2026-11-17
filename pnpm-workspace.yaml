@@ -141,6 +141,10 @@ catalog:
   "@types/node": ^24.13.5
   "@types/react": ^19.2.17
   "@types/react-dom": ^19.2.3
+  # The xterm 6.1 betas, for the kitty keyboard protocol and for the fix
+  # to a resize dropping the writes queued behind it
+  # (xtermjs/xterm.js#6201), which host/lib/terminals/screen.ts's resize
+  # relies on. Back to stable once 6.1.0 ships.
   "@xterm/addon-fit": 0.12.0-beta.332
   "@xterm/addon-serialize": 0.15.0-beta.330
   "@xterm/addon-unicode-graphemes": 0.5.0-beta.330
@@ -178,6 +182,10 @@ catalog:
 # is left of the tree (host/lib/scripts/processTrees/consoles.ts). Once
 # the shell has exited, node-pty has dropped the console without closing
 # it, so the close also closes the console's input, which ends its host.
+# node-pty is on the 1.2.0 beta (app/package.json) because 1.1.0's ConPTY
+# addon crashes the host when two shells exit together
+# (microsoft/node-pty#921, fixed by microsoft/node-pty#922). Back to
+# stable once 1.2.0 ships, the patch moved to it.
 patchedDependencies:
   node-pty@1.2.0-beta.18: patches/node-pty@1.2.0-beta.18.patch
   react-grab@0.2.0: patches/react-grab@0.2.0.patch

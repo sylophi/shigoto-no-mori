@@ -26,6 +26,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import { afterAll, it } from "vitest";
 import * as Paths from "../src/Paths.ts";
 import { nodeStore } from "./lib/nodeStore.ts";
+import { homeEnv } from "./lib/platform.ts";
 
 const root = mkdtempSync(join(tmpdir(), "engine-store-crash-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -76,7 +77,7 @@ write("file-sync/mirror-history.json", {
 const configured = (dir: string) =>
   ConfigProvider.layer(
     ConfigProvider.fromEnv({
-      env: { HOME: dir, USERPROFILE: dir, SHIGOMORI_DATA_DIR: dir },
+      env: { ...homeEnv(dir), SHIGOMORI_DATA_DIR: dir },
     }),
   );
 

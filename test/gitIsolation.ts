@@ -1,5 +1,5 @@
 // What every test runner here applies to its own process before a test
-// starts (the vitest configs, the Go tests through testTemp.mts, the
+// starts (the vitest configs, the Go checks in goChecks.mts, the
 // smoke, the scene comparison, the reliability harness and the guide's
 // evaluation), so no test's git can reach this repository however it
 // runs git.

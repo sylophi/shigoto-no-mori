@@ -29,13 +29,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-var osVerbs = map[string]func(args []string, stdout, stderr io.Writer) int{
-	"processes": listProcesses,
-	"end":       endProcesses,
-	"job":       runInJob,
-	"user-path": userPath,
-}
-
 type process struct {
 	Pid     uint32  `json:"pid"`
 	Parent  uint32  `json:"parent"`

@@ -11,6 +11,7 @@ import { afterEach, beforeEach } from "vitest";
 import * as Migration from "../../src/Migration.ts";
 import * as Paths from "../../src/Paths.ts";
 import * as Store from "../../src/Store.ts";
+import { homeEnv } from "./platform.ts";
 
 export const openNode: Store.OpenDatabase = (filename, options) =>
   SqliteClient.make({ filename, ...options });
@@ -42,8 +43,7 @@ export const onStoreAt =
         ConfigProvider.layer(
           ConfigProvider.fromEnv({
             env: {
-              HOME: dataDir,
-              USERPROFILE: dataDir,
+              ...homeEnv(dataDir),
               SHIGOMORI_DATA_DIR: dataDir,
             },
           }),

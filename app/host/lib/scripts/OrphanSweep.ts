@@ -24,6 +24,7 @@ import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import type { OrphanScriptReport } from "@shigomori/contracts/schemas";
+import * as ProcessTable from "@shigomori/engine/ProcessTable";
 import * as RunningScripts from "@shigomori/engine/RunningScripts";
 import * as Processes from "@shigomori/engine/processes";
 import * as ProcessTrees from "./ProcessTrees";
@@ -104,10 +105,12 @@ export class OrphanSweep extends Context.Service<
     // report that came back empty for that reason would drop the
     // notice. Every later ask answers nothing stopped.
     readonly takeReport: Effect.Effect<OrphanScriptReport>;
-    // Records a script this instance started, until `exit` says it is
-    // gone.
+    // Records a script this instance started, under the birth the
+    // process table reads for it, until `exit` says it is gone. One
+    // whose birth can't be read goes unrecorded, as the sweep could never
+    // prove it ours.
     readonly record: (
-      script: Omit<RecordedScript, "ownerPid">,
+      script: Omit<RecordedScript, "ownerPid" | "startedAt">,
       exit: Effect.Effect<unknown>,
     ) => Effect.Effect<void>;
   }
@@ -124,6 +127,7 @@ export const layer = Layer.effect(
   OrphanSweep,
   Effect.gen(function* () {
     const recorded = yield* RunningScripts.RunningScripts;
+    const processTable = yield* ProcessTable.ProcessTable;
     const scope = yield* Effect.scope;
     const ownerPid = process.pid;
     // Ours: a dead instance's, or this pid's from a session before. A
@@ -163,11 +167,13 @@ export const layer = Layer.effect(
         Effect.withSpan("OrphanSweep.takeReport"),
       ),
       record: Effect.fn("OrphanSweep.record")(function* (
-        script: Omit<RecordedScript, "ownerPid">,
+        script: Omit<RecordedScript, "ownerPid" | "startedAt">,
         exit: Effect.Effect<unknown>,
       ) {
+        const startedAt = yield* processTable.startedAt(script.pid);
+        if (Option.isNone(startedAt)) return;
         yield* recorded
-          .add({ ...script, ownerPid })
+          .add({ ...script, ownerPid, startedAt: startedAt.value })
           .pipe(recordFailure("record"));
         yield* exit.pipe(
           Effect.andThen(recorded.remove([script.runId])),

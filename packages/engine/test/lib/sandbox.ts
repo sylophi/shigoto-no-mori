@@ -45,6 +45,7 @@ import { doctorLayer, migratingEngineLayer } from "../../src/layer.ts";
 import * as Migration from "../../src/Migration.ts";
 import * as Open from "../../src/Open.ts";
 import * as Paths from "../../src/Paths.ts";
+import * as ProcessTable from "../../src/ProcessTable.ts";
 import * as Store from "../../src/Store.ts";
 import { openNode } from "./nodeStore.ts";
 import * as Worktrees from "../../src/Worktrees.ts";
@@ -54,6 +55,7 @@ import * as WtFolder from "../../src/WtFolder.ts";
 import { GIT_IDENTITY, isolateGit } from "../../../../test/gitIsolation.ts";
 import { nativefs } from "./nativefs.ts";
 import { SYNC_SPAWN } from "../../../../test/testProcesses.mts";
+import { homeEnv } from "./platform.ts";
 
 // The services a harness case calls.
 export type Engine =
@@ -80,7 +82,8 @@ export type Engine =
   | WorktreeData.WorktreeData
   | SqlClient.SqlClient
   | Migration.Migration
-  | Paths.Paths;
+  | Paths.Paths
+  | ProcessTable.ProcessTable;
 
 // What the agent hooks run, as the installed binary names itself.
 export const HOOK_BINARY =
@@ -109,20 +112,13 @@ const childEnv = (): NodeJS.ProcessEnv => ({ ...process.env, LC_ALL: "C" });
 // What Windows runs nothing without, beside PATH: its system folder,
 // its temp folder, and the extensions it runs a program by. Its names
 // come in any case.
-const WINDOWS_ENV = ["SYSTEMROOT", "TEMP", "TMP", "PATHEXT"];
-const passedEnv =
-  process.platform === "win32"
-    ? (name: string) =>
-        ["PATH", "TMPDIR", "LC_ALL", ...WINDOWS_ENV].includes(
-          name.toUpperCase(),
-        )
-    : (name: string) => ["PATH", "TMPDIR", "LC_ALL"].includes(name);
-const WINDOWS_ENGINE_ENV: Record<string, string> =
-  process.platform === "win32"
-    ? Object.fromEntries(
-        WINDOWS_ENV.map((name) => [name, process.env[name] ?? ""]),
-      )
-    : {};
+const WINDOWS_ENV =
+  process.platform === "win32" ? ["SYSTEMROOT", "TEMP", "TMP", "PATHEXT"] : [];
+const PASSED_ENV = new Set(["PATH", "TMPDIR", "LC_ALL", ...WINDOWS_ENV]);
+const passedEnv = (name: string) => PASSED_ENV.has(name.toUpperCase());
+const WINDOWS_ENGINE_ENV = Object.fromEntries(
+  WINDOWS_ENV.map((name) => [name, process.env[name] ?? ""]),
+);
 
 // What a binary did: its exit code, its last JSON document, its output.
 type Run = {
@@ -218,8 +214,7 @@ export function sandbox(
       ConfigProvider.layer(
         ConfigProvider.fromEnv({
           env: {
-            HOME: root,
-            USERPROFILE: root,
+            ...homeEnv(root),
             PATH: process.env.PATH ?? "",
             ...WINDOWS_ENGINE_ENV,
             SHIGOMORI_DATA_DIR: sideDir(side),
@@ -296,8 +291,7 @@ export function sandbox(
 
   const env = (side: string): NodeJS.ProcessEnv => ({
     ...sideEnv(),
-    HOME: root,
-    USERPROFILE: root,
+    ...homeEnv(root),
     SHIGOMORI_DATA_DIR: sideDir(side),
   });
 

@@ -24,6 +24,7 @@ import {
   onTestFinished,
 } from "vitest";
 import { type Sandbox, sandbox } from "../../engine/test/lib/sandbox.ts";
+import { homeEnv, whereV2Ran } from "../../engine/test/lib/platform.ts";
 import { builtBinary } from "./lib/binary.ts";
 import { own as owned } from "../../../test/testProcesses.mts";
 
@@ -132,12 +133,8 @@ describe("the v3 migration", () => {
     assert.ok(!existsSync(join(box.side("cli"), "store.db")));
   });
 
-  it("is made by doctor --fix, which leaves a worktree something runs in", async ({
-    skip,
-  }) => {
-    // v2 never ran on Windows, so no v2 worktree is there to move, and the
-    // move asks lsof, which Windows lacks, what runs in one.
-    skip(process.platform === "win32", "v2 never ran on Windows");
+  it("is made by doctor --fix, which leaves a worktree something runs in", async (ctx) => {
+    whereV2Ran(ctx);
     const { dataDir, a, b } = v2();
     const doctor = async (...args: string[]) =>
       (await runAt(box.home, "--json", "doctor", ...args)).doc as {
@@ -189,12 +186,7 @@ describe("shell", () => {
   it("installs the hook in the shell's config and takes it out again", async () => {
     const home = homeWith({ ".zshrc": "export A=1\n" });
     const run = (...args: string[]) =>
-      piped(
-        box.home,
-        args,
-        { HOME: home, USERPROFILE: home, SHELL: "/bin/zsh" },
-        "",
-      );
+      piped(box.home, args, { ...homeEnv(home), SHELL: "/bin/zsh" }, "");
     await run("shell", "install");
     // Idempotent.
     await run("shell", "install", "zsh");
@@ -210,8 +202,7 @@ describe("shell", () => {
       ".zshrc": `${BEGIN}\necho mine\n# <<< shigomori-dev shell integration <<<\n`,
     });
     const before = readFileSync(join(home, ".zshrc"), "utf8");
-    const run = (...args: string[]) =>
-      piped(box.home, args, { HOME: home, USERPROFILE: home }, "");
+    const run = (...args: string[]) => piped(box.home, args, homeEnv(home), "");
     await run("shell", "install", "zsh");
     await run("shell", "uninstall");
     assert.equal(readFileSync(join(home, ".zshrc"), "utf8"), before);
@@ -222,8 +213,7 @@ describe("shell", () => {
   it("writes a symlinked config through its link", async () => {
     const home = homeWith({ "dotfiles/zshrc": "export A=1\n" });
     symlinkSync("dotfiles/zshrc", join(home, ".zshrc"));
-    const run = (...args: string[]) =>
-      piped(box.home, args, { HOME: home, USERPROFILE: home }, "");
+    const run = (...args: string[]) => piped(box.home, args, homeEnv(home), "");
     await run("shell", "install", "zsh");
     assert.ok(lstatSync(join(home, ".zshrc")).isSymbolicLink());
     assert.match(
