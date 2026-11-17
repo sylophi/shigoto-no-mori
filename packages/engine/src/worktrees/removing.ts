@@ -463,8 +463,8 @@ export const makeRemoving = ({
       // side is done (an orphaned checkout's too), the rest goes before
       // anything can cut in: what is kept under the id, which a worktree
       // made at the same path later would take over, and the branch, which
-      // nothing would remove after an interrupt (a Ctrl-C, a quit). What
-      // the app runs in it lets go first.
+      // nothing would remove after an interrupt (a Ctrl-C, a quit). On
+      // Windows what the app runs in it lets go first.
       const removed = yield* Effect.uninterruptible(
         Effect.gen(function* () {
           yield* releaseHolders({

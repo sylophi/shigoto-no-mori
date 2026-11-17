@@ -271,23 +271,34 @@ const removingHeld = async (
   );
   // Ended before the sandbox goes, as Windows deletes no folder it works
   // in.
-  if (held.exitCode === null && held.signalCode === null) {
+  const alive = held.exitCode === null && held.signalCode === null;
+  if (alive) {
     held.kill();
     await once(held, "exit");
   }
-  return { removed, told };
+  return { removed, told, alive };
 };
 
 // Windows deletes no folder a process works in.
-it("lets go of what the app runs in a worktree right before its files go", async () => {
+it("lets go of what the app runs in a worktree right before its files go only on Windows", async () => {
   const { located } = await withLooseFile();
-  const { told } = await removingHeld(located, { force: true });
-  assert.deepEqual(told, [
-    {
-      owner: { projectId: located.project.id, worktreeId: located.worktree.id },
-      filesThere: true,
-    },
-  ]);
+  const { told, alive } = await removingHeld(located, { force: true });
+  const windows = process.platform === "win32";
+  assert.deepEqual(
+    told,
+    windows
+      ? [
+          {
+            owner: {
+              projectId: located.project.id,
+              worktreeId: located.worktree.id,
+            },
+            filesThere: true,
+          },
+        ]
+      : [],
+  );
+  assert.equal(alive, !windows);
   assert.ok(!existsSync(located.worktree.path));
 });
 

@@ -1,7 +1,7 @@
 // The engine under the terminal: the store over Bun's SQLite, the
 // filesystem helper beside the binary, and the running app, which the
-// cross-device verbs ask and which is asked to stop a mirror and let go
-// of its terminals before a worktree's files go.
+// cross-device verbs ask and which is asked to stop a mirror before a
+// worktree's files go, and on Windows to let go of its terminals.
 import { dirname, join } from "node:path";
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
 import * as DataDirLock from "@shigomori/engine/DataDirLock";
