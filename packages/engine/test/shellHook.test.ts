@@ -41,3 +41,11 @@ for (const [encoding, bytes] of Object.entries(stored)) {
     assert.ok(Buffer.from(unhooked).equals(bytes));
   });
 }
+
+it("adds an LF hook to a zsh rc with CRLF lines and removes it byte for byte", () => {
+  const rc = "# edited on Windows\r\nexport EDITOR=vim\r\n";
+  const hooked = withHook(names, "zsh", rc);
+  assert.ok(hooked.startsWith(rc));
+  assert.ok(!hooked.slice(rc.length).includes("\r"));
+  assert.equal(withoutHook(names, hooked), rc);
+});
