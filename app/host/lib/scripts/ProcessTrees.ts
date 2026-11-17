@@ -27,15 +27,11 @@ export class ProcessTrees extends Context.Service<
 >()("sm/host/ProcessTrees") {}
 
 // `nativefs` is the helper that reads and ends trees on Windows.
-const make = (nativefs: string) =>
-  Effect.gen(function* () {
-    return ProcessTrees.of(
-      yield* byFamily({
-        posix: makeSignals,
-        windows: makeConsoles(nativefs),
-      }),
-    );
-  });
-
 export const layer = (nativefs: string) =>
-  Layer.effect(ProcessTrees, make(nativefs));
+  Layer.effect(
+    ProcessTrees,
+    Effect.map(
+      byFamily({ posix: makeSignals, windows: makeConsoles(nativefs) }),
+      ProcessTrees.of,
+    ),
+  );

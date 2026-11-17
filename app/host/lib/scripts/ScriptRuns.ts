@@ -20,10 +20,10 @@ import { type IPty, spawn as spawnPty } from "node-pty";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import * as Shells from "@shigomori/engine/Shells";
 import * as ProcessTrees from "./ProcessTrees";
+import type { Stop } from "./processTrees/tree";
 
-// No process could be started: a missing folder to start in or login
-// shell, or a PTY that could not be allocated. The console shows the
-// message.
+// No process could be started: a missing folder to start in or shell,
+// or a PTY that could not be allocated. The console shows the message.
 export class PtySpawnError extends Schema.TaggedError<PtySpawnError>()(
   "PtySpawnError",
   {
@@ -65,7 +65,7 @@ export type SpawnOptions = {
 export interface Stopping {
   readonly graceMs: number;
   readonly wait: boolean;
-  readonly how?: "stop" | "hangup";
+  readonly how?: Stop["how"];
 }
 
 // What the layer's close stops a run it finds still open with.
