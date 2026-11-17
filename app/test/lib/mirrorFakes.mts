@@ -72,3 +72,54 @@ export const inertMirrorImpl = (
   leaveAccount: Effect.void,
   ...impl,
 });
+
+// The engine reporting every session it was asked to create as in step
+// at once, and recording the ones it was asked to end. `onCreate` runs
+// as each is created, and `impl` replaces the rest.
+export function recordingMirror(
+  impl: Partial<MirrorEngine["Service"]> = {},
+  onCreate: (
+    input: Parameters<MirrorEngine["Service"]["create"]>[0],
+  ) => void = () => {},
+) {
+  const sessions = new Map<string, MirrorSessionRaw>();
+  const terminated: string[] = [];
+  let next = 0;
+  return {
+    terminated,
+    impl: inertMirrorImpl({
+      sessions: Effect.sync(() => [...sessions.values()]),
+      create: (input) =>
+        Effect.sync(() => {
+          onCreate(input);
+          next += 1;
+          const session = `sync_fake${next}`;
+          sessions.set(
+            session,
+            rawMirrorSession({
+              session,
+              name: input.name,
+              labels: input.labels,
+              localWorktreeId: input.localWorktreeId,
+              localRoot: input.localRoot,
+              deviceId: input.deviceId,
+              projectId: input.projectId,
+              worktreeId: input.worktreeId,
+              remoteRoot: input.remoteRoot,
+              ignores: [...input.ignores],
+              createdAt: Date.now(),
+              statusText: "Watching for changes",
+              successfulCycles: 1,
+            }),
+          );
+          return session;
+        }),
+      terminate: (session) =>
+        Effect.sync(() => {
+          terminated.push(session);
+          sessions.delete(session);
+        }),
+      ...impl,
+    }),
+  };
+}

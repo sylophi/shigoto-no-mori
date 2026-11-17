@@ -23,7 +23,6 @@ import {
   rmdirSync,
   rmSync,
   statSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -62,7 +61,7 @@ export function ownTestTemp(family: string): string {
   // dev app, so one run's move or settle would stall another's changes.
   const config = join(run, "config");
   mkdirSync(config, { recursive: true });
-  linkPackageManagers(config, userConfig);
+  copyPackageManagers(config, userConfig);
   process.env["XDG_CONFIG_HOME"] = config;
   owned = { root, run };
   process.on("exit", leaveTestTemp);
@@ -81,10 +80,9 @@ export function leaveTestTemp(): void {
 
 // pnpm and Bun read their global settings (the release cooldown,
 // ignore-scripts) from XDG_CONFIG_HOME once it is set, so the run's
-// folder links the user's own back in, or an install inside a run would
-// go without them. Windows links only with Developer Mode on, so there
-// the run gets a copy.
-function linkPackageManagers(config: string, userConfig?: string): void {
+// folder holds a copy of the user's own, or an install inside a run
+// would go without them.
+function copyPackageManagers(config: string, userConfig?: string): void {
   const home = homedir();
   const sources: Record<string, string> = {
     pnpm:
@@ -101,11 +99,8 @@ function linkPackageManagers(config: string, userConfig?: string): void {
         : join(home, ".bunfig.toml"),
   };
   for (const [name, source] of Object.entries(sources)) {
-    if (!existsSync(source)) continue;
-    if (process.platform === "win32") {
+    if (existsSync(source)) {
       cpSync(source, join(config, name), { recursive: true });
-    } else {
-      symlinkSync(source, join(config, name));
     }
   }
 }

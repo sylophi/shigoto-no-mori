@@ -4,7 +4,7 @@
 // nothing to fight over, and git agrees with itself on both ends.
 // mirror:startTo runs for real: the send over a REAL direct websocket,
 // the landing on the listener, the engine's create with REAL git. The
-// mirror engine is the recording stand-in test/control.mts uses (its
+// mirror engine is the recording stand-in (lib/mirrorFakes.mts, its
 // real runs are test/mirror.mts's): what is pinned here is that git on
 // both ends writes the same bytes, which is all the engine would carry.
 // For each pairing of a Windows original (core.autocrlf=true,
@@ -50,10 +50,7 @@ import { afterAll, beforeAll, it } from "vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as PlatformError from "effect/PlatformError";
-import {
-  mirrorContract,
-  type MirrorSessionRaw,
-} from "@shigomori/contracts/modules/mirror";
+import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
@@ -71,7 +68,7 @@ import {
   standInMirror,
   standInPeers,
 } from "./lib/hostStandIns.mts";
-import { inertMirrorImpl, rawMirrorSession } from "./lib/mirrorFakes.mts";
+import { recordingMirror } from "./lib/mirrorFakes.mts";
 
 const fixture = cliSandbox("sm-mirror-checkout-");
 const { sandbox, git, gitOut } = fixture;
@@ -82,50 +79,23 @@ afterAll(async () => {
   await fixture.remove();
 });
 
-// The mirror engine's stand-in: every session it is asked for is in
-// step at once, and a start's replica pass writes the original's bytes
-// at every tracked path over what the copy's checkout wrote.
-const sessions = new Map<string, MirrorSessionRaw>();
-let next = 0;
+// The mirror engine's stand-in, whose start's replica pass writes the
+// original's bytes at every tracked path over what the copy's checkout
+// wrote.
 standInMirror(
-  inertMirrorImpl({
-    sessions: Effect.sync(() => [...sessions.values()]),
-    create: (input) =>
-      Effect.sync(() => {
-        if (input.direction === "replica") {
-          for (const file of execFileSync("git", ["ls-files", "-z"], {
-            cwd: input.localRoot,
-            encoding: "utf8",
-          })
-            .split("\0")
-            .filter(Boolean)) {
-            if (!lstatSync(join(input.localRoot, file)).isSymbolicLink()) {
-              carry(input.localRoot, input.remoteRoot, file);
-            }
-          }
-        }
-        next += 1;
-        const session = `sync_checkout${next}`;
-        sessions.set(
-          session,
-          rawMirrorSession({
-            session,
-            name: input.name,
-            labels: input.labels,
-            localWorktreeId: input.localWorktreeId,
-            localRoot: input.localRoot,
-            deviceId: input.deviceId,
-            projectId: input.projectId,
-            worktreeId: input.worktreeId,
-            remoteRoot: input.remoteRoot,
-            statusText: "Watching for changes",
-            successfulCycles: 1,
-          }),
-        );
-        return session;
-      }),
-    terminate: (session) => Effect.sync(() => void sessions.delete(session)),
-  }),
+  recordingMirror({}, (input) => {
+    if (input.direction !== "replica") return;
+    for (const file of execFileSync("git", ["ls-files", "-z"], {
+      cwd: input.localRoot,
+      encoding: "utf8",
+    })
+      .split("\0")
+      .filter(Boolean)) {
+      if (!lstatSync(join(input.localRoot, file)).isSymbolicLink()) {
+        carry(input.localRoot, input.remoteRoot, file);
+      }
+    }
+  }).impl,
 );
 
 // A device's kind, as its git is set up. A Mac's filemode is what git
@@ -217,15 +187,11 @@ beforeAll(async () => {
   await git(sourceRepo, ["branch", "links", commit]);
 
   targetRepo = await fixture.cloneRepo(sourceRepo, "target");
-  otherWorktree = join(sandbox, "target-other");
-  await git(targetRepo, [
-    "worktree",
-    "add",
-    "-q",
-    "-b",
+  otherWorktree = await fixture.addWorktree(
+    targetRepo,
+    "target-other",
     "other",
-    otherWorktree,
-  ]);
+  );
   for (const repo of [sourceRepo, targetRepo]) {
     probedFilemode.set(repo, await gitOut(repo, "config", "core.filemode"));
   }
@@ -327,6 +293,10 @@ async function inStep(a: string, b: string, what: string) {
   assert.equal(await status(b), "", `${what}: status at ${b}`);
 }
 
+// The line ending `path` is written with.
+const eolOf = (path: string) =>
+  readFileSync(path, "latin1").includes("\r\n") ? "\r\n" : "\n";
+
 // What the file half does with an edit: the bytes, as they are.
 const carry = (from: string, to: string, file: string) =>
   writeFileSync(join(to, file), readFileSync(join(from, file)));
@@ -338,8 +308,7 @@ async function gitVerbs(end: string, other: string, what: string) {
   await git(end, ["checkout", "--", "a.txt"]);
   await inStep(end, other, `${what}, after checkout --`);
 
-  const eol = readFileSync(file, "latin1").includes("\r\n") ? "\r\n" : "\n";
-  writeFileSync(file, `${readFileSync(file, "latin1")}three${eol}`);
+  writeFileSync(file, `${readFileSync(file, "latin1")}three${eolOf(file)}`);
   await git(end, ["stash", "-q"]);
   await inStep(end, other, `${what}, after stash`);
   await git(end, ["stash", "pop", "-q"]);
@@ -359,11 +328,7 @@ async function gitVerbs(end: string, other: string, what: string) {
 // A file written on the copy and committed there is the blob the
 // original stages from the same bytes.
 async function commitsAlike(originalPath: string, copy: string) {
-  const eol = readFileSync(join(originalPath, "a.txt"), "latin1").includes(
-    "\r\n",
-  )
-    ? "\r\n"
-    : "\n";
+  const eol = eolOf(join(originalPath, "a.txt"));
   for (const root of [originalPath, copy]) {
     writeFileSync(join(root, "new.txt"), `x${eol}y${eol}`);
     await git(root, ["add", "new.txt"]);
@@ -449,8 +414,8 @@ for (const [originalKind, copyKind] of [
 
     await inStep(originalPath, copy, "after the start");
     assert.equal(
-      readFileSync(join(copy, "a.txt"), "latin1").includes("\r\n"),
-      originalKind === "windows",
+      eolOf(join(copy, "a.txt")),
+      originalKind === "windows" ? "\r\n" : "\n",
       "the copy's line endings are the original's",
     );
     await gitVerbs(copy, originalPath, "on the copy");
