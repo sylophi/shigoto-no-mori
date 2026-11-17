@@ -90,7 +90,7 @@ const make = Effect.gen(function* () {
 
 export const layer = Layer.effect(RunningScripts, make);
 
-// The recorded command is what we handed the login shell, but a shell
+// The recorded command is what we handed the script shell, but a shell
 // execs into the last command of what it runs, so the live command
 // line is often one program with its own argv: `pnpm i && pnpm dev`
 // shows up as `node .../pnpm.cjs dev`, and a shell-quoted absolute

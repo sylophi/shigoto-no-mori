@@ -33,7 +33,7 @@ Four questions, whose answers can differ within one window:
 - **Whose paths these are**: `packages/ui/src/lib/devicePaths.ts`, which tells a device's paths by their spelling, since a window shows other devices' too.
 - **Whose keyboard and file manager**: `viewerOs` in `packages/ui/src/lib/platform.ts`, the machine the window runs on, which need not be the host's.
 
-On Windows a project's command lines run in Git Bash, so they read as POSIX sh as they do on macOS and Linux, and a terminal runs PowerShell, the shell Windows comes with. That split is by design (`src/Shells.ts`, `src/shells/windows.ts`).
+On Windows a project's command lines run in Git Bash, so they read as POSIX sh as they do on macOS and Linux, and a terminal runs PowerShell: 7 where it is installed, else the one Windows comes with. That split is by design (`src/Shells.ts`, `src/shells/windows.ts`).
 
 ## Commit points
 
@@ -48,6 +48,6 @@ Each change of state in several steps has one step after which it counts as done
 - **The move into `wt/`** (`WtFolder.ts`): each worktree's move as above. One that can't be made stays stuck, with why and a Retry.
 - **Project removal** (`Registry.ts`, `unregister`): one transaction, its primary's marks, shelf, agent sessions, unshelve time, clone records and icon included.
 - **Project relocate** (`worktrees/relocating.ts`): the new path and what its worktrees kept commit in one transaction.
-- **The updater's swap** (`updater/swap.ts`): one exchange commits it where the filesystem helper can make one, else two renames.
+- **The updater's swap** (`updater/swap.ts`), by each OS's install: on a Mac one exchange commits it where the filesystem helper can make one, else two renames (`updater/bundle.ts`). On Linux the rename of `current` commits it (`updater/versions.ts`), and on Windows `Update.exe --update` (`updater/squirrel.ts`).
 - **Carry-over** (`CarryOver.ts`): each entry is renamed in whole from a staging folder.
 - **The data-folder lock** (`DataDirLock.ts`) makes a data-folder move the one change under way, and says how. The move and its recovery are `src/dataDirMove.ts`, which the host asks with the checks and holds only it can make (`app/host/lib/dataDirMove.ts`).
