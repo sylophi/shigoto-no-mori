@@ -17,7 +17,7 @@ import { exec } from "@shigomori/engine/processes";
 import { exitedWithin, type Stop, type Tree } from "./tree";
 
 const close = (tree: Tree) =>
-  Effect.try(() => tree.closeTerminal?.()).pipe(Effect.ignore);
+  Effect.try(() => tree.terminal?.close()).pipe(Effect.ignore);
 
 export const makeConsoles = (nativefs: string) =>
   Effect.gen(function* () {
@@ -68,18 +68,16 @@ export const makeConsoles = (nativefs: string) =>
       );
 
     return {
-      // Ctrl+C and the grace, where there is a console to type it into,
-      // then the console closed and the rest ended.
       stop: Effect.fn("ProcessTrees.stop")(function* (tree: Tree, stop: Stop) {
-        if (stop.how === "stop" && tree.interrupt !== undefined) {
-          yield* Effect.try(tree.interrupt).pipe(Effect.ignore);
-          if (yield* exitedWithin(stop, stop.graceMs)) {
+        if (stop.how === "stop" && tree.terminal !== undefined) {
+          yield* Effect.try(tree.terminal.interrupt).pipe(Effect.ignore);
+          if (yield* exitedWithin(stop.exited, stop.graceMs)) {
             yield* close(tree);
             return true;
           }
         }
         yield* endTree(tree);
-        if (yield* exitedWithin(stop, stop.endMs)) return true;
+        if (yield* exitedWithin(stop.exited, stop.endMs)) return true;
         yield* Effect.logWarning(
           `[scripts] ${stop.name} (pid ${tree.pid}) still runs after its tree was ended, giving up on it`,
         );
@@ -89,7 +87,7 @@ export const makeConsoles = (nativefs: string) =>
       // escaped the console goes on, as a process that left its group
       // does elsewhere.
       stopNow: Effect.fn("ProcessTrees.stopNow")((tree: Tree) =>
-        tree.closeTerminal === undefined ? endTree(tree) : close(tree),
+        tree.terminal === undefined ? endTree(tree) : close(tree),
       ),
       // The console outlives its shell (the node-pty patch), and closing
       // it ends what is still attached.

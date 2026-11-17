@@ -9,11 +9,12 @@ export type Tree = {
   // A PTY run's shell leads a group, and a lifecycle script runs in the
   // host's.
   readonly ownGroup: boolean;
-  // Closes the PTY a run's tree is attached to, while the host holds
-  // it: the hangup where no signal is one.
-  readonly closeTerminal?: () => void;
-  // Types Ctrl+C into that PTY: the stop where no signal is one.
-  readonly interrupt?: () => void;
+  // The PTY a run's tree is attached to, while the host holds it: its
+  // close is the hangup and its Ctrl+C the stop where no signal is one.
+  readonly terminal?: {
+    readonly close: () => void;
+    readonly interrupt: () => void;
+  };
 };
 
 export type Stop = {
@@ -30,8 +31,8 @@ export type Stop = {
   readonly name: string;
 };
 
-export const exitedWithin = (stop: Stop, ms: number) =>
-  stop.exited.pipe(
+export const exitedWithin = (exited: Effect.Effect<unknown>, ms: number) =>
+  exited.pipe(
     Effect.timeoutOption(Duration.millis(ms)),
     Effect.map(Option.isSome),
   );

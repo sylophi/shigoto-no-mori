@@ -17,10 +17,8 @@ import {
 import { scriptEnvOf, UNATTENDED_ENV } from "@shigomori/contracts/scriptEnv";
 import * as Shells from "@shigomori/engine/Shells";
 import * as Clock from "effect/Clock";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
-import * as Option from "effect/Option";
 import type { Marks } from "./marks";
 import { OrphanSweep } from "./OrphanSweep";
 import * as ProcessTrees from "./ProcessTrees";
@@ -182,12 +180,6 @@ export interface LifecycleRuns {
   readonly end: () => void;
 }
 
-const settledWithin = (done: Promise<void>, ms: number) =>
-  Effect.promise(() => done).pipe(
-    Effect.timeoutOption(Duration.millis(ms)),
-    Effect.map(Option.isSome),
-  );
-
 export const makeRuns = ({
   marks,
   env: baseEnv,
@@ -214,8 +206,8 @@ export const makeRuns = ({
       if (record.cancelling) {
         // Another caller is already escalating. Wait for it, but bounded
         // so an unkillable child doesn't wedge this caller's chain too.
-        yield* settledWithin(
-          record.done,
+        yield* ProcessTrees.exitedWithin(
+          Effect.promise(() => record.done),
           DEFAULT_GRACE_MS + UNKILLABLE_WAIT_MS,
         );
         return;

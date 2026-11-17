@@ -65,12 +65,11 @@ export const makeSignals = Effect.gen(function* () {
       : signalPidTree(tree.pid, signal);
 
   return {
-    // SIGTERM (SIGHUP for a hangup), SIGKILL past the grace.
     stop: Effect.fn("ProcessTrees.stop")(function* (tree: Tree, stop: Stop) {
       yield* send(tree, SIGNALS[stop.how]);
-      if (yield* exitedWithin(stop, stop.graceMs)) return true;
+      if (yield* exitedWithin(stop.exited, stop.graceMs)) return true;
       yield* send(tree, "SIGKILL");
-      if (yield* exitedWithin(stop, stop.endMs)) return true;
+      if (yield* exitedWithin(stop.exited, stop.endMs)) return true;
       yield* Effect.logWarning(
         `[scripts] ${stop.name} (pid ${tree.pid}) survived SIGKILL, giving up on it`,
       );

@@ -195,8 +195,10 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
           return spawned.pid;
         },
         ownGroup: true,
-        closeTerminal: () => spawned.kill(),
-        interrupt: () => spawned.write("\x03"),
+        terminal: {
+          close: () => spawned.kill(),
+          interrupt: () => spawned.write("\x03"),
+        },
       };
       return Effect.gen(function* () {
         if (yield* Deferred.isDone(exited)) return yield* trees.release(tree);
@@ -298,8 +300,8 @@ const make = Effect.gen(function* () {
       return Scope.close(run, Exit.void);
     };
     // A run that is over lets go of its scope, so the layer stops
-    // holding it. The release finds the child exited and signals
-    // nothing.
+    // holding it. The release finds the child exited and only lets go
+    // of its tree.
     yield* handle.exit.pipe(
       Effect.andThen(() => close({ graceMs: 0, wait: false })),
       Effect.forkIn(scope),

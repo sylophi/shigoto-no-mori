@@ -9,6 +9,8 @@ import { makeConsoles } from "./processTrees/consoles";
 import { makeSignals } from "./processTrees/signals";
 import type { Stop, Tree } from "./processTrees/tree";
 
+export { exitedWithin } from "./processTrees/tree";
+
 export class ProcessTrees extends Context.Service<
   ProcessTrees,
   {
