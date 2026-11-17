@@ -1,8 +1,9 @@
 // How a device's paths read and type for its people. The engine spells
-// every path with `/` (contracts' projectPaths.ts). A Windows device's
-// show with `\`, take either when typed, and browse up from a drive's
-// root to "/", where its host lists the drives. A device is told by its
-// paths' spelling, its home's where the path alone can't say (`~/dev`).
+// every path with `/` (the model: packages/engine/src/canonicalPath.ts).
+// A Windows device's show with `\`, take either when typed, and browse up
+// from a drive's root to "/", where its host lists the drives. A device
+// is told by its home's spelling, and by the path's only when its home
+// is unknown: a typed `//x` is a share on Windows and `/x` elsewhere.
 import {
   appendBrowsePathSegment,
   getBrowseDirectoryPath,
@@ -28,7 +29,7 @@ export interface DevicePaths {
 
 const POSIX: DevicePaths = {
   show: (path) => path,
-  read: (typed) => typed,
+  read: (typed) => typed.replace(/^\/+/, "/"),
   parentOf: getBrowseParentPath,
   childOf: appendBrowsePathSegment,
   isFolder: isAnchoredPath,
@@ -49,7 +50,7 @@ const WINDOWS: DevicePaths = {
 };
 
 function isWindowsDevice(home: string | null | undefined, path = ""): boolean {
-  return isWindowsPath(path) || isWindowsPath(home ?? "");
+  return isWindowsPath(home || path);
 }
 
 export function devicePaths(

@@ -14,7 +14,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "../../../test/canonicalPaths.mts";
+import { dirname, join } from "@shigomori/engine/canonicalPath";
 import {
   afterEach,
   beforeAll,

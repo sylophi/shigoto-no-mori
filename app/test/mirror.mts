@@ -54,7 +54,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "../../test/canonicalPaths.mts";
+import { join } from "@shigomori/engine/canonicalPath";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, it } from "vitest";
 import * as PeerReach from "@host/ipc/PeerReach";

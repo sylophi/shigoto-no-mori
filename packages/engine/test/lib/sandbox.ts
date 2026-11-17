@@ -11,12 +11,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import {
-  delimiter,
-  dirname,
-  join,
-  realpath,
-} from "../../../../test/canonicalPaths.mts";
+import { delimiter } from "node:path";
+import { dirname, join, realpath } from "../../src/canonicalPath.ts";
 import * as NodeServices from "./nodeServices.ts";
 import { writeStub } from "./stubs.ts";
 import * as ConfigProvider from "effect/ConfigProvider";

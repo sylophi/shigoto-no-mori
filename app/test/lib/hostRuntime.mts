@@ -5,7 +5,7 @@
 // and a bench under plain node disposes it itself.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, realpath } from "../../../test/canonicalPaths.mts";
+import { join, realpath } from "@shigomori/engine/canonicalPath";
 import * as NodeServices from "@shared/nodeServices";
 import { childDefaults } from "@shigomori/engine/processes";
 import * as Context from "effect/Context";

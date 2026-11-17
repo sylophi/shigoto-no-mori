@@ -4,7 +4,7 @@
 // behind it, a signed-out account, and the device the store names. Each
 // answers through what a proof last stood in, so a proof swaps a peer
 // or the engine between its checks.
-import { join } from "../../../test/canonicalPaths.mts";
+import { join } from "@shigomori/engine/canonicalPath";
 import * as Effect from "effect/Effect";
 import { RemoteCallError } from "@shigomori/contracts/errors";
 import * as Layer from "effect/Layer";

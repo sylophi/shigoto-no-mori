@@ -1,9 +1,9 @@
 // Where the command runs among the projects, which every command that
 // names a project starts from. Terrier's trouble is a warning here, as
 // the listing it explains is about to be used.
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute } from "node:path";
 import * as Agents from "@shigomori/engine/Agents";
-import { canonicalPath } from "@shigomori/engine/canonicalPath";
+import { canonicalPath, resolve } from "@shigomori/engine/canonicalPath";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Terrier from "@shigomori/engine/Terrier";
 import { isSameOrInside } from "@shigomori/contracts/projectPaths";
@@ -218,7 +218,7 @@ export const absolute = (raw: string) =>
     const expanded = expandHome(raw);
     if (isAbsolute(expanded)) return expanded;
     try {
-      return canonicalPath(resolve(process.cwd(), expanded));
+      return resolve(process.cwd(), expanded);
     } catch {
       return expanded;
     }

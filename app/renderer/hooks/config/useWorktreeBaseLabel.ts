@@ -6,6 +6,7 @@
 // read.
 import type { Project } from "@shigomori/contracts/schemas";
 import { worktreeBase } from "@shigomori/contracts/git/worktreeLayout";
+import { ensureTrailingSep } from "@shigomori/contracts/projectPaths";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { shownPath } from "@shigomori/ui/lib/devicePaths.ts";
@@ -17,12 +18,14 @@ export function useWorktreeBaseLabel(
   const device = useDeviceLayout();
   if (!device) return null;
   return shownPath(
-    `${worktreeBase({
-      ...device,
-      layout: config?.worktreeLayout,
-      projectPath: project.path,
-      customPath: config?.customWorktreePath,
-    })}/`,
+    ensureTrailingSep(
+      worktreeBase({
+        ...device,
+        layout: config?.worktreeLayout,
+        projectPath: project.path,
+        customPath: config?.customWorktreePath,
+      }),
+    ),
     device.homedir,
   );
 }

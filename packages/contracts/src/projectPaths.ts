@@ -2,7 +2,8 @@
 // surface that spells a folder the same way (the host's default clone
 // place among them, shared/cloneDestination.ts). Ported from T3 Code's
 // projectPaths.ts. Only "/" separates, since a backslash is a legal
-// filename character on POSIX.
+// filename character on POSIX. How paths are spelled, and where they are
+// made so: packages/engine/src/canonicalPath.ts.
 
 const TRAILING_SEPS = /\/+$/;
 
@@ -61,7 +62,7 @@ export function normalizeForSubmit(value: string): string {
 // on every OS, so the same folder always hashes to the same id. A
 // Windows path is told by its spelling, a drive (`C:/`) or a share
 // (`//server/share`), not by the OS this runs on: a browser can show
-// another device's paths.
+// another device's paths. A macOS or Linux path never starts with `//`.
 
 // "/", a drive's "C:/" or a share's "//server/share/" for an absolute
 // path, "" for a relative one.

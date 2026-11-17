@@ -28,8 +28,8 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
-import { canonicalPath } from "@shigomori/engine/canonicalPath";
+import { isAbsolute } from "node:path";
+import { join } from "@shigomori/engine/canonicalPath";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -183,7 +183,7 @@ export const cloneDestination = (
   identity: string | null,
 ) =>
   Effect.gen(function* () {
-    const dest = canonicalPath(join(expandHome(parentDir), name));
+    const dest = join(expandHome(parentDir), name);
     const there = yield* Effect.promise(() =>
       lstat(dest).then(
         () => true,
@@ -225,11 +225,18 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
   // that cannot be made (a file in its place) is the destination
   // check's to name.
   const parent = expandHome(parentDir);
+  // Another OS's spelling (`D:/src` sent to Linux) is relative here, and
+  // would land the clone under the host's cwd.
+  if (!isAbsolute(parent)) {
+    return yield* new Git.GitRefusedError({
+      reason: `The folder to clone into must be an absolute path: ${parentDir}`,
+    });
+  }
   yield* Effect.promise(() =>
     mkdir(parent, { recursive: true }).catch(() => {}),
   );
   // A clone a crash left renamed in but not registered: registered now.
-  const left = canonicalPath(join(parent, name));
+  const left = join(parent, name);
   const pending = yield* pendingIn(left);
   if (pending?.dest === left && pending.identity === identity) {
     return yield* finishRegister(left);

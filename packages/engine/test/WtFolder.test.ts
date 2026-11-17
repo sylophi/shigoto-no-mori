@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join, realpath } from "../../../test/canonicalPaths.mts";
+import { join, realpath } from "../src/canonicalPath.ts";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import {

@@ -1,4 +1,5 @@
 import { WORKTREES_DIR } from "@shigomori/contracts/git/worktreeLayout";
+import { ensureTrailingSep } from "@shigomori/contracts/projectPaths";
 import { shownPath } from "@shigomori/ui/lib/devicePaths.ts";
 import { FirstRunView } from "@shigomori/ui/views/FirstRunView.tsx";
 import { useOverlays } from "@/hooks/ui/useOverlays";
@@ -25,7 +26,10 @@ export function EmptyState() {
       <FirstRunView
         worktreesDir={
           runtime
-            ? shownPath(`${runtime.dataDir}/${WORKTREES_DIR}/`, runtime.homedir)
+            ? shownPath(
+                `${ensureTrailingSep(runtime.dataDir)}${WORKTREES_DIR}/`,
+                runtime.homedir,
+              )
             : null
         }
         addKeys={keys?.label ?? null}

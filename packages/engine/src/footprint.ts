@@ -20,6 +20,8 @@ export type FootprintPlace = {
   // app's own folders.
   readonly dataHome: string;
   readonly stateHome: string;
+  // APPDATA (Paths), where Windows keeps them.
+  readonly appData: string;
   // Where the terminal command is linked (XDG_BIN_HOME, or ~/.local/bin).
   readonly binHome: string;
 };
@@ -30,11 +32,10 @@ export type FootprintPlace = {
 // Electron keeps a Windows app's logs in its userData.
 export const appFolders = (
   flavor: Flavor,
-  place: Pick<FootprintPlace, "home" | "dataHome" | "stateHome">,
+  place: Pick<FootprintPlace, "home" | "dataHome" | "stateHome" | "appData">,
 ) => {
   const names = flavorNames(flavor);
   const library = join(place.home, "Library");
-  const roaming = join(place.home, "AppData", "Roaming");
   return byPlatform({
     darwin: {
       userData: join(library, "Application Support", names.userDataDir),
@@ -47,8 +48,8 @@ export const appFolders = (
       preferences: null,
     },
     win32: {
-      userData: join(roaming, names.userDataDir),
-      logs: join(roaming, names.userDataDir, "logs"),
+      userData: join(place.appData, names.userDataDir),
+      logs: join(place.appData, names.userDataDir, "logs"),
       preferences: null,
     },
   });

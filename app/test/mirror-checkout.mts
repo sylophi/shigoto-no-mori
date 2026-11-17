@@ -41,7 +41,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "../../test/canonicalPaths.mts";
+import { join } from "@shigomori/engine/canonicalPath";
 import { afterAll, beforeAll, it } from "vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

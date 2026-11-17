@@ -36,12 +36,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import {
-  basename,
-  dirname,
-  join,
-  realpath,
-} from "../../test/canonicalPaths.mts";
+import { basename } from "node:path";
+import { dirname, join, realpath } from "@shigomori/engine/canonicalPath";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

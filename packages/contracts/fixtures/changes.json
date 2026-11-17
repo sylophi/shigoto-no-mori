@@ -97,11 +97,19 @@
     ]
   },
   "RepoRelPathSchema": {
-    "accepts": ["renderer/lib/toast.tsx", "README.md"],
+    "accepts": [
+      "renderer/lib/toast.tsx",
+      "README.md",
+      "notes/a:b.txt",
+      "\\notes.txt"
+    ],
     "rejects": [
       "",
       "/Users/alex/.ssh/id_ed25519",
       "../port-pool/README.md",
+      "src\\..\\..\\secrets.env",
+      "src/.. /secrets.env",
+      ".../secrets.env",
       "renderer/lib\u0000.ts"
     ]
   },

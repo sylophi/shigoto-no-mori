@@ -1,5 +1,5 @@
-import { resolve } from "node:path";
-import { canonicalPath } from "@shigomori/engine/canonicalPath";
+import { resolve } from "@shigomori/engine/canonicalPath";
+import { samePath } from "@shigomori/contracts/projectPaths";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { type HandlerContext, isRemoteCaller } from "@shared/ipc/transport";
 import type { EffectHandlers } from "@shigomori/contracts/types";
@@ -114,7 +114,7 @@ export const runtimeHandlers = {
         dataDirReal: dataDirReal(),
         dataDirSource: dataDirSource(),
         // resolve() drops the trailing slash a hand-edited pointer may carry.
-        atDefaultDataDir: canonicalPath(resolve(dir)) === defaultDataDir(),
+        atDefaultDataDir: samePath(resolve(dir), defaultDataDir()),
         canonicalDataDirName: canonicalDataDirName(),
         homedir: home(),
       };

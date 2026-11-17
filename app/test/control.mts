@@ -31,7 +31,7 @@
 import { LOOPBACK_FILE } from "@shigomori/contracts/link";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { join } from "../../test/canonicalPaths.mts";
+import { join } from "@shigomori/engine/canonicalPath";
 import * as Schema from "effect/Schema";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import {

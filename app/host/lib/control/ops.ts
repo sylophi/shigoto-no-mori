@@ -42,9 +42,6 @@ import {
 } from "@shigomori/contracts/leaveOutRule";
 import { type Project } from "@shigomori/contracts/schemas";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
-import { tildify } from "@shigomori/contracts/projectPaths";
-import { canonicalPath } from "@shigomori/engine/canonicalPath";
-import { home } from "@shared/paths";
 import {
   parseLeaveOutPreset,
   sharedSettingKeys,
@@ -100,6 +97,7 @@ import {
   repoIdentityOf,
   roster,
   standingsOf,
+  targetFolder,
   worktreesOn,
 } from "./peers";
 
@@ -598,7 +596,7 @@ export const clone = (
         projectId: project.id,
         ...(input.cloneInto === undefined
           ? {}
-          : { parentDir: tildify(canonicalPath(input.cloneInto), home()) }),
+          : { parentDir: targetFolder(input.cloneInto) }),
       });
       return {
         ...cloned,

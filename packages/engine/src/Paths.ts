@@ -74,6 +74,9 @@ export class Paths extends Context.Service<
     // (footprint.ts).
     readonly dataHome: string;
     readonly stateHome: string;
+    // APPDATA, else ~/AppData/Roaming, where Windows keeps the app's own
+    // folders, as Electron's appData reads it.
+    readonly appData: string;
     // Where the pointer file goes, which redirects the data dir away from
     // the flavor's default: one line holding an absolute path, outside
     // the data dir (nothing inside it can say where it is). The pre-2.0
@@ -135,6 +138,9 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
   );
   const stateHome = Option.getOrElse(yield* env("XDG_STATE_HOME"), () =>
     path.join(home, ".local", "state"),
+  );
+  const appData = Option.getOrElse(yield* env("APPDATA"), () =>
+    path.join(home, "AppData", "Roaming"),
   );
   const pointerFile = path.join(configHome, names.configDir, names.pointer);
   const legacyPointerFile =
@@ -258,6 +264,7 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
     configHome,
     dataHome,
     stateHome,
+    appData,
     pointerFile,
     legacyPointerFile,
     defaultDataDir,

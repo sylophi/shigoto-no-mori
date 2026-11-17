@@ -35,7 +35,7 @@ func TestServeLeavesOutNamesWindowsCantKeep(t *testing.T) {
 	}
 	scan()
 	directory := &core.Entry{Kind: core.EntryKind_Directory}
-	for _, path := range []string{"x.", "y ", "aux.txt", "COM1", "d./e"} {
+	for _, path := range []string{"x.", "y ", "aux.txt", "COM1", "d./e", "CONIN$", "conout$.log", "COM0", "lpt¹", "CON .txt"} {
 		results, problems, _, err := endpoint.Transition(ctx, []*core.Change{{Path: path, New: directory}})
 		if err != nil {
 			t.Fatal(err)
