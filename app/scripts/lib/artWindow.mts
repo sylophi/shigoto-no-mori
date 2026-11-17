@@ -21,10 +21,9 @@ export function paintArt(
 ): void {
   // A terminal launched from an Electron app (any agent harness, say)
   // exports ELECTRON_RUN_AS_NODE=1, which makes the electron binary
-  // behave as plain node. "electron" then hands back a path string
-  // instead of the api, and nothing here works. Relaunch with it
-  // cleared rather than failing with a puzzling TypeError.
-  if (typeof electron === "string") {
+  // behave as plain node, with no api behind "electron". Relaunch with
+  // it cleared rather than failing with a puzzling TypeError.
+  if (process.env.ELECTRON_RUN_AS_NODE) {
     const { status } = spawnSync(process.execPath, process.argv.slice(1), {
       stdio: "inherit",
       env: { ...process.env, ELECTRON_RUN_AS_NODE: "" },

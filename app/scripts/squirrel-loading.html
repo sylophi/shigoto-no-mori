@@ -6,8 +6,7 @@
   Made like the dmg's art (scripts/dmg-background.html), and the same
   brand plaque on the leaf canvas. Squirrel shows the image as it is,
   with no window around it, and a GIF's edge is either there or not, so
-  the card is a plain rectangle with a line around it. The script's
-  window is its size.
+  the card is a plain rectangle. The script's window is its size.
 
   The one thing that moves is the bar: the app's stripes, sliding the
   way they do under a hover. The script steps --frame through one loop.
@@ -29,8 +28,6 @@
       .stage {
         width: 100vw;
         height: 100vh;
-        box-sizing: border-box;
-        border: 1px solid var(--border);
       }
 
       /* ac-stripe-slide's travel, a frame at a time. */
