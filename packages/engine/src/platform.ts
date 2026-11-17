@@ -4,7 +4,7 @@
 // file name (nativefs/sys_<os>.go).
 //
 // A service whose verbs all differ by OS gives each OS a module of its
-// own behind one name, and picks one once (Shells, ProcessTable,
+// own behind one name, which picks this OS's (Shells, ProcessTable,
 // ProcessTrees, Open's Desktop, the updater's Installation, the
 // command line tool's placement). A difference of one value or one call
 // stays where it is used, as a table every OS is placed in: byFamily
