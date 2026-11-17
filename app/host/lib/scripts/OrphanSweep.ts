@@ -13,7 +13,7 @@
 // The dangerous half is the sweep. It works from a record that may be
 // days old, and a pid that has been recycled belongs to a stranger by
 // then, so the engine's RunningScripts.survivors has to prove the pid is
-// still ours before anything is signaled. Every inconclusive answer
+// still ours before anything is stopped. Every inconclusive answer
 // leaves the process alone.
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -29,9 +29,9 @@ import * as RunningScripts from "@shigomori/engine/RunningScripts";
 import * as Processes from "@shigomori/engine/processes";
 import * as ProcessTrees from "./ProcessTrees";
 
-// SIGTERM -> grace -> SIGKILL, same shape as a run's stop (./runs.ts).
-// Shorter than the interactive grace: this runs at boot, and a script
-// that ignores SIGTERM shouldn't hold the sweep open.
+// A run's stop (./ProcessTrees.ts) with a grace shorter than the
+// interactive one, for its end too: this runs at boot, and a script
+// that ignores the stop shouldn't hold the sweep open.
 const ORPHAN_GRACE_MS = 2_000;
 const EXIT_POLL_MS = 100;
 
@@ -39,32 +39,29 @@ type RecordedScript = RunningScripts.RunningScript;
 
 // Polls instead of waiting on an exit event: these processes are not
 // our children any more, so there is nothing to listen to.
-const waitForExit = (pid: number, ms: number) =>
+const exitOf = (pid: number) =>
   Processes.pidAlive(pid).pipe(
     Effect.repeat({
       schedule: Schedule.spaced(Duration.millis(EXIT_POLL_MS)),
       while: (alive) => alive,
     }),
     Effect.delay(Duration.millis(EXIT_POLL_MS)),
-    Effect.timeoutOption(Duration.millis(ms)),
-    Effect.map(Option.isSome),
   );
 
 // A lifecycle script's group is the dead app's, which its other
-// leftovers share, so only its own tree is signaled.
+// leftovers share, so only its own tree is stopped.
 const killOrphan = Effect.fnUntraced(function* (record: RecordedScript) {
   const trees = yield* ProcessTrees.ProcessTrees;
-  const tree = { pid: record.pid, ownGroup: record.groupLeader };
-  yield* trees.ask(tree, "stop");
-  if (yield* waitForExit(record.pid, ORPHAN_GRACE_MS)) return true;
-  yield* trees.end(tree);
-  const died = yield* waitForExit(record.pid, ORPHAN_GRACE_MS);
-  if (!died) {
-    yield* Effect.logWarning(
-      `[scripts] orphaned pid ${record.pid} outlived its kill, leaving it alone`,
-    );
-  }
-  return died;
+  return yield* trees.stop(
+    { pid: record.pid, ownGroup: record.groupLeader },
+    {
+      how: "stop",
+      graceMs: ORPHAN_GRACE_MS,
+      endMs: ORPHAN_GRACE_MS,
+      exited: exitOf(record.pid),
+      name: "orphaned script",
+    },
+  );
 });
 
 // Survivors get killed rather than adopted back into the UI. Their

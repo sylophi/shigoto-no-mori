@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Processes from "@shigomori/engine/processes";
 import { descendantsIn } from "../descendants";
-import type { Tree } from "./tree";
+import { exitedWithin, type Stop, type Tree } from "./tree";
 
 const SIGNALS = { stop: "SIGTERM", hangup: "SIGHUP" } as const;
 
@@ -65,16 +65,26 @@ export const makeSignals = Effect.gen(function* () {
       : signalPidTree(tree.pid, signal);
 
   return {
-    ask: Effect.fn("ProcessTrees.ask")(
-      (tree: Tree, how: keyof typeof SIGNALS) => send(tree, SIGNALS[how]),
+    stop: Effect.fn("ProcessTrees.stop")(function* (tree: Tree, stop: Stop) {
+      yield* send(tree, SIGNALS[stop.how]);
+      if (yield* exitedWithin(stop.exited, stop.graceMs)) return true;
+      yield* send(tree, "SIGKILL");
+      if (yield* exitedWithin(stop.exited, stop.endMs)) return true;
+      yield* Effect.logWarning(
+        `[scripts] ${stop.name} (pid ${tree.pid}) survived SIGKILL, giving up on it`,
+      );
+      return false;
+    }),
+    // A group gets its SIGTERM at once, not after `ps` answers:
+    // descendants that escaped it via setsid() get reparented, same as
+    // if we hadn't signaled at all.
+    stopNow: Effect.fn("ProcessTrees.stopNow")((tree: Tree) =>
+      tree.ownGroup
+        ? Effect.sync(() => safeKill(-tree.pid, "SIGTERM"))
+        : signalPidTree(tree.pid, "SIGTERM"),
     ),
-    // Descendants that escaped the group via setsid() get reparented,
-    // same as if we hadn't signaled at all.
-    askNow: Effect.fn("ProcessTrees.askNow")((tree: Tree) =>
-      Effect.sync(() => safeKill(-tree.pid, "SIGTERM")),
-    ),
-    end: Effect.fn("ProcessTrees.end")((tree: Tree) => send(tree, "SIGKILL")),
-    // node-pty closes the PTY once the shell's output has drained.
+    // The session's end hung up on its group, and node-pty closes the
+    // PTY once the shell's output has drained.
     release: () => Effect.void,
   };
 });

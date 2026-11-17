@@ -14,10 +14,10 @@ import * as Effect from "effect/Effect";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { readProcesses } from "@shigomori/engine/processTable/nativefs";
 import { exec } from "@shigomori/engine/processes";
-import type { Tree } from "./tree";
+import { exitedWithin, type Stop, type Tree } from "./tree";
 
 const close = (tree: Tree) =>
-  Effect.try(() => tree.closeTerminal?.()).pipe(Effect.ignore);
+  Effect.try(() => tree.terminal?.close()).pipe(Effect.ignore);
 
 export const makeConsoles = (nativefs: string) =>
   Effect.gen(function* () {
@@ -54,29 +54,59 @@ export const makeConsoles = (nativefs: string) =>
         Effect.orElseSucceed(() => []),
       );
 
+    const end = (found: ReadonlyArray<{ pid: number; birth: number }>) =>
+      found.length === 0
+        ? Effect.void
+        : exec(nativefs, [
+            "end",
+            ...found.map((member) => `${member.pid}:${member.birth}`),
+          ]).pipe(Effect.ignore);
+
+    // Closes the console and ends the rest of the tree.
     const endTree = (tree: Tree) =>
       Effect.gen(function* () {
         const found = yield* members(tree.pid);
         yield* close(tree);
-        if (found.length === 0) return;
-        yield* exec(nativefs, [
-          "end",
-          ...found.map((member) => `${member.pid}:${member.birth}`),
-        ]).pipe(Effect.ignore);
+        yield* end(found);
       }).pipe(
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       );
 
+    // The same once the console is closed.
+    const endAgain = (tree: Tree) =>
+      members(tree.pid).pipe(
+        Effect.flatMap(end),
+        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      );
+
     return {
-      ask: Effect.fn("ProcessTrees.ask")((tree: Tree, how: "stop" | "hangup") =>
-        how === "stop" && tree.interrupt !== undefined
-          ? Effect.try(tree.interrupt).pipe(Effect.ignore)
-          : endTree(tree),
+      stop: Effect.fn("ProcessTrees.stop")(function* (tree: Tree, stop: Stop) {
+        if (stop.how === "stop" && tree.terminal !== undefined) {
+          yield* Effect.try(tree.terminal.interrupt).pipe(Effect.ignore);
+          if (yield* exitedWithin(stop.exited, stop.graceMs)) {
+            yield* close(tree);
+            return true;
+          }
+        }
+        yield* endTree(tree);
+        if (yield* exitedWithin(stop.exited, stop.graceMs)) return true;
+        // The first end may not have finished the tree: a table read that
+        // failed finds nothing, and an end that failed says nothing.
+        yield* endAgain(tree);
+        if (yield* exitedWithin(stop.exited, stop.endMs)) return true;
+        yield* Effect.logWarning(
+          `[scripts] ${stop.name} (pid ${tree.pid}) still runs after its tree was ended, giving up on it`,
+        );
+        return false;
+      }),
+      // A PTY run's console closes without reading the table: what
+      // escaped the console goes on, as a process that left its group
+      // does elsewhere.
+      stopNow: Effect.fn("ProcessTrees.stopNow")((tree: Tree) =>
+        tree.terminal === undefined ? endTree(tree) : close(tree),
       ),
-      // What escaped the console goes on, as a process that left its
-      // group does elsewhere.
-      askNow: Effect.fn("ProcessTrees.askNow")(close),
-      end: Effect.fn("ProcessTrees.end")(endTree),
+      // The console outlives its shell (the node-pty patch), and closing
+      // it ends what is still attached.
       release: Effect.fn("ProcessTrees.release")(close),
     };
   });
