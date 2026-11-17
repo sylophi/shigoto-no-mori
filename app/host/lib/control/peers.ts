@@ -354,6 +354,15 @@ export const mirrorOf = (target: { projectId: string; worktreeId: string }) =>
       ),
   );
 
+// A folder typed for another device. One under this device's home is
+// the same place under the target's. Any other is the target's own
+// spelling, left for its host to read: `//nas/src` typed on Linux is a
+// share on Windows.
+export const targetFolder = (typed: string) => {
+  const tildified = tildify(canonicalPath(typed), home());
+  return tildified.startsWith("~") ? tildified : typed;
+};
+
 // Where a send clones the repo on a device with no checkout of it, as
 // the dialogs' review defaults it (shared/cloneDestination.ts): the
 // source's own layout with this device's home swapped for the
@@ -366,10 +375,9 @@ export const cloneIntoOn = (
   project: Project,
   parent: string | undefined,
 ) => {
-  const here = home();
   if (parent !== undefined) {
     return Effect.succeed<SyncCloneInto>(
-      cloneIntoOf(tildify(canonicalPath(parent), here), project.path),
+      cloneIntoOf(targetFolder(parent), project.path),
     );
   }
   return Effect.map(
@@ -384,7 +392,7 @@ export const cloneIntoOn = (
       cloneIntoOf(
         moveCloneParent({
           sourcePath: project.path,
-          sourceHome: here,
+          sourceHome: home(),
           destinationHome: info.homedir,
           destinationProjects: projects,
         }),

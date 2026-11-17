@@ -1,7 +1,7 @@
 // Worktrees' relocating: a project moved or renamed by hand, pointed at
 // where it is now, its worktrees re-linked.
 import { UnknownProjectError } from "@shigomori/contracts/errors";
-import { cleanPath, relativeInside } from "@shigomori/contracts/projectPaths";
+import { relativeInside } from "@shigomori/contracts/projectPaths";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -304,7 +304,7 @@ export const makeRelocating = ({
         ),
         (worktree) =>
           Effect.gen(function* () {
-            const destination = cleanPath(path.join(base, worktree.name));
+            const destination = path.join(base, worktree.name);
             const inPlace =
               destination === worktree.path ||
               (yield* fs.realPath(destination).pipe(

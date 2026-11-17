@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, realpath } from "../../../test/canonicalPaths.mts";
+import { join, realpath } from "../src/canonicalPath.ts";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Doctor from "../src/Doctor.ts";

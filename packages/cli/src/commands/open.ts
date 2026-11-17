@@ -1,8 +1,6 @@
 // sm [worktrees] open <tool> [<worktree>]: a worktree opened in one of
 // its launchers, and sm [worktrees] edit <file> [<worktree>]: one of its
 // files in the editor.
-import { resolve } from "node:path";
-import { canonicalPath } from "@shigomori/engine/canonicalPath";
 import { flavorNames } from "@shigomori/engine/flavor";
 import * as Open from "@shigomori/engine/Open";
 import * as Paths from "@shigomori/engine/Paths";
@@ -10,6 +8,7 @@ import { NO_SCREEN } from "@shigomori/engine/screen";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import { UsageError } from "../errors.ts";
@@ -127,7 +126,8 @@ export const edit = Command.make(
         });
       }
       const { located, fromCwd } = yield* commandTarget(input, "edit <file>");
-      const target = fromCwd ? canonicalPath(resolve(yield* cwd, file)) : file;
+      const path = yield* Path.Path;
+      const target = fromCwd ? path.resolve(yield* cwd, file) : file;
       const opened = yield* (yield* Open.Open).edit(located, target).pipe(
         Effect.asSome,
         // With no screen to open it on (a Linux server over SSH), it
@@ -147,7 +147,7 @@ export const edit = Command.make(
             }
             const failed = yield* runEditor(
               editor,
-              resolve(located.worktree.path, target),
+              path.resolve(located.worktree.path, target),
             );
             if (failed !== undefined) {
               return yield* new Open.LaunchFailed({

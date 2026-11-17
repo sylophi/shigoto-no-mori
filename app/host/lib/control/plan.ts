@@ -10,6 +10,7 @@ import {
 } from "@shigomori/contracts/modules/control";
 import { type MirrorSession } from "@shigomori/contracts/modules/mirror";
 import { hostsProjects } from "@shigomori/contracts/platform";
+import { isWindowsPath, samePath } from "@shigomori/contracts/projectPaths";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { type Project, type Worktree } from "@shigomori/contracts/schemas";
 
@@ -214,11 +215,14 @@ export function chooseTarget(
   );
 }
 
-// A project as a person names it: its id, its path there, or its
-// name, any case.
+// A project as a person names it: its id, its path there (a Windows
+// device's typed with either slash), or its name, any case.
 const matchesProject = (project: Project, query: string): boolean =>
   project.id === query ||
-  project.path === query ||
+  samePath(
+    project.path,
+    isWindowsPath(project.path) ? query.replaceAll("\\", "/") : query,
+  ) ||
   project.name.toLowerCase() === query.toLowerCase();
 
 // The one peer project a clone takes, among what each asked device

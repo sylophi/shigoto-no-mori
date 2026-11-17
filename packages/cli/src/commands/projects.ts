@@ -1,8 +1,7 @@
 // sm projects <list|icon|add|clone|unregister|delete|relocate|config>: the
 // registered projects, terrier's included (and written through to it),
 // and each one's settings. clone is a cross-device verb (transfer.ts).
-import { basename, dirname } from "node:path";
-import { canonicalPath } from "@shigomori/engine/canonicalPath";
+import { basename } from "node:path";
 import {
   keyDescriptions,
   ShigomoriConfigSchema,
@@ -15,6 +14,7 @@ import * as Registry from "@shigomori/engine/Registry";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
@@ -372,7 +372,10 @@ const deleteProject = Command.make("delete", unregisterArgs, (input) =>
         ),
       );
     // A shell left standing in the deleted folder is told where to go.
-    const hint = cdHintFor(project.path, canonicalPath(dirname(project.path)));
+    const hint = cdHintFor(
+      project.path,
+      (yield* Path.Path).dirname(project.path),
+    );
     const { json } = yield* Effect.service(Output);
     if (json) {
       return yield* emit({

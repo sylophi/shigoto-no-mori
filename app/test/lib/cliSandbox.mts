@@ -6,7 +6,7 @@
 import { execFile } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, realpath } from "../../../test/canonicalPaths.mts";
+import { join, realpath } from "@shigomori/engine/canonicalPath";
 import { promisify } from "node:util";
 import { GIT_IDENTITY } from "../../../test/gitIsolation.ts";
 import { createCliRunner, scrubProcessGitEnv } from "./checkKit.mts";

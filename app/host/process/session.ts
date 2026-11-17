@@ -8,8 +8,7 @@ import * as Graph from "./graph";
 import * as BackgroundFetch from "@host/lib/BackgroundFetch";
 import * as Tunnel from "@host/direct/Tunnel";
 import * as Agents from "@shigomori/engine/Agents";
-import { dirname } from "node:path";
-import { canonicalPath } from "@shigomori/engine/canonicalPath";
+import { dirname } from "@shigomori/engine/canonicalPath";
 import * as HostFacts from "@host/lib/HostFacts";
 import * as HostRpc from "@host/socket/hostRpc";
 import { applyAccount, noteAccountDevices } from "./handlers";
@@ -63,7 +62,7 @@ export const sessionHandlers = (options: {
             ...input,
             source: facts.packaged
               ? { tag: `v${facts.appVersion}` }
-              : { checkout: canonicalPath(dirname(facts.appPath)) },
+              : { checkout: dirname(facts.appPath) },
           }),
         ).pipe(
           Effect.mapError(callFailureOf),

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "../../../test/canonicalPaths.mts";
+import { dirname, join } from "../src/canonicalPath.ts";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import { afterEach, beforeEach, it, onTestFinished } from "vitest";

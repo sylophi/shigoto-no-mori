@@ -17,7 +17,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "../../../test/canonicalPaths.mts";
+import { dirname, join } from "../src/canonicalPath.ts";
 import * as NodeServices from "./lib/nodeServices.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";

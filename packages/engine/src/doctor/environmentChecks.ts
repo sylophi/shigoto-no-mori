@@ -1,5 +1,5 @@
 // The doctor's environment checks: git, gh, the shell hook and its wrapper, the programs `sm` runs.
-import { tildify } from "@shigomori/contracts/projectPaths";
+import { samePath, tildify } from "@shigomori/contracts/projectPaths";
 import { shellName } from "@shigomori/contracts/shellName";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -330,11 +330,12 @@ export const makeEnvironmentChecks = ({
       const runs = byPlatform({
         darwin: candidate,
         linux: candidate,
-        win32:
-          path.dirname(candidate) ===
-          canonicalPath(windowsCliBinDir(path.dirname(executable)))
-            ? executable
-            : candidate,
+        win32: samePath(
+          path.dirname(candidate),
+          canonicalPath(windowsCliBinDir(path.dirname(executable))),
+        )
+          ? executable
+          : candidate,
       });
       return Effect.map(realPath(runs), (found) =>
         Option.getOrElse(found, () => runs),

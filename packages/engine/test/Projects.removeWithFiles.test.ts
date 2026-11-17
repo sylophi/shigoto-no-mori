@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "../../../test/canonicalPaths.mts";
+import { join } from "../src/canonicalPath.ts";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Projects from "../src/Projects.ts";

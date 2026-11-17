@@ -60,7 +60,7 @@ function devUserDataDir(): string {
   const appData = byPlatform({
     darwin: join(homedir(), "Library", "Application Support"),
     linux: process.env["XDG_CONFIG_HOME"] || join(homedir(), ".config"),
-    win32: join(homedir(), "AppData", "Roaming"),
+    win32: process.env["APPDATA"] || join(homedir(), "AppData", "Roaming"),
   });
   return join(appData, flavorNames("dev").userDataDir);
 }

@@ -9,7 +9,8 @@ const PATH_SEPARATOR = /[/\\:<>"|?*]/g;
 const CONTROL_CHARS = /[\x00-\x1f\x7f]/g;
 // The CLI matches its keywords case-insensitively.
 const RESERVED_NAMES = new Set([".", "..", "root", "primary"]);
-// A name Windows reads as a device, whatever its case or extension.
+// A name Windows reads as a device, whatever its case or extension. The
+// mirror holds back the same list (file-sync/names_windows.go).
 const DEVICE_NAME =
   /^(con|prn|aux|nul|conin\$|conout\$|com[0-9¹²³]|lpt[0-9¹²³]) *(\.|$)/i;
 

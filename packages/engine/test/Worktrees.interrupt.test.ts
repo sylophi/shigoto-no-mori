@@ -22,12 +22,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import {
-  dirname,
-  join,
-  realpath,
-  resolve,
-} from "../../../test/canonicalPaths.mts";
+import { dirname, join, realpath, resolve } from "../src/canonicalPath.ts";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";

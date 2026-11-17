@@ -36,13 +36,7 @@ export const watchTree = (
   byPlatform({
     darwin: () => watchPath(fs, root, { recursive: true }),
     linux: () => watchFolders(fs, root, leaveOut),
-    win32: () =>
-      watchPath(fs, root, { recursive: true }).pipe(
-        Stream.map((event) => ({
-          ...event,
-          path: event.path.replaceAll("\\", "/"),
-        })),
-      ),
+    win32: () => watchPath(fs, root, { recursive: true }),
   })();
 
 const under = (folder: string, name: string) =>

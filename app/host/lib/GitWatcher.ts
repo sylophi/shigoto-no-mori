@@ -105,8 +105,7 @@ const OPERATION_MARKERS = [
 ];
 
 // Git-dir relative paths whose change means the project's git state
-// moved. Paths arrive with the platform separator and are normalized
-// to `/` before matching.
+// moved.
 const RELEVANT = [
   /^(HEAD|ORIG_HEAD|packed-refs)$/,
   /^refs(\/|$)/,
@@ -132,11 +131,8 @@ const INDEX = /^(worktrees\/[^/]+\/)?index$/;
 // app runs, its own reads of the rows included.
 const GIT_SEGMENT = /(^|\/)\.git(\/|$)/;
 
-// A watched path, `/`-separated whatever the platform's separator.
-const slashed = (file: string) => file.replaceAll("\\", "/");
-
 function isWorkingTreeChange(file: string): boolean {
-  return !GIT_SEGMENT.test(slashed(file));
+  return !GIT_SEGMENT.test(file);
 }
 
 const isGitignore = (file: string) =>
@@ -148,13 +144,12 @@ function isRelevantGitPath(file: string): boolean {
   // into place. The rename lands as an event for the final name, so
   // the lock itself is noise.
   if (file.endsWith(".lock")) return false;
-  const normalized = slashed(file);
-  if (OWN_REFS.test(normalized)) return false;
-  return RELEVANT.some((pattern) => pattern.test(normalized));
+  if (OWN_REFS.test(file)) return false;
+  return RELEVANT.some((pattern) => pattern.test(file));
 }
 
 function isIndexPath(file: string): boolean {
-  return INDEX.test(slashed(file));
+  return INDEX.test(file);
 }
 
 // The working trees of a project: its own folder when it is a checkout,

@@ -36,7 +36,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "../../test/canonicalPaths.mts";
+import { join } from "@shigomori/engine/canonicalPath";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import {
   syncContract,

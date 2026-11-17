@@ -10,12 +10,8 @@ import {
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import {
-  delimiter,
-  dirname,
-  join,
-  realpath,
-} from "../../../test/canonicalPaths.mts";
+import { delimiter } from "node:path";
+import { dirname, join, realpath } from "@shigomori/engine/canonicalPath";
 import type { HandlerContext } from "../../shared/ipc/transport.ts";
 import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";

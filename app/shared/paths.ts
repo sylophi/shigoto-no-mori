@@ -12,14 +12,18 @@
 // script launched from the packaged app's script runner would boot the
 // dev build, see the packaged app's data dir here, and quietly operate
 // on real data.
-import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute } from "node:path";
 import * as NodeServices from "@shared/nodeServices";
 import type { DataDirSource } from "@shigomori/engine/Paths";
-import { canonicalPath, expandHomeAt } from "@shigomori/engine/canonicalPath";
+import {
+  canonicalPath,
+  expandHomeAt,
+  join,
+  realpath,
+  resolve,
+} from "@shigomori/engine/canonicalPath";
 import * as Paths from "@shigomori/engine/Paths";
-import { byPlatform } from "@shigomori/engine/platform";
 import type { Flavor } from "@shigomori/engine/flavor";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -87,7 +91,7 @@ export function initDataDirAt(
     dataDir: dir,
     source,
     dataDirName: ".sm",
-    defaultDataDir: canonicalPath(join(home(), ".sm")),
+    defaultDataDir: join(home(), ".sm"),
     pointer: null,
     pointerFiles: null,
   };
@@ -109,14 +113,9 @@ export function dataDir(): string {
 // it as git does (canonicalPlatform.ts).
 export function dataDirReal(): string | undefined {
   const dir = dataDir();
-  const realpath = byPlatform({
-    darwin: realpathSync,
-    linux: realpathSync,
-    win32: realpathSync.native,
-  });
   try {
-    const real = canonicalPath(realpath(dir));
-    return real === canonicalPath(resolve(dir)) ? undefined : real;
+    const real = realpath(dir);
+    return real === resolve(dir) ? undefined : real;
   } catch {
     return undefined;
   }
@@ -175,7 +174,7 @@ export function expandHome(path: string): string {
 
 export function toAbsolute(path: string): string {
   const expanded = expandHome(path);
-  return isAbsolute(expanded) ? expanded : canonicalPath(resolve(expanded));
+  return isAbsolute(expanded) ? expanded : resolve(expanded);
 }
 
 export function isENOENT(error: unknown): boolean {

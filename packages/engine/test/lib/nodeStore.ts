@@ -2,7 +2,7 @@
 // stands alone, its migration's reports heard by no one.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "../../../../test/canonicalPaths.mts";
+import { join } from "../../src/canonicalPath.ts";
 import * as NodeServices from "./nodeServices.ts";
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import * as ConfigProvider from "effect/ConfigProvider";

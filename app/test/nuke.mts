@@ -17,12 +17,15 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { basename, join } from "../../test/canonicalPaths.mts";
+import { basename } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterAll, beforeAll, it } from "vitest";
 import { readOnly } from "../../packages/engine/test/lib/holds.ts";
 import { isSameOrInside } from "../../packages/contracts/src/projectPaths.ts";
-import { canonicalPath } from "../../packages/engine/src/canonicalPath.ts";
+import {
+  canonicalPath,
+  join,
+} from "../../packages/engine/src/canonicalPath.ts";
 import {
   footprint,
   removeLeftovers,
@@ -265,6 +268,7 @@ const homeOf = (name: string) => {
     configHome: join(home, ".config"),
     dataHome: join(home, ".local", "share"),
     stateHome: join(home, ".local", "state"),
+    appData: join(home, "AppData", "Roaming"),
     binHome: join(home, ".local", "bin"),
   };
 };
