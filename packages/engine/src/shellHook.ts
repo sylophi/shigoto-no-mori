@@ -440,21 +440,22 @@ export const inspectHook = (place: HookPlace, kind: ShellKind) =>
     } satisfies Hook;
   });
 
-// The rc file with the hook in it, in the file's own line endings:
-// appended after a blank line, or the block refreshed in place, since
-// the guard line may have a new shape.
+// The rc file with the hook in it: appended after a blank line, or the
+// block refreshed in place, since the guard line may have a new shape. A
+// PowerShell profile gets it in the file's own line endings. A POSIX
+// shell reads a `\r` as part of the line, so its rc file always gets LF.
 export const withHook = (
   names: HookNames,
   kind: ShellKind,
   text: string | undefined,
 ) => {
-  const crlf = text?.includes("\r\n") ?? false;
+  const crlf = kind === "powershell" && (text?.includes("\r\n") ?? false);
   const block = hookLines(names, kind);
   const lines = (text ?? "").split("\n");
   const span = findHookSpan(names, lines);
   if (span.kind !== "found") {
     const eol = crlf ? "\r\n" : "\n";
-    const kept = (text ?? "").replace(/(\r?\n)+$/, "");
+    const kept = (text ?? "").replace(crlf ? /(\r?\n)+$/ : /\n+$/, "");
     return `${kept === "" ? "" : `${kept}${eol}${eol}`}${block.join(eol)}${eol}`;
   }
   return [
