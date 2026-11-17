@@ -24,7 +24,11 @@
 // every OS, since a config roams to devices of the other kind.
 import { realpathSync } from "node:fs";
 import * as NodePath from "node:path";
-import { expandHome } from "@shigomori/contracts/projectPaths";
+import {
+  expandHome,
+  isAnchoredPath,
+  isWindowsPath,
+} from "@shigomori/contracts/projectPaths";
 import { byFamily } from "./platform.ts";
 
 export const canonicalPath = (raw: string): string =>
@@ -60,6 +64,12 @@ export const expandHomeAt = (home: string, typed: string) => {
     windows: () => (/^\/(?!\/)/.test(path) ? resolve(path) : path),
   })();
 };
+
+// Whether a typed path names a fixed spot on this machine. macOS and
+// Linux read a drive (`C:/x`) as a relative path.
+export const isAnchoredHere = (typed: string) =>
+  isAnchoredPath(typed) &&
+  byFamily({ posix: !isWindowsPath(canonicalPath(typed)), windows: true });
 
 const windowsPath = (raw: string): string => {
   const path = raw

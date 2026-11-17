@@ -8,7 +8,7 @@ import {
   tildify,
 } from "@shigomori/contracts/projectPaths";
 import { afterAll, beforeAll, it } from "vitest";
-import { canonicalPath } from "../src/canonicalPath.ts";
+import { canonicalPath, isAnchoredHere } from "../src/canonicalPath.ts";
 
 const { platform } = process;
 beforeAll(() => Object.defineProperty(process, "platform", { value: "linux" }));
@@ -33,4 +33,10 @@ it("tells folders apart by case, and reads a leading // as /", () => {
   assert.equal(samePath(canonicalPath("//tmp/X"), "/tmp/x"), false);
   assert.equal(samePath(canonicalPath("//tmp/x"), "/tmp/x"), true);
   assert.equal(tildify(canonicalPath("//home/me/x"), home), "~/x");
+});
+
+it("reads a drive as relative, as the OS does", () => {
+  assert.equal(isAnchoredHere("C:/scratch"), false);
+  assert.equal(isAnchoredHere("//server/share"), true);
+  assert.equal(isAnchoredHere("~/wt"), true);
 });

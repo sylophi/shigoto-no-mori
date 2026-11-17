@@ -3,11 +3,11 @@
 // nesting (scripts.setup).
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
-import { isAnchoredPath } from "@shigomori/contracts/projectPaths";
 import {
   isCarryOverEntry,
   isLauncherCommand,
 } from "@shigomori/contracts/schemas/config";
+import { isAnchoredHere } from "./canonicalPath.ts";
 
 export type ConfigDoc = { [key: string]: unknown };
 
@@ -231,7 +231,7 @@ function valueProblem(key: ConfigKey, value: unknown): string | undefined {
       if (
         key.name === "customWorktreePath" &&
         value.trim() !== "" &&
-        !isAnchoredPath(value.trim())
+        !isAnchoredHere(value.trim())
       ) {
         return `${key.name} must be an absolute path.`;
       }
