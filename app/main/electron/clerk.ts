@@ -22,7 +22,7 @@ import { clerkTokenStorage } from "./clerkTokenStorage";
 import { clerkFrontendHost } from "@shigomori/contracts/accountServiceConfig";
 import { rendererContentPolicy } from "./contentPolicy";
 import { registerScheme } from "./squirrel";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byFamily } from "@shigomori/engine/platform";
 import {
   RENDERER_SCHEME_HOST,
   rendererSchemeName,
@@ -75,7 +75,7 @@ export function createDesktopClerkBridge(): { cleanup: () => void } {
     storage: memoizedTokenStorage(),
     renderer: { scheme: rendererScheme(), host: RENDERER_SCHEME_HOST },
   });
-  byPlatform({ darwin: () => {}, linux: () => {}, win32: registerScheme })();
+  byFamily({ posix: () => {}, windows: registerScheme })();
   return bridge;
 }
 

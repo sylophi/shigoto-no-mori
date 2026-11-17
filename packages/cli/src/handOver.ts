@@ -5,7 +5,7 @@
 import { spawn } from "node:child_process";
 import { startable, startOnWindows } from "@shigomori/engine/batchFiles";
 import { findOn } from "@shigomori/engine/executables";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byFamily } from "@shigomori/engine/platform";
 import { errnoWords } from "@shigomori/engine/platformErrors";
 import { KILL_GRACE } from "@shigomori/engine/processes";
 import * as Effect from "effect/Effect";
@@ -90,10 +90,9 @@ const startOf = (
   args: ReadonlyArray<string>,
   searched: string,
 ) =>
-  byPlatform({
-    darwin: Effect.succeed({ command: program, args, shell: false }),
-    linux: Effect.succeed({ command: program, args, shell: false }),
-    win32: startOnWindows((name) => findOn(searched, name), program, args),
+  byFamily({
+    posix: Effect.succeed({ command: program, args, shell: false }),
+    windows: startOnWindows((name) => findOn(searched, name), program, args),
   });
 
 const handedOver = (
@@ -129,10 +128,9 @@ const handedOver = (
       if (!(atTerminal && FROM_TERMINAL.has(signal))) child.kill(signal);
       if (signal === "SIGTSTP") process.kill(process.pid, "SIGSTOP");
     };
-    const { held, pass } = byPlatform({
-      darwin: { held: PASSED, pass: relay },
-      linux: { held: PASSED, pass: relay },
-      win32: { held: CONSOLE, pass: () => {} },
+    const { held, pass } = byFamily({
+      posix: { held: PASSED, pass: relay },
+      windows: { held: CONSOLE, pass: () => {} },
     });
     const set = held.map((signal) => {
       const listeners = process.listeners(signal);

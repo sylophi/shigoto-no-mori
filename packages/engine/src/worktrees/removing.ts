@@ -31,7 +31,7 @@ import {
 } from "../MirrorsOnDelete.ts";
 import { removeEmptyFolder } from "../entries.ts";
 import * as Paths from "../Paths.ts";
-import { byPlatform } from "../platform.ts";
+import { byFamily } from "../platform.ts";
 import { isNotFound } from "../platformErrors.ts";
 import { ownedLevels } from "../worktreeLayout.ts";
 import {
@@ -155,10 +155,9 @@ export const makeRemoving = ({
         Effect.retry({
           while: (error) =>
             Predicate.hasProperty(error.cause, "code") &&
-            byPlatform({
-              darwin: ["ENOTEMPTY"],
-              linux: ["ENOTEMPTY"],
-              win32: ["ENOTEMPTY", "EBUSY", "EPERM"],
+            byFamily({
+              posix: ["ENOTEMPTY"],
+              windows: ["ENOTEMPTY", "EBUSY", "EPERM"],
             }).includes(String(error.cause.code)),
           // Five seconds in tries, which no clock step shortens.
           schedule: Schedule.spaced("250 millis").pipe(

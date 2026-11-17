@@ -11,7 +11,7 @@ import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Stream from "effect/Stream";
 import { canonicalPath } from "./canonicalPath.ts";
-import { byPlatform } from "./platform.ts";
+import { byFamily } from "./platform.ts";
 import { reasonOf } from "./platformErrors.ts";
 
 const canonicalPaths = (paths: ReadonlyArray<string>) =>
@@ -94,5 +94,5 @@ export const canonicalPlatform = <A, E, R>(
 ): Layer.Layer<A | Path.Path | FileSystem.FileSystem, E, R> =>
   Layer.suspend(() => {
     const win32 = Layer.provideMerge(windows, platform);
-    return byPlatform({ darwin: platform, linux: platform, win32 });
+    return byFamily({ posix: platform, windows: win32 });
   });

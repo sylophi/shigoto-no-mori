@@ -29,7 +29,7 @@ import {
 } from "@shigomori/engine/linuxInstall";
 import { childEnv } from "@shigomori/engine/processes";
 import * as Paths from "@shigomori/engine/Paths";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byFamily, byPlatform } from "@shigomori/engine/platform";
 import * as ProcessTable from "@shigomori/engine/ProcessTable";
 import {
   windowsInstallRoot,
@@ -210,7 +210,7 @@ export const nuke = Command.make(
       })();
       if (nuked === null) {
         return yield* new UsageError({
-          problem: `nuke runs from ${byPlatform({ darwin: "a packaged", linux: "a packaged", win32: "an installed" })} build's ${paths.binaryName}. A dev build's is in Settings, under Danger zone.`,
+          problem: `nuke runs from ${byFamily({ posix: "a packaged", windows: "an installed" })} build's ${paths.binaryName}. A dev build's is in Settings, under Danger zone.`,
         });
       }
       if (input.keepApp && nuked.removal === null) {

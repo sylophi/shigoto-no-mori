@@ -3,7 +3,7 @@
 // command also takes -p <project>, said once in the prose instead of on
 // every usage line. Help is data, and layout and color are computed.
 import type { flavorNames } from "@shigomori/engine/flavor";
-import { byHostKind, byPlatform } from "@shigomori/engine/platform";
+import { byFamily, byHostKind, byPlatform } from "@shigomori/engine/platform";
 import { SHELL_KINDS } from "@shigomori/engine/shellHook";
 import { commandName, projectVerb } from "./aliases.ts";
 import { splitAtDashes } from "./argv.ts";
@@ -42,10 +42,9 @@ const catalog = (names: Names) => {
           [
             "app",
             "Open the Shigoto no Mori app",
-            byPlatform({
-              darwin: "",
-              linux: "",
-              win32: "Not on Windows: open it from the Start menu.",
+            byFamily({
+              posix: "",
+              windows: "Not on Windows: open it from the Start menu.",
             }),
           ],
         ],
@@ -440,10 +439,9 @@ const catalog = (names: Names) => {
       [
         "shell install [<shell>]",
         "Hook shell integration into your shell config",
-        byPlatform({
-          darwin: POSIX_SHELL_INSTALL,
-          linux: POSIX_SHELL_INSTALL,
-          win32:
+        byFamily({
+          posix: POSIX_SHELL_INSTALL,
+          windows:
             "A guarded eval line in the PowerShell profile or .zshrc/.bashrc (marker-fenced), or a fish conf.d drop-in. Defaults to PowerShell, which terminals run here.",
         }),
       ],

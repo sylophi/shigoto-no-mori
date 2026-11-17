@@ -26,7 +26,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Result from "effect/Result";
 import { canonicalPath } from "./canonicalPath.ts";
 import { flavorNames } from "./flavor.ts";
-import { byPlatform } from "./platform.ts";
+import { byFamily, byPlatform } from "./platform.ts";
 import type { Paths } from "./Paths.ts";
 import { isNotFound } from "./platformErrors.ts";
 
@@ -35,10 +35,9 @@ export type ShellKind = "zsh" | "bash" | "fish" | "powershell";
 
 const UNIX_SHELLS: ReadonlyArray<ShellKind> = ["zsh", "bash", "fish"];
 
-export const SHELL_KINDS: ReadonlyArray<ShellKind> = byPlatform({
-  darwin: UNIX_SHELLS,
-  linux: UNIX_SHELLS,
-  win32: [...UNIX_SHELLS, "powershell" as const],
+export const SHELL_KINDS: ReadonlyArray<ShellKind> = byFamily({
+  posix: UNIX_SHELLS,
+  windows: [...UNIX_SHELLS, "powershell" as const],
 });
 
 export const isShellKind = (text: string): text is ShellKind =>
@@ -281,10 +280,9 @@ const noPowerShell = { profile: "", policy: "" };
 // decides whether a profile loads at all. Both "" elsewhere, or when it
 // doesn't answer.
 const askPowerShell = (program: string) =>
-  byPlatform({
-    darwin: Effect.succeed(noPowerShell),
-    linux: Effect.succeed(noPowerShell),
-    win32: Effect.gen(function* () {
+  byFamily({
+    posix: Effect.succeed(noPowerShell),
+    windows: Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const output = yield* spawner.string(
         ChildProcess.make(program, [

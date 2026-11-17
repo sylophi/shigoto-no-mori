@@ -30,7 +30,8 @@ The install keeps its versions in `~/.local/share/shigomori`, links `sm` into `~
 | `lint/` | The repo's own oxlint rules |
 | `packages/` | The workspace packages: `contracts` (what crosses a wire), `engine` (the data model, the store and git), `ui` (the views and the fixture world), and `cli` (the terminal `sm`) |
 | `file-sync/` | The worktree mirroring engine, a Go module bundled into the app |
-| `nativefs/` | The filesystem calls Node lacks, on macOS and Linux (copy-on-write clone, exchange, flags, xattrs, lstat with private size, whether a volume can clone), a Go module bundled into the app |
+| `nativefs/` | The filesystem calls Node lacks on every OS (copy-on-write clone, exchange, flags, xattrs, lstat with private size, whether a volume can clone), and on Windows the process table, jobs and the user's PATH, a Go module bundled into the app |
+| `cli-launcher/` | The terminal command on PATH on Windows, which runs the newest installed version's `sm`, a Go module bundled into the app |
 | `skills/` | Agent skills for the `sm` workflow (below) |
 | `test/` | What every test runner and the lab's harnesses share: `gitIsolation.ts` keeps a run's git off this repository, `testTemp.mts` gives the run a temp folder of its own, and `testProcesses.mts` ends what the run started |
 

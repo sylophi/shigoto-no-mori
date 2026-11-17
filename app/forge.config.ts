@@ -17,7 +17,7 @@ import {
   flavorNames,
 } from "@shigomori/engine/flavor";
 import { programFile } from "@shigomori/engine/executables";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byFamily } from "@shigomori/engine/platform";
 import {
   squirrelPackageId,
   squirrelVersion,
@@ -121,10 +121,9 @@ const macPackage = {
   ptyPrebuilds: "darwin-.*",
   ptyFiles: [NODE_PTY_ADDON, NODE_PTY_SPAWN_HELPER],
 };
-const osPackage = byPlatform({
-  darwin: macPackage,
-  linux: macPackage,
-  win32: {
+const osPackage = byFamily({
+  posix: macPackage,
+  windows: {
     cliLauncher: true,
     ptyPrebuilds: "win32-[^/]+(/conpty\\.node)?",
     ptyFiles: [NODE_PTY_CONPTY_ADDON],

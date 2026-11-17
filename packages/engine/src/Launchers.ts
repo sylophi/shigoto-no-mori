@@ -1,6 +1,6 @@
 import type { LauncherEntry } from "@shigomori/contracts/schemas/launchers";
 import { findExecutable } from "./executables.ts";
-import { byPlatform } from "./platform.ts";
+import { byFamily, byPlatform } from "./platform.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -171,10 +171,9 @@ const catalogApps: ReadonlyArray<CatalogApp> = catalog;
 
 // Where an app is looked for on this OS.
 const placesOf = (app: CatalogApp) =>
-  byPlatform({
-    darwin: app.bundleNames,
-    linux: app.bundleNames,
-    win32: app.programs,
+  byFamily({
+    posix: app.bundleNames,
+    windows: app.programs,
   }) ?? [];
 
 // Code-unit order, as Go compares strings.
@@ -214,10 +213,9 @@ const make = Effect.gen(function* () {
     return undefined;
   });
 
-  const foundAt = byPlatform({
-    darwin: inAppFolders,
-    linux: inAppFolders,
-    win32: (name: string) => Effect.map(pathTo(name), Option.getOrUndefined),
+  const foundAt = byFamily({
+    posix: inAppFolders,
+    windows: (name: string) => Effect.map(pathTo(name), Option.getOrUndefined),
   });
 
   // The catalog's apps this OS can have: those with a place to look for

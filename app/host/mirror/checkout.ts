@@ -14,7 +14,7 @@ import { symlinksRefusal } from "@shared/pullCollision";
 import * as Git from "@shigomori/engine/Git";
 import { splitZ } from "@shigomori/engine/gitParse";
 import * as Layout from "@shigomori/engine/Layout";
-import { byPlatform } from "@shigomori/engine/platform";
+import { byFamily } from "@shigomori/engine/platform";
 
 // A script whose #! line ends in CRLF, which a shell outside Windows
 // reads as part of the interpreter's name.
@@ -56,10 +56,12 @@ export const readOriginal = Effect.fnUntraced(function* (worktreePath: string) {
       ...config,
       tracksSymlinks: entries.some((entry) => entry.startsWith("120000 ")),
     } satisfies SyncCheckout,
-    crlfScripts: yield* byPlatform({
-      darwin: Effect.succeed(false),
-      linux: Effect.succeed(false),
-      win32: Effect.map(Effect.findFirst(scripts, crlfShebang), Option.isSome),
+    crlfScripts: yield* byFamily({
+      posix: Effect.succeed(false),
+      windows: Effect.map(
+        Effect.findFirst(scripts, crlfShebang),
+        Option.isSome,
+      ),
     }),
   };
 });
@@ -69,10 +71,7 @@ class SymlinksRefusedError extends Schema.TaggedError<SymlinksRefusedError>()(
   { dir: Schema.String },
 ) {
   override get message(): string {
-    return symlinksRefusal(
-      this.dir,
-      byPlatform({ darwin: false, linux: false, win32: true }),
-    );
+    return symlinksRefusal(this.dir, byFamily({ posix: false, windows: true }));
   }
 }
 

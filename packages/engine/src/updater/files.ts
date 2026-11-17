@@ -14,7 +14,7 @@ import { unitState } from "../hostUnit.ts";
 import { parseJson } from "../json.ts";
 import { linuxInstall } from "../linuxInstall.ts";
 import * as Paths from "../Paths.ts";
-import { byPlatform } from "../platform.ts";
+import { byFamily, byPlatform } from "../platform.ts";
 import { exec, pidAlive } from "../processes.ts";
 import * as ProcessTable from "../ProcessTable.ts";
 import {
@@ -85,10 +85,9 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
     // Windows has no rm: there it is FileSystem.remove, which clears a
     // read-only file and takes a junction without what it names.
     const removeAll = (target: string) =>
-      byPlatform({
-        darwin: removeByRm,
-        linux: removeByRm,
-        win32: removeByFs,
+      byFamily({
+        posix: removeByRm,
+        windows: removeByFs,
       })(target);
     const removeByFs = (target: string) =>
       fs

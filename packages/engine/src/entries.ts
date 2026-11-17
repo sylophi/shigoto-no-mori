@@ -10,7 +10,7 @@ import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { CopyFailed } from "./entries/documents.ts";
 import { copyEntries } from "./entries/windows.ts";
-import { byPlatform } from "./platform.ts";
+import { byFamily } from "./platform.ts";
 import { exec } from "./processes.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
@@ -54,10 +54,9 @@ export const copyTree = (
 ) => {
   const keepTimes = options.keepTimes === true;
   const cp = () => cpTree(spawner, from, to, keepTimes);
-  return byPlatform({
-    darwin: cp,
-    linux: cp,
-    win32: () => copyEntries(from, to, keepTimes),
+  return byFamily({
+    posix: cp,
+    windows: () => copyEntries(from, to, keepTimes),
   })();
 };
 
@@ -102,10 +101,9 @@ export const removeEmptyFolder = (
   spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
   dir: string,
 ) =>
-  byPlatform({
-    darwin: rmdirCommand,
-    linux: rmdirCommand,
-    win32: () =>
+  byFamily({
+    posix: rmdirCommand,
+    windows: () =>
       Effect.promise(() =>
         rmdir(dir).then(
           () => true,

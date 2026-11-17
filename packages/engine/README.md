@@ -22,6 +22,17 @@ The store is one SQLite database in the data dir (`store.db`, WAL), opened by th
 
 What a person or a script reads from the engine reads as the 2.x `sm`'s does: a failure's words (an errno in Go's words, `exit status N` from a program that printed nothing), a `--json` document's fields, a listing's order. What a 2.x data dir or another program wrote is read as leniently as 2.x reads it. Scripts, hooks and agents written against 2.x depend on both, as they do on the verbs (`packages/cli/README.md`).
 
+## Which platform question to ask
+
+Four questions, each asked of a different machine:
+
+- **The OS this process runs on**: `src/platform.ts`, whose opening comment says when a difference gets a module per OS and when a table where it is used (`byFamily`, `byPlatform`).
+- **The desktop app or a headless host**: `byHostKind` in the same module, for what differs by the machine's role.
+- **Whose paths these are**: `packages/ui/src/lib/devicePaths.ts`, which tells a device's paths by their spelling, since a window shows other devices' too.
+- **Whose keyboard and file manager**: `viewerOs` in `packages/ui/src/lib/platform.ts`, the machine the window runs on, which need not be the host's.
+
+On Windows a project's command lines run in Git Bash, so they read as POSIX sh as they do on macOS and Linux, and a terminal runs PowerShell, the shell Windows comes with. That split is by design (`src/Shells.ts`, `src/shells/windows.ts`).
+
 The engine runs in the host under Node and in the terminal binary under Bun, so it imports Node's APIs, `effect`, `@effect/*`, `@shigomori/contracts` and `semver`, and nothing else: no Electron, nothing from the app, no Bun global.
 
 ## Commit points

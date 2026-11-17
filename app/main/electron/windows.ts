@@ -56,7 +56,7 @@ import {
   type RestartVisibility,
 } from "./restartVisibility";
 import {
-  byPlatform,
+  byFamily,
   current as currentPlatform,
 } from "@shigomori/engine/platform";
 
@@ -262,10 +262,9 @@ function captionColors(): TitleBarOverlayOptions {
     : { color: "#ffffff00", symbolColor: "#000000" };
 }
 
-const FRAME = byPlatform({
-  darwin: TRAFFIC_LIGHTS,
-  linux: TRAFFIC_LIGHTS,
-  win32: CAPTION_BUTTONS,
+const FRAME = byFamily({
+  posix: TRAFFIC_LIGHTS,
+  windows: CAPTION_BUTTONS,
 });
 
 function create(
