@@ -239,6 +239,7 @@ export const worktreesContract = defineContract(
     CommitMessageSchema,
     ungated,
   ),
+  invoke("commitAuthorEmail", CommitDiffPayloadSchema, Schema.String, ungated),
   invoke(
     "resetSoft",
     ResetSoftPayloadSchema,

@@ -128,6 +128,11 @@ function buildQueryKeys(deviceId: string) {
       worktreeId: string | undefined,
       hash: string | undefined,
     ) => host("commitMessage", projectId, worktreeId, hash),
+    commitAuthorEmail: (
+      projectId: string,
+      worktreeId: string | undefined,
+      hash: string,
+    ) => host("commitAuthorEmail", projectId, worktreeId, hash),
     commitSummary: (
       projectId: string,
       worktreeId: string | undefined,
@@ -213,6 +218,8 @@ function buildQueryKeys(deviceId: string) {
     githubRepos: () => host("githubCli", "repos"),
     repoMergeConfig: (projectId: string) =>
       host("githubCli", "repoMergeConfig", projectId),
+    commitLogin: (projectId: string, hash: string) =>
+      host("githubCli", "commitLogin", projectId, hash),
     repoDescription: (projectId: string) =>
       host("githubCli", "repoDescription", projectId),
     remoteImage: (projectId: string, url: string) =>

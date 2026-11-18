@@ -6,6 +6,13 @@
       "comment": ""
     }
   },
+  "githubCli:commitLogin": {
+    "payload": {
+      "projectId": "-1",
+      "hash": "8e82"
+    },
+    "success": null
+  },
   "githubCli:createPullRequest": {
     "payload": {
       "projectId": ")",

@@ -55,7 +55,7 @@ import {
 } from "../lib/patchFiles.ts";
 import { changeKey } from "@shigomori/contracts/schemas";
 import { createFakeChanges } from "../fixtures/changesFixtures.ts";
-import { LOCAL_DEVICE_ID } from "../fixtures/fixtures.ts";
+import { COMMIT_AUTHOR, LOCAL_DEVICE_ID } from "../fixtures/fixtures.ts";
 import { fakeBlob } from "../fixtures/filesFixtures.ts";
 import { FAKE_DIFF } from "../fixtures/pullRequestFixtures.ts";
 import { ScenePart, SceneWindowFrame } from "./frame.tsx";
@@ -312,7 +312,11 @@ export function CommitPageScene() {
     ),
     header: pageHeader(
       commit?.subject ?? "Commit",
-      <CommitBylineView commit={commit} hash={commit?.hash} />,
+      <CommitBylineView
+        commit={commit}
+        author={COMMIT_AUTHOR}
+        hash={commit?.hash}
+      />,
       {
         details: (
           <CommitDetailsView
@@ -395,7 +399,11 @@ export function DiffPartsScene() {
           )}
           {pageHeader(
             "Commit",
-            <CommitBylineView commit={undefined} hash="5eed5ab" />,
+            <CommitBylineView
+              commit={undefined}
+              author={COMMIT_AUTHOR}
+              hash="5eed5ab"
+            />,
           )}
         </ScenePart>
         <ScenePart label="A commit only the upstream has">

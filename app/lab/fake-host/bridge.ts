@@ -137,6 +137,7 @@ import {
   fakeStashes,
   addLiveEdgeRuns,
   repoDescriptionFor,
+  COMMIT_AUTHOR,
   type FakeWorktree,
   worktree as worktreeFixture,
 } from "@shigomori/ui/fixtures/fixtures.ts";
@@ -965,6 +966,8 @@ function hostHandlersFor(
           ?.subject ?? "",
       description: "",
     }),
+    "worktrees:commitAuthorEmail": () => COMMIT_AUTHOR.email,
+    "githubCli:commitLogin": () => COMMIT_AUTHOR.login,
     "worktreeData:read": ({ worktreeId }) =>
       worktreeData.get(worktreeId) ?? null,
     "worktreeData:patchPorts": ({ worktreeId, ...patch }) => {

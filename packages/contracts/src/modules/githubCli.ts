@@ -9,6 +9,7 @@ import {
   ungated,
 } from "../contract.ts";
 import {
+  CommitHashSchema,
   CreatePullRequestPayloadSchema,
   CreatePullRequestResultSchema,
   DiscardAttachmentPayloadSchema,
@@ -86,6 +87,18 @@ export const githubCliContract = defineContract(
     "repoMergeConfig",
     ProjectScopedPayloadSchema,
     Schema.NullOr(RepoMergeConfigSchema),
+    ungated,
+  ),
+  // The GitHub user a commit is by. Null when gh can't be asked, off
+  // GitHub, or for a commit GitHub doesn't have (not pushed) or can't
+  // tie to a user.
+  invoke(
+    "commitLogin",
+    Schema.Struct({
+      ...ProjectScopedPayloadSchema.fields,
+      hash: CommitHashSchema,
+    }),
+    Schema.NullOr(Schema.String),
     ungated,
   ),
   // Null when there is none, off GitHub, or the integration is off. A

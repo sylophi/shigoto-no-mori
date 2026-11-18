@@ -287,6 +287,21 @@ export const makeHistory = ({
       };
     });
 
+    const readAuthorEmail = Effect.fn("Git.readAuthorEmail")(function* (
+      worktree: string,
+      hash: string,
+    ) {
+      const stdout = yield* run(worktree, [
+        "show",
+        "-s",
+        "--format=%ae",
+        "--end-of-options",
+        hash,
+        "--",
+      ]);
+      return stdout.trim();
+    });
+
     return {
       aheadBehind,
       upstreamSync,
@@ -296,5 +311,6 @@ export const makeHistory = ({
       firstParentChain,
       primaryRelation,
       readCommitMessage,
+      readAuthorEmail,
     };
   });

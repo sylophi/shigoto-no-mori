@@ -296,6 +296,10 @@ export class Git extends Context.Service<
       worktree: string,
       hash: string,
     ) => Effect.Effect<CommitMessage, GitError>;
+    readonly readAuthorEmail: (
+      worktree: string,
+      hash: string,
+    ) => Effect.Effect<string, GitError>;
 
     // --- refs and objects ---
     // The commit a ref resolves to, none when it does not exist.
