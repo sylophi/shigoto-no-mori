@@ -3,6 +3,7 @@ import { Archive } from "lucide-react";
 import { Button } from "../../../primitives/button.tsx";
 import { Input } from "../../../primitives/input.tsx";
 import { RelativeDate } from "../../../primitives/relative-date.tsx";
+import { SHOWS_LATE } from "../../../primitives/skeleton.tsx";
 import { cn } from "../../../lib/utils.ts";
 import { opensOnPress, warmOnRest } from "../../../lib/pointerIntent.ts";
 import type { StashEntry } from "@shigomori/contracts/schemas";
@@ -14,6 +15,7 @@ import type { StashEntry } from "@shigomori/contracts/schemas";
 // that takes no commands from here only lists them (StashList binds it).
 export function StashListView({
   stashes,
+  loading = false,
   selected,
   changedCount,
   canCommand,
@@ -25,6 +27,8 @@ export function StashListView({
   warm,
 }: {
   stashes: readonly StashEntry[];
+  // They are still being read.
+  loading?: boolean;
   // The stash shown beside the list, by hash.
   selected: string | undefined;
   // The uncommitted files a stash would take. Null when they couldn't
@@ -69,11 +73,18 @@ export function StashListView({
           </Button>
         </form>
       )}
-      {stashes.length === 0 && (
-        <p className="px-3 py-1 text-xs text-muted-foreground">
-          {changedCount !== 0 || !canCommand
-            ? "No stashes yet"
-            : "Nothing to stash"}
+      {(loading || stashes.length === 0) && (
+        <p
+          className={cn(
+            "px-3 py-1 text-xs text-muted-foreground",
+            loading && SHOWS_LATE,
+          )}
+        >
+          {loading
+            ? "Loading…"
+            : changedCount !== 0 || !canCommand
+              ? "No stashes yet"
+              : "Nothing to stash"}
         </p>
       )}
       <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1.5 pb-3">

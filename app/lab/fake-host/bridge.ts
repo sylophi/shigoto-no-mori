@@ -213,6 +213,9 @@ interface FakeHostControls {
   // now on reads, in place of FAKE_DIFF: one git printed for a
   // repository of the caller's.
   setPatch(patch: string): void;
+  // Every answer from now on comes this many milliseconds late, for
+  // what a screen shows while it waits on its host.
+  setLatency(ms: number): void;
   // Set by boot.tsx once the memory router is up.
   navigate?: (to: string) => void;
 }
@@ -276,6 +279,7 @@ function createFixtureWire(
     if (call === undefined) {
       throw new Error(`[fake-host] no contract entry for ${channel}`);
     }
+    if (fakeLatency > 0) await sleep(fakeLatency);
     const handler = handlers[channel];
     if (handler !== undefined) {
       // Parsed the way the real registrar parses it, so a handler sees
@@ -1613,6 +1617,7 @@ let pushFromPeer: (
 ) => void = () => {};
 let fakeSessionSerial = 1;
 let fakePatch = FAKE_DIFF;
+let fakeLatency = 0;
 
 function mirrorChanged() {
   for (const emit of mirrorWires.values()) emit("mirror:changed", undefined);
@@ -2643,6 +2648,9 @@ export function installFakeHostBridge(
     },
     setPatch(patch) {
       fakePatch = patch;
+    },
+    setLatency(ms) {
+      fakeLatency = ms;
     },
     // Holds the given roots still on every posed mirror, each changed
     // on both sides, so the conflict chip and its list can be posed.

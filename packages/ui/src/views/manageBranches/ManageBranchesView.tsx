@@ -6,6 +6,7 @@ import { ChevronRight, Plus, Search } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
 import { Input } from "../../primitives/input.tsx";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
+import { SHOWS_LATE } from "../../primitives/skeleton.tsx";
 import { rankByScore } from "../../lib/fuzzyMatch.ts";
 import { cn } from "../../lib/utils.ts";
 import { PAGE_BODY } from "../shared/PageShellView.tsx";
@@ -17,6 +18,7 @@ export function ManageBranchesView({
   onCreate,
   newBranchForm,
   localNames,
+  loading = false,
   rows,
   remotes,
 }: {
@@ -25,6 +27,8 @@ export function ManageBranchesView({
   onCreate: () => void;
   newBranchForm: ReactNode;
   localNames: readonly string[];
+  // The branches are still being read.
+  loading?: boolean;
   // Each local branch's row (BranchRow), by name.
   rows: ReadonlyMap<string, ReactNode>;
   remotes: readonly string[];
@@ -45,7 +49,11 @@ export function ManageBranchesView({
 
           {creating && newBranchForm}
 
-          {localNames.length === 0 ? (
+          {loading ? (
+            <p className={cn("text-sm text-muted-foreground", SHOWS_LATE)}>
+              Loading…
+            </p>
+          ) : localNames.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No local branches yet.
             </p>

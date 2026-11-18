@@ -114,8 +114,10 @@ export const makeHistory = ({
     // side above what it was merged into), back to where it left `base`
     // (the project's primary ref), and which commit that is. Without a
     // base (the primary checkout, a branch that is the primary branch, a
-    // detached HEAD) it is the newest commits of HEAD. `more` says the
-    // list was cut at `count`.
+    // detached HEAD) it is the newest commits of HEAD as `git log` lists
+    // them: sorting all of HEAD's history walks every commit of a
+    // repository that has no commit-graph. `more` says the list was cut
+    // at `count`.
     //
     // Against the upstream: which of HEAD's commits it lacks
     // (`unpushed`, by the same short hash the list uses), which of its
@@ -142,7 +144,8 @@ export const makeHistory = ({
         runLenient(worktree, [
           "log",
           `-${opts.count + 1}`,
-          "--topo-order",
+          // All of HEAD stays in the order listCommits pages on in.
+          ...(range === "HEAD" ? [] : ["--topo-order"]),
           `--pretty=format:${LOG_FORMAT}`,
           "--shortstat",
           "--diff-merges=first-parent",
@@ -176,7 +179,7 @@ export const makeHistory = ({
       const baseHash = mergeBase.trim();
       const forkHash = forkOut.trim();
       const range = baseHash ? `${baseHash}..HEAD` : "HEAD";
-      const [base, own, merges, upstreamFork] = yield* Effect.all(
+      const [base, own, upstreamFork] = yield* Effect.all(
         [
           opts.base && baseHash
             ? short(baseHash).pipe(
@@ -184,21 +187,26 @@ export const makeHistory = ({
               )
             : Effect.succeed(null),
           log(range).pipe(Effect.map(parseLog)),
-          runLenient(worktree, [
-            "log",
-            "--merges",
-            "--format=%h %p",
-            `-${opts.count}`,
-            "--end-of-options",
-            range,
-            "--",
-          ]),
           forkHash ? short(forkHash) : Effect.succeed(""),
         ],
         { concurrency: "unbounded" },
       );
+      const commits = own.slice(0, opts.count);
+      // The listed commits' parents, read off them alone: a search for
+      // merges walks all of a history that holds few.
+      const parents =
+        commits.length === 0
+          ? ""
+          : yield* runLenient(worktree, [
+              "log",
+              "--no-walk",
+              "--format=%h %p",
+              "--end-of-options",
+              ...commits.map((commit) => commit.hash),
+              "--",
+            ]);
       return {
-        commits: own.slice(0, opts.count),
+        commits,
         more: own.length > opts.count,
         base,
         upstream,
@@ -206,9 +214,11 @@ export const makeHistory = ({
         incoming: incoming.slice(0, opts.count),
         incomingMore: incoming.length > opts.count,
         upstreamFork: upstreamFork || null,
-        merges: merges.split("\n").flatMap((line) => {
-          const [hash = "", firstParent = ""] = line.split(" ");
-          return isCommitHash(hash) && isCommitHash(firstParent)
+        merges: parents.split("\n").flatMap((line) => {
+          const [hash = "", firstParent = "", second] = line.split(" ");
+          return second !== undefined &&
+            isCommitHash(hash) &&
+            isCommitHash(firstParent)
             ? [{ hash, firstParent }]
             : [];
         }),

@@ -77,11 +77,14 @@ function BranchCommits({
   worktree: Worktree;
   actions: CommitActions;
 }) {
-  const { data: history } = useBranchHistory(worktree.projectId, worktree.id);
+  const { data: history, isLoading } = useBranchHistory(
+    worktree.projectId,
+    worktree.id,
+  );
   const rewriteAt = useCommitRewrites(worktree, history?.commits ?? []);
   const [earlierOpen, setEarlierOpen] = useState(false);
   if (!history) {
-    return <NoteView>Reading the history…</NoteView>;
+    return isLoading && <NoteView waiting>Reading the history…</NoteView>;
   }
   const own = history.commits;
   const base = history.base;
@@ -90,8 +93,13 @@ function BranchCommits({
   // Past what the history read holds: past a branch longer than the
   // read, from its oldest commit shown, else from where the branch left
   // the primary branch. Without one (the primary checkout), only when
-  // there is more than the read held.
-  const earlierFrom = history.more ? own.at(-1)?.hash : base?.hash;
+  // there is more than the read held, and as the rest of HEAD's log:
+  // where history has merges, no one commit has all the rest behind it.
+  const earlier = base
+    ? { from: (history.more && own.at(-1)?.hash) || base.hash }
+    : history.more
+      ? { after: own.length }
+      : null;
   const split = history.unpushed.length > 0 && history.incoming.length > 0;
   const props = { worktree, history, unpushed, rewriteAt, actions };
 
@@ -106,7 +114,7 @@ function BranchCommits({
         />
       )}
       {split ? <SplitRows {...props} /> : <LineRows {...props} />}
-      {earlierFrom && (
+      {earlier && (
         <>
           <EarlierToggleView
             open={earlierOpen}
@@ -115,8 +123,9 @@ function BranchCommits({
           {earlierOpen && (
             <EarlierCommits
               worktree={worktree}
-              from={earlierFrom}
+              page={earlier}
               shown={own}
+              unpushed={base ? undefined : unpushed}
               actions={actions}
             />
           )}
@@ -149,7 +158,8 @@ function remoteName(worktree: Worktree, upstream: string | null): string {
 // branch on no remote yet) and the primary branch's where the branch
 // began. Where the commits the remote lacks aren't the newest run (a
 // merge brought older ones in), the remote's line sits on top and those
-// rows carry a mark of their own.
+// rows carry a mark of their own. Without a base the list is HEAD's log,
+// where one of them can sit past what is shown.
 function LineRows({
   worktree,
   history,
@@ -161,7 +171,9 @@ function LineRows({
   const state = deriveRemoteSyncState(worktree);
   const pill = <WorktreeSyncPill worktree={worktree} compact />;
   const lacked = own.filter((c) => unpushed.has(c.hash)).length;
-  const run = own.slice(0, lacked).every((c) => unpushed.has(c.hash));
+  const run =
+    (history.base !== null || lacked === unpushed.size) &&
+    own.slice(0, lacked).every((c) => unpushed.has(c.hash));
   const upstream = history.upstream ?? "The remote";
   let remote: { at: number; line: ReactNode } | null = null;
   if (state.kind === "publish") {
@@ -392,23 +404,29 @@ function BranchChangesRow({
 // branch's, which nothing here rewrites. Paged in on request.
 function EarlierCommits({
   worktree,
-  from,
+  page,
   shown,
+  unpushed,
   actions,
 }: {
   worktree: Worktree;
-  from: string;
+  // Where they start (useBranchCommits).
+  page: { from: string } | { after: number };
   // Already listed above, left out here.
   shown: readonly CommitSummary[];
+  // The ones the remote lacks, where they can be among these.
+  unpushed: ReadonlySet<string> | undefined;
   actions: CommitActions;
 }) {
-  const { data, hasNextPage, isFetchingNextPage, fetchNextPage } =
+  const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useBranchCommits(
       worktree.projectId,
       worktree.id,
-      worktree.recentCommits[0]?.hash,
-      { from },
+      // The list's own HEAD, which the pages go on from.
+      shown[0]?.hash,
+      page,
     );
+  if (isLoading) return <NoteView waiting>Loading…</NoteView>;
   const listed = new Set(shown.map((c) => c.hash));
   const commits = (data ? data.pages.flat() : []).filter(
     (c) => !listed.has(c.hash),
@@ -418,6 +436,7 @@ function EarlierCommits({
       worktree={worktree}
       commits={commits}
       actions={actions}
+      unpushed={unpushed}
       faded
       more={
         hasNextPage
@@ -445,7 +464,7 @@ function SearchResults({
       { query },
     );
   const commits = data ? data.pages.flat() : [];
-  if (isLoading) return <NoteView>Searching…</NoteView>;
+  if (isLoading) return <NoteView waiting>Searching…</NoteView>;
   if (commits.length === 0)
     return <NoteView>{noMatch("commit messages")}</NoteView>;
   return (
@@ -468,12 +487,14 @@ function PastCommits({
   worktree,
   commits,
   actions,
+  unpushed,
   faded = false,
   more,
 }: {
   worktree: Worktree;
   commits: readonly CommitSummary[];
   actions: CommitActions;
+  unpushed?: ReadonlySet<string>;
   faded?: boolean;
   more: { pending: boolean; load: () => void } | null;
 }) {
@@ -486,6 +507,7 @@ function PastCommits({
           commit={commit}
           rewrite={NO_REWRITE}
           actions={actions}
+          unpushed={unpushed?.has(commit.hash)}
           faded={faded}
         />
       ))}

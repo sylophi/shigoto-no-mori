@@ -2,9 +2,10 @@
 // field, the branch's whole diff, then its commits, newest first, with
 // the refs that matter drawn as lines across the list where they point.
 import type { ReactNode } from "react";
-import { ChevronRight, Layers, Search } from "lucide-react";
+import { ChevronRight, Layers, Loader2, Search } from "lucide-react";
 import { Input } from "../../../primitives/input.tsx";
 import { SegmentedControl } from "../../../primitives/segmented-control.tsx";
+import { SHOWS_LATE } from "../../../primitives/skeleton.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 import { pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../../lib/utils.ts";
@@ -214,8 +215,23 @@ export function ShowMoreView({
   );
 }
 
-export function NoteView({ children }: { children: ReactNode }) {
+export function NoteView({
+  children,
+  waiting = false,
+}: {
+  children: ReactNode;
+  // For a read under way.
+  waiting?: boolean;
+}) {
   return (
-    <p className="px-2 py-1.5 text-xs text-muted-foreground">{children}</p>
+    <p
+      className={cn(
+        "flex items-center gap-1.5 px-2 py-1.5 text-xs text-muted-foreground",
+        waiting && SHOWS_LATE,
+      )}
+    >
+      {waiting && <Loader2 aria-hidden className="size-3 animate-spin" />}
+      {children}
+    </p>
   );
 }
