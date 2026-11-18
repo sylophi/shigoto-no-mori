@@ -264,10 +264,20 @@ export const makeKept = Effect.gen(function* () {
                 ),
         ),
       ),
+    // A removed worktree's. Its marks' watchers are told by hand, which
+    // is how the app hears of a removal from a terminal (it closes the
+    // worktree's terminals and scripts): a worktree has no row of its
+    // own, and one with nothing kept deletes none.
     forget: (project: RegisteredProject, worktreeId: string) =>
-      Effect.andThen(
-        forgetRows(project, worktreeId),
-        git.deleteRef(project.path, dirtyRef(worktreeId)).pipe(Effect.ignore),
+      forgetRows(project, worktreeId).pipe(
+        Effect.andThen(
+          sql`UPDATE changes SET version = version + 1 WHERE name = 'worktree_marks'`.pipe(
+            Effect.orDie,
+          ),
+        ),
+        Effect.andThen(
+          git.deleteRef(project.path, dirtyRef(worktreeId)).pipe(Effect.ignore),
+        ),
       ),
   };
 });
