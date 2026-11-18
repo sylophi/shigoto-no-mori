@@ -47,6 +47,12 @@ const ASSETS: Record<string, CloudflaredAsset> = {
     name: "cloudflared-windows-amd64.exe",
     sha256: "411b16d40c8d872243efeb52c550053d00af0a8a97fbb32e730fb8aba429eaa8",
   },
+  // Cloudflare publishes no Windows arm64 build, and Windows on Arm runs
+  // the x64 one under emulation.
+  "win32-arm64": {
+    name: "cloudflared-windows-amd64.exe",
+    sha256: "411b16d40c8d872243efeb52c550053d00af0a8a97fbb32e730fb8aba429eaa8",
+  },
 };
 
 export function cloudflaredAsset(

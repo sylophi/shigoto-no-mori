@@ -283,16 +283,34 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # The Windows installer and the package its updates install
-  # (forge.config.ts, MakerSquirrel). Unsigned for now.
+  # The Windows installers and the packages their updates install
+  # (forge.config.ts, MakerSquirrel), each built on a runner of its
+  # arch. Unsigned for now. Arm64 is experimental, since no one has run
+  # it by hand: its failure doesn't hold the release back, and its
+  # installer's name says so.
   release-windows:
     needs: tag
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.experimental }}
     timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+            experimental: false
+            installer: x64-Setup.exe
+          - arch: arm64
+            runner: windows-11-arm
+            experimental: true
+            installer: arm64-experimental-Setup.exe
     defaults:
       run:
         shell: bash
         working-directory: app
+    env:
+      ARCH: ${{ matrix.arch }}
+      MADE: out/make/squirrel.windows/${{ matrix.arch }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -321,11 +339,11 @@ jobs:
       # the package carries, the launcher, and that version's own sm.
       - name: Install the package
         run: |
-          MADE="$PWD/out/make/squirrel.windows/x64"
+          MADE="$PWD/$MADE"
           NUPKG="$(basename "$MADE"/*-full.nupkg)"
           SQUIRREL_VERSION="${NUPKG#shigomori-}"
           SQUIRREL_VERSION="${SQUIRREL_VERSION%-full.nupkg}"
-          SM="$PWD/out/Shigoto no Mori-win32-x64/resources/sm.exe"
+          SM="$PWD/out/Shigoto no Mori-win32-$ARCH/resources/sm.exe"
           SMOKE="$PWD/scripts/smoke-sm.sh"
           export SHIGOMORI_DATA_DIR="$RUNNER_TEMP/sm-empty-data"
           mkdir -p "$SHIGOMORI_DATA_DIR"
@@ -346,23 +364,25 @@ jobs:
       # <configDir>-win32-<arch>-<version>.nupkg (engine updateFeed.ts),
       # and each other platform's picker passes over both.
       - name: Name the assets
+        env:
+          INSTALLER: ${{ matrix.installer }}
         run: |
-          MADE=out/make/squirrel.windows/x64
           mkdir out/assets
-          cp "$MADE"/*-full.nupkg "out/assets/shigomori-win32-x64-${TAG#v}.nupkg"
-          cp "$MADE"/*Setup.exe "out/assets/Shigoto.no.Mori-${TAG#v}-x64-Setup.exe"
+          cp "$MADE"/*-full.nupkg "out/assets/shigomori-win32-$ARCH-${TAG#v}.nupkg"
+          cp "$MADE"/*Setup.exe "out/assets/Shigoto.no.Mori-${TAG#v}-$INSTALLER"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: assets-windows
+          name: assets-windows-${{ matrix.arch }}
           path: app/out/assets/*
           if-no-files-found: error
           retention-days: 1
 
   # The release gets its assets only once every build has passed its
-  # gates, so it never holds some platforms and not others. The download
-  # checks each build's artifact, as one archive, against the digest
-  # recorded when it was uploaded, and fails on a mismatch.
+  # gates, so it never holds some platforms and not others, save
+  # Windows arm64, which it goes out without when that build fails. The
+  # download checks each build's artifact, as one archive, against the
+  # digest recorded when it was uploaded, and fails on a mismatch.
   attach:
     needs: [release-mac, release-linux, release-windows]
     runs-on: ubuntu-latest

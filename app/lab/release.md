@@ -4,7 +4,9 @@ The `Release` workflow (`../.github/workflows/release.yml`) runs once
 a release is published. Its `tag` job checks the tag, then the macOS,
 Linux and Windows builds run side by side, each smoking what it built,
 the Mac's signed and notarized. Its `attach` job adds their assets to
-the release only once all three have passed. These gates come first,
+the release only once all three have passed. Windows' arm64 build is
+experimental: when it fails, the release goes out without it. These
+gates come first,
 on the machine that cuts, at the tip about to be tagged and in this
 order. A failure at any of them stops the cut.
 

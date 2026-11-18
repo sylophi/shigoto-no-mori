@@ -37,8 +37,10 @@ PowerShell, which terminals run. The build needs Node, pnpm, Go (for
 `file-sync/`, `nativefs/` and `cli-launcher/`) and Bun (for the
 terminal `sm`), as on the other OSes. Install scripts are off, so run
 `pnpm run postinstall` after `pnpm install`. Windows has the desktop
-app only, with no headless host or service, on x64, and its builds are
-unsigned. The builds are in `lab/dev-app.md`, device windows in
+app only, with no headless host or service, on x64 and, as an
+experimental build no one has run by hand, arm64. Its builds are
+unsigned. `pnpm make --arch=arm64` makes the arm64 one on an x64
+machine. The builds are in `lab/dev-app.md`, device windows in
 `lab/devices.md`, which notes Windows' own steps, and the release in
 `lab/release.md`.
 
