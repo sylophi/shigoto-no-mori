@@ -250,6 +250,14 @@
       }
     }
   },
+  "worktrees:commitAuthorEmail": {
+    "payload": {
+      "projectId": "7Y",
+      "worktreeId": "}",
+      "hash": "81cf"
+    },
+    "success": ""
+  },
   "worktrees:commitDiff": {
     "payload": {
       "projectId": "\ud800",

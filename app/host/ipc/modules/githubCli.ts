@@ -98,6 +98,11 @@ export const githubCliHandlers = {
       Effect.flatMap(GithubCli, (cli) => cli.mergeConfig(cwd)),
     ),
 
+  commitLogin: ({ projectId, hash }) =>
+    Effect.flatMap(projectPath(projectId), (cwd) =>
+      Effect.flatMap(GithubCli, (cli) => cli.commitLogin(cwd, hash)),
+    ),
+
   repoDescription: ({ projectId }) =>
     Effect.flatMap(projectPath(projectId), (cwd) =>
       Effect.flatMap(GithubCli, (cli) => cli.description(cwd)),

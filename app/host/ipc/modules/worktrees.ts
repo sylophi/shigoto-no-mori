@@ -381,6 +381,11 @@ export const worktreesHandlers = {
       withGit((git) => git.readCommitMessage(path, input.hash)),
     ),
 
+  commitAuthorEmail: (input) =>
+    atPath(input, (path) =>
+      withGit((git) => git.readAuthorEmail(path, input.hash)),
+    ),
+
   resetSoft: (input) =>
     mutateAndDescribeWith(input, (wt) =>
       withGit((git) =>

@@ -94,12 +94,17 @@ function commit(
   return {
     hash,
     subject,
-    author: "sylophi",
+    author: "Sylophi",
     date: iso(msAgo),
     additions,
     deletions,
   };
 }
+
+export const COMMIT_AUTHOR = {
+  email: "sylophi@users.noreply.github.com",
+  login: "sylophi",
+};
 
 // A row of the fake forest, which the bridge's verbs update in place.
 export type FakeWorktree = Types.Mutable<Worktree>;

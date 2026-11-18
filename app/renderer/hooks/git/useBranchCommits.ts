@@ -91,3 +91,37 @@ export function useCommitSummary(
     meta: { errorTitle: "Couldn't read the commit" },
   });
 }
+
+// A commit's author's email and GitHub login, which its row leaves out.
+// A login GitHub didn't have (an unpushed commit) is asked again
+// after a minute.
+export function useCommitAuthor(
+  projectId: string,
+  worktreeId: string | undefined,
+  hash: string,
+): { email: string | undefined; login: string | null | undefined } {
+  const { api, keys } = useHostScope();
+  const { data: email } = useQuery({
+    queryKey: keys.commitAuthorEmail(projectId, worktreeId, hash),
+    queryFn: ({ signal }) =>
+      api.run(
+        api.worktrees.commitAuthorEmail({
+          projectId,
+          worktreeId: worktreeId ?? "",
+          hash,
+        }),
+        { signal },
+      ),
+    enabled: worktreeId !== undefined,
+    staleTime: Infinity,
+    meta: { silentError: true },
+  });
+  const { data: login } = useQuery({
+    queryKey: keys.commitLogin(projectId, hash),
+    queryFn: ({ signal }) =>
+      api.run(api.githubCli.commitLogin({ projectId, hash }), { signal }),
+    staleTime: (query) => (query.state.data ? Infinity : 60_000),
+    meta: { silentError: true },
+  });
+  return { email, login };
+}

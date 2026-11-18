@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { RelativeDate } from "../../primitives/relative-date.tsx";
 import { DiffStats } from "../../primitives/diff-stats.tsx";
 import { pluralize } from "@shigomori/contracts/words";
@@ -51,17 +52,49 @@ export function BranchDiffSubtitleView({
 // (a deep link), since a known one's hash ends its details' buttons.
 export function CommitBylineView({
   commit,
+  author,
   hash,
 }: {
   commit: { author: string; date: string } | undefined;
+  // Until both are read, the name alone. login: null when GitHub has no
+  // user for the commit.
+  author: { email: string | undefined; login: string | null | undefined };
   hash: string | undefined;
 }) {
-  return commit ? (
+  if (!commit) return <span className="font-mono">{hash}</span>;
+  const { email, login } = author;
+  return (
     <>
-      By {commit.author}, <RelativeDate date={commit.date} />
+      By{" "}
+      {email === undefined || login === undefined ? (
+        commit.author
+      ) : (
+        <AuthorToggle
+          key={hash}
+          shown={
+            login === null
+              ? [email, commit.author]
+              : [`@${login}`, commit.author, email]
+          }
+        />
+      )}
+      , <RelativeDate date={commit.date} />
     </>
-  ) : (
-    <span className="font-mono">{hash}</span>
+  );
+}
+
+// Who made a commit, a click going on to the next way of naming them.
+function AuthorToggle({ shown }: { shown: readonly string[] }) {
+  const [at, setAt] = useState(0);
+  return (
+    <button
+      type="button"
+      data-no-hit-area
+      onClick={() => setAt((at + 1) % shown.length)}
+      className="-mx-1 rounded px-1 transition-colors hover:bg-accent hover:text-foreground"
+    >
+      {shown[at]}
+    </button>
   );
 }
 

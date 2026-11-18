@@ -142,7 +142,7 @@ export function createFakeChanges(
       const made: CommitSummary = {
         hash,
         subject,
-        author: "sylophi",
+        author: "Sylophi",
         date: new Date().toISOString(),
         additions: total("additions"),
         deletions: total("deletions"),

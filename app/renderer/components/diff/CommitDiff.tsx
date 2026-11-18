@@ -1,6 +1,7 @@
 import { WorktreeMissingView } from "@shigomori/ui/views/shared/WorktreeMissingView.tsx";
 import {
   useBranchHistory,
+  useCommitAuthor,
   useCommitSummary,
 } from "@/hooks/git/useBranchCommits";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
@@ -38,6 +39,7 @@ export function CommitDiff() {
     listed === undefined,
   );
   const commit = listed ?? read ?? undefined;
+  const author = useCommitAuthor(projectId, worktree?.id, hash);
 
   if (!worktree) {
     return <WorktreeMissingView {...missing} />;
@@ -50,7 +52,9 @@ export function CommitDiff() {
       worktree={worktree}
       title={commit?.subject ?? "Commit"}
       // A known commit's hash ends its details' row of buttons.
-      subtitle={<CommitBylineView commit={commit} hash={hash} />}
+      subtitle={
+        <CommitBylineView commit={commit} author={author} hash={hash} />
+      }
       details={
         commit && (
           <TimelineCommitDetails

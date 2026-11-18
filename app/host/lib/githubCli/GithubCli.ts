@@ -77,6 +77,13 @@ export class GithubCli extends Context.Service<
       string | null,
       GhUnavailableError | GitHub.GitHubCliError
     >;
+    // The GitHub user a commit of the repo at `cwd` is by, null when gh
+    // can't be asked, off GitHub, or for a commit GitHub doesn't have
+    // (not pushed) or can't tie to a user.
+    readonly commitLogin: (
+      cwd: string,
+      hash: string,
+    ) => Effect.Effect<string | null>;
     // Who and what a new pull request can name: the signed-in user, the
     // repo's assignable people and its labels. Ungated, for the action
     // that reads it to gate.
@@ -312,6 +319,26 @@ const make = Effect.gen(function* () {
       const info = yield* repos.get(cwd);
       if (info === null) return null;
       return yield* descriptions.get(`${info.host}/${info.owner}/${info.repo}`);
+    }),
+    commitLogin: Effect.fn("GithubCli.commitLogin")(function* (cwd, hash) {
+      if ((yield* unavailableReason) !== null) return null;
+      const info = yield* repos.get(cwd);
+      if (info === null) return null;
+      return yield* github
+        .runOn(
+          info.host,
+          [
+            "api",
+            `repos/${info.owner}/${info.repo}/commits/${hash}`,
+            "--jq",
+            '.author.login // ""',
+          ],
+          { timeout: GH_TIMEOUT_MS },
+        )
+        .pipe(
+          Effect.map((stdout) => stdout.trim() || null),
+          Effect.orElseSucceed(() => null),
+        );
     }),
     pullRequestOptions: Effect.fn("GithubCli.pullRequestOptions")((cwd) =>
       pullRequestOptions.get(cwd),
