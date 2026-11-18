@@ -816,7 +816,7 @@ func mirrorEndpointStateOf(state, other *synchronization.EndpointState) mirrorEn
 	out := mirrorEndpointState{
 		Connected:        state.Connected,
 		Scanned:          state.Scanned,
-		Files:            state.Files,
+		Files:            state.Files + state.SymbolicLinks,
 		Problems:         make([]mirrorProblem, 0, len(state.ScanProblems)+len(state.TransitionProblems)),
 		ExcludedProblems: state.ExcludedScanProblems + state.ExcludedTransitionProblems,
 	}
