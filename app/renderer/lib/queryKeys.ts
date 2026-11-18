@@ -151,7 +151,7 @@ function buildQueryKeys(deviceId: string) {
       projectId: string,
       worktreeId: string,
       headHash: string | undefined,
-      opts: { query?: string; from?: string },
+      opts: { query?: string; from?: string; after?: number },
     ) =>
       host(
         "branchCommits",
@@ -160,6 +160,7 @@ function buildQueryKeys(deviceId: string) {
         headHash,
         opts.query ?? "",
         opts.from ?? "",
+        opts.after ?? 0,
       ),
     stashDiff: (projectId: string, worktreeId: string, hash: string) =>
       host("stashDiff", projectId, worktreeId, hash),

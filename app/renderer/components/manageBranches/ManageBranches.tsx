@@ -23,7 +23,7 @@ export function ManageBranches() {
 // The branch lists of whichever device the surrounding scope names.
 function BranchesBody({ project }: { project: Project }) {
   const projectId = project.id;
-  const { data: branches } = useBranches(projectId);
+  const { data: branches, isLoading } = useBranches(projectId);
   const { data: worktrees = [] } = useWorktrees(projectId);
   const { data: defaultBranch } = useDefaultBranch(projectId);
   const [creating, setCreating] = useState(false);
@@ -48,6 +48,7 @@ function BranchesBody({ project }: { project: Project }) {
         />
       }
       localNames={locals}
+      loading={isLoading}
       rows={
         new Map(
           locals.map((name) => [

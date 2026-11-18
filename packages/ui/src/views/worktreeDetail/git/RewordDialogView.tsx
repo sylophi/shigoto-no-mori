@@ -4,9 +4,13 @@
 import type { Binding } from "../../../lib/keymap.ts";
 import type { KeyboardEvent } from "react";
 import { Button } from "../../../primitives/button.tsx";
+import { CenteredMessage } from "../../../primitives/centered-message.tsx";
+import { Loader2 } from "lucide-react";
 import { DialogFrame } from "../../../primitives/dialog.tsx";
 import { Input } from "../../../primitives/input.tsx";
+import { SHOWS_LATE } from "../../../primitives/skeleton.tsx";
 import { Textarea } from "../../../primitives/textarea.tsx";
+import { cn } from "../../../lib/utils.ts";
 
 function title(hash: string) {
   return (
@@ -26,7 +30,10 @@ export function RewordLoadingView({
 }) {
   return (
     <DialogFrame title={title(hash)} onCancel={onCancel}>
-      <div className="mt-4 h-40" />
+      <CenteredMessage className={cn("mt-4 h-40", SHOWS_LATE)}>
+        <Loader2 aria-hidden className="mr-2 size-3.5 animate-spin" />
+        Reading the commit…
+      </CenteredMessage>
     </DialogFrame>
   );
 }

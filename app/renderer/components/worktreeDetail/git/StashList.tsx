@@ -19,7 +19,7 @@ export function StashList({
 }) {
   const nav = useWorktreeNav();
   const warm = useWarmGitPages(worktree);
-  const { data: listed } = useWorktreeStashes(worktree);
+  const { data: listed, isLoading } = useWorktreeStashes(worktree);
   const stashes = listed ?? [];
   const stashChanges = useStashChanges();
   const { canCommand } = useCommandAccess();
@@ -59,6 +59,7 @@ export function StashList({
   return (
     <StashListView
       stashes={stashes}
+      loading={isLoading}
       selected={selected}
       changedCount={changedCount}
       canCommand={canCommand}

@@ -160,7 +160,7 @@ export function BranchComboboxView({
         busy={fetching ? "Syncing branches" : undefined}
         className="w-(--anchor-width) min-w-56"
       >
-        {sorted.length === 0 && !showCustom && (
+        {sorted.length === 0 && !showCustom && !fetching && (
           <ComboboxEmpty>{noMatch("branches")}</ComboboxEmpty>
         )}
         {sorted.map((entry) => (

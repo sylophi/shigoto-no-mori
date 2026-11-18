@@ -21,15 +21,16 @@ export function useBranchHistory(projectId: string, worktreeId?: string) {
 }
 
 // Pages through `git log` in PAGE_SIZE chunks, from `from` (a commit,
-// for the history before the branch) or HEAD, or through a search of
-// the messages. The cursor is the number already loaded, fed back as
-// `skip`, and a short page ends it. HEAD's hash is in the key, so any
-// HEAD movement drops the stale pages.
+// for the history before the branch) or HEAD, past its first `after`
+// commits (the ones a list above already shows), or through a search
+// of the messages. The cursor is `skip`, the commits passed so far,
+// and a short page ends it. HEAD's hash is in the key, so any HEAD
+// movement drops the stale pages.
 export function useBranchCommits(
   projectId: string,
   worktreeId: string,
   headHash: string | undefined,
-  opts: { query?: string; from?: string } = {},
+  opts: { query?: string; from?: string; after?: number } = {},
 ) {
   const { api, keys } = useHostScope();
   return useInfiniteQuery<
@@ -40,7 +41,7 @@ export function useBranchCommits(
     number
   >({
     queryKey: keys.branchCommits(projectId, worktreeId, headHash, opts),
-    initialPageParam: 0,
+    initialPageParam: opts.after ?? 0,
     queryFn: ({ pageParam, signal }) =>
       api.run(
         api.worktrees.listCommits({
@@ -53,10 +54,10 @@ export function useBranchCommits(
         }),
         { signal },
       ),
-    getNextPageParam: (lastPage, allPages) => {
-      if (lastPage.length < BRANCH_COMMITS_PAGE_SIZE) return undefined;
-      return allPages.reduce((sum, page) => sum + page.length, 0);
-    },
+    getNextPageParam: (lastPage, _pages, skipped) =>
+      lastPage.length < BRANCH_COMMITS_PAGE_SIZE
+        ? undefined
+        : skipped + lastPage.length,
     meta: { errorTitle: "Couldn't load the history" },
   });
 }

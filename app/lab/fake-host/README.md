@@ -37,6 +37,9 @@ Some ways to use it:
   pose: the web shell here runs on a fixture page api and never
   dials (`web/hub/` does not run), so a redial or its trace is the
   real web client's (`../reliability/README.md`).
+- **A slow host.** `window.fakeHost.setLatency(ms)` has every answer
+  from then on come that late, to see what a list, a fold or a dialog
+  shows while it waits.
 - **A real patch.** `window.fakeHost.setPatch(patch)` has the commit,
   branch, stash and pull request diffs opened after it read a patch of
   your own in place of the fixture's, such as `git show --format=
@@ -216,7 +219,7 @@ Poses ride the URL:
 
 Runtime controls on `window.fakeHost`, for a `js` step:
 `setPeer(deviceId, "connected" | "online" | "offline")`,
-`setSocket(phase)`, `navigate(to)` (desktop, no reload),
+`setSocket(phase)`, `setLatency(ms)`, `navigate(to)` (desktop, no reload),
 `setMirrorConflicts(roots)` (holds those paths still on every mirror
 started in this session, for the conflict chip. Start one first, since
 the fixtures seed none), `worktree(deviceId, "add" | "remove", name,

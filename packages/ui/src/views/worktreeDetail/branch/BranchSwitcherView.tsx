@@ -76,7 +76,7 @@ export function BranchSwitcherView({
         sideOffset={6}
         className="w-72"
       >
-        {sorted.length === 0 && (
+        {sorted.length === 0 && !fetching && (
           <ComboboxEmpty>{noMatch("branches")}</ComboboxEmpty>
         )}
         {sorted.map((entry) => (
