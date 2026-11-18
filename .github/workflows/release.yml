@@ -199,13 +199,14 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: node scripts/smoke-app.mts "$APP_PATH"
 
-      # The dmg and the zip forge's makers write (forge.config.ts), with
-      # the dots GitHub puts in place of the spaces in an uploaded name.
+      # The dmg is what a person downloads, so its name says the OS and
+      # arch. The zip is the updaters' alone (engine updateFeed.ts, and
+      # the update server), which find it by "-darwin-<arch>-".
       - name: Name the assets
         run: |
           mkdir out/assets
-          cp "out/make/Shigoto no Mori-${TAG#v}-arm64.dmg" "out/assets/Shigoto.no.Mori-${TAG#v}-arm64.dmg"
-          cp "out/make/zip/darwin/arm64/Shigoto no Mori-darwin-arm64-${TAG#v}.zip" "out/assets/Shigoto.no.Mori-darwin-arm64-${TAG#v}.zip"
+          cp "out/make/Shigoto no Mori-${TAG#v}-arm64.dmg" "out/assets/Shigoto.no.Mori-macOS-arm64-${TAG#v}.dmg"
+          cp "out/make/zip/darwin/arm64/Shigoto no Mori-darwin-arm64-${TAG#v}.zip" "out/assets/update-darwin-arm64-${TAG#v}.zip"
 
       # Handed to the attach job and kept a day, since the release holds
       # the real copies.
@@ -342,15 +343,15 @@ jobs:
           echo "installed sm --version: $SM_VERSION"
           [[ "$SM_VERSION" == *"${TAG#v}"* ]]
 
-      # GitHub turns the spaces in a name into dots. The updater takes
-      # <configDir>-win32-<arch>-<version>.nupkg (engine updateFeed.ts),
-      # and each other platform's picker passes over both.
+      # Setup.exe is what a person downloads, so its name says the OS and
+      # arch. The nupkg is the updater's alone (engine updateFeed.ts),
+      # which finds it by "-win32-<arch>-".
       - name: Name the assets
         run: |
           MADE=out/make/squirrel.windows/x64
           mkdir out/assets
-          cp "$MADE"/*-full.nupkg "out/assets/shigomori-win32-x64-${TAG#v}.nupkg"
-          cp "$MADE"/*Setup.exe "out/assets/Shigoto.no.Mori-${TAG#v}-x64-Setup.exe"
+          cp "$MADE"/*-full.nupkg "out/assets/update-win32-x64-${TAG#v}.nupkg"
+          cp "$MADE"/*Setup.exe "out/assets/Shigoto.no.Mori-Windows-x64-Setup-${TAG#v}.exe"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
