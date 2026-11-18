@@ -19,7 +19,7 @@
 //   - a pull cancelled mid-create takes what it made and leaves the
 //     source as it was, so the same pull lands after, and a send
 //     cancelled on the peer leaves no receipt, so its teardown is
-//     refused.
+//     refused. Neither leaves a capture's ref on either device.
 // And a queued transplant whose ignored files couldn't all be written
 // keeps the source its teardown was asked for.
 //
@@ -59,6 +59,7 @@ import { callFailureOf, RemoteCallError } from "@shigomori/contracts/errors";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import * as Fixtures from "./lib/engineFixtures.mts";
 import * as Scripts from "@host/lib/Scripts";
+import { dirtyRef } from "@shigomori/engine/Dirty";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import {
   handlerCtx,
@@ -744,6 +745,17 @@ describe("cancelMove", () => {
     return pid;
   };
   const landedNothing = async (branch: string, sourcePath: string) => {
+    const capture = dirtyRef(worktreeIdFromPath(sourcePath));
+    assert.equal(
+      await refExists(targetRepo, capture),
+      false,
+      "the cancelled move left the capture it fetched",
+    );
+    // A pull's source serves on the peer, which ends after the pull.
+    await waitFor(
+      async () => !(await refExists(sourceRepo, capture)),
+      "the source to drop its capture",
+    );
     assert.equal(
       await refExists(targetRepo, `refs/heads/${branch}`),
       false,
@@ -790,6 +802,7 @@ describe("cancelMove", () => {
     // (a) The pull, cancelled by the caller.
     const wtCancelPath = await addWorktree(sourceRepo, "wt-cancel", "cancel1");
     const wtCancelId = worktreeIdFromPath(wtCancelPath);
+    writeFileSync(join(wtCancelPath, "draft.txt"), "pull draft\n");
     const cancelledPull = Promise.resolve(
       pullWorktree(
         {
@@ -839,6 +852,7 @@ describe("cancelMove", () => {
       pullCtx,
     );
     assert.equal(retried.worktree.branch, "cancel1");
+    assert.equal(retried.dirtyApplied, true);
   });
 
   it("cancelMove (send): the peer's landing is cancelled by the link torn down under it, its setup script dies, the copy goes, and no receipt is kept", async () => {
@@ -850,6 +864,7 @@ describe("cancelMove", () => {
       "cancel2",
     );
     const wtCancel2Id = worktreeIdFromPath(wtCancel2Path);
+    writeFileSync(join(wtCancel2Path, "draft.txt"), "send draft\n");
     const cancelledSend = Promise.resolve(
       sendWorktreeHere(
         {
