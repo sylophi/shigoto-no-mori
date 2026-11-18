@@ -44,12 +44,12 @@ import * as HostNodeServices from "./nodeServices";
 import { sessionHandlers } from "./session";
 
 // Every span that ends, a JSON line in host-trace.log beside the
-// shell's trace.log, rotated to host-trace.old.log past 1 MB as the
-// shell's is: a host that runs for weeks writes a line every few
-// seconds while nothing happens. Written as each span ends, so a
-// rotation has nothing still on its way to the file it moves. A test
-// flavor's is kept whole: it is thrown away, and a failed lab run needs
-// every minute of it.
+// shell's trace.log, rotated to host-trace.old.log past 20 MB: a busy
+// mirror writes about that much an hour, and a host that runs for
+// weeks writes a line every few seconds while nothing happens. Written
+// as each span ends, so a rotation has nothing still on its way to the
+// file it moves. A test flavor's is kept whole: it is thrown away, and
+// a failed lab run needs every minute of it.
 function traceFile(logsPath: string, rotates: boolean): (line: string) => void {
   const path = join(logsPath, "host-trace.log");
   const open = (flags: "a" | "w") => {
@@ -68,7 +68,7 @@ function traceFile(logsPath: string, rotates: boolean): (line: string) => void {
   }
   let fd = open("a");
   return (line) => {
-    if (rotates && size > 1_000_000) {
+    if (rotates && size > 20_000_000) {
       if (fd !== null) closeSync(fd);
       let renamed = true;
       try {

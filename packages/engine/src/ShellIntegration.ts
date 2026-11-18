@@ -55,7 +55,9 @@ export class HookFileError extends Schema.TaggedError<HookFileError>()(
   override get message(): string {
     switch (this.reason) {
       case "read":
-        return `Couldn't read ${this.path}.`;
+        return this.path === ""
+          ? "PowerShell didn't say where its profile is."
+          : `Couldn't read ${this.path}.`;
       case "create":
         return `Couldn't create ${this.path}.`;
       case "write":
