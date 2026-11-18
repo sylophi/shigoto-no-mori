@@ -4,7 +4,7 @@ import { execSync } from "node:child_process";
 
 // Bounded, so a stalled remote (remoteTag's) costs the version rather
 // than the build.
-function gitOutput(args: string): string | null {
+function gitOutput(args: string): string | undefined {
   try {
     return execSync(`git ${args}`, {
       stdio: ["ignore", "pipe", "ignore"],
@@ -13,7 +13,7 @@ function gitOutput(args: string): string | null {
       .toString()
       .trim();
   } catch {
-    return null;
+    return undefined;
   }
 }
 
@@ -25,6 +25,14 @@ function remoteTag(sha: string): string | undefined {
     .find((line) => line.startsWith(`${sha}\t`))
     ?.split("\t")[1]
     ?.replace(/^refs\/tags\/|\^\{\}$/g, "");
+}
+
+// The release workflow checks out the tag's commit without its tags,
+// so there Actions names the tag.
+function releaseTag(vercelSha: string | undefined): string | undefined {
+  if (vercelSha) return remoteTag(vercelSha);
+  if (process.env.GITHUB_REF_TYPE === "tag") return process.env.GITHUB_REF_NAME;
+  return gitOutput("describe --tags --exact-match HEAD");
 }
 
 // Git can't read the repository in Vercel's deploy build of the web
@@ -44,12 +52,10 @@ export function buildInfoDefine(mode: string): Record<string, string> {
   // exclusion to the repo root, so it holds no matter which directory
   // vite is invoked from.
   const dirty =
-    (gitOutput("status --porcelain -- ':(exclude,top)app/package.json'") ??
+    (gitOutput(`status --porcelain -- ":(exclude,top)app/package.json"`) ??
       "") !== "";
   const commit = sha ? (dirty ? `${sha}-dirty` : sha) : "unknown";
-  const tag = vercelSha
-    ? remoteTag(vercelSha)
-    : gitOutput("describe --tags --exact-match HEAD");
+  const tag = releaseTag(vercelSha);
   // Bare, as app.getVersion() and the peers report it: the views add the v.
   const version =
     mode === "production" ? (tag?.replace(/^v/, "") ?? "unknown") : "dev";
