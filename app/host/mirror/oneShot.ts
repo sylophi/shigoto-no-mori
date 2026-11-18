@@ -17,6 +17,7 @@ import { messageOf } from "@shigomori/engine/errorDocument";
 import {
   isHaltedStatus,
   MIRROR_LABEL_MODE,
+  MIRROR_STATUS_WORDS,
   mirrorProblemCount,
 } from "@shigomori/contracts/modules/mirror";
 import { listed, pluralize } from "@shigomori/contracts/words";
@@ -211,7 +212,7 @@ const waitSettled = (
           onProgress(staging.receivedSize, staging.expectedSize);
         }
         if (isHaltedStatus(raw.status)) {
-          return failed(raw.lastError ?? raw.statusText);
+          return failed(raw.lastError ?? MIRROR_STATUS_WORDS[raw.status]);
         }
         // No cycle yet after the connect ceiling, and either an error
         // or a side still not connected (a source that went away, which

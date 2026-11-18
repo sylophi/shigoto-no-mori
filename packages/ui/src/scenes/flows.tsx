@@ -677,7 +677,7 @@ export function MirrorManageScene() {
           ...session,
           paused: true,
           status: "disconnected",
-          statusText: "Paused",
+          statusText: "paused",
           git: {
             status: "diverged",
             detail: "MacBook has a commit the original lacks",

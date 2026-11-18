@@ -48,7 +48,7 @@ export const MIRROR_LABEL_MODE = "mode";
 // its agreement across, and the host ends it on sight if it outlived the
 // re-open.
 export const MIRROR_LABEL_REPLACES = "replaces";
-export function isHaltedStatus(status: string): boolean {
+export function isHaltedStatus(status: string): status is MirrorHaltedStatus {
   return status.startsWith("halted-");
 }
 
@@ -96,6 +96,29 @@ const MirrorStatusSchema = Schema.Literals([
   "unknown",
 ]);
 export type MirrorStatus = typeof MirrorStatusSchema.Type;
+export type MirrorHaltedStatus = Extract<MirrorStatus, `halted-${string}`>;
+
+// What a session is doing, or what halted it, for every surface that
+// says so. The engine's statusText is in its own terms ("Connecting to
+// beta", "Staging files on alpha"), which say nothing to someone looking
+// at two worktrees, so only the stable code is read.
+export const MIRROR_STATUS_WORDS: Record<MirrorStatus, string> = {
+  disconnected: "waiting for the other device",
+  "halted-on-root-emptied": "one side's folder was emptied",
+  "halted-on-root-deletion": "one side's folder was deleted",
+  "halted-on-root-type-change": "one side's folder was replaced by a file",
+  "connecting-local": "opening this copy",
+  "connecting-remote": "connecting to the other device",
+  watching: "watching for changes",
+  scanning: "looking for changes",
+  "waiting-for-rescan": "waiting to look again",
+  reconciling: "working out what changed",
+  "staging-local": "receiving files",
+  "staging-remote": "sending files",
+  transitioning: "applying changes",
+  saving: "saving state",
+  unknown: "",
+};
 
 const MirrorProblemSchema = strict(
   Schema.Struct({
@@ -267,6 +290,8 @@ export const MirrorSessionSchema = strict(
     ignoreMode: MirrorIgnoreModeSchema,
     createdAt: Schema.Natural,
     status: MirrorStatusSchema,
+    // The engine's words on the daemon's line, ours (MIRROR_STATUS_WORDS)
+    // once the host annotates it.
     statusText: Schema.String,
     lastError: Schema.optional(Schema.String),
     successfulCycles: Schema.Natural,
