@@ -110,9 +110,8 @@
   --secondary-foreground: oklch(0.39 0.045 74.1);
   --muted: oklch(0.945 0.025 85);
   --muted-foreground: oklch(0.55 0.031 67.2);
-  /* The accent pillow is declared as its own token so the sidebar
-     zone can restore it after index.css's vibrancy override (see the
-     zone tints), and the rail's muted text beside it. */
+  /* The accent pillow is its own token so a palette (palettes.css) can
+     set it, and the rail's muted text beside it (see the zone tints). */
   --doubutsu-accent: oklch(0.88 0.07 155);
   --doubutsu-accent-foreground: oklch(0.39 0.045 74.1);
   --doubutsu-rail-muted-foreground: oklch(0.55 0.031 67.2);
@@ -869,16 +868,10 @@
    AC menus separate regions by stacking flat colored panels. The
    sidebar gets a calm mint, the main canvas keeps the cream --background
    plus a low-opacity leaf wallpaper. No borders between them. The
-   color shift is the boundary.
-
-   The base-layer [data-sidebar] token overrides assume the translucent
-   vibrancy surface. Doubutsu's rail is opaque mint, so the doubutsu
-   palette's own muted/accent pairings are restored here. */
+   color shift is the boundary. The rail takes its own muted text. */
 .doubutsu [data-doubutsu-zone="sidebar"] {
   background-color: var(--doubutsu-sidebar);
   --muted-foreground: var(--doubutsu-rail-muted-foreground);
-  --accent: var(--doubutsu-accent);
-  --accent-foreground: var(--doubutsu-accent-foreground);
 }
 
 /* The inbox's create buttons (New worktree, Add project) are filled

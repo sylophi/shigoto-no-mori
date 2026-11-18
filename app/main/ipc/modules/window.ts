@@ -16,9 +16,9 @@ import { host, hostAddress } from "../../hostProcess";
 
 export const windowHandlers: Handlers<typeof windowContract, HandlerContext> = {
   // Track the renderer's applied theme (including unsaved previews) so
-  // the vibrancy material follows the in-app appearance rather than
-  // the OS one. Nothing is persisted here. The saved value lands
-  // through the clientConfig module instead.
+  // the native appearance follows the in-app one rather than the OS's.
+  // Nothing is persisted here. The saved value lands through the
+  // clientConfig module instead.
   previewTheme: ({ theme }) => {
     applyThemeSource(theme);
   },

@@ -15,11 +15,11 @@ import { cn } from "../lib/utils.ts";
 export type SceneWindow = "desktop" | "phone";
 
 // The shell a scene's root stands in for (data-shell, which the app's
-// stylesheet lays a window out by): the desktop window's page is
-// transparent under the sidebar and its headers sit on the traffic
-// lights' line, and the phone is the web app's, which takes the phone
-// layout at its width. A part sits on the page's background in a
-// window of neither, so it keeps the desktop's density at any width.
+// stylesheet lays a window out by): the desktop window's headers sit
+// on the traffic lights' line, and the phone is the web app's, which
+// takes the phone layout at its width. A part sits on the page's
+// background in a window of neither, so it keeps the desktop's density
+// at any width.
 export function windowShell(
   window: SceneWindow | undefined,
 ): "desktop" | "web" | "part" {
