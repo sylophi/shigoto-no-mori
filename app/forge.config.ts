@@ -232,17 +232,19 @@ const config: ForgeConfig = {
   // the same binary.
   rebuildConfig: { ignoreModules: ["node-pty"] },
   hooks: {
+    // Every binary is the TARGET arch's, not the build machine's: a
+    // cross-arch package must ship the arch it runs on.
     prePackage: async (_config, platform, arch) => {
       runScript("generate-third-party-licenses.mts");
       // Compile the file-sync engine and the filesystem helper (Go), then
       // the terminal sm (Bun).
-      runScript("build-go.mts", "file-sync");
-      runScript("build-go.mts", "nativefs");
-      if (osPackage.cliLauncher) runScript("build-go.mts", "cli-launcher");
-      runScript("build-cli.mts");
-      // Fetch the pinned cloudflared for the TARGET platform, not the
-      // build machine's: a cross-arch package must ship the arch it
-      // runs on.
+      runScript("build-go.mts", "file-sync", "--arch", arch);
+      runScript("build-go.mts", "nativefs", "--arch", arch);
+      if (osPackage.cliLauncher) {
+        runScript("build-go.mts", "cli-launcher", "--arch", arch);
+      }
+      runScript("build-cli.mts", "--arch", arch);
+      // Fetch the pinned cloudflared, for the target platform too.
       runScript(
         "fetch-cloudflared.mts",
         "--platform",

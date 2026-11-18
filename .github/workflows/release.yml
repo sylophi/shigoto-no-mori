@@ -285,16 +285,34 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # The Windows installer and the package its updates install
-  # (app/scripts/package-windows.mts, Velopack). Unsigned for now.
+  # The Windows installers and the packages their updates install
+  # (app/scripts/package-windows.mts, Velopack), each built on a runner
+  # of its arch. Unsigned for now. Arm64 is experimental, since no one
+  # has run it by hand: its failure doesn't hold the release back, and
+  # its installer's name says so.
   release-windows:
+    name: release-windows (${{ matrix.arch }})
     needs: tag
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.experimental }}
     timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+            experimental: false
+            setup: Windows-x64-Setup
+          - arch: arm64
+            runner: windows-11-arm
+            experimental: true
+            setup: Windows-arm64-experimental-Setup
     defaults:
       run:
         shell: bash
         working-directory: app
+    env:
+      ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -323,7 +341,7 @@ jobs:
       - name: Install the package
         run: |
           MADE="$PWD/out/make/velopack"
-          SM="$PWD/out/Shigoto no Mori-win32-x64/resources/sm.exe"
+          SM="$PWD/out/Shigoto no Mori-win32-$ARCH/resources/sm.exe"
           SMOKE="$PWD/scripts/smoke-sm.sh"
           export SHIGOMORI_DATA_DIR="$RUNNER_TEMP/sm-empty-data"
           mkdir -p "$SHIGOMORI_DATA_DIR"
@@ -344,23 +362,26 @@ jobs:
       # arch. The nupkg is the updater's alone (engine updateFeed.ts),
       # which finds it by "-win32-<arch>-".
       - name: Name the assets
+        env:
+          SETUP: ${{ matrix.setup }}
         run: |
           MADE=out/make/velopack
           mkdir out/assets
-          cp "$MADE"/*-full.nupkg "out/assets/update-win32-x64-${TAG#v}.nupkg"
-          cp "$MADE"/*Setup.exe "out/assets/Shigoto.no.Mori-Windows-x64-Setup-${TAG#v}.exe"
+          cp "$MADE"/*-full.nupkg "out/assets/update-win32-$ARCH-${TAG#v}.nupkg"
+          cp "$MADE"/*Setup.exe "out/assets/Shigoto.no.Mori-$SETUP-${TAG#v}.exe"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: assets-windows
+          name: assets-windows-${{ matrix.arch }}
           path: app/out/assets/*
           if-no-files-found: error
           retention-days: 1
 
   # The release gets its assets only once every build has passed its
-  # gates, so it never holds some platforms and not others. The download
-  # checks each build's artifact, as one archive, against the digest
-  # recorded when it was uploaded, and fails on a mismatch.
+  # gates, so it never holds some platforms and not others, save
+  # Windows arm64, which it goes out without when that build fails. The
+  # download checks each build's artifact, as one archive, against the
+  # digest recorded when it was uploaded, and fails on a mismatch.
   attach:
     needs: [release-mac, release-linux, release-windows]
     runs-on: ubuntu-latest
