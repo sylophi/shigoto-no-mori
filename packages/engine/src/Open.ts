@@ -19,22 +19,18 @@ import * as Launchers from "./Launchers.ts";
 import * as Paths from "./Paths.ts";
 import { errnoText, isAbsent } from "./platformErrors.ts";
 import { isRunnable } from "./executables.ts";
-import { byPlatform } from "./platform.ts";
 import * as Shells from "./Shells.ts";
 import { typedLines } from "@shigomori/contracts/typedLines";
 import * as Usage from "./Usage.ts";
 import * as Worktrees from "./Worktrees.ts";
 import { makeCommands } from "./open/commands.ts";
-import type { Desktop } from "./open/desktop.ts";
+import { type Desktop, thisDesktop } from "./open/desktop.ts";
 import {
   type AppNotOpened,
   LaunchFailed,
   type NoAppWindow,
   type NoWindowsApp,
 } from "./open/documents.ts";
-import { makeLaunchServices } from "./open/launchServices.ts";
-import { makeWindowsShell } from "./open/windowsShell.ts";
-import { makeXdg } from "./open/xdg.ts";
 export { LaunchFailed } from "./open/documents.ts";
 
 // No launcher of the project's goes by `tool`.
@@ -173,20 +169,15 @@ const make = Effect.gen(function* () {
   const config = yield* Config.Config;
   const commands = yield* makeCommands;
   const { ran, onScreen } = commands;
-  const desktop: Desktop = yield* byPlatform({
-    darwin: makeLaunchServices(commands),
-    linux: makeXdg(commands),
-    win32: makeWindowsShell(commands),
-  });
+  const desktop: Desktop = yield* thisDesktop().make(commands);
 
   // A terminal tool's command line, run in a folder or a worktree in
-  // `picked`, else the user's chosen terminal: a worktree's in the app
-  // when that is chosen and the app is the one opening, else the chosen
-  // terminal app (Terminal when that one isn't installed, or the app's
-  // own can't take it). `entries` are the launchers already read, which say
-  // whether the chosen terminal is installed. Without them it is
-  // looked up. Linux has no terminal app sm drives, so there the app's
-  // is the only one.
+  // `picked`, else the desktop's chosen terminal: a worktree's in the
+  // app when that is chosen and the app is the one opening, else the
+  // chosen terminal app (Terminal when that one isn't installed, or the
+  // app's own can't take it). `entries` are the launchers already read,
+  // which say whether the chosen terminal is installed. Without them it
+  // is looked up.
   const inTerminal = (
     label: string,
     command: string,
@@ -195,13 +186,7 @@ const make = Effect.gen(function* () {
     picked?: TerminalId,
   ) =>
     Effect.gen(function* () {
-      const chosen =
-        picked ??
-        (yield* byPlatform({
-          darwin: config.device("terminal"),
-          linux: Effect.succeed("app" as const),
-          win32: config.device("terminal"),
-        }));
+      const chosen = picked ?? (yield* desktop.terminal);
       const appTerminal = yield* Effect.serviceOption(AppTerminal);
       if (
         chosen === "app" &&
