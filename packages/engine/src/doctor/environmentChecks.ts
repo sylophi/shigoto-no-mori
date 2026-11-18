@@ -18,7 +18,7 @@ import { flavorNames } from "../flavor.ts";
 import * as Git from "../Git.ts";
 import { unitState } from "../hostUnit.ts";
 import { installedVersionOf, linuxInstall } from "../linuxInstall.ts";
-import { appFoldersOf } from "../Launchers.ts";
+import { appFoldersOf } from "../open/launchServices.ts";
 import * as Paths from "../Paths.ts";
 import { byFamily, byPlatform } from "../platform.ts";
 import {

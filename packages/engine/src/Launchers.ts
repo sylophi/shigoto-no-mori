@@ -1,6 +1,5 @@
 import type { LauncherEntry } from "@shigomori/contracts/schemas/launchers";
 import { findExecutable } from "./executables.ts";
-import { byFamily, byPlatform } from "./platform.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -11,6 +10,7 @@ import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import catalog from "./data/launcher-catalog.json" with { type: "json" };
 import * as EngineConfig from "./Config.ts";
+import { thisDesktop } from "./open/desktop.ts";
 import * as Paths from "./Paths.ts";
 import * as Usage from "./Usage.ts";
 
@@ -150,31 +150,11 @@ const launchersOf = (
   };
 };
 
-// Where an installed .app can live, in the order they are looked in.
-// Linux and Windows have none: their launchers are found on PATH.
-export const appFoldersOf = (path: Path.Path, home: string) =>
-  byPlatform({
-    darwin: [
-      "/Applications",
-      path.join(home, "Applications"),
-      "/System/Applications",
-    ],
-    linux: [],
-    win32: [],
-  });
-
 // The desktop's file manager, always there where the OS has one, which
 // opens a folder as the desktop does (Open).
 export const FILE_MANAGER = "__file_manager__";
 
 const catalogApps: ReadonlyArray<CatalogApp> = catalog;
-
-// Where an app is looked for on this OS.
-const placesOf = (app: CatalogApp) =>
-  byFamily({
-    posix: app.bundleNames,
-    windows: app.programs,
-  }) ?? [];
 
 // Code-unit order, as Go compares strings.
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -185,8 +165,7 @@ const make = Effect.gen(function* () {
   const { home } = yield* Paths.Paths;
   const settings = yield* EngineConfig.Config;
   const usage = yield* Usage.Usage;
-  const appFolders = appFoldersOf(path, home);
-  const fileManager = byPlatform({ darwin: true, linux: false, win32: true });
+  const { placesOf, lookIn, fileManager } = thisDesktop().launchers;
   // The provider the engine was built with, not the caller's: a fiber
   // with none set reads a copy of the environment taken once.
   const configProvider = yield* ConfigProvider.ConfigProvider;
@@ -205,18 +184,19 @@ const make = Effect.gen(function* () {
 
   const onPath = (name: string) => Effect.map(pathTo(name), Option.isSome);
 
-  const inAppFolders = Effect.fnUntraced(function* (bundle: string) {
-    for (const folder of appFolders) {
-      const found = path.join(folder, bundle);
-      if (yield* exists(found)) return found;
-    }
-    return undefined;
-  });
+  const inAppFolders = (folders: ReadonlyArray<string>) =>
+    Effect.fnUntraced(function* (name: string) {
+      for (const folder of folders) {
+        const found = path.join(folder, name);
+        if (yield* exists(found)) return found;
+      }
+      return undefined;
+    });
 
-  const foundAt = byFamily({
-    posix: inAppFolders,
-    windows: (name: string) => Effect.map(pathTo(name), Option.getOrUndefined),
-  });
+  const foundAt =
+    lookIn === "PATH"
+      ? (name: string) => Effect.map(pathTo(name), Option.getOrUndefined)
+      : inAppFolders(lookIn(path, home));
 
   // The catalog's apps this OS can have: those with a place to look for
   // them here, a command line tool or a terminal tool.

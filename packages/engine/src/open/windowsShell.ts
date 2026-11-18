@@ -6,10 +6,19 @@ import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Config from "../Config.ts";
 import * as Shells from "../Shells.ts";
 import type { CommandsArea } from "./commands.ts";
-import type { Desktop } from "./desktop.ts";
+import type { Desktop, LauncherTable } from "./desktop.ts";
 import { LaunchFailed, NoWindowsApp } from "./documents.ts";
+
+// Windows finds the catalog's apps by their programs on PATH, and
+// Explorer always.
+export const windowsLaunchers: LauncherTable = {
+  placesOf: (app) => app.programs ?? [],
+  lookIn: "PATH",
+  fileManager: true,
+};
 
 const WINDOWS_TERMINAL = "windows-terminal";
 
@@ -41,6 +50,7 @@ export const makeWindowsShell = ({ run, onScreen }: CommandsArea) =>
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const path = yield* Path.Path;
     const shells = yield* Shells.Shells;
+    const config = yield* Config.Config;
 
     // Started detached, so it has no console of ours (nor a window for
     // one) and outlives the engine, and left running.
@@ -138,6 +148,7 @@ export const makeWindowsShell = ({ run, onScreen }: CommandsArea) =>
           );
         },
       ),
+      terminal: config.device("terminal"),
       openOwnApp: Effect.fail(new NoWindowsApp()),
     } satisfies Desktop;
   });

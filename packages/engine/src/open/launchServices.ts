@@ -3,12 +3,28 @@
 import { typedLines } from "@shigomori/contracts/typedLines";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
+import * as Config from "../Config.ts";
 import { flavorNames } from "../flavor.ts";
 import * as Paths from "../Paths.ts";
 import { openEnvArgs } from "../relaunchEnv.ts";
 import type { CommandsArea } from "./commands.ts";
-import type { Desktop } from "./desktop.ts";
+import type { Desktop, LauncherTable } from "./desktop.ts";
 import { AppNotOpened, LaunchFailed } from "./documents.ts";
+
+// Where an installed .app can live, in the order they are looked in.
+export const appFoldersOf = (path: Path.Path, home: string) => [
+  "/Applications",
+  path.join(home, "Applications"),
+  "/System/Applications",
+];
+
+// A Mac finds the catalog's apps by bundle name in its app folders, and
+// Finder always.
+export const macLaunchers: LauncherTable = {
+  placesOf: (app) => app.bundleNames ?? [],
+  lookIn: appFoldersOf,
+  fileManager: true,
+};
 
 // How each terminal runs a command line, as an AppleScript taking it as
 // its one argument: into a new window, or into the first one a terminal
@@ -73,6 +89,7 @@ export const makeLaunchServices = ({ ran, run }: CommandsArea) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
+    const config = yield* Config.Config;
     const { appName, bundleId } = flavorNames(paths.flavor);
 
     return {
@@ -118,6 +135,7 @@ export const makeLaunchServices = ({ ran, run }: CommandsArea) =>
           return yield* new LaunchFailed({ label, said });
         },
       ),
+      terminal: config.device("terminal"),
       // The installed app's bundle, opened by its id, which still finds
       // it renamed or moved.
       openOwnApp: Effect.gen(function* () {
