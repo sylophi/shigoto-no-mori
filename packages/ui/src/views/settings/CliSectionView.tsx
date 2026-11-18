@@ -246,7 +246,7 @@ export function ShellIntegrationView({
           </Button>
           {enabledAnywhere && (
             <span className="text-xs text-muted-foreground">
-              Enabled for another shell. This adds your login shell.
+              Enabled for another shell.
             </span>
           )}
         </div>
