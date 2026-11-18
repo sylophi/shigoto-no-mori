@@ -1,6 +1,7 @@
 // What the engine and the host read of other processes on this machine:
-// when one was born, what it runs and what holds a shell. Each OS reads
-// its own table (processTable/), and what it means is shared here.
+// when one was born, what it runs, what holds a shell and which folder
+// it is in. Each OS reads its own table (processTable/), and what it
+// means is shared here.
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -43,8 +44,9 @@ export class ProcessTable extends Context.Service<
     readonly listed: (
       pids: ReadonlyArray<number>,
     ) => Effect.Effect<ReadonlyMap<number, LiveProcess>>;
-    // A process's parent and its program's name. None when it is gone
-    // or can't be read.
+    // A process's parent and its program's file name (.exe and all on
+    // Windows, cut to 15 characters on Linux). None when it is gone or
+    // can't be read.
     readonly identify: (pid: number) => Effect.Effect<
       Option.Option<{
         readonly parent: number;
@@ -59,6 +61,9 @@ export class ProcessTable extends Context.Service<
     readonly held: (
       pids: ReadonlyArray<number>,
     ) => Effect.Effect<ReadonlySet<number>, CommandError>;
+    // The folder `pid` is in now. None where the OS can't tell
+    // (Windows), or when it is gone or can't be read.
+    readonly cwdOf: (pid: number) => Effect.Effect<Option.Option<string>>;
   }
 >()("sm/engine/ProcessTable") {}
 

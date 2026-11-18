@@ -50,6 +50,9 @@ export const readProcesses = (
 // pid out again within moments.
 const sameBirth = (recorded: number, live: number) => recorded === live;
 
+// Windows gives no way to read a process's folder from outside.
+const cwdOf = () => Effect.succeedNone;
+
 export const makeNativefs = (helper: string) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -132,5 +135,5 @@ export const makeNativefs = (helper: string) =>
       return busy;
     }, withSpawner);
 
-    return { startedAt, sameBirth, listed, identify, running, held };
+    return { startedAt, sameBirth, listed, identify, running, held, cwdOf };
   });

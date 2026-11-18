@@ -199,26 +199,23 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
 
     // A live pid isn't yet the app: pids recycle across reboots, and handing
     // the install to a recycled one would wait on a process that never
-    // restarts. On a Mac the executable's name has to match too, and ps
-    // fails for a pid that is gone. On Linux it has to be the pid the
-    // host's unit runs. On Windows its program has to be the app's.
+    // restarts. On a Mac and on Windows its program has to be the app's.
+    // On Linux it has to be the pid the host's unit runs.
+    const runsApp = Effect.fnUntraced(function* (pid: number) {
+      if (!(yield* pidAlive(pid))) return false;
+      return Option.exists(
+        yield* processTable.identify(pid),
+        ({ name }) => name === programFile(appExecutable),
+      );
+    });
     const appAlive = (pid: number) =>
       byPlatform({
-        darwin: Effect.map(
-          processTable.identify(pid),
-          Option.exists(({ name }) => name.includes(appExecutable)),
-        ),
+        darwin: runsApp(pid),
         linux: Effect.map(
           unit,
           (state) => Option.isSome(state) && state.value.pid === pid,
         ),
-        win32: Effect.gen(function* () {
-          if (!(yield* pidAlive(pid))) return false;
-          return Option.exists(
-            yield* processTable.identify(pid),
-            ({ name }) => name === programFile(appExecutable),
-          );
-        }),
+        win32: runsApp(pid),
       });
 
     // The app running, even one that hasn't published updater.json yet:

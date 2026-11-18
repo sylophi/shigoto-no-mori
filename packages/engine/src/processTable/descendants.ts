@@ -1,6 +1,6 @@
 // The processes under a root by the ppid chain, read off `ps -A -o
-// pid=,ppid=`. Dependency-free, so the dev launcher (scripts/
-// dev-device.mts) reads the same tree under plain node.
+// pid=,ppid=`. Dependency-free, so the dev launcher
+// (app/scripts/dev-device.mts) reads the same tree under plain node.
 export function descendantsIn(stdout: string, rootPid: number): number[] {
   const byParent = new Map<number, number[]>();
   for (const line of stdout.split("\n")) {
