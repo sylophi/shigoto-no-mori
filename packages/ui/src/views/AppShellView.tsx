@@ -17,8 +17,7 @@ interface AppShellViewProps {
   // The phone layout (usePhoneLayout), which mounts a different shell,
   // so the caller decides it rather than a stylesheet.
   phone: boolean;
-  // The desktop window, which has a title bar to drag by and paints no
-  // root background of its own (the sidebar's material shows through).
+  // The desktop window, which has a title bar to drag by.
   hasLocalHost: boolean;
   // The sidebar, beside the page on a wide viewport. The phone layout
   // has none: the forest is a page there (ForestPageView). Null for a
@@ -69,10 +68,6 @@ export function AppShellView({
     <div
       className={cn(
         "relative flex h-full overflow-hidden text-foreground sidebar-right:flex-row-reverse",
-        // The desktop window is transparent so the sidebar's vibrancy
-        // material shows through, and the main pane paints its own
-        // background. A browser tab has no material, so the root paints.
-        !hasLocalHost && "bg-background",
         // A notched phone draws under its status bar (viewport-fit=cover
         // in the page's meta), so the frame steps down past it.
         phone && "pt-[env(safe-area-inset-top)]",

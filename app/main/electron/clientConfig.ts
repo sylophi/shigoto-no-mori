@@ -7,8 +7,8 @@
 // Read once as the shell's graph comes up (layer below), which the boot
 // waits on before its first window: the saved theme is applied before
 // the BrowserWindow exists (main/index.ts, via applyThemeSource below),
-// which is what keeps the vibrancy material from flashing the wrong
-// variant on first paint. Reads after that are this module's memory,
+// which is what keeps the window's background from flashing the wrong
+// light/dark on first paint. Reads after that are this module's memory,
 // which every window watches (clientConfig:watch), and writes go
 // through FileSystem.
 import { join } from "node:path";

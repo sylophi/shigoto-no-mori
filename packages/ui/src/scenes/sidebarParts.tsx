@@ -57,10 +57,7 @@ export function SidebarPartsScene() {
   };
   const worktree = worktreeNamed(SM, "happy-hummingbird");
   return (
-    <div
-      data-sidebar
-      className="grid h-full grid-cols-3 gap-6 bg-background p-6 text-foreground"
-    >
+    <div className="grid h-full grid-cols-3 gap-6 bg-background p-6 text-foreground">
       <div className="flex flex-col gap-6">
         <ScenePart label="Sort">
           <StaticMenu>

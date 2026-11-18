@@ -6,18 +6,11 @@ import { cn } from "../../lib/utils.ts";
 import { ARRIVE_FROM } from "./sidebarChrome.ts";
 import { ROW_LAYOUT, type SidebarRow } from "./sidebarRow.ts";
 
-// Both themes are fully transparent so the BrowserWindow vibrancy
-// material shows through. A heavy white wash in light mode washes out
-// the chroma, so we let the "sidebar" material do its job on its own.
-// The `data-sidebar` attribute scopes the token overrides in index.css
-// to this surface only.
+// The plain sidebar wears the window's canvas. Doubutsu paints its own
+// rail (doubutsu.css).
 export function SidebarAsideView({ children }: { children: ReactNode }) {
   return (
-    <aside
-      data-sidebar
-      data-doubutsu-zone="sidebar"
-      className="flex h-full flex-col"
-    >
+    <aside data-doubutsu-zone="sidebar" className="flex h-full flex-col">
       {children}
     </aside>
   );

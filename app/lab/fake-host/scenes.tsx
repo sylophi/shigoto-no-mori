@@ -14,8 +14,8 @@ import { applyPose } from "./pose";
 applyPose();
 const root = document.getElementById("root");
 if (!root) throw new Error("#root missing from scenes.html");
-// A desktop scene's page is transparent under its sidebar, so the
-// browser's canvas shows there, and follows the theme.
+// The browser's canvas, past a scene's root and under the list, follows
+// the theme.
 document.documentElement.style.colorScheme = root.style.colorScheme;
 const name = new URLSearchParams(location.search).get("scene");
 const scene: Scene | undefined = name

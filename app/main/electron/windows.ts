@@ -211,19 +211,19 @@ function raise(entry: Held): void {
   entry.window.focus();
 }
 
-// Inset traffic lights over a transparent shell so the
-// NSVisualEffectView material set via `vibrancy` shows through where
-// the renderer paints no background (the sidebar column). Inset as far
-// from the top as from the left, which centers the 14pt buttons on
-// y=23: the renderer's title bars line up on that (SidebarHeader,
-// PageHeader's device tabs).
+// Inset as far from the top as from the left, which centers the 14pt
+// buttons on y=23: the renderer's title bars line up on that
+// (SidebarHeader, PageHeader's device tabs).
 const INSET_TRAFFIC_LIGHTS: BrowserWindowConstructorOptions = {
   titleBarStyle: "hiddenInset",
   trafficLightPosition: { x: 16, y: 16 },
-  backgroundColor: "#00000000",
-  vibrancy: "sidebar",
-  visualEffectState: "active",
 };
+
+// What a window shows before its page paints, and where a resize
+// outruns it: doubutsu's default canvas in the app's light or dark.
+function canvasColor(): string {
+  return nativeTheme.shouldUseDarkColors ? "#171a1c" : "#faf6ee";
+}
 
 // A window's frame on each system: its options, the flags its page lays
 // out by (argFlags.ts), and what follows the app's light or dark.
@@ -243,14 +243,11 @@ const TRAFFIC_LIGHTS: Frame = {
 // corner, so the page puts its sidebar on the right to hold them in its
 // top strip, as a Mac's holds the traffic lights. Their strip is
 // transparent so the sidebar shows through, and its hue still picks the
-// hover's shade, dark on a light sidebar and light on a dark one. Mica
-// shows through the transparent shell where vibrancy would.
+// hover's shade, dark on a light sidebar and light on a dark one.
 const CAPTION_BUTTONS: Frame = {
   options: () => ({
     titleBarStyle: "hidden",
     titleBarOverlay: { height: 32, ...captionColors() },
-    backgroundColor: "#00000000",
-    backgroundMaterial: "mica",
   }),
   flags: [SIDEBAR_RIGHT_FLAG],
   recolor: (window) => window.setTitleBarOverlay(captionColors()),
@@ -279,14 +276,15 @@ function create(
 ): Held {
   if (migrating) route = MIGRATION_ROUTE;
   // Drive the native appearance from the saved theme before constructing
-  // the window so the macOS vibrancy material picks the right light/dark
-  // variant on first paint. Absent or "system" delegates back to the OS.
+  // the window so its background takes the right light/dark on first
+  // paint. Absent or "system" delegates back to the OS.
   applyThemeSource(readClientConfigSync().theme);
   const window = new BrowserWindow({
     ...placement(options.bounds),
     minWidth: 640,
     minHeight: 420,
     show: options.restart === undefined,
+    backgroundColor: canvasColor(),
     ...FRAME.options(),
     webPreferences: {
       preload: join(__dirname, "preload.js"),
@@ -484,7 +482,10 @@ export function openWindowsAtStart(options: {
   isShuttingDown = options.isShuttingDown;
   started = true;
   nativeTheme.on("updated", () => {
-    for (const entry of held) FRAME.recolor(entry.window);
+    for (const entry of held) {
+      entry.window.setBackgroundColor(canvasColor());
+      FRAME.recolor(entry.window);
+    }
   });
   let remembered: readonly Remembered[] = [];
   try {

@@ -194,8 +194,8 @@ function ForestKeepalive() {
 // continues its card (Safari tints its top strip from that same colour
 // unless a fixed element covers the top edge: AppShellView's
 // statusBarEdge), and the rubber band at the top of a fixed shell,
-// which reads as a broken layout, is off. The desktop window stays
-// transparent.
+// which reads as a broken layout, is off. The desktop window shows its
+// own background there (main/electron/windows.ts).
 function usePageCanvas(phone: boolean): void {
   const root = useWindowRoot();
   useEffect(() => {
