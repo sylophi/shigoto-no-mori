@@ -503,6 +503,7 @@ const sendBundle = (
   project: Project,
   refs: readonly string[],
   haves: readonly string[],
+  onProgress: (bytes: number, totalBytes: number) => void,
 ) =>
   inTempDir("sm-sync-", (dir) =>
     Effect.gen(function* () {
@@ -512,6 +513,8 @@ const sendBundle = (
           bundle.create(project.path, path, [...refs], [...haves]),
         ),
       );
+      onProgress(0, bytes);
+      const report = coalescedProgress(bytes, onProgress);
       yield* Effect.acquireUseRelease(
         onFiles("read the bundle", () => openFile(path, "r")),
         (file) =>
@@ -533,6 +536,7 @@ const sendBundle = (
               }
               yield* link.writeBytes(piece.subarray(0, bytesRead));
               offset += bytesRead;
+              report(offset);
             }
           }).pipe(
             // The header is out: whatever ends the bytes early, a failure
@@ -562,6 +566,7 @@ const answerAsk = (
   project: Project,
   facts: SourceFacts,
   ask: typeof AskSchema.Type,
+  onBundleProgress: (bytes: number, totalBytes: number) => void,
 ) => {
   switch (ask.ask) {
     case "tip":
@@ -577,7 +582,7 @@ const answerAsk = (
         link.write({ ok: clone }),
       );
     case "bundle":
-      return sendBundle(link, project, ask.refs, ask.haves);
+      return sendBundle(link, project, ask.refs, ask.haves, onBundleProgress);
   }
 };
 
@@ -587,6 +592,10 @@ const answerAsk = (
 // `failure`, so a caller whose run failed can tell its own trouble
 // from the other device's). A malformed message, or a bundle cut off
 // halfway, resets the link and fails.
+//
+// The other device's progress goes to `onProgress`, and so do a
+// bundle's bytes as they go, under the step that asked for it: the other
+// device's own count of them would only be read once they all went.
 const serveSource = (
   link: Link,
   project: Project,
@@ -598,6 +607,7 @@ const serveSource = (
 ) => {
   const facts = localSource(project, worktreeId);
   return Effect.gen(function* () {
+    let bundleStep: "clone" | "transfer" = "transfer";
     // One question at a time.
     for (;;) {
       const message = yield* link.read;
@@ -611,10 +621,14 @@ const serveSource = (
           new LinkError({ reason: "the other device asked something else" }),
       });
       if ("progress" in request) {
+        bundleStep = request.progress.step === "clone" ? "clone" : "transfer";
         opts.onProgress?.(request.progress);
         continue;
       }
-      yield* answerAsk(link, project, facts, request).pipe(
+      if (request.ask === "bundle") opts.onProgress?.({ step: bundleStep });
+      yield* answerAsk(link, project, facts, request, (bytes, totalBytes) =>
+        opts.onProgress?.({ step: bundleStep, bytes, totalBytes }),
+      ).pipe(
         Effect.withSpan("SourceLink.answer", {
           attributes: { ask: request.ask },
         }),
@@ -923,9 +937,11 @@ export const peerSource = (
 export const linkSource = (link: Link) =>
   Effect.acquireRelease(
     Effect.sync(() =>
-      askSource(Effect.succeed(link), (frame) =>
-        link.post({ progress: frame }),
-      ),
+      // Bar a bundle's byte count, which the source makes itself as it
+      // sends (serveSource).
+      askSource(Effect.succeed(link), (frame) => {
+        if (frame.bytes === undefined) link.post({ progress: frame });
+      }),
     ),
     (_, exit) =>
       Effect.sync(() => {
