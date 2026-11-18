@@ -60,6 +60,7 @@ import type {
 import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
 import {
   MIRROR_HISTORY_LIMIT,
+  MIRROR_STATUS_WORDS,
   summarizeIgnores,
 } from "@shigomori/contracts/modules/mirror";
 import {
@@ -1656,7 +1657,7 @@ function setMirrorPaused(session: string, paused: boolean) {
   if (entry === undefined) return;
   entry.paused = paused;
   entry.status = paused ? "disconnected" : "watching";
-  entry.statusText = paused ? "Paused" : "Watching for changes";
+  entry.statusText = paused ? "paused" : MIRROR_STATUS_WORDS[entry.status];
   noteMirrorEvent(entry.localWorktreeId, paused ? "paused" : "resumed", "");
   mirrorChanged();
 }
@@ -1733,7 +1734,7 @@ async function fakeMirrorStartTo(
     ignoreMode: input.ignoreMode,
     createdAt: Date.now(),
     status: "connecting-remote",
-    statusText: "Connecting to beta",
+    statusText: MIRROR_STATUS_WORDS["connecting-remote"],
     successfulCycles: 0,
     conflicts: [],
     excludedConflicts: 0,

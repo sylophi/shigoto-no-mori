@@ -40,7 +40,7 @@ export function mirrorSessionFixture(
     ignoreMode: "gitignored",
     createdAt: Date.now() - 3 * HOUR,
     status: "watching",
-    statusText: "Watching for changes",
+    statusText: "watching for changes",
     successfulCycles: 128,
     conflicts: [],
     excludedConflicts: 0,

@@ -12,6 +12,7 @@ import { pluralize } from "@shigomori/contracts/words";
 import {
   isHaltedStatus,
   MIRROR_HISTORY_LIMIT,
+  MIRROR_STATUS_WORDS,
   type MirrorEvent,
   type MirrorEventKind,
   type MirrorGitStatus,
@@ -241,10 +242,14 @@ export function createMirrorHistory(deps: {
       if (connected && previous.lostConnection) {
         note(localWorktreeId, "connected", "");
       } else if (lost && !previous.lostConnection) {
-        note(localWorktreeId, "disconnected", session.statusText);
+        note(
+          localWorktreeId,
+          "disconnected",
+          MIRROR_STATUS_WORDS[session.status],
+        );
       }
       if (next.halted && !previous.halted) {
-        note(localWorktreeId, "halted", session.statusText);
+        note(localWorktreeId, "halted", MIRROR_STATUS_WORDS[session.status]);
       }
       if (next.lastError !== "" && next.lastError !== previous.lastError) {
         note(localWorktreeId, "error", next.lastError);

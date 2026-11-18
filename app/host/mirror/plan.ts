@@ -4,6 +4,7 @@
 import * as Schema from "effect/Schema";
 import {
   MIRROR_LABEL_MODE,
+  MIRROR_STATUS_WORDS,
   type MirrorGitStatus,
   type MirrorSession,
   MirrorSessionSchema,
@@ -75,16 +76,18 @@ export function reopenInput(
 }
 
 // The daemon's document with the project's label-borne id lifted to a
-// field. The daemon validates each line on arrival (host/mirror/
-// MirrorDaemon.ts). This checks the annotated whole against the
-// contract, a backstop for what the host attaches and for an impl that
-// is not the daemon (the proofs' fakes).
+// field, and our words for its status in place of the engine's (a
+// pause reads to the engine as a lost link). The daemon validates each
+// line on arrival (host/mirror/MirrorDaemon.ts). This checks the
+// annotated whole against the contract, a backstop for what the host
+// attaches and for an impl that is not the daemon (the proofs' fakes).
 export function annotateMirrorSession(
   raw: MirrorSessionRaw,
   git?: MirrorGitStatus,
 ): MirrorSession {
   return decodeMirrorSession({
     ...raw,
+    statusText: raw.paused ? "paused" : MIRROR_STATUS_WORDS[raw.status],
     localProjectId: raw.labels[MIRROR_LABEL_LOCAL_PROJECT] ?? "",
     ignoreMode: ignoreModeOf(raw.labels),
     ...(git === undefined ? {} : { git }),

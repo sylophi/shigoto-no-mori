@@ -8,8 +8,10 @@
 // The surfaces add "mirror" or the peer's name themselves.
 import {
   isHaltedStatus,
+  MIRROR_STATUS_WORDS,
   mirrorProblemCount,
   type MirrorDaemonStatus,
+  type MirrorHaltedStatus,
   type MirrorSession,
   type MirrorStatus,
 } from "@shigomori/contracts/modules/mirror";
@@ -18,7 +20,7 @@ import {
   mirrorPausedUntil,
 } from "../../../lib/commandAccessCopy.ts";
 import type { StatusTone } from "../../../primitives/status-dot.tsx";
-import { pluralize } from "@shigomori/contracts/words";
+import { capitalized, pluralize } from "@shigomori/contracts/words";
 
 // The states in which files cross or are written. The engine passes
 // through them on every cycle, but only stays long enough to be seen
@@ -42,26 +44,6 @@ const CHECKING: ReadonlySet<MirrorStatus> = new Set([
   "saving",
 ]);
 
-// The engine's own description of a lifecycle state is written in its
-// own terms ("Connecting to beta"), which says nothing to someone
-// looking at two worktrees. The status code beside it is stable and
-// ours to phrase, so the states a working mirror passes through are
-// read from that instead. statusText stays for halts and errors,
-// where the engine's wording is the news.
-const STATUS_DETAIL: Partial<Record<MirrorStatus, string>> = {
-  disconnected: "waiting for the other device",
-  "connecting-local": "opening this copy",
-  "connecting-remote": "connecting to the other device",
-  watching: "watching for changes",
-  scanning: "looking for changes",
-  "waiting-for-rescan": "waiting to look again",
-  reconciling: "working out what changed",
-  "staging-local": "receiving files",
-  "staging-remote": "sending files",
-  transitioning: "applying changes",
-  saving: "saving state",
-};
-
 export type MirrorLook = {
   tone: StatusTone;
   label: string;
@@ -82,15 +64,14 @@ const look = (
   spinning = false,
 ): MirrorLook => ({ tone, label, detail, spinning });
 
-// What a halt means and what to do about it, by its code. The
-// engine's own wording says only which state it stopped in.
-const HALT_DETAIL: Record<string, string> = {
+// What a halt means and what to do about it, after what halted it.
+const HALT_ADVICE: Record<MirrorHaltedStatus, string> = {
   "halted-on-root-emptied":
-    "One side's folder was emptied, so the mirror stopped rather than empty the other side too. Resume once the files are back, or stop the mirror.",
+    "so the mirror stopped rather than empty the other side too. Resume once the files are back, or stop the mirror.",
   "halted-on-root-deletion":
-    "One side's folder was deleted, so the mirror stopped rather than delete the other side too. Stop the mirror: the other side keeps its files.",
+    "so the mirror stopped rather than delete the other side too. Stop the mirror: the other side keeps its files.",
   "halted-on-root-type-change":
-    "One side's folder was replaced by a file, so the mirror stopped. Put the folder back and resume, or stop the mirror.",
+    "so the mirror stopped. Put the folder back and resume, or stop the mirror.",
 };
 
 // What the surface knows beside the session: the runner's reach (a
@@ -116,7 +97,7 @@ export function describeMirror(
   const firstPass = session.successfulCycles === 0;
   const quietCheck = CHECKING.has(session.status) && !firstPass;
   const lifecycle =
-    STATUS_DETAIL[quietCheck ? "watching" : session.status] ?? "";
+    MIRROR_STATUS_WORDS[quietCheck ? "watching" : session.status];
   if (session.stopping === true) {
     return look("slate", "Stopping", "removing the copy", true);
   }
@@ -144,7 +125,7 @@ export function describeMirror(
     return look(
       "rose",
       "Halted",
-      HALT_DETAIL[session.status] ?? session.statusText,
+      `${capitalized(MIRROR_STATUS_WORDS[session.status])}, ${HALT_ADVICE[session.status]}`,
     );
   }
   // The engine's error for the cut stream and the git half's off both
