@@ -170,7 +170,7 @@ export type Landing = {
 // incoming ref and then fail, and a survivor is NOT harmless -- a stale
 // refs/shigomori/incoming/foo blocks any later ref named
 // incoming/foo/bar at git's directory/file boundary. A failure before
-// the create leaves nothing: the capture's ref, fetched under the
+// the create leaves no ref behind: the capture's, fetched under the
 // source's id, is swept on failure the same way. After the create, an
 // apply failure resolves with dirtyApplied:false rather than failing:
 // the worktree and branch are real and useful, and the dirty state is

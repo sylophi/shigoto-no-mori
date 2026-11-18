@@ -751,10 +751,10 @@ describe("cancelMove", () => {
       false,
       "the cancelled move left the capture it fetched",
     );
-    assert.equal(
-      await refExists(sourceRepo, capture),
-      false,
-      "the cancelled move left the source's capture",
+    // A pull's source serves on the peer, which ends after the pull.
+    await waitFor(
+      async () => !(await refExists(sourceRepo, capture)),
+      "the source to drop its capture",
     );
     assert.equal(
       await refExists(targetRepo, `refs/heads/${branch}`),
