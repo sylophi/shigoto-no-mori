@@ -17,10 +17,10 @@ import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { byFamily } from "@shigomori/engine/platform";
+import { descendantsIn } from "@shigomori/engine/processTable/descendants";
 import { appRoot } from "./lib/appRoot.mts";
 import { parsePositionalDevProfile } from "./lib/devProfile.mts";
 import { pnpm } from "./lib/pnpm.mts";
-import { descendantsIn } from "../host/lib/scripts/descendants.ts";
 import { rendererDevServerAnswers } from "./lib/portsEnvFile.mts";
 
 const forwarded = byFamily({

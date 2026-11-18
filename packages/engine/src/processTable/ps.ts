@@ -1,10 +1,13 @@
 // The process table as ps tells it, on a Mac and on Linux.
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { current } from "../platform.ts";
 import type { LiveProcess } from "../ProcessTable.ts";
 import { exec } from "../processes.ts";
+import { descendantsIn } from "./descendants.ts";
 
 const MONTHS = [
   "Jan",
@@ -76,8 +79,17 @@ const parseProcessTable = (stdout: string) => {
 const sameBirth = (recorded: number, live: number) =>
   Math.abs(live - recorded) <= 5_000;
 
+// Every process that descends from `pid` by the ppid chain, those that
+// called setsid() and left its group included, as long as they haven't
+// been handed to init.
+export const readDescendants = (pid: number) =>
+  exec("ps", ["-A", "-o", "pid=,ppid="]).pipe(
+    Effect.map(({ stdout }) => descendantsIn(stdout, pid)),
+  );
+
 export const makePs = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const fs = yield* FileSystem.FileSystem;
   const withSpawner = Effect.provideService(
     ChildProcessSpawner.ChildProcessSpawner,
     spawner,
@@ -118,7 +130,10 @@ export const makePs = Effect.gen(function* () {
       const output = stdout.trim();
       const space = output.indexOf(" ");
       const ppid = space < 0 ? output : output.slice(0, space);
-      const name = space < 0 ? "" : output.slice(space + 1);
+      const comm = space < 0 ? "" : output.slice(space + 1);
+      // A Mac names the program by its whole path.
+      const name =
+        current() === "darwin" ? comm.slice(comm.lastIndexOf("/") + 1) : comm;
       return { parent: Number(ppid), name };
     });
   }, withSpawner);
@@ -148,5 +163,30 @@ export const makePs = Effect.gen(function* () {
     );
   }, withSpawner);
 
-  return { startedAt, sameBirth, listed, identify, running, held };
+  // By lsof on a Mac, and on Linux by the link the kernel keeps in /proc.
+  // Untraced, as the terminals ask at every save.
+  const cwdOf =
+    current() === "darwin"
+      ? Effect.fnUntraced(
+          function* (pid: number) {
+            const { stdout } = yield* exec(
+              "lsof",
+              ["-a", "-p", String(pid), "-d", "cwd", "-Fn"],
+              { timeout: "2 seconds" },
+            );
+            return Option.fromNullishOr(
+              stdout
+                .split("\n")
+                .find((line) => line.startsWith("n"))
+                ?.slice(1),
+            );
+          },
+          Effect.orElseSucceed(() => Option.none<string>()),
+          withSpawner,
+        )
+      : Effect.fnUntraced(function* (pid: number) {
+          return yield* Effect.option(fs.readLink(`/proc/${pid}/cwd`));
+        });
+
+  return { startedAt, sameBirth, listed, identify, running, held, cwdOf };
 });

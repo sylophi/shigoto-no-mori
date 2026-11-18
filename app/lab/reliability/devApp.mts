@@ -9,7 +9,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { chromium, type Browser, type Page } from "playwright-core";
 import { isAlive, signalIfAlive } from "../../../test/testProcesses.mts";
-import { descendantsIn } from "../../host/lib/scripts/descendants.ts";
+import { descendantsIn } from "@shigomori/engine/processTable/descendants";
 import type { RendererApi } from "../../renderer/lib/runtime/pageApi.tsx";
 import { devProfilePaths } from "../../scripts/lib/devProfile.mts";
 import { pageApi, withPageApi } from "./pageApi.mts";

@@ -50,10 +50,7 @@ import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as Processes from "@shigomori/engine/processes";
 import * as ProcessTable from "@shigomori/engine/ProcessTable";
-import { byPlatform } from "@shigomori/engine/platform";
 import * as ProcessTrees from "../scripts/ProcessTrees";
 import { type PtyHandle, PtySpawnError, spawn } from "../scripts/ScriptRuns";
 import { type History, makeHistory } from "./history";
@@ -390,7 +387,6 @@ const make = <R, E>(options: {
         Effect.provide(startContext),
       );
     const layerScope = yield* Effect.scope;
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const processTable = yield* ProcessTable.ProcessTable;
     const trees = yield* ProcessTrees.ProcessTrees;
     const fs = yield* FileSystem.FileSystem;
@@ -428,42 +424,6 @@ const make = <R, E>(options: {
     const find = (terminalId: string) => listedSession(terminalId, true);
     const living = () =>
       [...sessions.values()].filter((session) => Option.isNone(session.exited));
-
-    // The folder a shell is in now, read off the process: by lsof on a
-    // Mac, and on Linux by the link the kernel keeps in /proc. Windows
-    // gives no way to read it from outside, so there it stays the one
-    // the shell started in.
-    const folderOf = (session: Session) => {
-      const read: Effect.Effect<Option.Option<string>, unknown> = byPlatform({
-        darwin: Processes.exec("lsof", [
-          "-a",
-          "-p",
-          String(session.pty.pid),
-          "-d",
-          "cwd",
-          "-Fn",
-        ]).pipe(
-          Effect.map(({ stdout }) =>
-            Option.fromNullishOr(
-              stdout
-                .split("\n")
-                .find((line) => line.startsWith("n"))
-                ?.slice(1),
-            ),
-          ),
-          Effect.provideService(
-            ChildProcessSpawner.ChildProcessSpawner,
-            spawner,
-          ),
-        ),
-        linux: fs.readLink(`/proc/${session.pty.pid}/cwd`).pipe(Effect.asSome),
-        win32: Effect.succeedNone,
-      });
-      return read.pipe(
-        Effect.timeout(Duration.seconds(2)),
-        Effect.orElseSucceed(() => Option.none<string>()),
-      );
-    };
 
     // The shells among `among` that a command holds. Fails when the
     // process table can't be read.
@@ -589,7 +549,7 @@ const make = <R, E>(options: {
     // history. One row, written at once, so a crash leaves the last one
     // whole.
     const persist = Effect.fnUntraced(function* (session: Session) {
-      const folder = yield* folderOf(session);
+      const folder = yield* processTable.cwdOf(session.pty.pid);
       yield* saved.save({
         ...session.terminal,
         cwd: Option.getOrElse(folder, () => session.cwd),

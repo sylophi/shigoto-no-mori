@@ -4,8 +4,7 @@
 // group).
 import * as Effect from "effect/Effect";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as Processes from "@shigomori/engine/processes";
-import { descendantsIn } from "../descendants";
+import { readDescendants } from "@shigomori/engine/processTable/ps";
 import { exitedWithin, type Stop, type Tree } from "./tree";
 
 const SIGNALS = { stop: "SIGTERM", hangup: "SIGHUP" } as const;
@@ -27,13 +26,8 @@ function safeKill(pid: number, signal: NodeJS.Signals): void {
 export const makeSignals = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
-  // Walks `ps` to find every process that descends from rootPid via the
-  // ppid chain. Catches grandchildren that called setsid() and left our
-  // process group. They stay reachable here as long as their ppid hasn't
-  // been re-parented to init.
   const descendantPids = (rootPid: number) =>
-    Processes.exec("ps", ["-A", "-o", "pid=,ppid="]).pipe(
-      Effect.map(({ stdout }) => descendantsIn(stdout, rootPid)),
+    readDescendants(rootPid).pipe(
       Effect.orElseSucceed((): number[] => []),
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
     );
