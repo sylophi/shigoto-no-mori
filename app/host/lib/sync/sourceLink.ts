@@ -43,6 +43,7 @@ import * as Fiber from "effect/Fiber";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import { errnoWords } from "@shigomori/engine/platformErrors";
 import {
@@ -591,7 +592,9 @@ const answerAsk = (
 // answer is answered with the error (the first one is kept on
 // `failure`, so a caller whose run failed can tell its own trouble
 // from the other device's). A malformed message, or a bundle cut off
-// halfway, resets the link and fails.
+// halfway, resets the link and fails. The capture's ref is there only
+// for a bundle to carry, so it goes as the serving ends, however it
+// ends, unless a capture of the user's own has replaced it.
 //
 // The other device's progress goes to `onProgress`, and so do a
 // bundle's bytes as they go, under the step that asked for it: the other
@@ -605,9 +608,24 @@ const serveSource = (
     failure?: { error?: unknown };
   } = {},
 ) => {
-  const facts = localSource(project, worktreeId);
+  const local = localSource(project, worktreeId);
   return Effect.gen(function* () {
     let bundleStep: "clone" | "transfer" = "transfer";
+    const git = yield* Git.Git;
+    const serving = yield* Effect.scope;
+    const facts: SourceFacts = {
+      ...local,
+      capture: Effect.tap(local.capture, ({ commit }) =>
+        commit === undefined
+          ? Effect.void
+          : Scope.addFinalizer(
+              serving,
+              Effect.ignore(
+                git.deleteRef(project.path, Dirty.dirtyRef(worktreeId), commit),
+              ),
+            ),
+      ),
+    };
     // One question at a time.
     for (;;) {
       const message = yield* link.read;
@@ -660,7 +678,10 @@ const serveSource = (
         ),
       );
     }
-  }).pipe(Effect.tapError(() => Effect.sync(() => link.reset())));
+  }).pipe(
+    Effect.tapError(() => Effect.sync(() => link.reset())),
+    Effect.scoped,
+  );
 };
 
 // A link a peer opened to ask this host as its source (sync:openSource):

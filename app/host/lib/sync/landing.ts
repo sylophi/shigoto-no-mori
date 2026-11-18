@@ -170,10 +170,11 @@ export type Landing = {
 // incoming ref and then fail, and a survivor is NOT harmless -- a stale
 // refs/shigomori/incoming/foo blocks any later ref named
 // incoming/foo/bar at git's directory/file boundary. A failure before
-// the create leaves at most the capture ref (a retry overwrites it).
-// After the create, an apply failure resolves with dirtyApplied:false
-// rather than failing: the worktree and branch are real and useful,
-// and the dirty state is still safe on the source device.
+// the create leaves nothing: the capture's ref, fetched under the
+// source's id, is swept on failure the same way. After the create, an
+// apply failure resolves with dirtyApplied:false rather than failing:
+// the worktree and branch are real and useful, and the dirty state is
+// still safe on the source device.
 //
 // The landing commits when it answers: the create is held in `move`
 // (Worktrees.createHeld) until the caller runs the `keep` it answers
@@ -182,8 +183,7 @@ export type Landing = {
 // an interrupt (the move's cancel) at any step of the move, which
 // stops whichever step is waiting (the link's question, the engine's
 // create). The destination is then as it was, bar a clone that got
-// registered (which stays, a checkout at the place the user named) and
-// a capture ref a retry overwrites.
+// registered (which stays, a checkout at the place the user named).
 export const landWorktree = (
   source: WorktreeSource,
   landing: Landing,
@@ -348,6 +348,19 @@ export const landWorktree = (
     }).pipe(
       // Swept success or fail.
       Effect.ensuring(Effect.ignore(git.deleteRef(project.path, incomingRef))),
+      // The capture as it arrived, which only the create's re-key
+      // consumes.
+      Effect.onError(() =>
+        captureCommit === undefined
+          ? Effect.void
+          : Effect.ignore(
+              git.deleteRef(
+                project.path,
+                Dirty.dirtyRef(sourceWorktreeId),
+                captureCommit,
+              ),
+            ),
+      ),
     );
   });
 
