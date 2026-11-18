@@ -83,11 +83,10 @@ export const ReleaseListCache = Schema.Struct({
 // --- picking a release -------------------------------------------------------
 
 // A platform's asset is "<name>-<platform>-<arch>-<version>" and its
-// archive's ending: a Mac's the zip maker's, the product name's spaces
-// turned into dots by GitHub on upload, Linux's the tarball
-// app/scripts/package-linux.mts makes (linuxInstall.ts linuxPackageName),
-// and Windows' Squirrel's full package (windowsInstall.ts
-// squirrelPackageFile) uploaded as "<configDir>-win32-<arch>-<version>.nupkg".
+// archive's ending: a Mac's the zip maker's and Windows' Squirrel's full
+// package, both uploaded as "update-<platform>-<arch>-<version>"
+// (release.yml), and Linux's the tarball app/scripts/package-linux.mts
+// makes (linuxInstall.ts linuxPackageName).
 const ARCHIVE = { darwin: ".zip", linux: ".tar.gz", win32: ".nupkg" } as const;
 
 const assetOf = (release: GitHubRelease, arch: string) => {
