@@ -29,7 +29,6 @@ export const makeFileReads = ({
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
-    const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
     const { home, dataDir } = paths;
     const { checkGlobalConfig, registryLine, registeredLine } = dataDirChecks;
@@ -82,7 +81,7 @@ export const makeFileReads = ({
 
     // A registry document's line and projects, judged in order: the
     // projects list, then the manual order, then each entry.
-    const judgeRegistry = (doc: ConfigDoc, file: string) => {
+    const judgeRegistry = (doc: ConfigDoc) => {
       const projects = Schema.decodeUnknownOption(RegistryProjects)(
         doc["projects"],
       );
@@ -90,7 +89,7 @@ export const makeFileReads = ({
         return {
           entry: registryLine.fail(
             "the projects list has the wrong shape, so no project resolves",
-            `Repair the projects array in ${tildify(file, home)}.`,
+            `Repair the projects array in ${tildify(registryFile, home)}.`,
           ),
           projects: [],
         };
@@ -104,7 +103,7 @@ export const makeFileReads = ({
         return {
           entry: registryLine.warn(
             "the projectOrder list has the wrong shape, so projects list in their default order and can't be reordered",
-            `Repair or delete the projectOrder key in ${tildify(file, home)}.`,
+            `Repair or delete the projectOrder key in ${tildify(registryFile, home)}.`,
           ),
           projects: listed,
         };
@@ -112,7 +111,7 @@ export const makeFileReads = ({
       return {
         entry: registeredLine(
           listed,
-          `Remove the incomplete entries from ${tildify(file, home)}.`,
+          `Remove the incomplete entries from ${tildify(registryFile, home)}.`,
         ),
         projects: listed,
       };
@@ -144,7 +143,7 @@ export const makeFileReads = ({
             projects: [],
           };
         case "parsed":
-          return judgeRegistry(found.doc, registryFile);
+          return judgeRegistry(found.doc);
       }
     });
 
@@ -234,7 +233,7 @@ export const makeFileReads = ({
               ],
           projectFiles,
         } satisfies FileReads;
-      }).pipe(Effect.provideContext(platform));
+      });
 
     return { readFiles };
   });
