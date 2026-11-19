@@ -800,19 +800,15 @@ const make = Effect.gen(function* () {
     repo: string,
     branch: string,
   ) {
-    const answer = yield* run(
+    const rows = yield* rowsFor(
       repo,
       lookupArgs(branch, "merged", ["number,isCrossRepository,headRefOid"]),
     );
-    const rows = rowsOf(answer);
-    if (Option.isNone(rows)) {
-      return yield* new GitHubOutputError({ command: "pr list" });
-    }
     const checkedOut = yield* Effect.cached(
       checkedOutPullRequest(repo, branch),
     );
     const heads: Array<{ readonly number: number; readonly head: string }> = [];
-    for (const row of rows.value) {
+    for (const row of rows) {
       if (isBranchsOwn(row, yield* checkedOut)) {
         heads.push({ number: row.number, head: row.headRefOid });
       }
