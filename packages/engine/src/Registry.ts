@@ -101,8 +101,6 @@ export class Registry extends Context.Service<
       RegisteredProject,
       UnknownProjectError | ProjectPathTaken
     >;
-    // The sidebar's manual order, as project paths.
-    readonly order: Effect.Effect<ReadonlyArray<string>>;
     // Stores `listed` (the merged list as it reads now) with `ids` moved
     // to the front in their order. A stored path the list lacks keeps its
     // place behind the path it followed. False when nothing changed.
@@ -292,6 +290,7 @@ const make = Effect.gen(function* () {
       .pipe(Effect.catchTags({ SqlError: Effect.die }));
   });
 
+  // The sidebar's manual order, as project paths.
   const order = sql<{ path: string }>`
     SELECT path FROM project_order ORDER BY position`.pipe(
     Effect.map((rows) => rows.map(({ path }) => path)),
@@ -617,7 +616,6 @@ const make = Effect.gen(function* () {
     rows,
     register,
     unregister,
-    order,
     reorder,
     marked,
     setMark,
