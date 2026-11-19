@@ -398,7 +398,6 @@ export class Git extends Context.Service<
     readonly resolveDefaultBranch: (
       repo: string,
       override?: string,
-      remotes?: readonly string[],
     ) => Effect.Effect<Option.Option<string>>;
     // What to hand git so a checkout of `ref` lands on a branch. An
     // exact local branch wins. A qualified remote ref resolves to its

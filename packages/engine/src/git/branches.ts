@@ -167,9 +167,9 @@ export const makeBranches = ({
     });
 
     const resolveDefaultBranch = Effect.fn("Git.resolveDefaultBranch")(
-      function* (repo: string, override?: string, remotes?: readonly string[]) {
+      function* (repo: string, override?: string) {
         return Option.map(
-          yield* resolvePrimaryRef(repo, override, remotes),
+          yield* resolvePrimaryRef(repo, override),
           shortRefName,
         );
       },
