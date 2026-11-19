@@ -23,7 +23,7 @@ export function useConfirmTwice(timeoutMs = 2_500) {
 // named by key. Arming another item moves the arm rather than adding a
 // second, so a list can never hold two half-confirmed actions. The
 // single-button form above is this with one key.
-export function useConfirmTwiceKeyed(timeoutMs = 2_500) {
+export function useConfirmTwiceKeyed(timeoutMs: number) {
   const [armedKey, setArmedKey] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
   // The arm the second click is checked against. The timer only draws
