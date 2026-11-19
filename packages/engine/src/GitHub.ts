@@ -176,10 +176,6 @@ export class GitHub extends Context.Service<
       args: ReadonlyArray<string>,
       options?: RunOptions,
     ) => Effect.Effect<string, GitHubCliError>;
-    // The GitHub host of the remote gh resolves `cwd`'s repo from, or
-    // null for none. Every gh run in a repo goes there: `gh api` asks
-    // github.com otherwise.
-    readonly hostOf: (cwd: string) => Effect.Effect<string | null>;
     // The repo the checkout at `cwd` is, which the app's links open: its
     // first remote on a host gh is signed in to, or null. Not the repo gh
     // resolves (hostOf), which for a fork is the parent.
@@ -257,11 +253,6 @@ export class GitHub extends Context.Service<
       repo: string,
       branch: string,
     ) => Effect.Effect<number | null>;
-    // The same for every branch of the repo, in one git call: branch to
-    // the number of the fork's PR it was checked out from.
-    readonly checkedOutPullRequests: (
-      repo: string,
-    ) => Effect.Effect<ReadonlyMap<string, number>>;
     // The commits the branch's merged PRs ended on: from this
     // repository, or the fork's one the branch was checked out from.
     readonly mergedHeads: (
@@ -516,6 +507,9 @@ const make = Effect.gen(function* () {
       { concurrency: 2 },
     );
 
+  // The GitHub host of the remote gh resolves `cwd`'s repo from, or
+  // null for none. Every gh run in a repo goes there: `gh api` asks
+  // github.com otherwise.
   const hostOf = Effect.fn("GitHub.hostOf")(function* (cwd: string) {
     const [remotes, known] = yield* remotesAndHosts(cwd);
     return ghHostFor(remotes, known);
@@ -601,6 +595,8 @@ const make = Effect.gen(function* () {
       ),
   );
 
+  // The same for every branch of the repo, in one git call: branch to
+  // the number of the fork's PR it was checked out from.
   const checkedOutPullRequests = Effect.fn("GitHub.checkedOutPullRequests")(
     function* (repo: string) {
       const numbers = new Map<string, number>();
@@ -1025,7 +1021,6 @@ const make = Effect.gen(function* () {
   return GitHub.of({
     run,
     runOn,
-    hostOf,
     repoOf,
     knownHosts,
     cardFor,
@@ -1036,7 +1031,6 @@ const make = Effect.gen(function* () {
     list,
     ownPullRequests,
     checkedOutPullRequest,
-    checkedOutPullRequests,
     mergedHeads,
     headOf,
     mergeSettings,
