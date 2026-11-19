@@ -16,7 +16,7 @@ import {
 } from "../shared/packaging/cloudflaredDist.mts";
 
 type LicenseInfo = {
-  licenses?: string;
+  licenses: string;
   repository?: string;
   publisher?: string;
   url?: string;
@@ -382,7 +382,7 @@ function normalizeEntry(key: string, value: LicenseInfo): LicenseEntry {
   return {
     name,
     version,
-    licenses: value.licenses || "UNKNOWN",
+    licenses: value.licenses,
     repository: value.repository || "",
     publisher: value.publisher || "",
     url: value.url || "",
