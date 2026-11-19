@@ -128,15 +128,15 @@ export function createMirrorHistory(deps: {
     queueFlush();
   }
 
-  // The worktree is gone (the tombstone protocol says so), and with it
-  // the only page the thread shows on. Without this the store keeps
-  // one thread per worktree ever mirrored.
   // The thread's newest word on the link, for a session's baseline.
   function lastLinkEvent(localWorktreeId: string): MirrorEventKind | null {
     const thread = events[localWorktreeId] ?? [];
     return thread.find((event) => LINK_KINDS.has(event.kind))?.kind ?? null;
   }
 
+  // The worktree is gone (the tombstone protocol says so), and with it
+  // the only page the thread shows on. Without this the store keeps
+  // one thread per worktree ever mirrored.
   function forget(localWorktreeId: string): void {
     if (!(localWorktreeId in events)) return;
     delete events[localWorktreeId];
