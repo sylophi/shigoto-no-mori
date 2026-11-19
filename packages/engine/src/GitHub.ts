@@ -952,23 +952,13 @@ const make = Effect.gen(function* () {
     return stackOf;
   });
 
-  const asyncTicket = (stdout: string) =>
-    Option.map(
-      Schema.decodeOption(AsyncTicket)(stdout),
-      ({ status, details }) => ({
-        status,
-        message: details.message,
-        uuid: details.uuid,
-      }),
-    );
-
   const mergeStackAsync = Effect.fn("GitHub.mergeStackAsync")(function* (
     repo: string,
     number: number,
     method: MergeMethod,
   ) {
     const read = (stdout: string) =>
-      Option.match(asyncTicket(stdout), {
+      Option.match(Schema.decodeOption(AsyncTicket)(stdout), {
         onNone: () =>
           Effect.fail(new GitHubOutputError({ command: "merge-async" })),
         onSome: Effect.succeed,
@@ -1005,7 +995,7 @@ const make = Effect.gen(function* () {
       yield* Effect.sleep(ASYNC_MERGE_POLL);
       const polled = yield* run(repo, [
         "api",
-        `repos/{owner}/{repo}/pulls/${number}/merge-async/${ticket.uuid}`,
+        `repos/{owner}/{repo}/pulls/${number}/merge-async/${ticket.details.uuid}`,
       ]).pipe(Effect.flatMap(read), Effect.option);
       if (Option.isSome(polled)) ticket = polled.value;
     }
@@ -1014,7 +1004,7 @@ const make = Effect.gen(function* () {
     return yield* new StackMergeFailed({
       number,
       reason: "refused",
-      detail: ticket.message,
+      detail: ticket.details.message,
     });
   });
 
