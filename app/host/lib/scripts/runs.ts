@@ -131,7 +131,6 @@ function createRunStream(starter: NotifyScriptEvent): RunStream {
 // what their tree is.
 interface Killable {
   runId: string;
-  scriptName: string;
   exited: boolean;
   cancelling: boolean;
   done: Promise<void>;
@@ -252,7 +251,6 @@ export const makeRuns = ({
             const tree = { pid, ownGroup: false };
             lifecycle.set(event.runId, {
               runId: event.runId,
-              scriptName: runScriptName(event.slot),
               exited: false,
               cancelling: false,
               done,
@@ -400,7 +398,6 @@ export const makeRuns = ({
         slot: args.slot,
         worktreeName: args.worktree.name,
         worktreePath: args.worktree.path,
-        scriptName: runScriptName(args.slot),
         startedAt,
         exited: false,
         cancelling: false,
