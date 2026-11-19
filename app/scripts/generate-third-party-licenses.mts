@@ -16,9 +16,7 @@ import {
 } from "../shared/packaging/cloudflaredDist.mts";
 
 type LicenseInfo = {
-  name?: string;
-  version?: string;
-  licenses?: string | string[];
+  licenses?: string;
   repository?: string;
   publisher?: string;
   url?: string;
@@ -27,7 +25,7 @@ type LicenseInfo = {
   copyright?: string;
 };
 
-type LicenseEntry = Required<LicenseInfo>;
+type LicenseEntry = { name: string; version: string } & Required<LicenseInfo>;
 
 const require = createRequire(import.meta.url);
 
@@ -179,23 +177,17 @@ async function goModuleEntries(moduleDir: string): Promise<LicenseEntry[]> {
           ? ""
           : (await readFile(licenseFile, "utf8")).trim();
       const note = GO_MODULE_NOTES[path];
-      return normalizeEntry([
-        `${path}@${version}`,
-        {
-          licenses:
-            licenseText === ""
-              ? "UNKNOWN"
-              : identifyLicense(licenseText) || "UNKNOWN",
-          repository: repositoryOf(path),
-          // Relative to the module cache root, never a machine path.
-          licenseFile:
-            licenseFile === null
-              ? ""
-              : `go-module-cache/${relative(dirname(dir), licenseFile)}`,
-          licenseText:
-            note === undefined ? licenseText : `${note}\n\n${licenseText}`,
-        },
-      ]);
+      return normalizeEntry(`${path}@${version}`, {
+        licenses: identifyLicense(licenseText) || "UNKNOWN",
+        repository: repositoryOf(path),
+        // Relative to the module cache root, never a machine path.
+        licenseFile:
+          licenseFile === null
+            ? ""
+            : `go-module-cache/${relative(dirname(dir), licenseFile)}`,
+        licenseText:
+          note === undefined ? licenseText : `${note}\n\n${licenseText}`,
+      });
     }),
   );
 }
@@ -336,9 +328,7 @@ function licensesOf(manifest: Manifest, licenseText: string): string {
     licenseName(manifest.license) ||
     (manifest.licenses ?? []).map(licenseName).filter(Boolean).join(" OR ");
   if (declared !== "") return declared;
-  return licenseText === ""
-    ? "UNKNOWN"
-    : identifyLicense(licenseText) || "UNKNOWN";
+  return identifyLicense(licenseText) || "UNKNOWN";
 }
 
 async function npmPackageEntries(): Promise<LicenseEntry[]> {
@@ -361,19 +351,16 @@ async function npmPackageEntries(): Promise<LicenseEntry[]> {
         licenseFile === null
           ? ""
           : (await readFile(licenseFile, "utf8")).trim();
-      return normalizeEntry([
-        key,
-        {
-          licenses: licensesOf(manifest, licenseText),
-          repository: repositoryUrl(manifest.repository),
-          licenseFile:
-            licenseFile === null
-              ? ""
-              : `${manifest.name}/${relative(dir, licenseFile)}`,
-          licenseText,
-          copyright: copyrightOf(licenseText),
-        },
-      ]);
+      return normalizeEntry(key, {
+        licenses: licensesOf(manifest, licenseText),
+        repository: repositoryUrl(manifest.repository),
+        licenseFile:
+          licenseFile === null
+            ? ""
+            : `${manifest.name}/${relative(dir, licenseFile)}`,
+        licenseText,
+        copyright: copyrightOf(licenseText),
+      });
     }),
   );
 }
@@ -390,11 +377,11 @@ function splitPackageKey(key: string): { name: string; version: string } {
   };
 }
 
-function normalizeEntry([key, value]: [string, LicenseInfo]): LicenseEntry {
-  const fromKey = splitPackageKey(key);
+function normalizeEntry(key: string, value: LicenseInfo): LicenseEntry {
+  const { name, version } = splitPackageKey(key);
   return {
-    name: value.name || fromKey.name,
-    version: value.version || fromKey.version,
+    name,
+    version,
     licenses: value.licenses || "UNKNOWN",
     repository: value.repository || "",
     publisher: value.publisher || "",
@@ -413,27 +400,21 @@ function normalizeEntry([key, value]: [string, LicenseInfo]): LicenseEntry {
 const BUNDLED_BINARIES = [
   // The runtime the terminal sm is compiled with (packages/cli), the
   // version the release workflow installs.
-  normalizeEntry([
-    `bun@${BUN_VERSION}`,
-    {
-      licenses: "MIT",
-      repository: "https://github.com/oven-sh/bun",
-      publisher: "Oven",
-      licenseText:
-        "MIT License. Bun statically links JavaScriptCore and WebKit's WTF " +
-        "(LGPL-2.0), and other libraries under their own licenses. Full " +
-        `text: https://github.com/oven-sh/bun/blob/bun-v${BUN_VERSION}/LICENSE.md`,
-    },
-  ]),
-  normalizeEntry([
-    `cloudflared@${CLOUDFLARED_VERSION}`,
-    {
-      licenses: CLOUDFLARED_LICENSE,
-      repository: CLOUDFLARED_REPOSITORY,
-      publisher: "Cloudflare, Inc.",
-      licenseText: `Apache License 2.0. Full text: ${CLOUDFLARED_REPOSITORY}/blob/${CLOUDFLARED_VERSION}/LICENSE`,
-    },
-  ]),
+  normalizeEntry(`bun@${BUN_VERSION}`, {
+    licenses: "MIT",
+    repository: "https://github.com/oven-sh/bun",
+    publisher: "Oven",
+    licenseText:
+      "MIT License. Bun statically links JavaScriptCore and WebKit's WTF " +
+      "(LGPL-2.0), and other libraries under their own licenses. Full " +
+      `text: https://github.com/oven-sh/bun/blob/bun-v${BUN_VERSION}/LICENSE.md`,
+  }),
+  normalizeEntry(`cloudflared@${CLOUDFLARED_VERSION}`, {
+    licenses: CLOUDFLARED_LICENSE,
+    repository: CLOUDFLARED_REPOSITORY,
+    publisher: "Cloudflare, Inc.",
+    licenseText: `Apache License 2.0. Full text: ${CLOUDFLARED_REPOSITORY}/blob/${CLOUDFLARED_VERSION}/LICENSE`,
+  }),
 ];
 
 // Data the engine and the app embed: the doubutsu worktree names, taken
@@ -446,82 +427,73 @@ const doubutsuSource: { retrieved: string; url: string; name: string } =
 const acNotice: string =
   require("../../packages/ui/src/lib/acNotice.json").notice;
 const BUNDLED_DATA = [
-  normalizeEntry([
-    `doubutsu-names@${doubutsuSource.retrieved}`,
-    {
-      licenses: "CC-BY-SA-4.0",
-      url: doubutsuSource.url,
-      publisher: doubutsuSource.name,
-      licenseText:
-        `${acNotice} Character names from Nookipedia's Villagers and ` +
-        "Special characters categories, by Nookipedia contributors, " +
-        "licensed under Creative Commons Attribution-ShareAlike 4.0 " +
-        "International. Changed: turned into kebab-case worktree names. " +
-        "Full text: https://creativecommons.org/licenses/by-sa/4.0/legalcode",
-    },
-  ]),
+  normalizeEntry(`doubutsu-names@${doubutsuSource.retrieved}`, {
+    licenses: "CC-BY-SA-4.0",
+    url: doubutsuSource.url,
+    publisher: doubutsuSource.name,
+    licenseText:
+      `${acNotice} Character names from Nookipedia's Villagers and ` +
+      "Special characters categories, by Nookipedia contributors, " +
+      "licensed under Creative Commons Attribution-ShareAlike 4.0 " +
+      "International. Changed: turned into kebab-case worktree names. " +
+      "Full text: https://creativecommons.org/licenses/by-sa/4.0/legalcode",
+  }),
   // The terminal's fallback face for Nerd Font icons
   // (packages/ui/src/styles/fonts/SymbolsNerdFontMono-Regular.woff2), from the
   // project's NerdFontsSymbolsOnly release, its TTF compressed to woff2.
   // The glyphs come from icon sets under their own licenses, which the
   // release's README lists.
-  normalizeEntry([
-    "symbols-nerd-font-mono@3.5.1",
-    {
-      licenses: "MIT AND CC-BY-4.0 AND Apache-2.0 AND OFL-1.1 AND Unlicense",
-      repository: "https://github.com/ryanoasis/nerd-fonts",
-      publisher: "Ryan L McIntyre",
-      licenseText:
-        readFileSync(
-          join(
-            repoRoot,
-            "packages",
-            "ui",
-            "src",
-            "styles",
-            "fonts",
-            "SymbolsNerdFontMono-LICENSE",
-          ),
-          "utf8",
-        ) +
-        "\nThe glyphs come from these icon sets: Codicons and Font Awesome " +
-        "(CC BY 4.0), Material Design Icons (Apache 2.0), Pomicons and " +
-        "Weather Icons (OFL 1.1), Font Logos (Unlicense), and Devicons, " +
-        "Font Awesome Extension, Octicons, Seti UI, Powerline Symbols, " +
-        "Powerline Extra Symbols, Power Symbols IEC and Hack's extra glyphs " +
-        "(MIT). Changed: the TTF compressed to woff2. Details: " +
-        "https://github.com/ryanoasis/nerd-fonts/releases/tag/v3.5.1",
-    },
-  ]),
+  normalizeEntry("symbols-nerd-font-mono@3.5.1", {
+    licenses: "MIT AND CC-BY-4.0 AND Apache-2.0 AND OFL-1.1 AND Unlicense",
+    repository: "https://github.com/ryanoasis/nerd-fonts",
+    publisher: "Ryan L McIntyre",
+    licenseText:
+      readFileSync(
+        join(
+          repoRoot,
+          "packages",
+          "ui",
+          "src",
+          "styles",
+          "fonts",
+          "SymbolsNerdFontMono-LICENSE",
+        ),
+        "utf8",
+      ) +
+      "\nThe glyphs come from these icon sets: Codicons and Font Awesome " +
+      "(CC BY 4.0), Material Design Icons (Apache 2.0), Pomicons and " +
+      "Weather Icons (OFL 1.1), Font Logos (Unlicense), and Devicons, " +
+      "Font Awesome Extension, Octicons, Seti UI, Powerline Symbols, " +
+      "Powerline Extra Symbols, Power Symbols IEC and Hack's extra glyphs " +
+      "(MIT). Changed: the TTF compressed to woff2. Details: " +
+      "https://github.com/ryanoasis/nerd-fonts/releases/tag/v3.5.1",
+  }),
   // tmux's launcher icon (packages/ui/src/app-icons/tmux.png), its 128px logo
   // icon as published, unchanged.
-  normalizeEntry([
-    "tmux-logo@3b10392",
-    {
-      licenses: "ISC",
-      repository: "https://github.com/tmux/tmux",
-      publisher: "Jason Long",
-      licenseText:
-        "Copyright (c) 2015, Jason Long <jason@jasonlong.me>\n\n" +
-        "Permission to use, copy, modify, and/or distribute this software for any " +
-        "purpose with or without fee is hereby granted, provided that the above " +
-        "copyright notice and this permission notice appear in all copies.\n\n" +
-        'THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES ' +
-        "WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF " +
-        "MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR " +
-        "ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES " +
-        "WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN " +
-        "ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF " +
-        "OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.",
-    },
-  ]),
+  normalizeEntry("tmux-logo@3b10392", {
+    licenses: "ISC",
+    repository: "https://github.com/tmux/tmux",
+    publisher: "Jason Long",
+    licenseText:
+      "Copyright (c) 2015, Jason Long <jason@jasonlong.me>\n\n" +
+      "Permission to use, copy, modify, and/or distribute this software for any " +
+      "purpose with or without fee is hereby granted, provided that the above " +
+      "copyright notice and this permission notice appear in all copies.\n\n" +
+      'THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES ' +
+      "WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF " +
+      "MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR " +
+      "ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES " +
+      "WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN " +
+      "ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF " +
+      "OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.",
+  }),
 ];
 
 function isMissingLicense(entry: LicenseEntry): boolean {
   return (
     !entry.licenses ||
-    /\bunknown\b/i.test(String(entry.licenses)) ||
-    /\bunlicensed\b/i.test(String(entry.licenses))
+    /\bunknown\b/i.test(entry.licenses) ||
+    /\bunlicensed\b/i.test(entry.licenses)
   );
 }
 
