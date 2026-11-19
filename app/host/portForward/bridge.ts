@@ -55,7 +55,6 @@ export function listenLoopback(
 }
 
 export type BridgedConn = {
-  readonly channelId: string;
   // Tears the conn down: the channel is reset and the local socket
   // destroyed.
   destroy: () => void;
@@ -159,5 +158,5 @@ export function bridgeSocket(
     socket.resume();
   })();
 
-  return { channelId, destroy };
+  return { destroy };
 }
