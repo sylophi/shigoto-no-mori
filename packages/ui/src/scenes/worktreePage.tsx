@@ -56,7 +56,6 @@ import {
   gitSection,
   portsSection,
   scriptsSection,
-  WorktreeSectionsPartsScene,
 } from "./worktreeSections.tsx";
 import { noop, projectNamed, worktreeNamed } from "./world.ts";
 
@@ -472,10 +471,4 @@ export function WorktreePagePartsScene() {
       </div>
     </div>
   );
-}
-
-// The Git page's parts, and the worktree page's sections in their other
-// states.
-export function WorktreeSectionsScene() {
-  return <WorktreeSectionsPartsScene worktree={HUMMINGBIRD} />;
 }

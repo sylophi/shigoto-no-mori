@@ -77,11 +77,8 @@ import {
 } from "./pullRequests.tsx";
 import { SidebarPartsScene } from "./sidebarParts.tsx";
 import { PeerTerminalsHiddenScene, TerminalPartsScene } from "./terminal.tsx";
-import {
-  WorktreePagePartsScene,
-  WorktreePageScene,
-  WorktreeSectionsScene,
-} from "./worktreePage.tsx";
+import { WorktreePagePartsScene, WorktreePageScene } from "./worktreePage.tsx";
+import { WorktreeSectionsScene } from "./worktreeSections.tsx";
 
 export interface Scene {
   // Takes no props: a scene is one picture.
