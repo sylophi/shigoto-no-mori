@@ -204,7 +204,6 @@ export type WsServerStartOpts = {
 type LinkServerStatus = {
   listening: boolean;
   port: number | null;
-  bindAddress: string | null;
   error: string | null;
 };
 
@@ -403,7 +402,6 @@ export const make = (options: {
     let status: LinkServerStatus = {
       listening: false,
       port: null,
-      bindAddress: null,
       error: null,
     };
     let current: {
@@ -1024,7 +1022,6 @@ export const make = (options: {
           wss.once("listening", () => resume(Effect.void));
         });
         wss.on("error", (error) => {
-          status = { ...status, error: messageOf(error) };
           log.warn(`[link] listener error: ${messageOf(error)}`);
         });
 
@@ -1095,7 +1092,7 @@ export const make = (options: {
       const running = current;
       if (running === null) return Effect.void;
       current = null;
-      status = { listening: false, port: null, bindAddress: null, error: null };
+      status = { listening: false, port: null, error: null };
       return Scope.close(running.scope, Exit.void);
     });
 
@@ -1138,7 +1135,6 @@ export const make = (options: {
           status = {
             listening: false,
             port: null,
-            bindAddress: opts.bindAddress,
             error,
           };
           log.error(
@@ -1154,7 +1150,6 @@ export const make = (options: {
         status = {
           listening: true,
           port: started.value.port,
-          bindAddress: opts.bindAddress,
           error: null,
         };
       });

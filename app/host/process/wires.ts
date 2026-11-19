@@ -84,7 +84,7 @@ const onLink = <A, E>(
 const linkStatus = () =>
   Graph.readNow(
     onLink((link) => link.status),
-    () => ({ listening: false, port: null, bindAddress: null, error: null }),
+    () => ({ listening: false, port: null, error: null }),
   );
 const onTunnel = <A, E>(
   f: (tunnel: TunnelService.Tunnel["Service"]) => Effect.Effect<A, E>,
