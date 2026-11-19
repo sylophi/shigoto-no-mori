@@ -5,21 +5,19 @@ import * as Effect from "effect/Effect";
 import type { HostServices } from "@host/process/services";
 import { findProject } from "@host/lib/projects";
 
-const registered = Effect.fnUntraced(function* (projectId: string) {
-  const { id, name, path } = yield* findProject(projectId);
-  return { id, name, path };
-});
-
 export const hygieneHandlers = {
   list: ({ projectId }) =>
     Effect.gen(function* () {
       const hygiene = yield* Hygiene.Hygiene;
-      return yield* hygiene.facts(yield* registered(projectId));
+      return yield* hygiene.facts(yield* findProject(projectId));
     }),
 
   diskUsage: ({ projectId, worktreeId }) =>
     Effect.gen(function* () {
       const hygiene = yield* Hygiene.Hygiene;
-      return yield* hygiene.diskUsage(yield* registered(projectId), worktreeId);
+      return yield* hygiene.diskUsage(
+        yield* findProject(projectId),
+        worktreeId,
+      );
     }),
 } satisfies EffectHandlers<typeof hygieneContract, unknown, HostServices>;
