@@ -32,7 +32,6 @@ import {
   type Reporter,
 } from "./landing/documents.ts";
 export {
-  LandingRefused,
   MergePollInterval,
   doneDocument,
   landDocument,
