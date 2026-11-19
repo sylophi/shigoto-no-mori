@@ -168,7 +168,7 @@ export const makeListing = Effect.gen(function* () {
   // once it is configured (it has one).
   const projectSettings = (project: RegisteredProject) =>
     config
-      .read({ kind: "project", projectId: project.id, path: project.path })
+      .read(Config.projectScope(project))
       .pipe(Effect.map(Config.projectSettingsOf));
 
   // What `git worktree list` reads, read with no git: where the common

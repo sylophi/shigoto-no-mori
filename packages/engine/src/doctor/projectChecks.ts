@@ -713,11 +713,7 @@ export const makeProjectChecks = ({
         const config = yield* Config.Config;
         const worktrees = yield* Worktrees.Worktrees;
         const layout = yield* Layout.Layout;
-        const stored = yield* config.read({
-          kind: "project",
-          projectId: project.id,
-          path: project.path,
-        });
+        const stored = yield* config.read(Config.projectScope(project));
         const { settings, defaultBranch } = projectSettingsOf(stored);
         const identities = yield* worktrees
           .identities(project)

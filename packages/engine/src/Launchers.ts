@@ -265,11 +265,7 @@ const make = Effect.gen(function* () {
     const [device, stored, installed, stats] = yield* Effect.all(
       [
         settings.read({ kind: "device" }),
-        settings.read({
-          kind: "project",
-          projectId: project.id,
-          path: project.path,
-        }),
+        settings.read(EngineConfig.projectScope(project)),
         Effect.filter(apps, available, { concurrency: "unbounded" }),
         usage.stats("launcher", ""),
       ],
@@ -312,11 +308,7 @@ const make = Effect.gen(function* () {
     const [device, stored, installed] = yield* Effect.all(
       [
         settings.read({ kind: "device" }),
-        settings.read({
-          kind: "project",
-          projectId: project.id,
-          path: project.path,
-        }),
+        settings.read(EngineConfig.projectScope(project)),
         Effect.forEach(apps, foundBy, { concurrency: "unbounded" }),
       ],
       { concurrency: "unbounded" },

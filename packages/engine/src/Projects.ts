@@ -208,11 +208,7 @@ const make = Effect.gen(function* () {
           true,
         );
       }
-      const scope = {
-        kind: "project",
-        projectId: project.id,
-        path: project.path,
-      } as const;
+      const scope = Config.projectScope(project);
       // Guesses, which the settings the repo's other devices share
       // replace.
       const guess = { stamp: false };
