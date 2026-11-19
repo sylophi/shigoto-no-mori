@@ -262,7 +262,7 @@ export class HandshakeState {
   private readonly symmetricState: SymmetricState;
   private readonly initiator: boolean;
   private readonly s: KeyPair;
-  private e: KeyPair | null;
+  private e: KeyPair | null = null;
   private rs: Uint8Array | null;
   private re: Uint8Array | null = null;
   // The index of the next message pattern. Message i is written by the
@@ -270,19 +270,16 @@ export class HandshakeState {
   private next = 0;
 
   // Initialize(handshake_pattern, initiator, prologue, s, e, rs, re).
-  // The initiator passes rs, the responder's static public key. `e`
-  // fixes the ephemeral key pair, which a handshake otherwise makes.
+  // The initiator passes rs, the responder's static public key.
   constructor(opts: {
     readonly initiator: boolean;
     readonly prologue: Uint8Array;
     readonly s: KeyPair;
     readonly rs?: Uint8Array;
-    readonly e?: KeyPair;
   }) {
     this.symmetricState = new SymmetricState(PROTOCOL_NAME);
     this.initiator = opts.initiator;
     this.s = opts.s;
-    this.e = opts.e ?? null;
     this.rs = opts.rs ?? null;
     this.symmetricState.mixHash(opts.prologue);
     // The pre-message "<- s": the responder's static key, which the
