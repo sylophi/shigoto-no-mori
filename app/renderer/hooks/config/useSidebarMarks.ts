@@ -65,6 +65,5 @@ export function useSidebarMarks(): SidebarMarks {
     terrier: markTerrier && terrierHere,
     deviceBadges: useClientFlag("showDeviceBadges"),
     agentsWaiting: useClientFlag("markAgentsWaiting"),
-    allowAgentWorking: useClientFlag("allowAgentWorking"),
   };
 }

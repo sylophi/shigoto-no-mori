@@ -84,7 +84,6 @@ const MARKS: SidebarMarks = {
   terrier: true,
   deviceBadges: true,
   agentsWaiting: true,
-  allowAgentWorking: false,
 };
 
 // Every device on the account as the shell lists it: Studio Mac as
@@ -166,7 +165,7 @@ function inboxModel(shell: SceneShell) {
     hiddenPrefixes: [],
     groupedPrefixes: [],
     shutGroups: new Set(),
-    allowAgentWorking: MARKS.allowAgentWorking,
+    allowAgentWorking: false,
     pinWaiting: MARKS.agentsWaiting,
   });
 }
@@ -195,7 +194,7 @@ function treeModel(shell: SceneShell, openKey: string | null) {
       hidden: new Set(),
     },
     hiddenPrefixes: [],
-    allowAgentWorking: MARKS.allowAgentWorking,
+    allowAgentWorking: false,
     byPrefix: null,
     arrangeMode: false,
     byOwner: null,
@@ -222,7 +221,7 @@ export function sceneGrid() {
     items,
     order: manualOrder(items),
     hiddenPrefixes: [],
-    allowAgentWorking: MARKS.allowAgentWorking,
+    allowAgentWorking: false,
     byOwner: true,
     deviceFilter: null,
     mirrors: [],

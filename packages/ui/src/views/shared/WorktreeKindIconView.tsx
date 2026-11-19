@@ -21,7 +21,7 @@ function kindOf(
 }
 
 // The mark for a worktree of a kind worth naming. `allowAgentWorking`
-// is the sidebar marks' setting (useAllowAgentWorking).
+// is the client setting of that name (useClientFlag).
 export function WorktreeKindIconView({
   worktree,
   allowAgentWorking,
