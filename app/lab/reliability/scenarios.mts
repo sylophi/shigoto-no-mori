@@ -16,16 +16,9 @@ import {
   PING_TIMEOUT_MS,
   PROBE_TIMEOUT_MS,
 } from "../../shared/remote/link.ts";
-import {
-  repoDir,
-  sleep,
-  within,
-  type Lab,
-  type Tab,
-  type TraceLine,
-} from "./lab.mts";
+import { type Lab, type Tab } from "./lab.mts";
 import { pageApi, withPageApi } from "./pageApi.mts";
-import { waitFor } from "./util.mts";
+import { repoDir, sleep, waitFor, within, type TraceLine } from "./util.mts";
 
 export type Scenario = {
   readonly name: string;

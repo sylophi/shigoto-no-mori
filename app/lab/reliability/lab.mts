@@ -53,8 +53,6 @@ import {
   type TraceLine,
 } from "./util.mts";
 
-export { repoDir, sleep, within, type TraceLine } from "./util.mts";
-
 export const CLIENT_KINDS = ["web", "desktop", "tunnel", "terminal"] as const;
 export type ClientKind = (typeof CLIENT_KINDS)[number];
 

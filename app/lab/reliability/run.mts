@@ -10,14 +10,7 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { isolateGit } from "../../../test/gitIsolation.ts";
 import { endAll } from "../../../test/testProcesses.mts";
-import {
-  CLIENT_KINDS,
-  Lab,
-  sleep,
-  within,
-  type ClientKind,
-  type TraceLine,
-} from "./lab.mts";
+import { CLIENT_KINDS, Lab, type ClientKind } from "./lab.mts";
 import {
   ALL_SCENARIOS,
   hubDiffersFromMain,
@@ -27,6 +20,7 @@ import {
   terminalRoundTrip,
   type Scenario,
 } from "./scenarios.mts";
+import { sleep, within, type TraceLine } from "./util.mts";
 
 // The seed repositories' git and the apps' own off this repository and
 // this machine's config (../../../test/gitIsolation.ts).
