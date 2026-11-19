@@ -123,6 +123,7 @@ export const FilesBroughtSchema = strict(
     error: Schema.optional(Schema.String),
   }),
 );
+export type FilesBrought = typeof FilesBroughtSchema.Type;
 
 export const ClonedFromDeviceSchema = Schema.Struct({
   project: ProjectSchema,
