@@ -1,5 +1,5 @@
 // The worktree page's header for work with a title of its own
-// (WorktreeHeader binds it, and gives untitled work its branch alone):
+// (WorktreeHeader binds it, and UntitledHeaderView draws untitled work):
 // what the work is called (useWorktreeTitle), then one line with its
 // branch (renamed, switched and copied from it). While a PR names the
 // work, the page names it once and the PR fills in the same two lines:
@@ -151,5 +151,22 @@ export function WorktreeHeaderView({
         </div>
       </div>
     </>
+  );
+}
+
+// Untitled work's header: its branch's line alone, and the repo's
+// GitHub link.
+export function UntitledHeaderView({
+  branchTitle,
+  github,
+}: {
+  branchTitle: ReactNode;
+  github?: ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3">
+      {branchTitle}
+      {github}
+    </div>
   );
 }
