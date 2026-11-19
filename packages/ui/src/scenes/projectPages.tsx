@@ -459,10 +459,6 @@ function tidyForest() {
 export function TidyScene() {
   const { entries, safe, selected } = tidyForest();
   const groups = groupByProject(sortTidyEntries(entries, "project"));
-  const total = entries.reduce(
-    (sum, entry) => sum + (entry.disk?.reclaimableBytes ?? 0),
-    0,
-  );
   return (
     <SceneWindowFrame sidebar={<SceneSidebar view="inbox" />} pathname="/tidy">
       <TidyPageView
@@ -476,7 +472,7 @@ export function TidyScene() {
       >
         <TidyBodyView
           disk={{
-            measuredBytes: total,
+            measuredBytes: sumBytes(entries),
             measuredCount: entries.length,
             totalCount: entries.length,
             measuring: false,
