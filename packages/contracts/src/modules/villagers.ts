@@ -14,30 +14,19 @@ import {
 // of its own, offers no Village life.
 export const villagersContract = defineContract(
   "villagers",
-  "host",
-  invoke("status", VoidSchema, VillagerDataStatusSchema, {
-    remote: false,
-  }),
+  { scope: "host", remote: false },
+  invoke("status", VoidSchema, VillagerDataStatusSchema),
   // Answers with the status once the download is under way (or with
   // ready when there is nothing to do), not when it ends.
-  invoke("download", VoidSchema, VillagerDataStatusSchema, {
-    remote: false,
-  }),
-  invoke("cancel", VoidSchema, VillagerDataStatusSchema, {
-    remote: false,
-  }),
-  invoke("remove", VoidSchema, VillagerDataStatusSchema, {
-    remote: false,
-  }),
+  invoke("download", VoidSchema, VillagerDataStatusSchema),
+  invoke("cancel", VoidSchema, VillagerDataStatusSchema),
+  invoke("remove", VoidSchema, VillagerDataStatusSchema),
   // A face as base64 PNG, or null for a slug without one here.
   invoke(
     "face",
     Schema.Struct({ slug: VillagerSlugSchema }),
     Schema.NullOr(Schema.NonEmptyString),
-    { remote: false },
   ),
   // Every villager's profile, or null until the data is downloaded.
-  invoke("profiles", VoidSchema, Schema.NullOr(VillagerProfilesSchema), {
-    remote: false,
-  }),
+  invoke("profiles", VoidSchema, Schema.NullOr(VillagerProfilesSchema)),
 );
