@@ -14,7 +14,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Argument from "effect/cli/Argument";
 import * as Flag from "effect/cli/Flag";
-import { unlessUnmigrated } from "./errors.ts";
+import { unlessUnmigrated, UsageError } from "./errors.ts";
 import { note, Output, styles } from "./output.ts";
 import { noteUnregistered, pickProject, pickWorktree } from "./pickers.ts";
 import { interactive } from "./prompt.ts";
@@ -211,17 +211,21 @@ export const resolveWorktree = (
   });
 
 // A typed path, home-expanded and made absolute against the cwd: an
-// absolute path stays as typed, and without a cwd the path stays
-// relative.
+// absolute path stays as typed. Without a cwd (the shell's folder was
+// removed under it) a relative path names no place, and git would read
+// it against the repository.
 export const absolute = (raw: string) =>
-  Effect.map(Effect.service(Paths.Paths), ({ expandHome }) => {
+  Effect.flatMap(Effect.service(Paths.Paths), ({ expandHome }) => {
     const expanded = expandHome(raw);
-    if (isAbsolute(expanded)) return expanded;
-    try {
-      return resolve(process.cwd(), expanded);
-    } catch {
-      return expanded;
-    }
+    return isAbsolute(expanded)
+      ? Effect.succeed(expanded)
+      : Effect.try({
+          try: () => resolve(process.cwd(), expanded),
+          catch: () =>
+            new UsageError({
+              problem: `This shell's folder is gone, so "${raw}" names no place. Give an absolute path.`,
+            }),
+        });
   });
 
 // Whether the command runs at or below `path`: the shell a removal or a

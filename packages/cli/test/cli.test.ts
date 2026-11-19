@@ -428,3 +428,16 @@ esac`,
     assert.ok(existsSync(fox), "nothing removed");
   });
 });
+
+// A script's variable that came out empty names no project.
+it("refuses a project delete handed an empty name", async () => {
+  const repo = box.repo("repo", { "README.md": "hi\n" });
+  box.write("registry.json", {
+    projects: [{ id: "R", name: "repo", path: repo }],
+  });
+  await box.migrate("cli");
+  const deleted = await runAt(repo, "projects", "delete", "", "--yes");
+  assert.notEqual(deleted.code, 0, deleted.stdout);
+  assert.match(deleted.stderr, /Specify a project to delete/);
+  assert.ok(existsSync(join(repo, "README.md")), "the project stays");
+});
