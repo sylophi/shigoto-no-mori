@@ -1,3 +1,4 @@
+import { isWebUrl } from "@shigomori/contracts/predicates/webUrl";
 import { checkBucket } from "@shigomori/contracts/pullRequestChecks";
 import * as Effect from "effect/Effect";
 import * as Base64Url from "effect/encoding/Base64Url";
@@ -107,13 +108,7 @@ class PullRequestShapeError extends Schema.TaggedError<PullRequestShapeError>()(
 // URL, and the renderer feeds it to openExternal, so only absolute
 // http(s) links make the cut.
 function toCheckUrl(value: string): string | undefined {
-  if (!value) return undefined;
-  try {
-    const protocol = new URL(value).protocol;
-    return protocol === "http:" || protocol === "https:" ? value : undefined;
-  } catch {
-    return undefined;
-  }
+  return isWebUrl(value) ? value : undefined;
 }
 
 const isMergeMethod = Schema.is(MergeMethodSchema);
