@@ -256,7 +256,6 @@ export function rankPaletteProjects(
       deviceId,
       device,
       lead: projectLead(trees),
-      localProject: device ? undefined : project,
       worktreeCount: trees.length,
       deviceCount: devices.size,
     }),

@@ -81,7 +81,6 @@ const ROWS: PaletteRow[] = [
       deviceId: LOCAL_DEVICE_ID,
       device: undefined,
       lead: undefined,
-      localProject: POOL,
       worktreeCount: 1,
       deviceCount: 1,
     } satisfies PaletteProject,
