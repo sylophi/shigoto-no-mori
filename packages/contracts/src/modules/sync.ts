@@ -2,7 +2,6 @@ import { MIRROR_VERSION } from "../protocol.ts";
 import * as Schema from "effect/Schema";
 import { errorMessageOf } from "../errors.ts";
 import { MIRROR_IGNORES_LIMIT } from "../mirrorIgnores.ts";
-import { isValidWorktreeDirName } from "../predicates/worktreeDirName.ts";
 import { isSafeRelPath } from "../predicates/relPath.ts";
 import { push, defineContract, invoke, gatedBy, view } from "../contract.ts";
 import { DeviceIdSchema } from "../hubProtocol.ts";
@@ -14,6 +13,7 @@ import {
   GitRefNameSchema,
   ProjectSchema,
   VoidSchema,
+  WorktreeDirNameSchema,
   WorktreeIdSchema,
   WorktreeSchema,
 } from "../schemas/index.ts";
@@ -197,14 +197,7 @@ export const SyncPullWorktreePayloadSchema = strict(
     // The source's folder name, so the two sides read as one worktree.
     // Omitted when it isn't a valid managed dirname (a fresh name is
     // picked). The handler refuses, rather than renames, on a clash.
-    worktreeName: Schema.optional(
-      Schema.NonEmptyString.check(
-        Schema.makeFilter(
-          (name: string) =>
-            isValidWorktreeDirName(name) || "Not a valid folder name",
-        ),
-      ),
-    ),
+    worktreeName: Schema.optional(WorktreeDirNameSchema),
     // Absent = yes.
     runSetup: Schema.optional(Schema.Boolean),
     // The only way an ignored file travels: a one-shot mirror run (the

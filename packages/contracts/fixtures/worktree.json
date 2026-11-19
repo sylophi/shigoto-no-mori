@@ -293,6 +293,10 @@
     "accepts": ["carryOver", "setup", "portPoolProvision"],
     "rejects": ["idle"]
   },
+  "WorktreeDirNameSchema": {
+    "accepts": ["brave-badger"],
+    "rejects": ["", "..", "a/b", "root"]
+  },
   "CreateWorktreePayloadSchema": {
     "accepts": [
       {
