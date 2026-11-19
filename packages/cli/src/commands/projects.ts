@@ -308,10 +308,12 @@ const confirmedProject = (
     const { binaryName } = yield* Effect.service(Output);
     const at = yield* here;
     const projectId = given(input.projectId);
+    // Resolved, an empty name would be the project here.
+    const name = given(input.name);
     const project = Option.isSome(projectId)
       ? yield* worktrees.resolveProjectById(at, projectId.value)
-      : Option.isSome(input.name)
-        ? yield* worktrees.resolveProject(at, input.name.value)
+      : Option.isSome(name)
+        ? yield* worktrees.resolveProject(at, name.value)
         : (yield* interactive)
           ? yield* pickProject(at)
           : yield* new UsageError({

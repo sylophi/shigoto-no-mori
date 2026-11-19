@@ -1,6 +1,9 @@
 // The terminal's cross-device verbs on the loopback (host/lib/control/ops.ts).
 import type { controlContract } from "@shigomori/contracts/modules/control";
-import type { SyncPullProgress } from "@shigomori/contracts/modules/sync";
+import {
+  syncContract,
+  type SyncPullProgress,
+} from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import type { HostServices } from "@host/process/services";
@@ -62,11 +65,17 @@ const followTransfer =
       Effect.gen(function* () {
         const ctx: HandlerContext = {
           connection: yield* Effect.abortSignal,
-          notifier: () => (progress) =>
-            Queue.offerUnsafe(queue, {
-              _tag: "progress",
-              progress: progress as SyncPullProgress,
-            }),
+          // Only the transfer's own progress is on this stream. A create
+          // or a teardown the op runs reports its phases and script
+          // output to a window, and here has no one to tell.
+          notifier: (module, key) =>
+            Object.is(module, syncContract) && key === "pullProgress"
+              ? (progress) =>
+                  Queue.offerUnsafe(queue, {
+                    _tag: "progress",
+                    progress: progress as SyncPullProgress,
+                  })
+              : () => {},
         };
         // Its failure as it is: the loopback sends a contract error as
         // itself, and any other with its message and code.
