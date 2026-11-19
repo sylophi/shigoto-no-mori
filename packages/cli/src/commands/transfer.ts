@@ -13,23 +13,18 @@ import * as Flag from "effect/cli/Flag";
 import { ExitCode, UsageError } from "../errors.ts";
 import { accessSwitches } from "./access.ts";
 import { deviceCommands } from "./login.ts";
-import { given, here, projectFlags, rest, worktreeFlags } from "../here.ts";
+import {
+  given,
+  here,
+  projectFlags,
+  rest,
+  worktreeFlags,
+  worktreeTarget,
+} from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
 
 // A flag: absent, or given (blank included).
 const raw = (flag: Option.Option<string>) => Option.getOrUndefined(flag);
-
-const target = (input: {
-  readonly ref: Option.Option<string>;
-  readonly project: Option.Option<string>;
-  readonly projectId: Option.Option<string>;
-  readonly worktreeId: Option.Option<string>;
-}) => ({
-  ref: Option.getOrUndefined(given(input.ref)),
-  project: Option.getOrUndefined(given(input.project)),
-  projectId: Option.getOrUndefined(given(input.projectId)),
-  worktreeId: Option.getOrUndefined(given(input.worktreeId)),
-});
 
 const transferFlags = {
   ...worktreeFlags,
@@ -111,7 +106,7 @@ const transferVerb = (name: "send" | "bring" | "mirror") =>
       };
       const { document, headline, result } = yield* transfer[name](
         at,
-        target(input),
+        worktreeTarget(input),
         flags,
         yield* onProgress,
       );
@@ -189,7 +184,7 @@ export const unmirror = Command.make(
     Effect.gen(function* () {
       const stopped = yield* (yield* Transfer.Transfer).unmirror(
         yield* here,
-        target(input),
+        worktreeTarget(input),
         { force: input.force },
       );
       const { document, worktree } = stopped;
