@@ -26,43 +26,39 @@ import type * as Stream from "effect/Stream";
 // One invoke as the server runs it: the handler's answer, an effect, a
 // promise or a value, as an effect whose failure crosses as the
 // contract error it is, or as RemoteCallError (the side's `failure`).
-export type Invoke<Ctx, Services, E = CallFailure> = (
+export type Invoke<Ctx, E = CallFailure> = (
   input: unknown,
   ctx: Ctx,
-) => Effect.Effect<unknown, E, Services>;
+) => Effect.Effect<unknown, E>;
 
-type View<Services> = (
-  input: unknown,
-) => Stream.Stream<unknown, unknown, Services>;
+type View = (input: unknown) => Stream.Stream<unknown, unknown>;
 
-export type Served<Ctx, Services = never, E = CallFailure> = {
+export type Served<Ctx, E = CallFailure> = {
   readonly serve: <M extends ContractModule>(
     module: M,
-    handlers: Handlers<M, Ctx> | EffectHandlers<M, Ctx, Services>,
+    handlers: Handlers<M, Ctx> | EffectHandlers<M, Ctx>,
   ) => void;
   readonly view: <M extends ContractModule>(
     module: M,
-    views: ViewHandlers<M, Services>,
+    views: ViewHandlers<M, never>,
   ) => void;
   // What answers one of the group's calls, or undefined when nothing
   // here serves it.
-  readonly invokeOf: (
-    call: ContractCall,
-  ) => Invoke<Ctx, Services, E> | undefined;
-  readonly viewOf: (call: ContractCall) => View<Services> | undefined;
+  readonly invokeOf: (call: ContractCall) => Invoke<Ctx, E> | undefined;
+  readonly viewOf: (call: ContractCall) => View | undefined;
 };
 
-export function createServed<Ctx, Services = never, E = CallFailure>(
+export function createServed<Ctx, E = CallFailure>(
   options: {
     // What a handler's failure crosses as: callFailureOf on a wire, the
     // failure as it is in the page, which has none.
     readonly failure?: (error: unknown) => E;
   } = {},
-): Served<Ctx, Services, E> {
+): Served<Ctx, E> {
   const failure =
     options.failure ?? ((error: unknown) => callFailureOf(error) as E);
-  const invokes = new Map<string, Invoke<Ctx, Services, E>>();
-  const views = new Map<string, View<Services>>();
+  const invokes = new Map<string, Invoke<Ctx, E>>();
+  const views = new Map<string, View>();
   const once = (call: ContractCall) => {
     const channel = channelOf(call);
     if (invokes.has(channel) || views.has(channel)) {
@@ -81,7 +77,7 @@ export function createServed<Ctx, Services = never, E = CallFailure>(
       }).pipe(
         Effect.flatMap((answer) =>
           Effect.isEffect(answer)
-            ? (answer as Effect.Effect<unknown, unknown, Services>)
+            ? (answer as Effect.Effect<unknown, unknown>)
             : Effect.tryPromise({
                 try: async () => answer,
                 catch: failure,
@@ -114,7 +110,7 @@ export function createServed<Ctx, Services = never, E = CallFailure>(
     },
     view(module, handlers) {
       // typed per view above, read here by key
-      const byKey = handlers as Record<string, View<Services> | undefined>;
+      const byKey = handlers as Record<string, View | undefined>;
       for (const call of callsOf(module)) {
         if (isPush(call) || isInvoke(call)) continue;
         // Every view is there on every wire: the device link's gates

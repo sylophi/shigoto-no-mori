@@ -107,7 +107,7 @@ export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
     // contract error it is, or as RemoteCallError with its message and
     // code.
     const serve =
-      (fn: Invoke<HandlerContext, never>) =>
+      (fn: Invoke<HandlerContext>) =>
       (payload: unknown, { client }: Options) =>
         Effect.flatMap(connectionOf(client.id), (connection) =>
           fn(payload, {
