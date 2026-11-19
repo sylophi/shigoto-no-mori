@@ -44,7 +44,6 @@ export function AppearanceSection({
   onVillageLifeChange: (next: boolean) => void;
   villageNews: boolean;
   onVillageNewsChange: (next: boolean) => void;
-  heading?: string;
 }) {
   const hasLocalHost = useHasLocalHost();
   return (

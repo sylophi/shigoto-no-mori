@@ -287,7 +287,6 @@ function SettingsPage({
         active={activeTab === APPEARANCE_TAB}
       >
         <AppearanceSection
-          heading="Theme"
           theme={form.theme}
           onPick={pickTheme}
           doubutsu={form.doubutsu}

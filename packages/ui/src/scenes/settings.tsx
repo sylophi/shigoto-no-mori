@@ -293,7 +293,6 @@ export function SettingsAppearanceScene() {
         null,
         <>
           <AppearanceSectionView
-            heading="Theme"
             theme={FORM.theme}
             onPick={noop}
             doubutsu

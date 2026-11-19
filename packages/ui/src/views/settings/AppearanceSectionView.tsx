@@ -39,9 +39,6 @@ export interface AppearanceSectionViewProps {
   darkPalette: ReactNode;
   // Village life, where this window has it.
   villageLife: ReactNode;
-  // "Appearance" where the section stands alone (the web page). The
-  // desktop's Appearance section already says that and names it "Theme".
-  heading?: string;
 }
 
 export function AppearanceSectionView({
@@ -61,7 +58,6 @@ export function AppearanceSectionView({
   lightPalette,
   darkPalette,
   villageLife,
-  heading = "Appearance",
 }: AppearanceSectionViewProps) {
   // A three-way pick, so it wears the house segmented control: the
   // chosen option carries the accent fill, the other two stay quiet.
@@ -77,7 +73,7 @@ export function AppearanceSectionView({
   }));
   return (
     <section className="space-y-3">
-      <SectionHeading className="mb-1">{heading}</SectionHeading>
+      <SectionHeading className="mb-1">Theme</SectionHeading>
       <SegmentedControl
         aria-label="Theme"
         value={theme}
