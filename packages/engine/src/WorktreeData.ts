@@ -67,13 +67,8 @@ export class WorktreeData extends Context.Service<
       worktreeId: string,
       described: Description,
     ) => Effect.Effect<boolean>;
-    // The ports the user added beside port-pool's, empty when none.
-    readonly ports: (
-      projectId: string,
-      worktreeId: string,
-    ) => Effect.Effect<ReadonlyArray<CustomPort>>;
-    // Replaces them, the title and description kept, as the transport
-    // decoded them (labels trimmed).
+    // Replaces the ports the user added beside port-pool's, the title and
+    // description kept, as the transport decoded them (labels trimmed).
     readonly setPorts: (
       projectId: string,
       worktreeId: string,
@@ -325,7 +320,6 @@ const make = Effect.gen(function* () {
     document,
     describe,
     carry,
-    ports,
     setPorts,
     patchPorts,
     move,
