@@ -249,7 +249,7 @@ const settled = <A, E, R>(
 export const finishMove = (
   journal: Journal,
   at: string,
-  options: { readonly settle: boolean; readonly file: string },
+  options: { readonly settle: boolean },
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -348,7 +348,7 @@ export const finishMove = (
       );
     }
     if (!(options.settle && cleaned && repaired)) return;
-    yield* letGo(options.file, "finishing");
+    yield* letGo(path.join(at, JOURNAL), "finishing");
   });
 
 // The journal gone, then the store writing again: a crash between leaves
@@ -368,14 +368,15 @@ const letGo = (file: string, doing: "undoing" | "finishing") =>
   });
 
 // A move that never landed, undone where the data still is (`at`), its
-// journal at `file`, by the journal's marks. Each entry is re-keyed back,
+// journal in it, by the journal's marks. Each entry is re-keyed back,
 // last first, and marked before the next. A copy's partial or landed
 // folder is removed (its own, its journal last). Then the journal goes,
 // and the store writes again, last of all.
-const undoMove = (journal: Journal, at: string, file: string) =>
+const undoMove = (journal: Journal, at: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    const file = path.join(at, JOURNAL);
     const entries: Array<Entry> = journal.moved.map((entry) => ({ ...entry }));
     let rekeyed = true;
     for (const entry of entries.toReversed()) {
@@ -464,10 +465,10 @@ export const resumeDataDirMove = (at: string) =>
       yield* Effect.logInfo(
         `[data] finishing the move from ${journal.value.from}`,
       );
-      return yield* finishMove(journal.value, at, { settle: true, file });
+      return yield* finishMove(journal.value, at, { settle: true });
     }
     yield* Effect.logInfo(`[data] undoing the move to ${journal.value.to}`);
-    yield* undoMove(journal.value, at, file);
+    yield* undoMove(journal.value, at);
   });
 
 // A move refused before anything moved: an earlier move still owed.
@@ -779,10 +780,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     // The store this process holds is the old place's: the first engine
     // graph to come up at the new place (not the doctor's) removes the old
     // tree, the journal, and lets it write.
-    yield* finishMove(journal, to, {
-      settle: false,
-      file: path.join(to, JOURNAL),
-    });
+    yield* finishMove(journal, to, { settle: false });
   }).pipe(
     Effect.onError(() =>
       Effect.gen(function* () {
@@ -800,7 +798,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
           yield* Effect.ignore(fs.remove(pointerTmp, { force: true }));
         }
         if (journaled && !renamed) {
-          yield* undoMove(journal, from, journalFile);
+          yield* undoMove(journal, from);
         } else if (storeRetired && !journaled) {
           yield* Effect.ignore(reviveStore);
         }
