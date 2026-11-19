@@ -25,7 +25,11 @@ import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import type { ChannelHandlers } from "@shigomori/contracts/types";
 import type { AllContractModule } from "@shigomori/contracts/allModules";
 import { worktreePathFor } from "@shigomori/contracts/git/worktreeLayout";
-import { stackCleanupForWorktree } from "@shigomori/contracts/pullRequestStack";
+import {
+  pullRequestStackFor,
+  stackCleanupFor,
+  trunkOf,
+} from "@shigomori/contracts/pullRequestStack";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import {
   isManagedWorktree,
@@ -861,11 +865,15 @@ function hostHandlersFor(
     // rows. With none, it refuses as the engine does.
     "worktrees:deleteStack": ({ projectId, worktreeId }) => {
       const rows = forest.worktrees[projectId] ?? [];
-      const cleanup = stackCleanupForWorktree(
-        fakePullRequests(projectId),
-        rows,
-        worktreeId,
-      );
+      const own = rows.find((w) => w.id === worktreeId);
+      const stack =
+        own &&
+        pullRequestStackFor(
+          fakePullRequests(projectId),
+          own.branch,
+          trunkOf(rows),
+        );
+      const cleanup = stack ? stackCleanupFor(stack, rows) : null;
       if (!cleanup) {
         const branch = rows.find((w) => w.id === worktreeId)?.branch ?? "";
         throw new Error(

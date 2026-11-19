@@ -111,23 +111,6 @@ export function stackCleanupFor<
   return target ? { target, worktrees: landed } : null;
 }
 
-export function stackCleanupForWorktree<
-  T extends {
-    id: string;
-    branch: string;
-    isPrimary: boolean;
-    primaryBranch?: string;
-  },
->(
-  prs: Record<string, PullRequest>,
-  rows: readonly T[],
-  worktreeId: string,
-): StackCleanup<T> | null {
-  const own = rows.find((row) => row.id === worktreeId);
-  const stack = own && pullRequestStackFor(prs, own.branch, trunkOf(rows));
-  return stack ? stackCleanupFor(stack, rows) : null;
-}
-
 // `index` from the bottom.
 export type StackPosition = { index: number; size: number };
 
