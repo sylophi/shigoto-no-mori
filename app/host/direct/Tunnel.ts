@@ -407,7 +407,7 @@ const make = (options: Options) =>
       Effect.flatMap(account.current, (current) =>
         Effect.tryPromise({
           try: async () => {
-            if (current.facts === null || current.service === null) {
+            if (current.facts === null) {
               throw new Error(
                 "signed out or the account service is not configured",
               );
