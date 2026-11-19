@@ -248,26 +248,35 @@ export const makeCreating = ({
         return { failures, ran };
       });
 
-    // What a new worktree goes through: carry-over, then the setup script
-    // and port-pool's provision. `baseBranch` reads the local branch its
-    // base lands on ("" for none), which decides where carry-over looks
+    // What a new worktree goes through once git made it: its row reported
+    // created (after how its files were cloned), carry-over, then the setup
+    // script and port-pool's provision. `baseBranch` reads the local branch
+    // its base lands on ("" for none), which decides where carry-over looks
     // first.
     const createLifecycle = (
       project: RegisteredProject,
-      worktree: WorktreeIdentity,
-      checkouts: ReadonlyArray<WorktreeIdentity>,
+      added: {
+        readonly made: WorktreeIdentity;
+        readonly found: ReadonlyArray<WorktreeIdentity>;
+        readonly cloned: Cloned | undefined;
+      },
       baseBranch: Effect.Effect<string>,
       skipSetup: boolean,
       reporter: Reporter,
       ignoredFilesFollow?: ReadonlyArray<string>,
     ) =>
       Effect.gen(function* () {
+        const { made, found, cloned } = added;
+        const worktree = yield* row({ project, worktree: made });
+        if (cloned !== undefined)
+          yield* reporter.report({ event: "cloned", cloned });
+        yield* reporter.report({ event: "created", worktree });
         const { settings } = yield* projectSettings(project);
         const carried = yield* carryOver.apply({
           repo: project.path,
           settings,
-          checkouts,
-          destination: worktree.path,
+          checkouts: found,
+          destination: made.path,
           baseBranch,
           ignoredFilesFollow,
         });
@@ -277,14 +286,14 @@ export const makeCreating = ({
         }
         const { failures } = yield* provision(
           project,
-          worktree,
+          made,
           settings,
           skipSetup,
           reporter,
-          checkouts,
+          found,
         );
         yield* reporter.report({ event: "phase", phase: "idle" });
-        return failures;
+        return { worktree, failures };
       });
 
     // The one way a worktree is made: the name checked or picked, the
@@ -508,7 +517,7 @@ export const makeCreating = ({
           return yield* new WorktreeRefused({ reason, subject: ref });
         }
       }
-      const { made, found, cloned, baseBranch } = yield* addWorktree(project, {
+      const added = yield* addWorktree(project, {
         name,
         branch: input.branch ?? "",
         base: input.base ?? "",
@@ -522,25 +531,19 @@ export const makeCreating = ({
         deviceFlag("autoPullPrimaryOnly"),
       ]);
       if (autoPullNew && !primaryOnly) {
-        yield* registry.setMark("autoPull", made.id, true);
+        yield* registry.setMark("autoPull", added.made.id, true);
       }
       if (input.agentSession !== undefined) {
-        yield* registry.bindAgentSession(input.agentSession, made.id);
+        yield* registry.bindAgentSession(input.agentSession, added.made.id);
       }
-      const worktree = yield* row({ project, worktree: made });
-      if (cloned !== undefined)
-        yield* reporter.report({ event: "cloned", cloned });
-      yield* reporter.report({ event: "created", worktree });
-      const failures = yield* createLifecycle(
+      return yield* createLifecycle(
         project,
-        made,
-        found,
-        baseBranch,
+        added,
+        added.baseBranch,
         input.skipSetup ?? false,
         reporter,
         input.ignoredFilesFollow,
       );
-      return { worktree, failures };
     });
     return {
       checkName,
