@@ -180,15 +180,14 @@ function buildQueryKeys(deviceId: string) {
       countsOnly: boolean,
     ) => host("mergePreview", projectId, worktreeId, ref, headHash, countsOnly),
 
-    packageScripts: (projectId: string | null, worktreeId: string | null) =>
+    packageScripts: (projectId: string, worktreeId: string) =>
       host("packageScripts", projectId, worktreeId),
     // Every worktree's listing of one project, which all carry the
     // project's launch row picks.
-    packageScriptsAll: (projectId: string | null) =>
-      host("packageScripts", projectId),
-    packageScriptSort: (projectId: string | null) =>
+    packageScriptsAll: (projectId: string) => host("packageScripts", projectId),
+    packageScriptSort: (projectId: string) =>
       host("packageScriptSort", projectId),
-    packageScriptOrder: (projectId: string | null) =>
+    packageScriptOrder: (projectId: string) =>
       host("packageScriptOrder", projectId),
 
     portPoolInstalled: () => host("portPoolInstalled"),
