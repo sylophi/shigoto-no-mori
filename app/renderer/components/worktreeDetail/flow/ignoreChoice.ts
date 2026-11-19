@@ -37,17 +37,6 @@ import { useSharedSettingsSettled } from "@/hooks/sharedSettings/useSharedSettin
 import type { PullChoice } from "@/hooks/remote/useMoveWorktree";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 
-// The rule itself (the selection, its mode, the setup default and the
-// patterns it resolves to) lives in contracts' leaveOutRule.ts, which the
-// CLI's control ops read too. Re-exported for the dialogs.
-export {
-  type IgnoreSelection,
-  modeOf,
-  presetOfSelection,
-  resolveIgnores,
-  selectionOfPreset,
-};
-
 // The review state a pull dialog (transplant or mirror) keeps: the
 // leave-out rule, the ignored list the gitignored rule resolves over
 // (read only once that rule is picked, since it walks the checkout

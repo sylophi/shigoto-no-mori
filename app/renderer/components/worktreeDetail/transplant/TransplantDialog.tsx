@@ -25,7 +25,8 @@ import {
   useTeardownSource,
 } from "@/hooks/remote/useMoveWorktree";
 import { DestinationProvider } from "@/hooks/remote/useHostScope";
-import { modeOf, selectionSummary } from "../flow/ignoreChoice";
+import { modeOf } from "@shigomori/contracts/leaveOutRule";
+import { selectionSummary } from "../flow/ignoreChoice";
 import { PullFlowFrame, usePullFlow } from "../flow/PullFlow";
 import type { DestinationPick } from "@shigomori/ui/views/worktreeDetail/flow/PullReviewView.tsx";
 import {
