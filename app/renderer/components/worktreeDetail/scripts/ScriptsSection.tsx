@@ -57,12 +57,7 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
     <ScriptsSectionView
       loading={configLoading || pkgLoading}
       packageScripts={
-        pkg &&
-        pkgHasScripts && (
-          // Keyed so arranging (and the search) stays with the worktree
-          // it started in rather than following the page to the next one.
-          <PackageScripts key={worktree.id} worktree={worktree} pkg={pkg} />
-        )
+        pkg && pkgHasScripts && <PackageScripts worktree={worktree} pkg={pkg} />
       }
       lifecycle={lifecycleRows.map((row) => (
         <ScriptRow

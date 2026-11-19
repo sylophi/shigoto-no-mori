@@ -142,8 +142,6 @@ export function WorktreeDetailInner({
       description={
         description !== null && (
           <DescriptionSection
-            // An edit stays with its worktree.
-            key={worktree.id}
             worktree={worktree}
             description={description}
             pullRequestBody={pullRequestBody}
@@ -154,8 +152,7 @@ export function WorktreeDetailInner({
       launch={<LaunchSection worktree={worktree} />}
       prSection={!pullRequest && <PullRequestSection worktree={worktree} />}
       git={<GitSection worktree={worktree} />}
-      // Keyed so an open add or edit form stays with its worktree.
-      ports={<PortsSection key={worktree.id} worktree={worktree} />}
+      ports={<PortsSection worktree={worktree} />}
       scripts={<ScriptsSection worktree={worktree} />}
       footer={
         <WorktreeDetailFooter
