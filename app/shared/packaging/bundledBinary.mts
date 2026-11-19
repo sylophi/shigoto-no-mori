@@ -34,12 +34,12 @@ export function bundledBinaryPath(
 export function bundledBinaryResolver(
   place: () => AppPlace,
   devDistDir: string,
-  name: () => string,
+  name: string,
 ): () => string | null {
   let cached: string | null = null;
   return () => {
     if (cached !== null) return cached;
-    const candidate = bundledBinaryPath(place(), devDistDir, name());
+    const candidate = bundledBinaryPath(place(), devDistDir, name);
     if (!existsSync(candidate)) return null;
     cached = candidate;
     return candidate;

@@ -18,7 +18,7 @@ export const layer = Layer.unwrap(
       bundledBinaryResolver(
         () => facts,
         FILE_SYNC_DIST_DIR,
-        () => FILE_SYNC_BINARY_NAME,
+        FILE_SYNC_BINARY_NAME,
       ),
     ),
   ),
