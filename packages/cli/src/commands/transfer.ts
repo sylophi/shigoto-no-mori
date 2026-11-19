@@ -284,19 +284,15 @@ export const devices = Command.make("devices", {}, (input) =>
     yield* out(
       renderTable(
         ["DEVICE", "PLATFORM", "STATUS"],
-        listed.devices.map((device) => {
-          // A reason from a newer app than this build shows as it came.
-          const block: string = device.block ?? "";
-          return [
-            device.name,
-            device.platform,
-            block === ""
-              ? green(scoped ? "ready" : "connected")
-              : yellow(
-                  `${BLOCKS[block as keyof typeof BLOCKS] ?? block}${device.refusal === undefined ? "" : ` (${device.refusal})`}`,
-                ),
-          ];
-        }),
+        listed.devices.map((device) => [
+          device.name,
+          device.platform,
+          device.block === undefined
+            ? green(scoped ? "ready" : "connected")
+            : yellow(
+                `${BLOCKS[device.block]}${device.refusal === undefined ? "" : ` (${device.refusal})`}`,
+              ),
+        ]),
         stdoutColor,
       ),
     );
