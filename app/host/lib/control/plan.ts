@@ -16,6 +16,7 @@ import { hostsProjects } from "@shigomori/contracts/platform";
 import { isWindowsPath, samePath } from "@shigomori/contracts/projectPaths";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { type Project, type Worktree } from "@shigomori/contracts/schemas";
+import { capitalized } from "@shigomori/contracts/words";
 
 export type Named = { deviceId: string; name: string };
 
@@ -216,7 +217,7 @@ export function chooseTarget(
     "device-blocked",
     query === undefined
       ? `No other device can take part: ${why}.`
-      : `${why.charAt(0).toUpperCase()}${why.slice(1)}.`,
+      : `${capitalized(why)}.`,
   );
 }
 

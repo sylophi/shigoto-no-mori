@@ -1,5 +1,6 @@
 import { resolve } from "@shigomori/engine/canonicalPath";
 import { samePath } from "@shigomori/contracts/projectPaths";
+import { capitalized } from "@shigomori/contracts/words";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { type HandlerContext, isRemoteCaller } from "@shared/ipc/transport";
 import type { EffectHandlers } from "@shigomori/contracts/types";
@@ -99,7 +100,7 @@ const underWayByName = (
     const [first = "", ...rest] = names;
     return {
       moving,
-      bringing: [first.charAt(0).toUpperCase() + first.slice(1), ...rest],
+      bringing: [capitalized(first), ...rest],
     };
   });
 
