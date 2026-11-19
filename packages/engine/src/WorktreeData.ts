@@ -148,6 +148,22 @@ const make = Effect.gen(function* () {
       Effect.map(([row]) => descriptionOf(row)),
     );
 
+  const write = (
+    projectId: string,
+    worktreeId: string,
+    described: Description,
+  ) =>
+    sql`INSERT INTO worktree_data ${sql.insert({
+      project_id: projectId,
+      worktree_id: worktreeId,
+      title: orNull(described.title),
+      description: orNull(described.description),
+      described_at: described.describedAt,
+    })} ON CONFLICT (project_id, worktree_id) DO UPDATE SET
+      title = excluded.title,
+      description = excluded.description,
+      described_at = excluded.described_at`;
+
   const description = Effect.fn("WorktreeData.description")(function* (
     projectId: string,
     worktreeId: string,
@@ -169,16 +185,7 @@ const make = Effect.gen(function* () {
           description: change.description ?? stored.description,
           describedAt: Math.max(now, stored.describedAt + 1),
         };
-        yield* sql`INSERT INTO worktree_data ${sql.insert({
-          project_id: projectId,
-          worktree_id: worktreeId,
-          title: orNull(next.title),
-          description: orNull(next.description),
-          described_at: next.describedAt,
-        })} ON CONFLICT (project_id, worktree_id) DO UPDATE SET
-          title = excluded.title,
-          description = excluded.description,
-          described_at = excluded.described_at`;
+        yield* write(projectId, worktreeId, next);
         return next;
       }),
     );
@@ -193,16 +200,7 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const stored = yield* read(projectId, worktreeId);
         if (described.describedAt <= stored.describedAt) return false;
-        yield* sql`INSERT INTO worktree_data ${sql.insert({
-          project_id: projectId,
-          worktree_id: worktreeId,
-          title: orNull(described.title),
-          description: orNull(described.description),
-          described_at: described.describedAt,
-        })} ON CONFLICT (project_id, worktree_id) DO UPDATE SET
-          title = excluded.title,
-          description = excluded.description,
-          described_at = excluded.described_at`;
+        yield* write(projectId, worktreeId, described);
         return true;
       }),
     );
