@@ -1,7 +1,9 @@
 import { queryOptions, skipToken, useQuery } from "@tanstack/react-query";
-import type { HostScope } from "@/hooks/remote/useHostScope";
 import { useDeviceApi } from "@/hooks/remote/useDeviceApi";
-import { forestRead } from "@/hooks/remote/hostForestScope";
+import {
+  forestRead,
+  type HostForestScope,
+} from "@/hooks/remote/hostForestScope";
 import { queryKeysFor } from "@/lib/queryKeys";
 
 const DESCRIPTION_STALE_MS = 60 * 60_000;
@@ -11,7 +13,7 @@ const DESCRIPTION_STALE_MS = 60 * 60_000;
 // failed read (gh signed out, the network) is asked again.
 function repoDescriptionQueryOptions(
   projectId: string,
-  scope: Pick<HostScope, "deviceId"> & { api: HostScope["api"] | undefined },
+  scope: HostForestScope,
 ) {
   const { deviceId, api } = scope;
   return queryOptions<string | null>({
