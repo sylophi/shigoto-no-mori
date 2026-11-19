@@ -86,7 +86,9 @@ const manualEntries = (
     : [];
 };
 
-const includeEnabled = (settings: Readonly<Record<string, unknown>> | null) => {
+export const includeEnabled = (
+  settings: Readonly<Record<string, unknown>> | null,
+) => {
   const stored = settings?.["useWorktreeInclude"];
   return Predicate.isBoolean(stored)
     ? stored
