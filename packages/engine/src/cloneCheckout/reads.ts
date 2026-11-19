@@ -8,7 +8,6 @@ import * as Path from "effect/Path";
 import * as NativeFs from "../NativeFs.ts";
 import * as Git from "../Git.ts";
 import { blobBytes, CONVERSION_ATTRS, toHex } from "../gitIndex.ts";
-import * as Paths from "../Paths.ts";
 
 export const makeReads = Effect.gen(function* () {
   const git = yield* Git.Git;
@@ -16,9 +15,6 @@ export const makeReads = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const crypto = yield* Crypto.Crypto;
-  const paths = yield* Paths.Paths;
-
-  const configHome = Effect.succeed(paths.configHome);
 
   // The process's umask, read the only way that doesn't set it: a file
   // made with every permission keeps those the umask leaves.
@@ -110,7 +106,6 @@ export const makeReads = Effect.gen(function* () {
   });
 
   return {
-    configHome,
     umask,
     lstatUnder,
     lstatAll,
