@@ -328,35 +328,12 @@ export class Git extends Context.Service<
       ancestor: string,
       descendant: string,
     ) => Effect.Effect<boolean, GitError>;
-    // The commit `ref` names, refused when there is none.
-    readonly resolveCommit: (
-      cwd: string,
-      ref: string,
-    ) => Effect.Effect<string, GitError | UnknownRevisionError>;
-    // HEAD, refused where it has moved on from `expectHead`.
-    readonly headAt: (
-      cwd: string,
-      expectHead: string | undefined,
-    ) => Effect.Effect<string, GitError | BranchMovedError>;
-    // The upstream by its name ("origin/feature"), none without one.
-    readonly upstreamName: (
-      cwd: string,
-    ) => Effect.Effect<Option.Option<string>>;
     // How many commits `revs` name, rev-list's own `flags` applied.
     readonly countCommits: (
       cwd: string,
       revs: readonly string[],
       flags?: readonly string[],
     ) => Effect.Effect<number, GitError>;
-    // HEAD's own commits past `ref`: how many, how many of them are
-    // merges, and how many no remote has.
-    readonly ownCommitCounts: (
-      cwd: string,
-      ref: string,
-    ) => Effect.Effect<
-      { own: number; merges: number; unpushed: number },
-      GitError
-    >;
     // With `expected`, a compare-and-set: the ref moves only while it
     // still points there (ABSENT_REF: only while it does not exist).
     readonly updateRef: (input: {
@@ -664,12 +641,6 @@ export class Git extends Context.Service<
     // --- an operation under way ---
     // The worktree's own git dir.
     readonly gitDir: (worktree: string) => Effect.Effect<string, GitError>;
-    readonly conflictedPaths: (
-      worktree: string,
-    ) => Effect.Effect<string[], GitError>;
-    readonly hasStagedChanges: (
-      worktree: string,
-    ) => Effect.Effect<boolean, GitError>;
     // The branch a rebase replays in the worktree whose git dir this
     // is, or null.
     readonly rebasingBranch: (gitDir: string) => Effect.Effect<string | null>;
@@ -685,13 +656,6 @@ export class Git extends Context.Service<
     ) => Effect.Effect<
       GitOperationState,
       GitError | PlatformError.PlatformError
-    >;
-    // Refused while an operation is under way or files are conflicted.
-    readonly refuseMidOperation: (
-      worktree: string,
-    ) => Effect.Effect<
-      void,
-      GitError | GitRefusedError | PlatformError.PlatformError
     >;
     readonly continueOperation: (
       worktree: string,
@@ -745,12 +709,6 @@ export class Git extends Context.Service<
       | UnknownRevisionError
       | PlatformError.PlatformError
     >;
-    // `paths` as they are on disk now, kept in a snapshot commit under
-    // DISCARD_REF_PREFIX, and the commit.
-    readonly snapshotPaths: (
-      worktree: string,
-      paths: readonly string[],
-    ) => Effect.Effect<string, GitError>;
     // Throws away the changes to `paths` after keeping them in a
     // snapshot commit under DISCARD_REF_PREFIX, and answers with it.
     readonly discard: (input: {

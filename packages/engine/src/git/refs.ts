@@ -126,6 +126,7 @@ export const makeRefs = ({ running }: { readonly running: RunningArea }) =>
       return tip.value;
     });
 
+    // HEAD, refused where it has moved on from `expectHead`.
     const headAt = Effect.fn("Git.headAt")(function* (
       cwd: string,
       expectHead: string | undefined,
@@ -143,6 +144,7 @@ export const makeRefs = ({ running }: { readonly running: RunningArea }) =>
       return head;
     });
 
+    // The upstream by its name ("origin/feature"), none without one.
     const upstreamName = Effect.fn("Git.upstreamName")(function* (cwd: string) {
       return yield* run(cwd, [
         "rev-parse",
@@ -174,6 +176,8 @@ export const makeRefs = ({ running }: { readonly running: RunningArea }) =>
     // Leaves out what any remote has, as unpushedCount does.
     const NOT_ON_A_REMOTE = ["--not", "--remotes", "--not"];
 
+    // HEAD's own commits past `ref`: how many, how many of them are
+    // merges, and how many no remote has.
     const ownCommitCounts = Effect.fn("Git.ownCommitCounts")(function* (
       cwd: string,
       ref: string,
