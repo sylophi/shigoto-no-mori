@@ -28,7 +28,7 @@ export default {
           });
           return;
         }
-        if (typeof source !== "string" || !source.startsWith("effect/")) {
+        if (!source.startsWith("effect/")) {
           return;
         }
         if (node.importKind === "type") return;
