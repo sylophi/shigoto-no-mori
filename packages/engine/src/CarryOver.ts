@@ -58,7 +58,6 @@ export class CarryOver extends Context.Service<
     // in order: the one on the `base` branch, the primary, the rest by
     // name. None when there is nothing to carry.
     readonly apply: (input: {
-      readonly repo: string;
       readonly settings: Readonly<Record<string, unknown>> | null;
       readonly checkouts: ReadonlyArray<Source>;
       readonly destination: string;
@@ -369,7 +368,6 @@ const make = Effect.gen(function* () {
     });
 
   const apply = Effect.fn("CarryOver.apply")(function* (input: {
-    readonly repo: string;
     readonly settings: Readonly<Record<string, unknown>> | null;
     readonly checkouts: ReadonlyArray<Source>;
     readonly destination: string;

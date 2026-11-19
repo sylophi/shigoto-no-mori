@@ -273,7 +273,6 @@ export const makeCreating = ({
         yield* reporter.report({ event: "created", worktree });
         const { settings } = yield* projectSettings(project);
         const carried = yield* carryOver.apply({
-          repo: project.path,
           settings,
           checkouts: found,
           destination: made.path,
