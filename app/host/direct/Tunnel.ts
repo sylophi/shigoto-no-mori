@@ -47,7 +47,6 @@ import {
   BACKOFF_LADDER_MS,
   backoffDelayMs,
   restartSchedule,
-  STABLE_CONNECTION_MS,
 } from "@shared/remote/supervisor";
 import { bundledBinaryPath } from "@shared/packaging/bundledBinary.mts";
 import {
@@ -73,11 +72,6 @@ const TUNNEL_BACKOFF_LADDER_MS: readonly [number, ...number[]] = [
   ...BACKOFF_LADDER_MS,
   60_000,
 ];
-
-// A child that stayed up at least this long before dying is treated as
-// healthy, so its restart starts the ladder from the bottom: the same
-// stable threshold the socket supervisor uses.
-const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
 
 // The readiness probe schedule: a fresh child is advertised only once
 // its hostname actually routes from the edge to the local listener
@@ -738,9 +732,7 @@ const make = (options: Options) =>
             yield* FiberHandle.run(
               supervisor,
               runOnce(wanted.port).pipe(
-                Effect.repeat(
-                  restartSchedule(TUNNEL_BACKOFF_LADDER_MS, TUNNEL_STABLE_MS),
-                ),
+                Effect.repeat(restartSchedule(TUNNEL_BACKOFF_LADDER_MS)),
                 Effect.andThen(Effect.never),
               ),
             );
