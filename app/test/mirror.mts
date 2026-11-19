@@ -166,12 +166,13 @@ const fileSync = FileSync.layer(() => fileSyncBinary);
 
 // The dialer's daemon, the way host/process/handlers.ts reads it.
 const daemon = {
-  status: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.status)),
-  sessions: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.sessions)),
+  status: () => runtime.runSync(MirrorDaemon.MirrorDaemon.use((d) => d.status)),
+  sessions: () =>
+    runtime.runSync(MirrorDaemon.MirrorDaemon.use((d) => d.sessions)),
   create: (input: MirrorCreateInput) =>
-    runtime.runPromise(MirrorDaemon.onDaemon((d) => d.create(input))),
+    runtime.runPromise(MirrorDaemon.MirrorDaemon.use((d) => d.create(input))),
   terminate: (id: string) =>
-    runtime.runPromise(MirrorDaemon.onDaemon((d) => d.terminate(id))),
+    runtime.runPromise(MirrorDaemon.MirrorDaemon.use((d) => d.terminate(id))),
 };
 
 // The dialer's daemon as the mirror impl reads it (host/process/handlers.ts).
@@ -183,7 +184,7 @@ const onDaemon = <A,>(
   Effect.flatMap(
     Effect.suspend(() => runtime.contextEffect),
     (context) =>
-      MirrorDaemon.onDaemon(f).pipe(
+      MirrorDaemon.MirrorDaemon.use(f).pipe(
         Effect.provide(context),
         Effect.mapError((error) => new MirrorError({ reason: error.message })),
       ),
