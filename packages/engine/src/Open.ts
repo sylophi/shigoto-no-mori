@@ -168,7 +168,7 @@ const make = Effect.gen(function* () {
   const usage = yield* Usage.Usage;
   const config = yield* Config.Config;
   const commands = yield* makeCommands;
-  const { ran, onScreen } = commands;
+  const { launched, onScreen } = commands;
   const desktop: Desktop = yield* thisDesktop().make(commands);
 
   // A terminal tool's command line, run in a folder or a worktree in
@@ -282,8 +282,7 @@ const make = Effect.gen(function* () {
             ]);
           }
           if (app.cli !== undefined && entry.cliOnPath) {
-            const { code } = yield* ran(app.cli, [where]);
-            if (code === 0) return;
+            if ((yield* launched(app.cli, [where])) === 0) return;
           }
           const { target } = entry;
           if (target === Launchers.FILE_MANAGER) {
@@ -395,7 +394,7 @@ const make = Effect.gen(function* () {
     // The worktree goes along, so the file opens in the window that has
     // it (or a new one for it) rather than the last one used.
     if (app.cli !== undefined && entry.cliOnPath) {
-      if ((yield* ran(app.cli, [where, absolute])).code === 0) return absolute;
+      if ((yield* launched(app.cli, [where, absolute])) === 0) return absolute;
     }
     const { target } = entry;
     if (target === undefined || target === Launchers.FILE_MANAGER) {
