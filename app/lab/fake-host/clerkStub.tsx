@@ -36,10 +36,7 @@ export function useAuth() {
 // useAccountIdentity reads.
 export function useUser() {
   return {
-    isLoaded: true,
-    isSignedIn: true,
     user: {
-      id: FAKE_ACCOUNT_ID,
       primaryEmailAddress: { emailAddress: "rin@example.com" },
       fullName: "Rin Hoshizora",
       username: null,
@@ -56,12 +53,4 @@ export function useClerk() {
       await callback?.();
     },
   };
-}
-
-export function SignIn() {
-  return (
-    <div className="rounded-md border border-border p-6 text-sm text-muted-foreground">
-      [fake-host] Clerk &lt;SignIn /&gt; renders here
-    </div>
-  );
 }
