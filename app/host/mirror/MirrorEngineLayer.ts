@@ -90,7 +90,7 @@ const make = Effect.gen(function* () {
   const saved = yield* threads.load;
   const writes = yield* Semaphore.make(1);
   const history = createMirrorHistory({
-    threads: { ...saved },
+    threads: saved,
     save: (events) => {
       runFork(writes.withPermit(threads.save(events)));
     },
