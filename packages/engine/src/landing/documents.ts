@@ -13,7 +13,6 @@ import * as Git from "../Git.ts";
 import * as GitHub from "../GitHub.ts";
 import type { MergeMethod } from "@shigomori/contracts/schemas/pullRequest";
 import type { PullRequestSummary } from "../GitHub.ts";
-import type { RegisteredProject } from "../Registry.ts";
 import * as Worktrees from "../Worktrees.ts";
 
 // What landing won't do, the reason in its message. `numbers` and
@@ -455,9 +454,6 @@ export function stackBelow(
   }
   return chain.toReversed();
 }
-
-export const projectScope = (project: RegisteredProject) =>
-  ({ kind: "project", projectId: project.id, path: project.path }) as const;
 
 // --- the documents `sm --json` prints ---
 

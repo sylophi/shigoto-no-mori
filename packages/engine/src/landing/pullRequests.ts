@@ -23,7 +23,6 @@ import {
   type MergeOutcome,
   MergePollInterval,
   type Reporter,
-  projectScope,
 } from "./documents.ts";
 
 export const makePullRequests = Effect.gen(function* () {
@@ -68,7 +67,7 @@ export const makePullRequests = Effect.gen(function* () {
         return flag;
       }
       const { settings } = Config.projectSettingsOf(
-        yield* config.read(projectScope(project)),
+        yield* config.read(Config.projectScope(project)),
       );
       return pickMergeMethod(allowed, settings?.["lastMergeMethod"]) ?? first;
     });
@@ -76,7 +75,7 @@ export const makePullRequests = Effect.gen(function* () {
   // Best effort, as the app does it.
   const persistMethod = (project: RegisteredProject, method: MergeMethod) =>
     config
-      .set(projectScope(project), "lastMergeMethod", method)
+      .set(Config.projectScope(project), "lastMergeMethod", method)
       .pipe(Effect.ignore);
 
   // A stacked PR refuses the plain merge: only GitHub's own stack merge
