@@ -12,7 +12,7 @@ import {
 // footer's Save and Discard act on all of them at once. Each device
 // form reports itself here. The page reads the flags to render the
 // footer, and calls the functions from its Save and Discard.
-export interface SettingsEditor {
+interface SettingsEditor {
   isDirty: boolean;
   // Dirty with something to store: a half-typed launcher row alone is
   // not.
@@ -26,7 +26,7 @@ export interface SettingsEditor {
 }
 
 // What the footer needs from all the editors at once.
-export interface EditorSummary {
+interface EditorSummary {
   isDirty: boolean;
   canSave: boolean;
   isPending: boolean;
