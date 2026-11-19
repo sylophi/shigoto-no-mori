@@ -5,7 +5,6 @@ import { DialogFrame } from "../../primitives/dialog.tsx";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import { InlineEdit } from "../../primitives/inline-edit.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { cn } from "../../lib/utils.ts";
 import { sanitizeBranchName } from "@shigomori/contracts/git/branches";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { IconButton } from "../../primitives/icon-button.tsx";
@@ -44,7 +43,7 @@ export function BranchRowView({
   const checkedOut = !!worktree;
 
   return (
-    <div className={cn("group flex items-center gap-3 px-3 py-2 text-sm")}>
+    <div className="group flex items-center gap-3 px-3 py-2 text-sm">
       {editing ? (
         <InlineEdit
           variant="icons"
