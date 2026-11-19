@@ -53,19 +53,19 @@ export type ChangeKind = typeof ChangeKindSchema.Type;
 const BusyOperationsSchema = strict(
   Schema.Struct({
     // PTY runs and the engine's lifecycle runs alike.
-    runningScripts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    runningScripts: Schema.Natural,
     // Worktree deletes, and project removals.
-    inflightDeletes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    inflightDeletes: Schema.Natural,
     // Worktree moves and renames, the data-folder move's included.
-    inflightMoves: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    inflightMoves: Schema.Natural,
     // The other git work a person started (or an auto-pull's), one
     // entry each.
     engineChanges: Schema.Array(ChangeKindSchema),
     // Terminals whose shell runs something.
-    busyTerminals: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    busyTerminals: Schema.Natural,
     // Queued moves waiting on another device or under way, which a
     // quit drops (sync:queued).
-    queuedMoves: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    queuedMoves: Schema.Natural,
   }),
 );
 export type BusyOperations = typeof BusyOperationsSchema.Type;
