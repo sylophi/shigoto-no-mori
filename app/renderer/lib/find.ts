@@ -24,8 +24,8 @@ export function occurrences(text: string, query: string): number[] {
 
 // The ranges `query` covers in a node's text, each of which may span
 // several text nodes (a line's tokens).
-export function rangesIn(root: Node, query: string): Range[] {
-  const doc = root.ownerDocument ?? (root as Document);
+export function rangesIn(root: Element, query: string): Range[] {
+  const doc = root.ownerDocument;
   const segments: { node: Text; start: number }[] = [];
   let text = "";
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
