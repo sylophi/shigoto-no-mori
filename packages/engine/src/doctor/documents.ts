@@ -230,11 +230,6 @@ export const LOCK_STALE_MS = 10_000;
 // landing sweeps it within seconds.
 export const INCOMING_REF_STALE_MS = 60 * 60 * 1000;
 
-// A JSON file the store imports, read as an object.
-export const JsonObjectText = Schema.fromJsonString(
-  Schema.Record(Schema.String, Schema.Unknown),
-);
-
 // A JSON file as the doctor reads it: absent, unreadable, not a JSON
 // object, or the object.
 export type JsonFile =

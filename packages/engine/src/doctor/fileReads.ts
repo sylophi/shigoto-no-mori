@@ -8,13 +8,12 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type { ConfigDoc } from "../configDoc.ts";
 import * as Paths from "../Paths.ts";
-import { StoreImportError } from "../migrations/importJson.ts";
+import { JsonObjectText, StoreImportError } from "../migrations/importJson.ts";
 import { errnoText, isAbsent } from "../platformErrors.ts";
 import {
   type Entry,
   type FileReads,
   type JsonFile,
-  JsonObjectText,
   ProjectOrder,
   RegistryProjects,
   check,

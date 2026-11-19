@@ -25,7 +25,8 @@ export class StoreImportError extends Schema.TaggedError<StoreImportError>()(
 
 type JsonObject = { readonly [key: string]: unknown };
 
-const JsonObjectText = Schema.fromJsonString(
+// A JSON file the store imports, read as an object.
+export const JsonObjectText = Schema.fromJsonString(
   Schema.Record(Schema.String, Schema.Unknown),
 );
 
