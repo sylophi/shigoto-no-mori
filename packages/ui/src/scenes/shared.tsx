@@ -294,7 +294,6 @@ export function MarksScene() {
             startedAt: NOW - 3 * MINUTE,
             endedAt: NOW - 2 * MINUTE,
           }}
-          variant="header"
         />
       </Strip>
       <WorktreeMoveDetailsView
