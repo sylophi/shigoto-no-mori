@@ -56,40 +56,33 @@ export const makeEnds = ({ marks }: { readonly marks: Marks }) =>
   Effect.gen(function* () {
     const reach = yield* PeerReach;
 
-    // The copy deleted on its device, or why it stayed: a cleanup step
-    // that failed there, or what `failed` makes of a call that did.
-    const deleteCopy = (
-      raw: MirrorSessionRaw,
-      expect: MovedSource | undefined,
-      failed: (error: unknown) => Effect.Effect<string | undefined>,
-    ) =>
-      peerWorktreesFor(raw.deviceId)
-        .delete({
-          projectId: raw.projectId,
-          worktreeId: raw.worktreeId,
-          force: true,
-          oneSide: true,
-          ...(expect === undefined ? {} : { expect }),
-        })
-        .pipe(
-          Effect.map((removed) =>
-            removed.ok
-              ? undefined
-              : `its ${removed.cleanupError.phase} step failed`,
-          ),
-          Effect.catch(failed),
-          Effect.provideService(PeerReach, reach),
-        );
-
-    // Why the copy stayed, or undefined once it is gone.
+    // Why the copy stayed (a cleanup step that failed on its device, or
+    // a call that failed while the copy is still listed), or undefined
+    // once it is gone.
     const endThenDeleteCopy = Effect.fn("MirrorLedger.endThenDeleteCopy")(
       function* (daemon: Daemon, raw: MirrorSessionRaw, expect?: MovedSource) {
         yield* daemon.terminate(raw.session);
-        return yield* deleteCopy(raw, expect, (error) =>
-          Effect.map(copyIsGone(raw), (gone) =>
-            gone ? undefined : messageOf(error),
-          ),
-        );
+        return yield* peerWorktreesFor(raw.deviceId)
+          .delete({
+            projectId: raw.projectId,
+            worktreeId: raw.worktreeId,
+            force: true,
+            oneSide: true,
+            ...(expect === undefined ? {} : { expect }),
+          })
+          .pipe(
+            Effect.map((removed) =>
+              removed.ok
+                ? undefined
+                : `its ${removed.cleanupError.phase} step failed`,
+            ),
+            Effect.catch((error) =>
+              Effect.map(copyIsGone(raw), (gone) =>
+                gone ? undefined : messageOf(error),
+              ),
+            ),
+            Effect.provideService(PeerReach, reach),
+          );
       },
     );
 
