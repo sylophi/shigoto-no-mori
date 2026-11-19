@@ -48,10 +48,8 @@ import type { Project } from "@shigomori/contracts/schemas";
 import { canonicalPath } from "@shigomori/engine/canonicalPath";
 import { clauseOf, messageOf } from "@shigomori/engine/errorDocument";
 import * as Deferred from "effect/Deferred";
-import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import type { PlatformError } from "effect/PlatformError";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -507,19 +505,11 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
 // unstage, a checkout, also git's own refreshes: the consumer compares
 // trees to tell them apart), for as long as it is read. Resolves the git
 // dir once. A worktree whose git dir moves is a removed worktree. The
-// watch's event is a hint: every `backstop` the index's stamp is read
+// watch's event is a hint: every 10 seconds the index's stamp is read
 // too, and one that moved with no event (a dropped one, a watch that
 // failed and ended) emits as well.
 export const watchIndexFile = (
   worktreePath: string,
-  // Test seams. Real callers take the defaults.
-  options: {
-    readonly debounce?: Duration.Input;
-    readonly backstop?: Duration.Input;
-    readonly watch?: (
-      path: string,
-    ) => Stream.Stream<FileSystem.WatchEvent, PlatformError>;
-  } = {},
 ): Stream.Stream<void, Git.GitError, Git.Git | FileSystem.FileSystem> =>
   Stream.unwrap(
     Effect.gen(function* () {
@@ -543,14 +533,14 @@ export const watchIndexFile = (
       // From a signal until its stamp is read, so a beat in between
       // doesn't take the old stamp for a change of its own.
       const firing = yield* Ref.make(false);
-      const heard = (options.watch?.(gitDir) ?? fs.watch(gitDir)).pipe(
+      const heard = fs.watch(gitDir).pipe(
         Stream.filter((event) => event.path === "index"),
         Stream.ignore,
       );
       // A beat waits for the last one's read: one held by a volume that
       // stalls must not be joined by another each beat, on a thread pool
       // of four.
-      const beats = Stream.tick(options.backstop ?? "10 seconds").pipe(
+      const beats = Stream.tick("10 seconds").pipe(
         Stream.drop(1),
         Stream.filterEffect(() =>
           Effect.gen(function* () {
@@ -563,7 +553,7 @@ export const watchIndexFile = (
       );
       return Stream.merge(heard, beats).pipe(
         Stream.tap(() => Ref.set(firing, true)),
-        Stream.debounce(options.debounce ?? "300 millis"),
+        Stream.debounce("300 millis"),
         Stream.mapEffect(() =>
           Effect.gen(function* () {
             const stamp = yield* stampOf;
