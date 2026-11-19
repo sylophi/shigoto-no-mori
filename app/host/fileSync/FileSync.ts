@@ -37,7 +37,6 @@ export const isFileSyncUnavailable = Schema.is(FileSyncUnavailableError);
 // apart for diagnostics, and its scope, which closes as it ends, for
 // what serves alongside it.
 export interface ServeChild {
-  readonly pid: number;
   readonly stream: Duplex;
   readonly stderr: Readable;
   readonly scope: Scope.Scope;
@@ -128,7 +127,6 @@ const make = (binaryPath: () => string | null) =>
       const stderr = yield* NodeStream.toReadable(handle.stderr);
       yield* until.pipe(Effect.andThen(close), Effect.forkIn(scope));
       return {
-        pid: handle.pid,
         stream: Duplex.from({ readable: output, writable: input }),
         stderr,
         scope: child,
