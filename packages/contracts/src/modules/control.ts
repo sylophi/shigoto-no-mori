@@ -186,6 +186,9 @@ const ControlMirrorSchema = strict(
     git: Schema.optional(Schema.String),
     gitDetail: Schema.optional(Schema.String),
     conflicts: Schema.Natural,
+    // Why a stop would refuse (mirrorStopBlocker), off the last look at
+    // git rather than a fresh one. Absent when the mirror is in step.
+    notInStep: Schema.optional(Schema.String),
   }),
 );
 export type ControlMirror = typeof ControlMirrorSchema.Type;
@@ -213,7 +216,7 @@ const ControlMirrorTargetSchema = Schema.Struct({
 
 export const controlContract = defineContract(
   "control",
-  { scope: "host", remote: false, version: 1 },
+  { scope: "host", remote: false, version: 2 },
   invoke(
     "devices",
     strict(

@@ -242,12 +242,12 @@ export const mirrors = Command.make("mirrors", { rest }, (input) =>
     }
     yield* out(
       renderTable(
-        ["WORKTREE", "DEVICE", "COPY", "FILES", "GIT"],
+        ["WORKTREE", "DEVICE", "COPY", "IN STEP", "GIT"],
         listed.mirrors.map((one) => [
           one.localRoot,
           one.device.name,
           one.copySide === "local" ? "copy here" : "copy there",
-          `${one.paused ? "paused" : one.status}${one.conflicts > 0 ? ` (${one.conflicts} conflicts)` : ""}`,
+          one.notInStep === undefined ? "yes" : `no: ${one.notInStep}`,
           one.git === undefined || one.git === "" ? "-" : one.git,
         ]),
         stdoutColor,

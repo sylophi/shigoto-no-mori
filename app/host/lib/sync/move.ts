@@ -207,7 +207,7 @@ export const pullWorktree = (
 // A move this device runs, counted for its whole run as work a quit
 // waits on (Scripts.busy), its landing's change joining it. It holds no
 // data-folder lock: a data-folder move refuses while a move runs.
-const counted = <A, E, R>(
+export const counted = <A, E, R>(
   move: Effect.Effect<A, E, R>,
   ids: { readonly projectId?: string; readonly worktreeId?: string },
   kind: "bring" | "send",

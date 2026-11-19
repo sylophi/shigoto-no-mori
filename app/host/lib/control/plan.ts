@@ -8,7 +8,10 @@ import {
   type ControlMirror,
   type ControlPeerWorktree,
 } from "@shigomori/contracts/modules/control";
-import { type MirrorSession } from "@shigomori/contracts/modules/mirror";
+import {
+  type MirrorSession,
+  mirrorStopBlocker,
+} from "@shigomori/contracts/modules/mirror";
 import { hostsProjects } from "@shigomori/contracts/platform";
 import { isWindowsPath, samePath } from "@shigomori/contracts/projectPaths";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
@@ -98,6 +101,7 @@ export function mirrorView(
   session: MirrorSession,
   devices: Named[],
 ): ControlMirror {
+  const notInStep = mirrorStopBlocker(session);
   return {
     session: session.session,
     device: {
@@ -117,7 +121,8 @@ export function mirrorView(
     ...(session.git === undefined
       ? {}
       : { git: session.git.status, gitDetail: session.git.detail }),
-    conflicts: session.conflicts.length,
+    conflicts: session.conflicts.length + session.excludedConflicts,
+    ...(notInStep === undefined ? {} : { notInStep }),
   };
 }
 

@@ -47,7 +47,7 @@ import { PeerReach, peerMirrorFor } from "@host/ipc/PeerReach";
 import * as DeviceId from "@host/lib/config/DeviceId";
 import { findWorktreePath } from "@host/lib/projects";
 import * as Moves from "@host/lib/sync/Moves";
-import { rollBackSent, sendWorktree } from "@host/lib/sync/move";
+import { counted, rollBackSent, sendWorktree } from "@host/lib/sync/move";
 import { readOriginal } from "./checkout";
 import { transferFilesOnce } from "./oneShot";
 import {
@@ -214,6 +214,15 @@ export const startMirrorTo = (
         Effect.onError(() =>
           Effect.sync(() => ledger.forgetStarting(input.worktreeId)),
         ),
+        // A send for the whole start, the send's own count joining it,
+        // so a quit asks first: past the send, the files' first pass
+        // and the session's open go with it too.
+        (start) =>
+          counted(
+            start,
+            { projectId: input.projectId, worktreeId: input.worktreeId },
+            "send",
+          ),
       ),
     );
   });
