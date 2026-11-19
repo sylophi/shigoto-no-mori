@@ -39,7 +39,6 @@ import {
   startHubFront,
   startListenerFront,
   startNetworkSwitch,
-  type PortSwitch,
 } from "./networkSwitch.mts";
 import {
   answers,
@@ -227,7 +226,6 @@ export class Lab {
     .replace(/[^a-z0-9-]/g, "-")
     .slice(0, 24);
   readonly profile = `${this.tag}-host`;
-  readonly profileDir = join(homedir(), ".smd-profiles", this.profile);
   readonly browserDir = join(homedir(), ".smd-profiles", `${this.tag}-browser`);
   readonly webPort = Number(envFile(".env.ports").WEB_PORT);
   readonly origin = `http://localhost:${this.webPort}`;
@@ -239,7 +237,6 @@ export class Lab {
   // A, the desktop device under test, and C, the one on the tunnel.
   readonly desk: DevApp | null;
   readonly remote: DevApp | null;
-  browserSwitch: PortSwitch | null = null;
   context!: BrowserContext;
   private webServer: ChildProcess | null = null;
   private readonly logs: WriteStream;
@@ -526,7 +523,7 @@ export class Lab {
   // ---- the browser ----
 
   async startBrowser(): Promise<void> {
-    this.browserSwitch = this.network.add(await startNetworkSwitch());
+    const browserSwitch = this.network.add(await startNetworkSwitch());
     mkdirSync(this.browserDir, { recursive: true });
     this.context = await chromium.launchPersistentContext(this.browserDir, {
       channel: "chrome",
@@ -539,7 +536,7 @@ export class Lab {
       handleSIGTERM: false,
       handleSIGHUP: false,
       proxy: {
-        server: `http://127.0.0.1:${this.browserSwitch.port}`,
+        server: `http://127.0.0.1:${browserSwitch.port}`,
         bypass: "localhost,127.0.0.1",
       },
     });
