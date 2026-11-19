@@ -177,7 +177,7 @@ const make = Effect.gen(function* () {
           WHERE from_path = ${fromPath} AND moved = 0
           AND NOT EXISTS (SELECT 1 FROM moving WHERE from_path = ${fromPath})`;
       }
-      // A move records itself as made (Worktrees.carryMoved).
+      // A move records itself as made (worktrees/moving.ts, carry).
       const outcome = yield* Effect.result(
         worktrees.move({ project, worktree: from }, row.to_path),
       );

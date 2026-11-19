@@ -358,14 +358,6 @@ export class Worktrees extends Context.Service<
       { readonly worktree: WorktreeRow; readonly previousId: string },
       WorktreeRefused | UnknownWorktreeError | Git.GitError
     >;
-    // What a move carries once git lists the checkout at `toPath`: what
-    // is kept under the old id, port-pool's lease, and a record of the
-    // move, which the app follows to re-open a mirror rooted there.
-    readonly carryMoved: (
-      project: RegisteredProject,
-      fromPath: string,
-      toPath: string,
-    ) => Effect.Effect<WorktreeRow, WorktreeRefused | Git.GitError>;
     // port-pool's lease carried from the folder a checkout left to the
     // one git lists it at now (`moved`), wherever its path is re-keyed.
     readonly carryLease: (

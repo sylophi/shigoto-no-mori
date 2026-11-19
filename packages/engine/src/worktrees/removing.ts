@@ -531,7 +531,6 @@ export const makeRemoving = ({
       wipe,
       removeCheckout,
       pruneEmptyParents,
-      removable,
       checkRemovable,
       deletesBranch,
       refuseChangedSince,
