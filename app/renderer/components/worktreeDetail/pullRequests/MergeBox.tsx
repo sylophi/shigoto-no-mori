@@ -31,7 +31,6 @@ export function MergeBox({
     disableAutoMerge,
     armed,
     trigger,
-    primary,
     activeMethod,
     mode,
     status,
@@ -49,7 +48,7 @@ export function MergeBox({
     toggleDraft,
     runDisableAutoMerge,
   } = useMergeBox({ worktree, pr, repoConfig, lastMergeMethod, stack });
-  const canMerge = primary !== null && activeMethod !== null;
+  const canMerge = activeMethod !== null;
   // A peer that takes no commands from here gets the status alone.
   const { canCommand } = useCommandAccess();
   const rowRef = useRef<HTMLDivElement>(null);
@@ -71,7 +70,7 @@ export function MergeBox({
         compact={compact}
         rowRef={rowRef}
         merge={
-          primary && activeMethod && canCommand
+          activeMethod && canCommand
             ? {
                 mode,
                 label,

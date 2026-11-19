@@ -171,7 +171,6 @@ export function useMergeBox({
     disableAutoMerge,
     armed,
     trigger,
-    primary,
     activeMethod,
     mode,
     status,
