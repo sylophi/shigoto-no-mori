@@ -12,9 +12,6 @@ import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
 // knows which. A call fails with the contract error it was sent as, or
 // the link gone. Interrupting it cancels the call on the far side.
 export type Link = {
-  // True when the far end is this machine's own serving side, the same
-  // build.
-  readonly local?: boolean;
   readonly call: (
     channel: string,
     input: unknown,

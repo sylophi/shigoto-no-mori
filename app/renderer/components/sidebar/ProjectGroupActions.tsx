@@ -211,10 +211,7 @@ export function ProjectGroupActions({
   const setPinned = useSetProjectPinned(groupKey);
   // Whose copy the pages open for (and, on a group of one, the remove
   // acts on): this machine's, or the `+`'s device on a header with no local checkout.
-  const primary =
-    members.find((member) => member.isThisDevice) ??
-    creator ??
-    members.find((member): member is LiveMember => member.api !== undefined);
+  const primary = members.find((member) => member.isThisDevice) ?? creator;
   // One arm for the whole menu, keyed by device in the submenus.
   const { removeArm, onOpenChange } = useProjectMenuRemoveArm();
   const spansDevices = members.length > 1;

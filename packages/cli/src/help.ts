@@ -707,6 +707,19 @@ export const helpPages = (look: HelpLook) => {
     ["Flags", items.flags],
     ["Environment", items.environment],
   ];
+  // The catalog's entries for `command`, narrowed to `sub` when given. A
+  // bare worktree command matches its namespaced entry too.
+  const entriesFor = (command: string, sub: string | undefined) =>
+    groups.flatMap(([, list]) =>
+      list.filter(([usage]) => {
+        let fields = fieldsOf(usage);
+        if (fields[0] === "worktrees" && fields[1] === command)
+          fields = fields.slice(1);
+        return (
+          fields[0] === command && (sub === undefined || fields[1] === sub)
+        );
+      }),
+    );
   const usageLine = (usage: string) =>
     `${paint.bold("Usage:")} ${bin} ${colorUsage(usage, paint)}`;
 
@@ -781,7 +794,7 @@ export const helpPages = (look: HelpLook) => {
     if (name === "worktrees" && first !== undefined && !first.startsWith("-")) {
       if (commandName(first) !== "worktrees") return commandPage(first, rest);
     }
-    let sub = "";
+    let sub: string | undefined;
     const ns = namespaces.find((each) => each.name === name);
     if (ns !== undefined) {
       if (first === undefined) return namespacePage(ns);
@@ -789,24 +802,15 @@ export const helpPages = (look: HelpLook) => {
       if (ns.items.some(([usage]) => fieldsOf(usage)[1] === wanted))
         sub = wanted;
     }
-    const found: string[] = [];
-    for (const [, list] of groups) {
-      for (const [usage, desc, detail] of list) {
-        let fields = fieldsOf(usage);
-        // A bare worktree command matches its namespaced entry too.
-        if (fields[0] === "worktrees" && fields[1] === name)
-          fields = fields.slice(1);
-        if (fields[0] !== name) continue;
-        if (sub !== "" && fields[1] !== sub) continue;
-        let entry = `${usageLine(usage)}\n  ${desc}\n`;
-        if (detail !== "") {
-          for (const line of wrapText(detail, look.columns - 2)) {
-            entry += `  ${paint.dim(line)}\n`;
-          }
+    const found = entriesFor(name, sub).map(([usage, desc, detail]) => {
+      let entry = `${usageLine(usage)}\n  ${desc}\n`;
+      if (detail !== "") {
+        for (const line of wrapText(detail, look.columns - 2)) {
+          entry += `  ${paint.dim(line)}\n`;
         }
-        found.push(entry);
       }
-    }
+      return entry;
+    });
     if (found.length === 0) return page(false);
     return `${found.join("\n")}\n${paint.dim(`Run \`${bin} --help\` for the full list.`)}`;
   };
@@ -816,17 +820,8 @@ export const helpPages = (look: HelpLook) => {
   const usageOf = (path: ReadonlyArray<string>): string | undefined => {
     const [command, sub] = path;
     if (command === undefined) return undefined;
-    for (const [, list] of groups) {
-      for (const [usage] of list) {
-        let fields = fieldsOf(usage);
-        if (fields[0] === "worktrees" && fields[1] === command)
-          fields = fields.slice(1);
-        if (fields[0] === command && (sub === undefined || fields[1] === sub)) {
-          return `Usage: ${bin} ${usage}`;
-        }
-      }
-    }
-    return undefined;
+    const [entry] = entriesFor(command, sub);
+    return entry === undefined ? undefined : `Usage: ${bin} ${entry[0]}`;
   };
 
   // What a command line asks of the help: the help before the command,

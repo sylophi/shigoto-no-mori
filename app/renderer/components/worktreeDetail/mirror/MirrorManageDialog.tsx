@@ -32,9 +32,8 @@ import {
   type IgnoreSelection,
   modeOf,
   resolveIgnores,
-  sameSelection,
-  selectionOf,
-} from "../flow/ignoreChoice";
+} from "@shigomori/contracts/leaveOutRule";
+import { sameSelection, selectionOf } from "../flow/ignoreChoice";
 import { browseWorktree, LeaveOutPicker } from "../flow/LeaveOutPicker";
 import {
   MirrorHistoryListView,

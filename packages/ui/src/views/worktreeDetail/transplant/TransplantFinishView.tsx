@@ -31,8 +31,6 @@ import { DialogBody, DialogFooter } from "../../../primitives/dialog.tsx";
 import type { Landing } from "../flow/pullSteps.ts";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 
-export type SourceChoice = SyncSourceFate;
-
 // The three fates of the source copy, in card order. Tear down is
 // preselected when the work landed whole: the worktree moved, and a
 // copy left behind is what the move was meant not to leave. With the
@@ -44,7 +42,7 @@ export type SourceChoice = SyncSourceFate;
 // nothing in the teardown itself refuses over them, so this is the
 // last place the user hears it before the confirm.
 const CHOICES: {
-  key: SourceChoice;
+  key: SyncSourceFate;
   title: string;
   // ignored: the count still only on the source (0 once the pull's
   // files step brought them here). null: the read has not landed or
@@ -85,8 +83,8 @@ export function SourceFateView({
   onChoose,
 }: {
   sourceDeviceLabel: string;
-  choice: SourceChoice;
-  onChoose: (choice: SourceChoice) => void;
+  choice: SyncSourceFate;
+  onChoose: (choice: SyncSourceFate) => void;
 }) {
   return (
     <section className="space-y-2">
@@ -112,7 +110,7 @@ export function SourceFateView({
   );
 }
 
-const FINISH_LABEL: Record<SourceChoice, string> = {
+const FINISH_LABEL: Record<SyncSourceFate, string> = {
   keep: "Keep and finish",
   shelve: "Shelve and finish",
   teardown: "Tear down and finish",
@@ -142,8 +140,8 @@ export function TransplantFinishView({
   // The device it landed on, and the words for that (pullSteps.ts).
   thisDeviceLabel: string;
   landing: Landing;
-  choice: SourceChoice;
-  onChoose: (choice: SourceChoice) => void;
+  choice: SyncSourceFate;
+  onChoose: (choice: SyncSourceFate) => void;
   // The ignored files a teardown would take with the source, null
   // when that is not known.
   staying: number | null;

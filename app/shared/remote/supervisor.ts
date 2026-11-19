@@ -47,7 +47,7 @@ export const BACKOFF_LADDER_MS: readonly [number, ...number[]] = [
 
 // A connection open at least this long before it drops is treated as
 // healthy, so its next reconnect starts the ladder from the bottom.
-export const STABLE_CONNECTION_MS = 30_000;
+const STABLE_CONNECTION_MS = 30_000;
 
 // Defined by the hub contract, whose schema validates it on the
 // loopback.
@@ -159,18 +159,17 @@ export const wakeable =
 
 // A restart ladder as a Schedule, for a supervised run
 // that is repeated whenever it ends. Its input is how long the run
-// lasted in milliseconds: one that stayed up for `stableMs` broke the
+// lasted in milliseconds: one that stayed up for STABLE_CONNECTION_MS broke the
 // failure streak, so the next restart starts the ladder from the
 // bottom. Each restart climbs a rung, capped at the last.
 export const restartSchedule = (
   ladder: readonly [number, ...number[]],
-  stableMs: number = STABLE_CONNECTION_MS,
 ): Schedule.Schedule<number, number> =>
   Schedule.fromStep(
     Effect.sync(() => {
       let attempt = 0;
       return (_now: number, uptimeMs: number) => {
-        if (uptimeMs >= stableMs) attempt = 0;
+        if (uptimeMs >= STABLE_CONNECTION_MS) attempt = 0;
         const delay = Duration.millis(backoffDelayMs(ladder, attempt));
         attempt += 1;
         return Effect.succeed([attempt, delay] as [number, Duration.Duration]);

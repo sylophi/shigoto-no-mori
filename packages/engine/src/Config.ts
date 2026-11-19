@@ -290,9 +290,6 @@ export class Config extends Context.Service<
     readonly storedProjectIds: Effect.Effect<ReadonlyArray<string>>;
     // Drops a project's stored settings.
     readonly forgetProject: (projectId: string) => Effect.Effect<void>;
-    // Carries a project's stored settings to another id, replacing what
-    // that id held.
-    readonly rekeyProject: (from: string, to: string) => Effect.Effect<void>;
   }
 >()("sm/engine/Config") {}
 
@@ -417,11 +414,6 @@ export const projectSettingsOf = (doc: ConfigDoc | null) => {
   return doc !== null && typeof branch === "string" && branch.trim() !== ""
     ? { settings: doc, defaultBranch: branch }
     : { settings: null, defaultBranch: undefined };
-};
-
-const missingBranch = (doc: ConfigDoc) => {
-  const [branch] = docGet(doc, "defaultBranch");
-  return typeof branch !== "string" || branch.trim() === "";
 };
 
 // A stored document less the keys `fields` models whose value isn't of
@@ -616,7 +608,10 @@ const make = Effect.gen(function* () {
           const before = (yield* load(scope)) ?? {};
           const next = structuredClone(before);
           if (change(next) === false) return false;
-          if (scope.kind === "project" && missingBranch(next)) {
+          if (
+            scope.kind === "project" &&
+            projectSettingsOf(next).settings === null
+          ) {
             if (Option.isNone(fallbackBranch)) {
               const [row] = yield* sql<{ readonly name: string }>`
                 SELECT name FROM projects WHERE id = ${scope.projectId}`;
@@ -891,14 +886,6 @@ const make = Effect.gen(function* () {
       projectId: string,
     ) {
       yield* sql`DELETE FROM project_config WHERE project_id = ${projectId}`;
-    }, Effect.orDie),
-    rekeyProject: Effect.fn("Config.rekeyProject")(function* (
-      from: string,
-      to: string,
-    ) {
-      yield* sql`DELETE FROM project_config WHERE project_id = ${to}`;
-      yield* sql`UPDATE project_config SET project_id = ${to}
-        WHERE project_id = ${from}`;
     }, Effect.orDie),
   });
 });

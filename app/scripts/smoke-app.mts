@@ -728,10 +728,6 @@ async function serve(port: string) {
     detached: true,
   });
   serving = child.pid;
-  let exited = false;
-  child.once("exit", () => {
-    exited = true;
-  });
   // Until stopped: a signal ends the app, and the run's folder, with the
   // run (the run end above).
   const stopped = new Promise<void>((resolve) =>
@@ -740,7 +736,6 @@ async function serve(port: string) {
   console.log(`serving on 127.0.0.1:${port}, the data folder ${dataDir}`);
   await stopped;
   serving = undefined;
-  if (child.pid !== undefined) await stop(child.pid, () => exited);
   rmSync(root, { recursive: true, force: true });
 }
 

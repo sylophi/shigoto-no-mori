@@ -9,11 +9,17 @@ import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { UsageError } from "../errors.ts";
-import { given, here, resolveWorktree, rest, worktreeFlags } from "../here.ts";
+import {
+  given,
+  here,
+  resolveWorktree,
+  rest,
+  worktreeArgs,
+  worktreeFlags,
+} from "../here.ts";
 import {
   emit,
   note,
@@ -238,55 +244,40 @@ const identityTable = (
     );
   });
 
-const path = Command.make(
-  "path",
-  {
-    ...worktreeFlags,
-    ref: Argument.String("worktree").pipe(Argument.optional),
-    // The first is read and the rest let be.
-    rest,
-  },
-  (input) =>
-    Effect.gen(function* () {
-      const { worktree, project } = (yield* resolveWorktree(input)).located;
-      const { json } = yield* Effect.service(Output);
-      yield* json
-        ? emit({
-            id: worktree.id,
-            name: worktree.name,
-            branch: worktree.branch,
-            path: worktree.path,
-            projectName: project.name,
-            projectId: project.id,
-            isPrimary: worktree.isPrimary,
-          })
-        : out(worktree.path);
-    }),
+const path = Command.make("path", worktreeArgs, (input) =>
+  Effect.gen(function* () {
+    const { worktree, project } = (yield* resolveWorktree(input)).located;
+    const { json } = yield* Effect.service(Output);
+    yield* json
+      ? emit({
+          id: worktree.id,
+          name: worktree.name,
+          branch: worktree.branch,
+          path: worktree.path,
+          projectName: project.name,
+          projectId: project.id,
+          isPrimary: worktree.isPrimary,
+        })
+      : out(worktree.path);
+  }),
 );
 
 // The deep link that opens a worktree's page in the app. It names this
 // data dir's device, so a link printed on another machine (over ssh, by
 // an agent there) opens that machine's worktree wherever it's clicked.
-export const link = Command.make(
-  "link",
-  {
-    ...worktreeFlags,
-    ref: Argument.String("worktree").pipe(Argument.optional),
-    rest,
-  },
-  (input) =>
-    Effect.gen(function* () {
-      const { worktree, project } = (yield* resolveWorktree(input)).located;
-      const { flavor } = yield* Paths.Paths;
-      const deviceId = yield* (yield* Registry.Registry).deviceId;
-      const url = `${flavorNames(flavor).scheme}://open${worktreePage({
-        deviceId,
-        projectId: project.id,
-        worktreeId: worktree.id,
-      })}`;
-      const { json } = yield* Effect.service(Output);
-      yield* json ? emit({ ok: true, url, worktree: worktree.name }) : out(url);
-    }),
+export const link = Command.make("link", worktreeArgs, (input) =>
+  Effect.gen(function* () {
+    const { worktree, project } = (yield* resolveWorktree(input)).located;
+    const { flavor } = yield* Paths.Paths;
+    const deviceId = yield* (yield* Registry.Registry).deviceId;
+    const url = `${flavorNames(flavor).scheme}://open${worktreePage({
+      deviceId,
+      projectId: project.id,
+      worktreeId: worktree.id,
+    })}`;
+    const { json } = yield* Effect.service(Output);
+    yield* json ? emit({ ok: true, url, worktree: worktree.name }) : out(url);
+  }),
 );
 
 // The verbs stand at the top level and under `sm worktrees`.

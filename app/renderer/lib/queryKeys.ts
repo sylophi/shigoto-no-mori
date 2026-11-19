@@ -138,7 +138,7 @@ function buildQueryKeys(deviceId: string) {
       worktreeId: string | undefined,
       hash: string,
     ) => host("commitSummary", projectId, worktreeId, hash),
-    pickedWorktreeName: (projectId: string | null) =>
+    pickedWorktreeName: (projectId: string) =>
       host("pickedWorktreeName", projectId),
 
     // Tidy-the-forest data. Split in two because the git facts are cheap
@@ -150,8 +150,7 @@ function buildQueryKeys(deviceId: string) {
       host("worktreeDiskUsage", projectId, worktreeId),
 
     branches: (projectId: string | null) => host("branches", projectId),
-    defaultBranch: (projectId: string | null) =>
-      host("defaultBranch", projectId),
+    defaultBranch: (projectId: string) => host("defaultBranch", projectId),
     branchCommits: (
       projectId: string,
       worktreeId: string,
@@ -181,15 +180,14 @@ function buildQueryKeys(deviceId: string) {
       countsOnly: boolean,
     ) => host("mergePreview", projectId, worktreeId, ref, headHash, countsOnly),
 
-    packageScripts: (projectId: string | null, worktreeId: string | null) =>
+    packageScripts: (projectId: string, worktreeId: string) =>
       host("packageScripts", projectId, worktreeId),
     // Every worktree's listing of one project, which all carry the
     // project's launch row picks.
-    packageScriptsAll: (projectId: string | null) =>
-      host("packageScripts", projectId),
-    packageScriptSort: (projectId: string | null) =>
+    packageScriptsAll: (projectId: string) => host("packageScripts", projectId),
+    packageScriptSort: (projectId: string) =>
       host("packageScriptSort", projectId),
-    packageScriptOrder: (projectId: string | null) =>
+    packageScriptOrder: (projectId: string) =>
       host("packageScriptOrder", projectId),
 
     portPoolInstalled: () => host("portPoolInstalled"),

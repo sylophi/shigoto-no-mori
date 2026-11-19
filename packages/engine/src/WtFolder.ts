@@ -151,17 +151,6 @@ const make = Effect.gen(function* () {
           known.success.find((id) => id.path === p || id.path === real),
         );
       const from = yield* at(row.from_path);
-      if (from !== undefined) {
-        // Not knowing what runs in it is no leave to move it.
-        const busy = Result.isFailure(running)
-          ? running.failure.message
-          : closeFirst(
-              running.success.filter(({ cwd }) =>
-                isSameOrInside(cwd, row.from_path),
-              ),
-            );
-        if (busy !== undefined) return yield* failed(fromPath, busy);
-      }
       if (from === undefined) {
         // Listed at its wt/ path with no `moving` record to say it is this
         // one: it stays stuck, never carried by path alone. Listed nowhere,
@@ -177,7 +166,16 @@ const make = Effect.gen(function* () {
           WHERE from_path = ${fromPath} AND moved = 0
           AND NOT EXISTS (SELECT 1 FROM moving WHERE from_path = ${fromPath})`;
       }
-      // A move records itself as made (Worktrees.carryMoved).
+      // Not knowing what runs in it is no leave to move it.
+      const busy = Result.isFailure(running)
+        ? running.failure.message
+        : closeFirst(
+            running.success.filter(({ cwd }) =>
+              isSameOrInside(cwd, row.from_path),
+            ),
+          );
+      if (busy !== undefined) return yield* failed(fromPath, busy);
+      // A move records itself as made (worktrees/moving.ts, carry).
       const outcome = yield* Effect.result(
         worktrees.move({ project, worktree: from }, row.to_path),
       );

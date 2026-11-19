@@ -72,7 +72,7 @@ import {
   MACBOOK_ID,
 } from "../fixtures/fixtures.ts";
 import { unposedPullRequests } from "../fixtures/pullRequestFixtures.ts";
-import { noop } from "./world.ts";
+import { noop, projectNamed } from "./world.ts";
 
 // Which app draws the forest: the desktop window on Studio Mac, whose
 // own projects are local there, or the web shell, a browser to which
@@ -84,7 +84,6 @@ const MARKS: SidebarMarks = {
   terrier: true,
   deviceBadges: true,
   agentsWaiting: true,
-  allowAgentWorking: false,
 };
 
 // Every device on the account as the shell lists it: Studio Mac as
@@ -166,7 +165,7 @@ function inboxModel(shell: SceneShell) {
     hiddenPrefixes: [],
     groupedPrefixes: [],
     shutGroups: new Set(),
-    allowAgentWorking: MARKS.allowAgentWorking,
+    allowAgentWorking: false,
     pinWaiting: MARKS.agentsWaiting,
   });
 }
@@ -195,7 +194,7 @@ function treeModel(shell: SceneShell, openKey: string | null) {
       hidden: new Set(),
     },
     hiddenPrefixes: [],
-    allowAgentWorking: MARKS.allowAgentWorking,
+    allowAgentWorking: false,
     byPrefix: null,
     arrangeMode: false,
     byOwner: null,
@@ -222,7 +221,7 @@ export function sceneGrid() {
     items,
     order: manualOrder(items),
     hiddenPrefixes: [],
-    allowAgentWorking: MARKS.allowAgentWorking,
+    allowAgentWorking: false,
     byOwner: true,
     deviceFilter: null,
     mirrors: [],
@@ -234,8 +233,7 @@ export function sceneGrid() {
 // The group key the open project goes by: shigoto-no-mori, this
 // machine's on the desktop, the Studio Mac's from a browser.
 function smGroupKey(shell: SceneShell): string {
-  const project = forests[LOCAL_DEVICE_ID]?.projects[0];
-  if (!project) throw new Error("no fixture project");
+  const project = projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori");
   return projectGroupKey(project, {
     deviceId: LOCAL_DEVICE_ID,
     isThisDevice: shell === "desktop",

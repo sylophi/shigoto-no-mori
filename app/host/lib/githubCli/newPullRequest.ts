@@ -407,14 +407,14 @@ const FETCH_TIMEOUT = Duration.minutes(2);
 // the URL ends in. A failed fetch leaves nothing behind.
 export const stageAttachmentFromUrl = Effect.fn(
   "NewPullRequest.stageAttachmentFromUrl",
-)(function* (
-  source: { readonly id: string; readonly stem: string; readonly url: string },
-  // A link to a private host is refused unless privateHosts is set.
-  opts: { privateHosts?: boolean } = {},
-) {
+)(function* (source: {
+  readonly id: string;
+  readonly stem: string;
+  readonly url: string;
+}) {
   const fs = yield* FileSystem.FileSystem;
   const fetched = yield* Effect.gen(function* () {
-    const response = yield* fetchLink(source.url, opts.privateHosts ?? false);
+    const response = yield* fetchLink(source.url);
     const body = response.body;
     if (!response.ok || !body) {
       return yield* new GhActionError({
@@ -479,17 +479,14 @@ export const stageAttachmentFromUrl = Effect.fn(
 // isn't caught, only one that says so.
 const MAX_REDIRECTS = 5;
 
-const fetchLink = Effect.fnUntraced(function* (
-  url: string,
-  privateHosts: boolean,
-) {
+const fetchLink = Effect.fnUntraced(function* (url: string) {
   let current = url;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     const target = new URL(current);
     if (target.protocol !== "https:" && target.protocol !== "http:") {
       return yield* new GhActionError({ reason: `${url} isn't on the web` });
     }
-    if (!privateHosts && isPrivateHost(target.hostname)) {
+    if (isPrivateHost(target.hostname)) {
       return yield* new GhActionError({
         reason: `${url} points at this machine or its network`,
       });

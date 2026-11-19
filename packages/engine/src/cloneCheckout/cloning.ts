@@ -39,7 +39,7 @@ const fail = (reason: CloneFailed["reason"]) => (cause: unknown) =>
   new CloneFailed({ reason, cause });
 
 export const makeCloning = ({
-  reads: { configHome, umask, lstatUnder, lstatAll, readConversions, blobId },
+  reads: { umask, lstatUnder, lstatAll, readConversions, blobId },
   verified: { recordsOf, keepRecords },
 }: {
   readonly reads: ReadsArea;
@@ -132,7 +132,7 @@ export const makeCloning = ({
       // Where the attributes outside the tree live, as git looks for them,
       // and the config files that decide which one is the global one.
       const readAttributeFiles = Effect.gen(function* () {
-        const home = yield* configHome;
+        const home = paths.configHome;
         let globalAttrs = (yield* git
           .run(source, ["config", "--path", "--get", "core.attributesFile"])
           .pipe(Effect.orElseSucceed(() => ""))).trim();

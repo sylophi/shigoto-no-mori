@@ -26,10 +26,10 @@ import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import * as Git from "@shigomori/engine/Git";
-import { findProjectInsideDataDir, listedProjects } from "./projects";
+import { listedProjects } from "./projects";
 import * as Scripts from "./Scripts";
 import * as Worktrees from "./Worktrees";
-import { dataDir, home } from "@shared/paths";
+import { dataDir, home, toAbsolute } from "@shared/paths";
 
 class NukeRefusedError extends Schema.TaggedError<NukeRefusedError>()(
   "NukeRefusedError",
@@ -55,7 +55,9 @@ export function nukeTrap(
       "home folder. Point SHIGOMORI_DATA_DIR or the data folder elsewhere first."
     );
   }
-  const trapped = findProjectInsideDataDir(projects, [root]);
+  const trapped = projects.find((p) =>
+    isSameOrInside(toAbsolute(p.path), root),
+  );
   if (trapped !== undefined) {
     return (
       `Refusing to nuke: project "${trapped.name}" lives inside ${root}, ` +
@@ -92,9 +94,6 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
   // under way restarts into (Shell.holdUpdater).
   readonly holdUpdater: Effect.Effect<string | null>;
   readonly home?: string;
-  // How long one worktree's teardown may run (Worktrees.forceRemove's
-  // minute by default).
-  readonly teardownTimeoutMs?: number;
 }) {
   const { onProgress } = options;
   const projects = yield* listedProjects;
@@ -148,11 +147,7 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
             // A teardown script that never ends is a cleanup failure,
             // not a nuke that never finishes.
             const failed = yield* worktrees
-              .forceRemove({
-                projectId: project.id,
-                worktreeId: target.id,
-                cleanupWithin: options.teardownTimeoutMs,
-              })
+              .forceRemove({ projectId: project.id, worktreeId: target.id })
               .pipe(
                 Effect.as(null),
                 Effect.catch((error) => Effect.succeed(messageOf(error))),

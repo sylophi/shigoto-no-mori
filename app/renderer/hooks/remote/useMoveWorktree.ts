@@ -37,10 +37,10 @@ import { useApi } from "@/lib/runtime/pageApi";
 function invalidateLanded(
   queryClient: QueryClient,
   localDeviceId: string,
-  landed: Landed,
+  projectId: string,
 ): void {
   void queryClient.invalidateQueries({
-    queryKey: queryKeysFor(localDeviceId).branches(landed.worktree.projectId),
+    queryKey: queryKeysFor(localDeviceId).branches(projectId),
   });
 }
 
@@ -146,7 +146,7 @@ export function useMoveMutation<Result extends Landed>(
           worktreeName: pullWorktreeName(worktree),
           ...choice,
         });
-        invalidateLanded(queryClient, localDeviceId, landed);
+        invalidateLanded(queryClient, localDeviceId, landed.worktree.projectId);
         return landed;
       }
       const { worktree, targetDeviceId } = move;
@@ -216,9 +216,7 @@ export function useTeardownSource(move: Move) {
       if (move.direction === "pull") {
         invalidateHostDevice(queryClient, deviceId);
       } else {
-        invalidateLanded(queryClient, api.deviceId, {
-          worktree: move.worktree,
-        });
+        invalidateLanded(queryClient, api.deviceId, move.worktree.projectId);
       }
     },
     meta: { errorTitle: "Couldn't tear down the source worktree" },

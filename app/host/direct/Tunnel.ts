@@ -47,7 +47,6 @@ import {
   BACKOFF_LADDER_MS,
   backoffDelayMs,
   restartSchedule,
-  STABLE_CONNECTION_MS,
 } from "@shared/remote/supervisor";
 import { bundledBinaryPath } from "@shared/packaging/bundledBinary.mts";
 import {
@@ -73,11 +72,6 @@ const TUNNEL_BACKOFF_LADDER_MS: readonly [number, ...number[]] = [
   ...BACKOFF_LADDER_MS,
   60_000,
 ];
-
-// A child that stayed up at least this long before dying is treated as
-// healthy, so its restart starts the ladder from the bottom: the same
-// stable threshold the socket supervisor uses.
-const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
 
 // The readiness probe schedule: a fresh child is advertised only once
 // its hostname actually routes from the edge to the local listener
@@ -254,10 +248,6 @@ export class Tunnel extends Context.Service<
   }
 >()("sm/host/Tunnel") {}
 
-// How long a SIGTERM'd child gets before SIGKILL. cloudflared closes
-// its edge connections promptly, so this only bounds a wedged one.
-const KILL_GRACE_MS = 3_000;
-
 // One readiness probe attempt, true when the hostname routes from the
 // edge to the local listener: a plain HTTPS GET of the tunnel
 // hostname. The direct listener is a ws server, so a non-upgrade GET
@@ -417,7 +407,7 @@ const make = (options: Options) =>
       Effect.flatMap(account.current, (current) =>
         Effect.tryPromise({
           try: async () => {
-            if (current.facts === null || current.service === null) {
+            if (current.facts === null) {
               throw new Error(
                 "signed out or the account service is not configured",
               );
@@ -621,7 +611,6 @@ const make = (options: Options) =>
                   // the host's crash leaves is reaped through the pid
                   // file as the next host starts.
                   detached: false,
-                  forceKillAfter: KILL_GRACE_MS,
                 }),
               )
               .pipe(Effect.result);
@@ -738,9 +727,7 @@ const make = (options: Options) =>
             yield* FiberHandle.run(
               supervisor,
               runOnce(wanted.port).pipe(
-                Effect.repeat(
-                  restartSchedule(TUNNEL_BACKOFF_LADDER_MS, TUNNEL_STABLE_MS),
-                ),
+                Effect.repeat(restartSchedule(TUNNEL_BACKOFF_LADDER_MS)),
                 Effect.andThen(Effect.never),
               ),
             );

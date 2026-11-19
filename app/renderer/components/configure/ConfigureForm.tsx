@@ -7,7 +7,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriPatch } from "@/hooks/config/useShigomoriPatch";
-import { notifyError } from "@/lib/toast";
+import { revealInFolder } from "@/lib/openExternal";
 import {
   type CarryOverEntry,
   type ShigomoriConfig,
@@ -132,11 +132,9 @@ export function ConfigureForm({
       home={home}
       remote={remote}
       deviceLabel={deviceLabel}
-      onReveal={() => {
-        api
-          .run(api.shell.showItemInFolder({ path: projectPath }))
-          .catch((err) => notifyError("Couldn't reveal folder", err));
-      }}
+      onReveal={() =>
+        revealInFolder(api, projectPath, "Couldn't reveal folder")
+      }
       onOpenLaunchTools={() => {
         selectSettingsTab(LAUNCH_TAB);
         void navigate({ to: "/settings" });

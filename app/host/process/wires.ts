@@ -84,7 +84,7 @@ const onLink = <A, E>(
 const linkStatus = () =>
   Graph.readNow(
     onLink((link) => link.status),
-    () => ({ listening: false, port: null, bindAddress: null, error: null }),
+    () => ({ listening: false, port: null, error: null }),
   );
 const onTunnel = <A, E>(
   f: (tunnel: TunnelService.Tunnel["Service"]) => Effect.Effect<A, E>,
@@ -107,7 +107,7 @@ export const tunnelLayer = TunnelService.layer({
 export const loopbackLayer = Layer.unwrap(
   Effect.map(DeviceId.current, (deviceId) =>
     Loopback.layer({
-      deviceId: () => deviceId,
+      deviceId,
       appVersion: hostFacts().appVersion,
       file: () => join(dataDir(), LOOPBACK_FILE),
       // The window's own page dials it, from the renderer scheme.
@@ -281,7 +281,7 @@ const listenerPortPath = () => join(hostFacts().userDataPath, "direct-port");
 // (listenerPort.ts), read back from status. accountId rides the opts as
 // an identity field, so an account switch restarts the listener and
 // drops every socket authed under the old account.
-export async function refreshDirectHost(): Promise<void> {
+async function refreshDirectHost(): Promise<void> {
   await Graph.run(
     Effect.flatMap(DeviceLink.DeviceLink, (link) =>
       reconcileOnLastPort(
@@ -336,21 +336,22 @@ export async function refreshDirectHost(): Promise<void> {
 }
 
 // What follows the device's settings wherever they are written, the
-// Settings form or `sm config` in a terminal: `reconcile` (the listener
-// and its tunnel, refreshDirectHost), and terrier's readiness, re-probed
+// Settings form or `sm config` in a terminal: the listener and its
+// tunnel (refreshDirectHost), and terrier's readiness, re-probed
 // in case its toggle flipped. The start's pass is the account's first
 // report (handlers.ts applyAccount).
-export const followDeviceSettings = (reconcile: Effect.Effect<void>) =>
-  Layer.effectDiscard(
-    Effect.gen(function* () {
-      const written = yield* (yield* StoreChanges.StoreChanges).subscribe;
-      const terrier = yield* Terrier.Terrier;
-      yield* written.pipe(
-        Stream.filter((tables) => tables.has("device_config")),
-        Stream.runForEach(() =>
-          terrier.invalidate.pipe(Effect.andThen(reconcile)),
+export const followDeviceSettings = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const written = yield* (yield* StoreChanges.StoreChanges).subscribe;
+    const terrier = yield* Terrier.Terrier;
+    yield* written.pipe(
+      Stream.filter((tables) => tables.has("device_config")),
+      Stream.runForEach(() =>
+        terrier.invalidate.pipe(
+          Effect.andThen(Effect.promise(refreshDirectHost)),
         ),
-        Effect.forkScoped,
-      );
-    }),
-  );
+      ),
+      Effect.forkScoped,
+    );
+  }),
+);

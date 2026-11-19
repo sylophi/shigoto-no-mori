@@ -9,7 +9,7 @@ import type { PathPickerProps } from "@shigomori/ui/views/shared/PathPickerView.
 import type { PickerEntry } from "@shigomori/ui/views/shared/PathPickerView.tsx";
 import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync";
 import { useWorktreeFolder } from "@/hooks/remote/useWorktreeFolder";
-import type { IgnoreSelection } from "./ignoreChoice";
+import type { IgnoreSelection } from "@shigomori/contracts/leaveOutRule";
 import {
   type IgnoredPaths,
   leaveOutEdit,

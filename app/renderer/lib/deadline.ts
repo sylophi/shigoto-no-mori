@@ -9,24 +9,17 @@ export interface Deadline {
   readonly ms: number;
 }
 
-interface Clocks {
-  readonly monotonic: number;
-  readonly wall: number;
-}
-
-const clocks = (): Clocks => ({
+const clocks = () => ({
   monotonic: performance.now(),
   wall: Date.now(),
 });
 
-export function deadlineIn(ms: number, now: Clocks = clocks()): Deadline {
-  return { ...now, ms };
+export function deadlineIn(ms: number): Deadline {
+  return { ...clocks(), ms };
 }
 
-export function deadlinePassed(
-  deadline: Deadline,
-  now: Clocks = clocks(),
-): boolean {
+export function deadlinePassed(deadline: Deadline): boolean {
+  const now = clocks();
   const wall = now.wall - deadline.wall;
   return (
     now.monotonic - deadline.monotonic >= deadline.ms ||

@@ -1,8 +1,10 @@
 import { queryOptions, skipToken, useQuery } from "@tanstack/react-query";
 import type { ProjectIcon } from "@shigomori/contracts/schemas";
-import type { HostScope } from "@/hooks/remote/useHostScope";
 import { useDeviceApi } from "@/hooks/remote/useDeviceApi";
-import { forestRead } from "@/hooks/remote/hostForestScope";
+import {
+  forestRead,
+  type HostForestScope,
+} from "@/hooks/remote/hostForestScope";
 import { queryKeysFor } from "@/lib/queryKeys";
 
 // The icon belongs to (device, project), not to a project alone, so the
@@ -13,10 +15,7 @@ import { queryKeysFor } from "@/lib/queryKeys";
 // dropping it. Cached forever: `null` is the success case for
 // icon-less projects, not an error, and an icon does not change while
 // the app runs.
-function projectIconQueryOptions(
-  projectId: string,
-  scope: Pick<HostScope, "deviceId"> & { api: HostScope["api"] | undefined },
-) {
+function projectIconQueryOptions(projectId: string, scope: HostForestScope) {
   const { deviceId, api } = scope;
   return queryOptions<ProjectIcon | null>({
     queryKey: queryKeysFor(deviceId).projectIcon(projectId),

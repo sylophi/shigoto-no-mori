@@ -255,9 +255,6 @@ function dataDirOrNone(): string {
   }
 }
 
-// The layer graph's build, started in the ready handler.
-let graph: Promise<unknown> = Promise.resolve();
-
 // An update install or a relaunch: a quit that neither asks about busy
 // work nor waits for it (host/process/layer.ts has why), counted from
 // the moment it is asked for, before its quit arrives.
@@ -379,7 +376,7 @@ app.on("ready", async () => {
     app.exit(1);
     return;
   }
-  graph = runtime.context();
+  const graph = runtime.context();
   buildAppMenu();
   // The crash guards, before the window exists so an early fatal error
   // is still caught.

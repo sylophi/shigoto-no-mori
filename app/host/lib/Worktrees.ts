@@ -51,8 +51,6 @@ import {
 import { makeMoving } from "./worktrees/moving";
 import { makeRemoving, type RemoveInput } from "./worktrees/removing";
 
-export type { CreateNotifiers } from "./worktrees/creating";
-
 // What a move or a removal can fail with before or at the engine's
 // commit.
 type ChangeError =
@@ -171,12 +169,11 @@ export class Worktrees extends Context.Service<
       notifyScript: Scripts.NotifyScriptEvent,
     ) => Effect.Effect<DeleteStackResult, ChangeError, Engine.Services>;
     // A removal that must happen (a nuke's, a landing's undone create),
-    // its cleanup on a clock of `cleanupWithin` ms (a minute by default),
+    // its cleanup on a clock of a minute,
     // and without it when it fails.
     readonly forceRemove: (input: {
       readonly projectId: string;
       readonly worktreeId: string;
-      readonly cleanupWithin?: number | undefined;
     }) => Effect.Effect<void, ChangeError, Engine.Services>;
   }
 >()("sm/host/Worktrees") {}

@@ -11,7 +11,7 @@ import * as Git from "./Git.ts";
 
 export type RefTip = { readonly ref: string; readonly commit: string };
 
-// A ref, a have, a refspec or a bundle that won't do. `subject` is what
+// A ref, a refspec or a bundle that won't do. `subject` is what
 // was given, and `said` git's words where git refused.
 export class BundleRefused extends Schema.TaggedError<BundleRefused>()(
   "BundleRefused",
@@ -19,7 +19,6 @@ export class BundleRefused extends Schema.TaggedError<BundleRefused>()(
     reason: Schema.Literals([
       "bad-ref",
       "unknown-ref",
-      "bad-have",
       "bad-refspec",
       "not-a-bundle",
       "unfetchable",
@@ -41,8 +40,6 @@ export class BundleRefused extends Schema.TaggedError<BundleRefused>()(
         return `Invalid ref ${quoted}.`;
       case "unknown-ref":
         return `Ref ${quoted} does not exist here.`;
-      case "bad-have":
-        return `Invalid have ${quoted} (must be a hex commit hash).`;
       case "bad-refspec":
         return `Invalid refspec ${quoted}: need <src>:<dst> full refs with dst under ${SHIGOMORI_REFS}.`;
       case "not-a-bundle":
@@ -60,7 +57,6 @@ export const INCOMING_PREFIX = `${SHIGOMORI_REFS}incoming/`;
 export const incomingRef = (branch: string) => `${INCOMING_PREFIX}${branch}`;
 
 const REF = /^refs\/[A-Za-z0-9][A-Za-z0-9._/-]*$/;
-const COMMIT = /^[0-9a-f]{4,64}$/;
 
 // A full ref git takes without question: no `..`, `//`, trailing slash
 // or .lock.
@@ -124,11 +120,6 @@ const make = Effect.gen(function* () {
           reason: "unknown-ref",
           subject: ref,
         });
-      }
-    }
-    for (const have of haves) {
-      if (!COMMIT.test(have)) {
-        return yield* new BundleRefused({ reason: "bad-have", subject: have });
       }
     }
     // The haves this repository has as commits leave their history out.

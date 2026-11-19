@@ -47,7 +47,6 @@ import {
   cloneRefusal,
   type Landing,
   type LandingTarget,
-  LANDS_HERE,
 } from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
 
 // Where the pull would refuse at step 2 (host/lib/sync/landing.ts
@@ -63,7 +62,7 @@ import {
 function useLocalCollision(
   localProject: Project | undefined,
   worktree: Worktree,
-  landing: Landing = LANDS_HERE,
+  landing: Landing,
 ): {
   // The branch the copy lands on.
   landingBranch: string;
@@ -110,7 +109,7 @@ export type PullReviewProps = {
   target: LandingTarget | null;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
-  landing?: Landing;
+  landing: Landing;
   toPeer?: DestinationPick;
   // The leave-out rule and the setup switch, the flows' shared pair.
   pull: PullChoiceState;
@@ -180,7 +179,7 @@ export function PullReviewStep({
             worktree={worktree}
             target={target}
             deviceLabel={thisDeviceLabel}
-            landing={landing ?? LANDS_HERE}
+            landing={landing}
             toPeer={toPeer}
             pull={pull}
             offline={waitsFor !== null}
@@ -232,7 +231,7 @@ function PullReviewFooter({
   // Where the flow lands, null while unpicked. A clone has no project
   // to check for collisions in yet.
   target: LandingTarget | null;
-  landing?: Landing;
+  landing: Landing;
   waiting: boolean;
   blocked: string | null;
   idleNote: string;

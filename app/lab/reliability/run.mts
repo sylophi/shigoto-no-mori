@@ -10,14 +10,7 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { isolateGit } from "../../../test/gitIsolation.ts";
 import { endAll } from "../../../test/testProcesses.mts";
-import {
-  CLIENT_KINDS,
-  Lab,
-  sleep,
-  within,
-  type ClientKind,
-  type TraceLine,
-} from "./lab.mts";
+import { CLIENT_KINDS, Lab, type ClientKind } from "./lab.mts";
 import {
   ALL_SCENARIOS,
   hubDiffersFromMain,
@@ -27,6 +20,7 @@ import {
   terminalRoundTrip,
   type Scenario,
 } from "./scenarios.mts";
+import { sleep, within, type TraceLine } from "./util.mts";
 
 // The seed repositories' git and the apps' own off this repository and
 // this machine's config (../../../test/gitIsolation.ts).
@@ -279,9 +273,9 @@ async function heal(): Promise<void> {
   for (const extra of deskWindows.slice(2)) {
     await lab.closeWindow(extra).catch(() => {});
   }
-  if (lab.hostPid() === null) {
-    await lab.stopHostApp();
-    await lab.launchHost(false);
+  if (lab.hostApp.hostPid() === null) {
+    await lab.hostApp.stop();
+    await lab.hostApp.launch(false);
   }
   for (const page of lab.pages()) {
     await within(60_000, "the reload", page.page.reload()).catch(() => {});

@@ -12,7 +12,7 @@ export function useWorktreeIgnoredPaths(
   worktreeId: string,
   // Off while nothing on screen reads the list: the walk covers the
   // whole checkout, over the device link on a peer's worktree.
-  { enabled = true }: { enabled?: boolean } = {},
+  { enabled }: { enabled: boolean },
 ) {
   const { api, keys } = useHostScope();
   return useQuery<SyncIgnoredPathsResult>({

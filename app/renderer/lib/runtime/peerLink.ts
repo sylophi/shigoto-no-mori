@@ -11,15 +11,10 @@
 // that holds the session reads it with this build's schemas (its
 // device link's RPC client), so nothing here decodes it again.
 import { refusalNamed } from "@shigomori/contracts/errors";
+import type { HubPeerPush } from "@shigomori/contracts/modules/hub";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Link } from "@shared/ipc/transport";
-
-type PeerPush = {
-  readonly deviceId: string;
-  readonly channel: string;
-  readonly payload: unknown;
-};
 
 // The input is left out when there is none, so a void contract input
 // crosses the bridge as an absent field.
@@ -39,10 +34,10 @@ export function peerLink(hub: Link, deviceId: string): Link {
     pushes: (channel) =>
       hub.pushes("hub:peerPush").pipe(
         Stream.filter((push) => {
-          const { deviceId: from, channel: on } = push as PeerPush;
+          const { deviceId: from, channel: on } = push as HubPeerPush;
           return from === deviceId && on === channel;
         }),
-        Stream.map((push) => (push as PeerPush).payload),
+        Stream.map((push) => (push as HubPeerPush).payload),
       ),
   };
 }

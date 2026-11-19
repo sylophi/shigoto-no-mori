@@ -53,13 +53,11 @@ export class Loopback extends Context.Service<
     // data dir off: a terminal then reads the app as not running rather
     // than dialing one about to relaunch.
     readonly unpublish: Effect.Effect<void>;
-    // Writes it again, after a data wipe took it along.
-    readonly publish: Effect.Effect<void>;
   }
 >()("sm/host/Loopback") {}
 
 const make = (options: {
-  readonly deviceId: () => string;
+  readonly deviceId: string;
   readonly appVersion: string;
   // Where loopback.json goes: the data dir's, resolved late because the
   // data dir is a boot-time fact.
@@ -82,15 +80,13 @@ const make = (options: {
       },
     });
     yield* link.reconcile(
-      Effect.sync(() => ({
+      Effect.succeed({
         port: 0,
         bindAddress: "127.0.0.1",
-        deviceId: options.deviceId(),
+        deviceId: options.deviceId,
         appVersion: options.appVersion,
-        ...(options.allowedOrigin === undefined
-          ? {}
-          : { allowedOrigin: options.allowedOrigin }),
-      })),
+        allowedOrigin: options.allowedOrigin,
+      }),
     );
     const status = yield* link.status;
     if (!status.listening || status.port === null) {
@@ -122,7 +118,6 @@ const make = (options: {
     return Loopback.of({
       address: Effect.succeed({ port, token, shellToken }),
       unpublish,
-      publish,
     });
   });
 

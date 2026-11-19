@@ -17,11 +17,10 @@ import * as Layer from "effect/Layer";
 import type * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 
-export type Account = {
-  readonly reported: boolean;
-  readonly facts: AccountFacts | null;
-  readonly service: AccountService | null;
-};
+export type Account = { readonly reported: boolean } & (
+  | { readonly facts: null; readonly service: null }
+  | { readonly facts: AccountFacts; readonly service: AccountService }
+);
 
 export const UNREPORTED: Account = {
   reported: false,
@@ -49,17 +48,17 @@ export const layer = Layer.effect(
       set: Effect.fn("HostAccount.set")((next: AccountFacts | null) =>
         SubscriptionRef.modify(account, (previous) => [
           previous,
-          {
-            reported: true,
-            facts: next,
-            service:
-              next === null
-                ? null
-                : previous.facts?.hubUrl === next.hubUrl &&
-                    previous.service !== null
-                  ? previous.service
-                  : createAccountService({ baseUrl: next.hubUrl }),
-          },
+          next === null
+            ? { reported: true, facts: null, service: null }
+            : {
+                reported: true,
+                facts: next,
+                service:
+                  previous.facts !== null &&
+                  previous.facts.hubUrl === next.hubUrl
+                    ? previous.service
+                    : createAccountService({ baseUrl: next.hubUrl }),
+              },
         ]),
       ),
     }),

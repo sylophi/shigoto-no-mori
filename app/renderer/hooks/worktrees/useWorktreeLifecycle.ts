@@ -260,11 +260,15 @@ export const worktreeLifecycleAtom = Atom.family((deviceId: string) =>
 const lifecycleOf = (result: AsyncResult.AsyncResult<Lifecycle, unknown>) =>
   AsyncResult.isSuccess(result) ? result.value : NOTHING;
 
-// Null asks for nothing: a page whose worktree lives on a peer has no
-// local create lifecycle to follow.
+// The worktree's create phase. The phases stream to this machine alone,
+// so a page scoped to a peer has none: a pull can mint a local worktree
+// with the SAME id as the peer's (ids hash the managed path), and the
+// peer's page must not take its phase.
 export function useWorktreeCreatePhase(
-  worktreeId: string | null,
+  worktree: Pick<Worktree, "id">,
 ): CreatePhase | null {
+  const { remote } = useHostScope();
+  const worktreeId = remote ? null : worktree.id;
   return useAtomValue(
     worktreeLifecycleAtom(useApi().deviceId),
     (result) =>
@@ -278,8 +282,7 @@ export function useWorktreeCreatePhase(
 // this window can tell: the create phases stream to this machine alone,
 // so a peer's page can't see them and relies on its host's refusals.
 export function useWorktreeSettingUp(worktree: Pick<Worktree, "id">): boolean {
-  const { remote } = useHostScope();
-  return useWorktreeCreatePhase(remote ? null : worktree.id) !== null;
+  return useWorktreeCreatePhase(worktree) !== null;
 }
 
 // Whether the device is in the middle of removing the worktree, as

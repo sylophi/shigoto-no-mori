@@ -121,9 +121,8 @@ const settingsFor = (flags: Parameters<typeof resolveProject>[0]) =>
   Effect.gen(function* () {
     const project = yield* resolveProject(flags);
     const settings: Settings = {
-      scope: { kind: "project", projectId: project.id, path: project.path },
+      scope: Config.projectScope(project),
       project: project.name,
-      listCommand: "projects config list",
       descriptions: keyDescriptions(ShigomoriConfigSchema),
     };
     return { settings, project };
@@ -177,17 +176,14 @@ const settingsOf = Command.make("config", shorthandFlags, (input) =>
     // In one commit.
     const setup = script(input.setup);
     const teardown = script(input.teardown);
-    yield* config.patchProject(
-      { kind: "project", projectId: project.id, path: project.path },
-      {
-        ...Option.match(input.defaultBranch, {
-          onNone: () => ({}),
-          onSome: (defaultBranch) => ({ defaultBranch }),
-        }),
-        ...("value" in setup ? { "scripts.setup": setup.value } : {}),
-        ...("value" in teardown ? { "scripts.teardown": teardown.value } : {}),
-      },
-    );
+    yield* config.patchProject(Config.projectScope(project), {
+      ...Option.match(input.defaultBranch, {
+        onNone: () => ({}),
+        onSome: (defaultBranch) => ({ defaultBranch }),
+      }),
+      ...("value" in setup ? { "scripts.setup": setup.value } : {}),
+      ...("value" in teardown ? { "scripts.teardown": teardown.value } : {}),
+    });
     yield* json
       ? emit({ ok: true, project: project.name })
       : out(styles(stdoutColor).green(`configured ${project.name}`));

@@ -5,7 +5,6 @@ import { DeviceChip } from "@/components/shared/DeviceChip";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
-import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useWorktreeDeletionFooter } from "@/hooks/worktrees/useWorktreeDeletionFooter";
 import { useTakeWorktreeDialog } from "@/hooks/worktrees/useWorktreeNav";
@@ -57,11 +56,6 @@ export function WorktreeDetailInner({
   // Configure exists for every device, so the breadcrumb links there
   // whichever device the page is scoped to.
   const { toProjectPage } = useProjectNav();
-  // Which device this page is scoped to. Everything data-shaped below
-  // already rides the host scope. `remote` only gates what is local by
-  // nature: the create-phase lock (LaunchSection gates launching
-  // itself, and the transfers and the device chip pick their side).
-  const { remote } = useHostScope();
   // The transfers render in two parts (the footer below) that share
   // which dialog is open.
   const [transferDialog, setTransferDialog] = useState<TransferDialog>(null);
@@ -108,10 +102,7 @@ export function WorktreeDetailInner({
   // Carry-over moves real files into the new worktree, so we lock the
   // page until it finishes. inLimbo wins, so a
   // delete-during-setup race shows the destructive banner instead.
-  // Scoped to this machine: the lifecycle broadcast is local, and a
-  // pull can mint a local worktree with the SAME id as the peer's (ids
-  // hash the managed path), so a peer's page must not lock for it.
-  const createPhase = useWorktreeCreatePhase(remote ? null : worktree.id);
+  const createPhase = useWorktreeCreatePhase(worktree);
   const bannerLabel =
     limboLabel ?? (createPhase ? CREATE_PHASE_LABEL[createPhase] : null);
   const locked = inLimbo || createPhase === "carryOver";
@@ -151,8 +142,6 @@ export function WorktreeDetailInner({
       description={
         description !== null && (
           <DescriptionSection
-            // An edit stays with its worktree.
-            key={worktree.id}
             worktree={worktree}
             description={description}
             pullRequestBody={pullRequestBody}
@@ -163,8 +152,7 @@ export function WorktreeDetailInner({
       launch={<LaunchSection worktree={worktree} />}
       prSection={!pullRequest && <PullRequestSection worktree={worktree} />}
       git={<GitSection worktree={worktree} />}
-      // Keyed so an open add or edit form stays with its worktree.
-      ports={<PortsSection key={worktree.id} worktree={worktree} />}
+      ports={<PortsSection worktree={worktree} />}
       scripts={<ScriptsSection worktree={worktree} />}
       footer={
         <WorktreeDetailFooter

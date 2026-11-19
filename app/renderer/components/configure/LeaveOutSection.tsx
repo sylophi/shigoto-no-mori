@@ -22,9 +22,9 @@ import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import {
   type IgnoreSelection,
   presetOfSelection,
-  sameSelection,
   selectionOfPreset,
-} from "../worktreeDetail/flow/ignoreChoice";
+} from "@shigomori/contracts/leaveOutRule";
+import { sameSelection } from "../worktreeDetail/flow/ignoreChoice";
 import {
   LeaveOutPicker,
   type LeaveOutBrowsing,

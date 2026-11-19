@@ -3,7 +3,6 @@
 // path check, repo identity and use stats), and every caller reads it
 // from the engine as `sm projects list` does, so none can be behind a
 // write made here or in a terminal.
-import { isSameOrInside } from "@shigomori/contracts/projectPaths";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -13,7 +12,6 @@ import * as Projects from "@shigomori/engine/Projects";
 import * as Registry from "@shigomori/engine/Registry";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import { handedRemotes, pickCloneUrl } from "@shared/cloneUrl";
-import { toAbsolute } from "@shared/paths";
 import { changing } from "../Engine";
 
 // Every listed project as the registry holds it, none of the rows'
@@ -132,20 +130,6 @@ export const findProjectByIdentityOrFail = (identity: string) =>
       () => new NoProjectOfIdentityError(),
     ),
   );
-
-// A project repo registered from inside the data dir (nothing stops
-// projects.add from accepting one) would be wiped by a nuke, which
-// refuses up front on this test (a data-folder move asks the engine's
-// own). Takes the caller's already-loaded list so the guard adds no
-// extra read.
-export function findProjectInsideDataDir(
-  projects: readonly Project[],
-  roots: readonly string[],
-): Project | undefined {
-  return projects.find((p) =>
-    roots.some((root) => isSameOrInside(toAbsolute(p.path), root)),
-  );
-}
 
 // The project `projectId` names, or the entity-gone error.
 export const findProject = Effect.fnUntraced(function* (projectId: string) {

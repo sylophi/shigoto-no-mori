@@ -66,7 +66,7 @@ const refusal = (channel: string, reason: "unavailable" | "noSafeAnswer") =>
   });
 
 export type LocalRegistrar = {
-  served: Served<HandlerContext, never, unknown>;
+  served: Served<HandlerContext, unknown>;
   link: Link;
   // A push to the page, as a host's reaches its windows.
   push: <M extends ContractModule, K extends PushKeys<M>>(
@@ -105,7 +105,7 @@ export function createLocalRegistrar(options: {
 }): LocalRegistrar {
   // What a handler rejects with (a contract error, any Error) is the
   // call's failure as it is, and a synchronous throw is too.
-  const served = createServed<HandlerContext, never, unknown>({
+  const served = createServed<HandlerContext, unknown>({
     failure: (error) => error,
   });
   const fanOut = pushFanOut();
@@ -151,7 +151,6 @@ export function createLocalRegistrar(options: {
   };
 
   const link: Link = {
-    local: true,
     call(channel, input) {
       const call = invokeIndex.get(channel);
       if (call === undefined) {

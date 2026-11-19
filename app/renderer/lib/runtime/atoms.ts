@@ -341,7 +341,7 @@ export function overlay<A, E>(
 }
 
 // An overlay that ends by itself once the view reads `caughtUp` (or
-// `withinMs` passes), or with "next", at the view's next value, which is
+// five seconds pass), or with "next", at the view's next value, which is
 // newer than the edit laid over it: a row the host has just made,
 // removed or answered with, shown before its stream says so, for a
 // caller that moves on to (or off) that row at once.
@@ -350,7 +350,7 @@ export function layOver<A, E>(
   shown: ReturnType<typeof optimisticView<A, E>>,
   view: Atom.Atom<AsyncResult.AsyncResult<A, E>>,
   edit: (value: A) => A,
-  until: { caughtUp: (value: A) => boolean; withinMs?: number } | "next",
+  until: { caughtUp: (value: A) => boolean } | "next",
 ): void {
   const laid = overlay(registry, shown, edit);
   endWith(registry, view, laid, until);
@@ -360,7 +360,7 @@ export function endWith<A, E>(
   registry: AtomRegistry.AtomRegistry,
   view: Atom.Atom<AsyncResult.AsyncResult<A, E>>,
   laid: { readonly end: () => void },
-  until: { caughtUp: (value: A) => boolean; withinMs?: number } | "next",
+  until: { caughtUp: (value: A) => boolean } | "next",
 ): void {
   let unsubscribe: (() => void) | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -369,7 +369,7 @@ export function endWith<A, E>(
     unsubscribe?.();
     laid.end();
   };
-  if (until !== "next") timer = setTimeout(end, until.withinMs ?? 5_000);
+  if (until !== "next") timer = setTimeout(end, 5_000);
   unsubscribe = registry.subscribe(view, (result) => {
     if (!AsyncResult.isSuccess(result)) return;
     if (until === "next" || until.caughtUp(result.value)) end();

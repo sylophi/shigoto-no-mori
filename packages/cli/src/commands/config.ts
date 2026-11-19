@@ -24,8 +24,6 @@ export type Settings = {
   readonly scope: Config.ConfigScope;
   // The project's name, which its documents and lines carry.
   readonly project?: string;
-  // The command people list the settings with.
-  readonly listCommand: string;
   // What each setting is for, in the listing.
   readonly descriptions: Readonly<Record<string, string>>;
 };
@@ -43,6 +41,10 @@ export const usage = (settings: Settings, verb: string) =>
             : `Usage: ${binaryName} projects config ${verb} [-p <project>]`,
       }),
   );
+
+// The command the verbs sit under: `config`, or `projects config`.
+const commandOf = (settings: Settings) =>
+  settings.project === undefined ? "config" : "projects config";
 
 // The editor, or what it left, wouldn't do.
 class EditFailed extends Schema.TaggedError<EditFailed>()("EditFailed", {
@@ -128,7 +130,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
       const { json, binaryName } = yield* Effect.service(Output);
       if (!json) {
         return yield* new UsageError({
-          problem: `read is plumbing for --json. For people: ${binaryName} ${settings.listCommand}.`,
+          problem: `read is plumbing for --json. For people: ${binaryName} ${commandOf(settings)} list.`,
         });
       }
       const config = yield* Config.Config;
@@ -182,9 +184,8 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
       const { json, binaryName } = yield* Effect.service(Output);
       const editor = terminalEditor();
       if (json || editor === "" || !(yield* interactive)) {
-        const verbs = settings.listCommand.replace(/ list$/, "");
         return yield* new UsageError({
-          problem: `edit opens the settings in $VISUAL or $EDITOR at a terminal. Use \`${binaryName} ${verbs} set\` instead${byHostKind({ app: ", or the app", headless: "" })}.`,
+          problem: `edit opens the settings in $VISUAL or $EDITOR at a terminal. Use \`${binaryName} ${commandOf(settings)} set\` instead${byHostKind({ app: ", or the app", headless: "" })}.`,
         });
       }
       const config = yield* Config.Config;
@@ -247,7 +248,6 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
 
 const device: Settings = {
   scope: { kind: "device" },
-  listCommand: "config list",
   descriptions: keyDescriptions(DeviceConfigKeysSchema),
 };
 

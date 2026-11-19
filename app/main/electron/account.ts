@@ -61,7 +61,6 @@ import { current as currentPlatform } from "@shigomori/engine/platform";
 // signed out and writes plaintext for the rest of the run.
 let cachedStore: AccountStore | null = null;
 let cachedConfig: AccountServiceConfig | null = null;
-let cipherWarned = false;
 let revokeWarned = false;
 
 // The safeStorage-backed cipher. `available` is the OS keychain's
@@ -74,8 +73,7 @@ let revokeWarned = false;
 function buildCipher(): StoreCipher {
   const keychain = byPlatform({ darwin: true, linux: false, win32: true });
   const available = keychain && safeStorage.isEncryptionAvailable();
-  if (keychain && !available && !cipherWarned) {
-    cipherWarned = true;
+  if (keychain && !available) {
     log.warn(
       "[account] OS encryption unavailable, storing the hub credential " +
         "as plaintext in userData.",

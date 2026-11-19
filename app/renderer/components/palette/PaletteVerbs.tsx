@@ -362,7 +362,7 @@ function ProjectVerbs({
   query: string;
   actions: PaletteActions;
 }) {
-  const { project, deviceId, lead, localProject } = item;
+  const { project, deviceId, device, lead } = item;
   const verbs: Verb[] = [];
   if (lead) {
     verbs.push({
@@ -373,12 +373,13 @@ function ProjectVerbs({
       run: () => actions.go(lead, "detail"),
     });
   }
-  if (localProject) {
+  // This device's checkout, when it has one: where a quick create goes.
+  if (!device) {
     verbs.push({
       key: "create",
       label: "New worktree",
       icon: iconOf(Plus),
-      run: () => actions.create(localProject.id),
+      run: () => actions.create(project.id),
     });
   }
   // With no worktree to open, ↩ opens the form, on the device that

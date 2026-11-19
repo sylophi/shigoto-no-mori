@@ -76,6 +76,18 @@ export const makeWorktreeVerbs = ({
         Effect.map((out) => out.trim()),
       );
 
+    const worktreeConfigOn = Effect.fn("Git.worktreeConfigOn")(function* (
+      repo: string,
+    ) {
+      return (
+        (yield* configAt(repo, [
+          "--type=bool",
+          "--get",
+          "extensions.worktreeConfig",
+        ])) === "true"
+      );
+    });
+
     const checkoutConfig = Effect.fn("Git.checkoutConfig")(function* (
       checkout: string,
     ) {
@@ -289,6 +301,7 @@ export const makeWorktreeVerbs = ({
       listWorktrees,
       addWorktree,
       checkoutConfig,
+      worktreeConfigOn,
       setWorktreeConfig,
       listRemotes,
       localBranchExists,

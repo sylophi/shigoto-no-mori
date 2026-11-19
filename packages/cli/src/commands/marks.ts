@@ -8,32 +8,24 @@ import * as Option from "effect/Option";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import { UsageError } from "../errors.ts";
-import { resolveWorktree, rest, worktreeFlags } from "../here.ts";
+import { resolveWorktree, worktreeArgs, worktreeFlags } from "../here.ts";
 import { emit, out, Output, styles } from "../output.ts";
 
 const shelf = (name: "shelve" | "unshelve") =>
-  Command.make(
-    name,
-    {
-      ...worktreeFlags,
-      ref: Argument.String("worktree").pipe(Argument.optional),
-      // The first is read and the rest let be.
-      rest,
-    },
-    (input) =>
-      Effect.gen(function* () {
-        const shelved = name === "shelve";
-        const { worktree } = (yield* resolveWorktree(input, false)).located;
-        yield* (yield* Worktrees.Worktrees).setShelved(worktree, shelved);
-        const { json, stdoutColor } = yield* Effect.service(Output);
-        yield* json
-          ? emit({ ok: true, name: worktree.name, id: worktree.id, shelved })
-          : out(
-              styles(stdoutColor).green(
-                `${shelved ? "shelved" : "unshelved"} ${worktree.name}`,
-              ),
-            );
-      }),
+  Command.make(name, worktreeArgs, (input) =>
+    Effect.gen(function* () {
+      const shelved = name === "shelve";
+      const { worktree } = (yield* resolveWorktree(input, false)).located;
+      yield* (yield* Worktrees.Worktrees).setShelved(worktree, shelved);
+      const { json, stdoutColor } = yield* Effect.service(Output);
+      yield* json
+        ? emit({ ok: true, name: worktree.name, id: worktree.id, shelved })
+        : out(
+            styles(stdoutColor).green(
+              `${shelved ? "shelved" : "unshelved"} ${worktree.name}`,
+            ),
+          );
+    }),
   );
 
 export const shelve = shelf("shelve");

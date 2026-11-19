@@ -2,6 +2,7 @@
 // its base, its changes, stashes and ports, as `sm status` shows it.
 import { isSafeRelPath } from "@shigomori/contracts/predicates/relPath";
 import { isUntracked } from "@shigomori/contracts/schemas";
+import { isRealBranch } from "@shigomori/contracts/schemas/project";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -15,7 +16,6 @@ import {
   type Located,
   NO_CHANGES,
   type StatusCard,
-  UNKNOWN_BRANCH,
   isAgentWorking,
   isShelved,
   nonEmpty,
@@ -115,7 +115,7 @@ export const makeStatusCard = ({
         GitHub.Lookup<GitHub.PullRequestCard> & { readonly skipped?: true }
       > = !options.pullRequest
         ? Effect.succeed({ found: null, skipped: true as const })
-        : worktree.detached || worktree.branch === UNKNOWN_BRANCH
+        : worktree.detached || !isRealBranch(worktree.branch)
           ? Effect.succeed({ found: null, unavailable: "no branch to look up" })
           : github.cardFor(project.path, worktree.branch);
       const probes = yield* Effect.all(

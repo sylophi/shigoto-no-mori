@@ -8,6 +8,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as ProcessTable from "../ProcessTable.ts";
+import { isDirectory } from "../entries.ts";
 import {
   acquireStagingLock,
   StagingLockUnavailable,
@@ -78,10 +79,10 @@ export const makeStaging = ({
         Schema.decodeUnknownOption(StagedManifestSchema),
       );
       if (Option.isNone(manifest)) return Option.none<StagedManifest>();
-      const bundle = yield* fs
-        .stat(path.join(stagedDir, manifest.value.bundleName))
-        .pipe(Effect.option);
-      return Option.isSome(bundle) && bundle.value.type === "Directory"
+      return (yield* isDirectory(
+        fs,
+        path.join(stagedDir, manifest.value.bundleName),
+      ))
         ? manifest
         : Option.none<StagedManifest>();
     });

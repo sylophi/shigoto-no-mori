@@ -9,7 +9,7 @@ import {
   SquareTerminal,
 } from "lucide-react";
 import type { AgentSession } from "@shigomori/contracts/schemas";
-import { pluralize } from "@shigomori/contracts/words";
+import { capitalized, pluralize } from "@shigomori/contracts/words";
 import { harnessLabel } from "@shigomori/contracts/harnesses";
 import { AGENT_STATE_VIEW } from "./agentSessions.ts";
 
@@ -78,9 +78,7 @@ export function stateLabel(
 ): string {
   if (session.state === "waiting") {
     const { verb, sentence } = needView(session);
-    return withHarness
-      ? sentence
-      : verb.charAt(0).toUpperCase() + verb.slice(1);
+    return withHarness ? sentence : capitalized(verb);
   }
   if (!withHarness) return AGENT_STATE_VIEW[session.state].label;
   return `${harnessLabel(session.harness)} is ${session.state}`;

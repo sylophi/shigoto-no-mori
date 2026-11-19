@@ -160,9 +160,6 @@ const SKIPPED = new Set([
 
 const SCAN_DEPTH = 6;
 
-// A step that only adds to what a project starts with: its failure,
-// or a defect under it, leaves the project as added.
-
 const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -211,11 +208,7 @@ const make = Effect.gen(function* () {
           true,
         );
       }
-      const scope = {
-        kind: "project",
-        projectId: project.id,
-        path: project.path,
-      } as const;
+      const scope = Config.projectScope(project);
       // Guesses, which the settings the repo's other devices share
       // replace.
       const guess = { stamp: false };

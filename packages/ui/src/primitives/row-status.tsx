@@ -9,16 +9,15 @@ export type RowStatus =
 interface RowStatusBadgeProps {
   status: RowStatus;
   // aria-label per state so screen readers describe the action in
-  // progress (e.g. "Moving" / "Converting"). Pages that don't override
-  // get a neutral default.
-  labels?: { running?: string; done?: string; error?: string };
+  // progress (e.g. "Moving" / "Converting").
+  labels: { running: string; done: string; error: string };
 }
 
 export function RowStatusBadge({ status, labels }: RowStatusBadgeProps) {
   if (status.kind === "running") {
     return (
       <Loader2
-        aria-label={labels?.running ?? "Working"}
+        aria-label={labels.running}
         className="mt-1 size-4 shrink-0 animate-spin text-muted-foreground"
       />
     );
@@ -26,7 +25,7 @@ export function RowStatusBadge({ status, labels }: RowStatusBadgeProps) {
   if (status.kind === "done") {
     return (
       <Check
-        aria-label={labels?.done ?? "Done"}
+        aria-label={labels.done}
         className="mt-1 size-4 shrink-0 text-emerald-500"
       />
     );
@@ -34,7 +33,7 @@ export function RowStatusBadge({ status, labels }: RowStatusBadgeProps) {
   if (status.kind === "error") {
     return (
       <X
-        aria-label={labels?.error ?? "Failed"}
+        aria-label={labels.error}
         className="mt-1 size-4 shrink-0 text-destructive"
       />
     );

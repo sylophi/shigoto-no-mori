@@ -369,10 +369,10 @@ export function withSharedSetting(
 }
 
 export function sharedStringSetting(
-  doc: SharedSettingsDoc | undefined,
+  doc: SharedSettingsDoc,
   key: string,
 ): string | undefined {
-  const value = doc?.entries[key]?.value;
+  const value = doc.entries[key]?.value;
   return typeof value === "string" ? value : undefined;
 }
 

@@ -61,6 +61,11 @@ export interface SettingsSection {
   update?: boolean;
 }
 
+export type SettingsSectionLists = {
+  client: SettingsSection[];
+  host: SettingsSection[];
+};
+
 // The page's sections in order, for whichever surface lists them: the
 // sidebar's nav on a wide viewport (SettingsSidebarNav), the chip row
 // under the header in the phone layout (SettingsSectionChips). Two
@@ -78,7 +83,7 @@ export function settingsSections(
   villageLife: boolean,
   // A desktop window, whose machine is behind it (hasLocalHost).
   desktop: boolean,
-): { client: SettingsSection[]; host: SettingsSection[] } {
+): SettingsSectionLists {
   const section = (id: SettingsTab, icon: LucideIcon): SettingsSection => ({
     id,
     label: SECTION_LABELS[id],

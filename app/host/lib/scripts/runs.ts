@@ -131,7 +131,6 @@ function createRunStream(starter: NotifyScriptEvent): RunStream {
 // what their tree is.
 interface Killable {
   runId: string;
-  scriptName: string;
   exited: boolean;
   cancelling: boolean;
   done: Promise<void>;
@@ -252,7 +251,6 @@ export const makeRuns = ({
             const tree = { pid, ownGroup: false };
             lifecycle.set(event.runId, {
               runId: event.runId,
-              scriptName: runScriptName(event.slot),
               exited: false,
               cancelling: false,
               done,
@@ -400,7 +398,6 @@ export const makeRuns = ({
         slot: args.slot,
         worktreeName: args.worktree.name,
         worktreePath: args.worktree.path,
-        scriptName: runScriptName(args.slot),
         startedAt,
         exited: false,
         cancelling: false,
@@ -483,7 +480,7 @@ export const makeRuns = ({
       return true;
     });
 
-    const live = () => [...ptyRuns.values()].filter((r) => !r.exited);
+    const live = () => [...ptyRuns.values()];
     // Every live run, for a stop of them all (a quit, a nuke, a
     // data-folder move): the lifecycle scripts too, since one left to its
     // engine run's scope goes by its shell alone (it leads no group), and
@@ -533,21 +530,19 @@ export const makeRuns = ({
           startedAt: record.startedAt,
           interactive: true,
         })),
-        ...[...lifecycle.values()]
-          .filter((run) => !run.exited)
-          .map((run) => ({
-            runId: run.runId,
-            projectId: run.projectId,
-            worktreeId: run.worktreeId,
-            slot: run.slot,
-            startedAt: run.startedAt,
-            interactive: false,
-          })),
+        ...[...lifecycle.values()].map((run) => ({
+          runId: run.runId,
+          projectId: run.projectId,
+          worktreeId: run.worktreeId,
+          slot: run.slot,
+          startedAt: run.startedAt,
+          interactive: false,
+        })),
       ].toSorted((a, b) => a.startedAt - b.startedAt);
 
     const attach = (runId: string, notify: NotifyScriptEvent) => {
       const run = ptyRuns.get(runId) ?? lifecycle.get(runId);
-      if (!run || run.exited) return null;
+      if (!run) return null;
       return run.stream.attach(notify);
     };
 

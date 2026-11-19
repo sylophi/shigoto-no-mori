@@ -158,8 +158,8 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
   const started = yield* Deferred.make<void>();
   const child = yield* Effect.acquireRelease(
     Effect.try({
-      try: (): IPty => {
-        const spawned = spawnPty(
+      try: (): IPty =>
+        spawnPty(
           program,
           opts.command === null
             ? [...args]
@@ -171,16 +171,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
             cwd: opts.cwd,
             env,
           },
-        );
-        // node-pty's type leaves the emitter out (the terminal has one
-        // of its own, not node's), so the method onError needs is
-        // checked for, not assumed.
-        if (!("on" in spawned) || typeof spawned.on !== "function") {
-          spawned.kill();
-          throw new Error("node-pty's terminal no longer emits events");
-        }
-        return spawned;
-      },
+        ),
       catch: (cause) =>
         new PtySpawnError({
           shell: program,
@@ -228,6 +219,8 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
       Deferred.doneUnsafe(started, Exit.void);
     });
   }
+  // node-pty's type leaves the emitter out (the terminal has one of its
+  // own, not node's).
   const on = (child as IPty & { on: (...args: never[]) => void }).on.bind(
     child,
   ) as (

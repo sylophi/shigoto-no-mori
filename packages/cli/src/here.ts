@@ -145,6 +145,26 @@ export const worktreeFlags = {
   worktreeId: Flag.String("worktree-id").pipe(Flag.optional),
 };
 
+// The worktree as the positional, the positionals past it let be.
+export const worktreeArgs = {
+  ...worktreeFlags,
+  ref: Argument.String("worktree").pipe(Argument.optional),
+  rest,
+};
+
+// The worktree a command's flags name. An empty flag is no flag.
+export const worktreeTarget = (ref: {
+  readonly ref?: Option.Option<string>;
+  readonly project: Option.Option<string>;
+  readonly projectId: Option.Option<string>;
+  readonly worktreeId: Option.Option<string>;
+}) => ({
+  ref: Option.getOrUndefined(given(ref.ref ?? Option.none())),
+  project: Option.getOrUndefined(given(ref.project)),
+  projectId: Option.getOrUndefined(given(ref.projectId)),
+  worktreeId: Option.getOrUndefined(given(ref.worktreeId)),
+});
+
 // The worktree a command names, else the one at the cwd, and where the
 // command runs. Named by nothing, a person at a terminal picks from a
 // menu: in place of the engine's refusal (outside every worktree, or
@@ -152,23 +172,13 @@ export const worktreeFlags = {
 // checkout. `primaryOk` is off for the commands that refuse the primary
 // checkout.
 export const resolveWorktree = (
-  ref: {
-    readonly ref?: Option.Option<string>;
-    readonly project: Option.Option<string>;
-    readonly projectId: Option.Option<string>;
-    readonly worktreeId: Option.Option<string>;
-  },
+  ref: Parameters<typeof worktreeTarget>[0],
   primaryOk = true,
 ) =>
   Effect.gen(function* () {
     const at = yield* here;
     const worktrees = yield* Worktrees.Worktrees;
-    const target = {
-      ref: Option.getOrUndefined(given(ref.ref ?? Option.none())),
-      project: Option.getOrUndefined(given(ref.project)),
-      projectId: Option.getOrUndefined(given(ref.projectId)),
-      worktreeId: Option.getOrUndefined(given(ref.worktreeId)),
-    };
+    const target = worktreeTarget(ref);
     const resolved = worktrees.resolve(at, target);
     if (
       target.ref !== undefined ||

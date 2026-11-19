@@ -145,13 +145,11 @@ export function useRemoteForests(
   // Flattened (device, project) pairs, so the worktree fan-out is one
   // flat read whatever shape the forests have.
   const { pairs, loading: projectsLoading, failed } = useRemoteProjects();
-  const wanted = useViewsWanted(pairs.map(({ device }) => device.deviceId));
+  // A pair's device is one whose views are wanted (useRemoteProjects).
   const worktreeQueries = useViews(
     someWorktreesAtom,
     pairs.map(({ device, project }) =>
-      wanted(device.deviceId)
-        ? worktreeListKey(device.deviceId, project.id)
-        : null,
+      worktreeListKey(device.deviceId, project.id),
     ),
   );
   // The PR maps are the peers' views of their sweeps, and the config
@@ -160,9 +158,7 @@ export function useRemoteForests(
   const pullRequestQueries = useViews(
     somePullRequestsAtom,
     pairs.map(({ device, project }) =>
-      wanted(device.deviceId)
-        ? pullRequestsKey(device.deviceId, project.id)
-        : null,
+      pullRequestsKey(device.deviceId, project.id),
     ),
   );
   const configQueries = useQueries({

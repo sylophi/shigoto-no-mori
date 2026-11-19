@@ -49,25 +49,8 @@ import {
   type Updated,
   type UpdatesUnavailable,
 } from "./updater/documents.ts";
-export {
-  AppStillRunning,
-  HandoffFailed,
-  InvalidAppPid,
-  NotInBundle,
-  RelaunchFailed,
-  UpdatesUnavailable,
-  causeText,
-  updaterFiles,
-} from "./updater/documents.ts";
-export type {
-  Progress,
-  Running,
-  Staged,
-  UpToDate,
-  UpdateAvailable,
-  UpdateInput,
-  Updated,
-} from "./updater/documents.ts";
+export { causeText, updaterFiles } from "./updater/documents.ts";
+export type { Progress, Running, UpdateInput } from "./updater/documents.ts";
 
 export class Updater extends Context.Service<
   Updater,

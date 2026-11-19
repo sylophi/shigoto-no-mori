@@ -3,7 +3,6 @@ import { WorktreeMissingView } from "@shigomori/ui/views/shared/WorktreeMissingV
 import { useBranchHistory } from "@/hooks/git/useBranchCommits";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useBranchDiff } from "@/hooks/worktrees/useWorktreeDiff";
-import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { BranchCombobox } from "@/components/shared/BranchCombobox";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
 import { GitPageActions } from "@/components/worktreeDetail/git/GitPageActions";
@@ -17,12 +16,11 @@ import {
 // branch, or the ref picked in its place, its uncommitted work
 // included.
 export function BranchDiff() {
-  const { projectId, worktree, goBack, missing } = useRouteWorktree();
+  const { projectId, nav, worktree, goBack, missing } = useRouteWorktree();
   const { base: picked, list } = useSearch({ strict: false }) as {
     base?: string;
     list?: true;
   };
-  const nav = useWorktreeNav();
   const diff = useBranchDiff(projectId, worktree?.id, picked);
   const { data: history } = useBranchHistory(projectId, worktree?.id);
 

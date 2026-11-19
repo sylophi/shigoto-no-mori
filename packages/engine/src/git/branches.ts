@@ -89,24 +89,6 @@ export const makeBranches = ({
       );
     });
 
-    // The branches and the default ref picked among them, or none when
-    // they can't be read.
-    const pickDefault = (
-      repo: string,
-      override: string | undefined,
-      remotes: readonly string[] | undefined,
-    ) =>
-      Effect.gen(function* () {
-        const refs = yield* Effect.option(branchRefs(repo));
-        if (Option.isNone(refs)) return Option.none();
-        const picked = pickDefaultRef(
-          refs.value,
-          override,
-          remotes ?? (yield* listRemotes(repo)),
-        );
-        return Option.some({ refs: refs.value, picked });
-      });
-
     const appendExcludes = Effect.fn("Git.appendExcludes")(
       function* (repo: string, paths: ReadonlyArray<string>) {
         if (paths.length === 0) return;
@@ -153,23 +135,27 @@ export const makeBranches = ({
       override?: string,
       remotes?: readonly string[],
     ) {
-      const found = yield* pickDefault(repo, override, remotes);
-      if (Option.isNone(found)) return Option.none<string>();
-      const { refs, picked } = found.value;
+      // None when the branches can't be read.
+      const refs = yield* Effect.option(branchRefs(repo));
+      if (Option.isNone(refs)) return Option.none<string>();
+      const picked = pickDefaultRef(
+        refs.value,
+        override,
+        remotes ?? (yield* listRemotes(repo)),
+      );
       if (picked !== undefined) return Option.some(picked);
       const head = yield* bareHead(repo);
+      const { locals } = refs.value;
       return Option.map(
-        Option.fromUndefinedOr(
-          refs.locals.includes(head) ? head : refs.locals[0],
-        ),
+        Option.fromUndefinedOr(locals.includes(head) ? head : locals[0]),
         (branch) => `refs/heads/${branch}`,
       );
     });
 
     const resolveDefaultBranch = Effect.fn("Git.resolveDefaultBranch")(
-      function* (repo: string, override?: string, remotes?: readonly string[]) {
+      function* (repo: string, override?: string) {
         return Option.map(
-          yield* resolvePrimaryRef(repo, override, remotes),
+          yield* resolvePrimaryRef(repo, override),
           shortRefName,
         );
       },

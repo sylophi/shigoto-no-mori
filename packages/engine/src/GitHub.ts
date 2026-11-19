@@ -176,10 +176,6 @@ export class GitHub extends Context.Service<
       args: ReadonlyArray<string>,
       options?: RunOptions,
     ) => Effect.Effect<string, GitHubCliError>;
-    // The GitHub host of the remote gh resolves `cwd`'s repo from, or
-    // null for none. Every gh run in a repo goes there: `gh api` asks
-    // github.com otherwise.
-    readonly hostOf: (cwd: string) => Effect.Effect<string | null>;
     // The repo the checkout at `cwd` is, which the app's links open: its
     // first remote on a host gh is signed in to, or null. Not the repo gh
     // resolves (hostOf), which for a fork is the parent.
@@ -257,11 +253,6 @@ export class GitHub extends Context.Service<
       repo: string,
       branch: string,
     ) => Effect.Effect<number | null>;
-    // The same for every branch of the repo, in one git call: branch to
-    // the number of the fork's PR it was checked out from.
-    readonly checkedOutPullRequests: (
-      repo: string,
-    ) => Effect.Effect<ReadonlyMap<string, number>>;
     // The commits the branch's merged PRs ended on: from this
     // repository, or the fork's one the branch was checked out from.
     readonly mergedHeads: (
@@ -516,6 +507,9 @@ const make = Effect.gen(function* () {
       { concurrency: 2 },
     );
 
+  // The GitHub host of the remote gh resolves `cwd`'s repo from, or
+  // null for none. Every gh run in a repo goes there: `gh api` asks
+  // github.com otherwise.
   const hostOf = Effect.fn("GitHub.hostOf")(function* (cwd: string) {
     const [remotes, known] = yield* remotesAndHosts(cwd);
     return ghHostFor(remotes, known);
@@ -601,6 +595,8 @@ const make = Effect.gen(function* () {
       ),
   );
 
+  // The same for every branch of the repo, in one git call: branch to
+  // the number of the fork's PR it was checked out from.
   const checkedOutPullRequests = Effect.fn("GitHub.checkedOutPullRequests")(
     function* (repo: string) {
       const numbers = new Map<string, number>();
@@ -800,19 +796,15 @@ const make = Effect.gen(function* () {
     repo: string,
     branch: string,
   ) {
-    const answer = yield* run(
+    const rows = yield* rowsFor(
       repo,
       lookupArgs(branch, "merged", ["number,isCrossRepository,headRefOid"]),
     );
-    const rows = rowsOf(answer);
-    if (Option.isNone(rows)) {
-      return yield* new GitHubOutputError({ command: "pr list" });
-    }
     const checkedOut = yield* Effect.cached(
       checkedOutPullRequest(repo, branch),
     );
     const heads: Array<{ readonly number: number; readonly head: string }> = [];
-    for (const row of rows.value) {
+    for (const row of rows) {
       if (isBranchsOwn(row, yield* checkedOut)) {
         heads.push({ number: row.number, head: row.headRefOid });
       }
@@ -960,23 +952,13 @@ const make = Effect.gen(function* () {
     return stackOf;
   });
 
-  const asyncTicket = (stdout: string) =>
-    Option.map(
-      Schema.decodeOption(AsyncTicket)(stdout),
-      ({ status, details }) => ({
-        status,
-        message: details.message,
-        uuid: details.uuid,
-      }),
-    );
-
   const mergeStackAsync = Effect.fn("GitHub.mergeStackAsync")(function* (
     repo: string,
     number: number,
     method: MergeMethod,
   ) {
     const read = (stdout: string) =>
-      Option.match(asyncTicket(stdout), {
+      Option.match(Schema.decodeOption(AsyncTicket)(stdout), {
         onNone: () =>
           Effect.fail(new GitHubOutputError({ command: "merge-async" })),
         onSome: Effect.succeed,
@@ -1013,7 +995,7 @@ const make = Effect.gen(function* () {
       yield* Effect.sleep(ASYNC_MERGE_POLL);
       const polled = yield* run(repo, [
         "api",
-        `repos/{owner}/{repo}/pulls/${number}/merge-async/${ticket.uuid}`,
+        `repos/{owner}/{repo}/pulls/${number}/merge-async/${ticket.details.uuid}`,
       ]).pipe(Effect.flatMap(read), Effect.option);
       if (Option.isSome(polled)) ticket = polled.value;
     }
@@ -1022,14 +1004,13 @@ const make = Effect.gen(function* () {
     return yield* new StackMergeFailed({
       number,
       reason: "refused",
-      detail: ticket.message,
+      detail: ticket.details.message,
     });
   });
 
   return GitHub.of({
     run,
     runOn,
-    hostOf,
     repoOf,
     knownHosts,
     cardFor,
@@ -1040,7 +1021,6 @@ const make = Effect.gen(function* () {
     list,
     ownPullRequests,
     checkedOutPullRequest,
-    checkedOutPullRequests,
     mergedHeads,
     headOf,
     mergeSettings,

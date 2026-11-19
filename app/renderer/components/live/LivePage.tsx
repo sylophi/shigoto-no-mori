@@ -17,13 +17,11 @@ import {
   useRunningScripts,
 } from "@/hooks/live/useLiveActivity";
 import { useWaitingAgents } from "@/lib/agentWatch";
-import { commandAccessOf } from "@/lib/remote/devices";
-import { useDevices } from "@/hooks/remote/useDevices";
 import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { scriptRunsOf } from "@/hooks/scripts/scriptRuns";
 import { useRegistry } from "@/lib/runtime/viewHooks";
 import { useAllPortForwards } from "@/hooks/remote/usePortForwards";
-import { plural, pluralize } from "@shigomori/contracts/words";
+import { pluralize } from "@shigomori/contracts/words";
 import { notifyError, toast } from "@/lib/toast";
 import { DeviceHeading, LiveCard } from "./LiveCard";
 import {
@@ -91,14 +89,9 @@ export function LivePage() {
 // left behind. Armed by a first click, like the app's other removals.
 function StopAllScripts({ hosts }: { hosts: readonly HostScripts[] }) {
   const atoms = useRegistry();
-  const devices = useDevices();
   const { armed, trigger } = useConfirmTwice();
-  const runs = hosts.flatMap(({ deviceId, api, runs: hostRuns }) =>
-    api !== undefined &&
-    commandAccessOf(devices.find((device) => device.deviceId === deviceId))
-      .canCommand
-      ? hostRuns.map((run) => ({ deviceId, run }))
-      : [],
+  const runs = hosts.flatMap(({ deviceId, runs: hostRuns }) =>
+    hostRuns.map((run) => ({ deviceId, run })),
   );
   const stopAll = useMutation({
     mutationFn: () =>
@@ -122,28 +115,19 @@ function StopAllScripts({ hosts }: { hosts: readonly HostScripts[] }) {
     },
   });
   if (runs.length === 0 && !stopAll.isPending) return null;
-  const total = hosts.reduce((sum, host) => sum + host.runs.length, 0);
-  // "all" only when it is: a read-only device's runs stay running.
-  const readOnly = total - runs.length;
   return (
     <ConfirmDestructiveButton
       armed={armed}
       pending={stopAll.isPending}
       pendingLabel="Stopping…"
-      idleLabel={stopAllLabel(runs.length, readOnly)}
+      idleLabel={stopAllLabel(runs.length)}
       icon={<Square aria-hidden className="size-3 fill-current" />}
-      tip={
-        readOnly > 0
-          ? `${pluralize(readOnly, "script")} on a read-only device ${plural(readOnly, "stays", "stay")} running`
-          : undefined
-      }
       onClick={() => trigger(() => stopAll.mutate())}
     />
   );
 }
 
-function stopAllLabel(stoppable: number, readOnly: number): string {
-  if (readOnly > 0) return `Stop ${pluralize(stoppable, "script")}`;
+function stopAllLabel(stoppable: number): string {
   if (stoppable === 1) return "Stop the script";
   return `Stop all ${stoppable} scripts`;
 }

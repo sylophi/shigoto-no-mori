@@ -97,7 +97,7 @@ async function startLoopback() {
       Layer.unwrap(
         Effect.map(Effect.context<HostServices>(), (services) =>
           Loopback.layer({
-            deviceId: () => DIALER,
+            deviceId: DIALER,
             appVersion: "9.9.9",
             file: () => loopbackFile,
           }).pipe(

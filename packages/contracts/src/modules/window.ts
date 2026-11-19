@@ -58,7 +58,7 @@ export const windowContract = defineContract(
     "widen",
     strict(
       Schema.Struct({
-        width: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+        width: Schema.Natural,
       }),
     ),
     VoidSchema,

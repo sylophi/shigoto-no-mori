@@ -158,7 +158,7 @@ export function armsAutoMerge(
 export function describeMergeState(
   state: PullRequestMergeState,
   isDraft: boolean,
-  autoMerge = false,
+  autoMerge: boolean,
 ): MergeStateDescriptor {
   if (isDraft) {
     return { label: "Draft", tone: "slate", canMerge: false };

@@ -9,7 +9,10 @@ import type {
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { useNow } from "../../hooks/useNow.ts";
-import { pullRequestBlockedBy } from "../../lib/pullRequest.ts";
+import {
+  PULL_REQUEST_SOURCE_UNAVAILABLE_TEXT,
+  pullRequestBlockedBy,
+} from "../../lib/pullRequest.ts";
 import { formatRelativeTime } from "../../lib/relativeTime.ts";
 import { cn } from "../../lib/utils.ts";
 
@@ -19,7 +22,6 @@ import { cn } from "../../lib/utils.ts";
 // the four ways this can render stay in one place.
 export function PullRequestSourceView({
   query,
-  unavailableText,
   selected,
   onSelect,
   worktreeByBranch,
@@ -30,9 +32,6 @@ export function PullRequestSourceView({
     | { isPending: true; isError: false }
     | { isPending: false; isError: true; error: Error }
     | { isPending: false; isError: false; data: PullRequestCandidateList };
-  // Set when the query came back "unavailable". The form shows the same
-  // line on the mode toggle.
-  unavailableText: string | undefined;
   selected: PullRequestCandidate | null;
   onSelect: (pr: PullRequestCandidate) => void;
   worktreeByBranch: Map<string, Worktree>;
@@ -50,15 +49,13 @@ export function PullRequestSourceView({
           message={query.error.message}
           title="Couldn't load pull requests"
         />
-      ) : unavailableText ? (
+      ) : query.data.status === "unavailable" ? (
         <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-          {unavailableText}
+          {PULL_REQUEST_SOURCE_UNAVAILABLE_TEXT[query.data.reason]}
         </p>
       ) : (
         <PullRequestPicker
-          pullRequests={
-            query.data.status === "ok" ? query.data.pullRequests : []
-          }
+          pullRequests={query.data.pullRequests}
           selected={selected}
           onSelect={onSelect}
           worktreeByBranch={worktreeByBranch}

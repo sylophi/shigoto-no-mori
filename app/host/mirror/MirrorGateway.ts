@@ -173,7 +173,6 @@ export class MirrorGateway extends Context.Service<
     // The listener's address and token, none until a bind has
     // succeeded. The daemon reads it at each spawn.
     readonly listening: Effect.Effect<Option.Option<MirrorGatewayAddress>>;
-    readonly streamCount: Effect.Effect<number>;
   }
 >()("sm/host/MirrorGateway") {}
 
@@ -348,7 +347,6 @@ const make = Effect.gen(function* () {
 
   return MirrorGateway.of({
     listening: Ref.get(listening),
-    streamCount: Effect.sync(() => streams.size),
   });
 });
 

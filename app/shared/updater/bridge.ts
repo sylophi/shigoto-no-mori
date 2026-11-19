@@ -26,23 +26,13 @@ import type {
 import { UpdateRequestSchema } from "@shigomori/contracts/schemas";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { updaterFiles } from "@shigomori/engine/Updater";
+import { isPidAlive } from "@shigomori/engine/processes";
 import { dataDir } from "@shared/paths";
 import { readJson, writeJson } from "@shared/jsonFile";
 
 const REQUEST_POLL_MS = 1000;
 
 const files = () => updaterFiles(path, dataDir());
-
-// Whether the process that wrote a request still waits on it: the
-// signal 0 probe, where EPERM is a live process of another user.
-const waiting = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-};
 
 // What an install asked for here came to: restarting, or why not.
 export type InstallOutcome = "installing" | "declined" | "nothing-staged";
@@ -137,7 +127,7 @@ export const makeBridge = (version: string) => {
         if (
           request === null ||
           request.appPid !== process.pid ||
-          !waiting(request.requesterPid)
+          !isPidAlive(request.requesterPid)
         ) {
           return;
         }

@@ -26,11 +26,9 @@ import { hostViewAtom } from "@/lib/runtime/atoms";
 import { useApi } from "@/lib/runtime/pageApi";
 import { useView, useViews, viewsOf } from "@/lib/runtime/viewHooks";
 
-// A host's running scripts. The api is undefined while a peer has no
-// session.
+// A host's running scripts.
 export type HostScripts = {
   deviceId: string;
-  api: HostApi | undefined;
   runs: readonly RunningScript[];
   // The first read is still on its way.
   loading: boolean;
@@ -69,14 +67,11 @@ const hostsTerminalsAtom = viewsOf((deviceId) => terminalsAtom(deviceId));
 // settled.
 function useCommandedHosts() {
   const page = useApi();
-  return useHostDevices().map((device) => {
-    const api = liveApi(page, device);
-    return {
-      deviceId: device.deviceId,
-      api,
-      reads: api !== undefined && commandAccessOf(device).canCommand,
-    };
-  });
+  return useHostDevices().map((device) => ({
+    deviceId: device.deviceId,
+    reads:
+      liveApi(page, device) !== undefined && commandAccessOf(device).canCommand,
+  }));
 }
 
 // Every host's running scripts. A peer whose app predates the view ends
@@ -87,9 +82,8 @@ export function useRunningScripts(): HostScripts[] {
     hostsScriptsAtom,
     hosts.map(({ deviceId, reads }) => (reads ? deviceId : null)),
   );
-  return hosts.map(({ deviceId, api, reads }, index) => ({
+  return hosts.map(({ deviceId, reads }, index) => ({
     deviceId,
-    api,
     runs: reads ? (views[index]?.data?.runs ?? NO_RUNS) : NO_RUNS,
     loading: reads && views[index]?.isPending === true,
   }));

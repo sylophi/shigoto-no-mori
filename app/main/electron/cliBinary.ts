@@ -6,7 +6,9 @@ import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
 import { bundledBinaryResolver } from "@shared/packaging/bundledBinary.mts";
 import { appPlace } from "./appPlace";
 
-const cliBinaryPath = bundledBinaryResolver(appPlace, CLI_DIST_DIR, () =>
+const cliBinaryPath = bundledBinaryResolver(
+  appPlace,
+  CLI_DIST_DIR,
   cliBinaryName(flavor),
 );
 

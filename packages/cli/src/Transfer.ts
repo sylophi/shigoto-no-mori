@@ -68,7 +68,7 @@ type Progress = {
 export type OnProgress = (progress: Progress) => Effect.Effect<void>;
 
 // The command line was what was wrong (the terminal exits 2).
-export class TransferRefused extends Schema.TaggedError<TransferRefused>()(
+class TransferRefused extends Schema.TaggedError<TransferRefused>()(
   "TransferRefused",
   {
     reason: Schema.Literals([
@@ -130,7 +130,7 @@ export class TransferRefused extends Schema.TaggedError<TransferRefused>()(
 
 // The app refused to stop a mirror that isn't in step. Its words, and
 // what to do about it.
-export class StopUnconfirmed extends Schema.TaggedError<StopUnconfirmed>()(
+class StopUnconfirmed extends Schema.TaggedError<StopUnconfirmed>()(
   "StopUnconfirmed",
   { said: Schema.String, binary: Schema.String },
 ) {
@@ -141,16 +141,6 @@ export class StopUnconfirmed extends Schema.TaggedError<StopUnconfirmed>()(
     return "stop-unconfirmed";
   }
 }
-
-// What a headline and the caveats read of a transfer's answer.
-type TransferResult = Pick<
-  ControlTransferResult,
-  "captured" | "dirtyApplied" | "files" | "source" | "alreadyMirrored"
-> & {
-  readonly worktree: { readonly name: string };
-  readonly device: { readonly name: string };
-  readonly cloned?: { readonly name: string; readonly path: string };
-};
 
 type NamedDevice = ControlPeerWorktree["device"];
 type SourceOutcome = NonNullable<ControlTransferResult["source"]>;
@@ -173,7 +163,7 @@ type WithCaveats<T> = Ok<T> & { readonly caveats: ReadonlyArray<string> };
 // A finished send, bring or mirror: the document `sm --json` prints (the
 // terminal exits 3 when it has caveats), the headline, and the answer
 // the lines read.
-export type Transferred = {
+type Transferred = {
   readonly document: WithCaveats<ControlTransferResult>;
   readonly headline: string;
   readonly result: ControlTransferResult;
@@ -181,7 +171,7 @@ export type Transferred = {
 
 // A peer's project cloned here: the document `sm --json` prints (the
 // terminal exits 3 when it has caveats), and the headline.
-export type Cloned = {
+type Cloned = {
   readonly document: WithCaveats<ControlCloneResult>;
   readonly headline: string;
   readonly result: ControlCloneResult;
@@ -189,7 +179,7 @@ export type Cloned = {
 
 // A project's worktrees on the other devices: the document (list's
 // shape, each saying whose it is), and the devices that weren't asked.
-export type PeerWorktrees = {
+type PeerWorktrees = {
   readonly document: ReadonlyArray<
     ControlPeerWorktree["worktree"] & { readonly device: NamedDevice }
   >;
@@ -199,7 +189,7 @@ export type PeerWorktrees = {
 
 // A stopped mirror, and the worktree it was asked of. A copy that stayed
 // is its caveat.
-export type Unmirrored = {
+type Unmirrored = {
   readonly document: WithCaveats<MirrorStop>;
   readonly worktree: Worktrees.WorktreeIdentity;
 };
@@ -353,7 +343,7 @@ export const sourceFateDone = (fate: string): string =>
 // The work landed, but something that should have followed it didn't:
 // the uncommitted changes weren't applied on the copy, the ignored files
 // didn't cross, or the source's fate couldn't be carried out.
-const caveatsOf = (result: TransferResult): ReadonlyArray<string> => [
+const caveatsOf = (result: ControlTransferResult): ReadonlyArray<string> => [
   ...(result.captured && !result.dirtyApplied
     ? [
         "the uncommitted changes did not apply on the copy, so they exist only on the source",
@@ -370,7 +360,7 @@ const caveatsOf = (result: TransferResult): ReadonlyArray<string> => [
 ];
 
 const headlineOf = (
-  result: TransferResult,
+  result: ControlTransferResult,
   direction: { readonly mirror: boolean; readonly sent: boolean },
 ): string => {
   const name = result.worktree.name;

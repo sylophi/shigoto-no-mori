@@ -554,6 +554,24 @@ export const bundleVersionArgs = (infoPlist: string) => [
   infoPlist,
 ];
 
+// The .app bundle a binary (its links resolved) runs from:
+// <bundle>/Contents/Resources/<binary>, where the command on PATH
+// links. None for a binary anywhere else. The swap's and the
+// doctor's alike.
+export const bundleOfBinary = (
+  path: Path.Path,
+  binary: string,
+): Option.Option<string> => {
+  const resources = path.dirname(binary);
+  const contents = path.dirname(resources);
+  const bundle = path.dirname(contents);
+  return path.basename(resources) === "Resources" &&
+    path.basename(contents) === "Contents" &&
+    bundle.endsWith(".app")
+    ? Option.some(bundle)
+    : Option.none();
+};
+
 // Two unparseable versions are never newer.
 export const isNewer = (version: string, than: string) => {
   const a = parse(version);

@@ -63,7 +63,7 @@ export const CHANNEL_CALLS_IN_FLIGHT = 64;
 // bytes have no JSON form a strict struct's could pass through.
 const WriteSchema = Schema.Struct({
   channelId: HexId32Schema,
-  seq: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  seq: Schema.Natural,
   data: Schema.Uint8Array.check(
     Schema.makeFilter((bytes) => bytes.byteLength <= CHANNEL_MAX_WRITE_BYTES),
   ),
@@ -72,7 +72,7 @@ const WriteSchema = Schema.Struct({
 const ReadSchema = strict(
   Schema.Struct({
     channelId: HexId32Schema,
-    seq: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    seq: Schema.Natural,
   }),
 );
 

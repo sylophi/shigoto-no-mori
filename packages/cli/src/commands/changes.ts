@@ -25,6 +25,7 @@ import {
   resolveProject,
   resolveWorktree,
   rest,
+  worktreeArgs,
   worktreeFlags,
 } from "../here.ts";
 import { emit, note, out, Output, styles } from "../output.ts";
@@ -146,9 +147,7 @@ export const create = Command.make(
 export const adopt = Command.make(
   "adopt",
   {
-    ...worktreeFlags,
-    ref: Argument.String("worktree").pipe(Argument.optional),
-    rest,
+    ...worktreeArgs,
     force: Flag.Boolean("force").pipe(
       Flag.withAlias("f"),
       Flag.withDefault(false),
@@ -177,53 +176,44 @@ export const adopt = Command.make(
     }),
 ).pipe(Command.provideEffectDiscard(refuseUnmigrated), changing);
 
-export const setup = Command.make(
-  "setup",
-  {
-    ...worktreeFlags,
-    ref: Argument.String("worktree").pipe(Argument.optional),
-    rest,
-  },
-  (input) =>
-    Effect.gen(function* () {
-      const { located } = yield* resolveWorktree(input);
-      const { json, stdoutColor, stderrColor } = yield* Effect.service(Output);
-      const { ran, failures } = yield* (yield* Worktrees.Worktrees).setup(
-        located,
-        yield* reporter(),
+export const setup = Command.make("setup", worktreeArgs, (input) =>
+  Effect.gen(function* () {
+    const { located } = yield* resolveWorktree(input);
+    const { json, stdoutColor, stderrColor } = yield* Effect.service(Output);
+    const { ran, failures } = yield* (yield* Worktrees.Worktrees).setup(
+      located,
+      yield* reporter(),
+    );
+    if (ran.length === 0) {
+      return yield* json
+        ? emit({ ok: true, ran: [] })
+        : note(
+            styles(stderrColor).dim(
+              "nothing to run: no setup script configured and port-pool isn't active for this worktree",
+            ),
+          );
+    }
+    const ok = failures.length === 0;
+    if (json) {
+      yield* emit({ ok, ran, failures });
+      if (!ok) return yield* new ExitCode({ code: 1 });
+      return;
+    }
+    if (ok) {
+      return yield* out(
+        styles(stdoutColor).green(
+          `setup complete for ${located.worktree.name}`,
+        ),
       );
-      if (ran.length === 0) {
-        return yield* json
-          ? emit({ ok: true, ran: [] })
-          : note(
-              styles(stderrColor).dim(
-                "nothing to run: no setup script configured and port-pool isn't active for this worktree",
-              ),
-            );
-      }
-      const ok = failures.length === 0;
-      if (json) {
-        yield* emit({ ok, ran, failures });
-        if (!ok) return yield* new ExitCode({ code: 1 });
-        return;
-      }
-      if (ok) {
-        return yield* out(
-          styles(stdoutColor).green(
-            `setup complete for ${located.worktree.name}`,
-          ),
-        );
-      }
-      return yield* new SetupFailed({ name: located.worktree.name });
-    }),
+    }
+    return yield* new SetupFailed({ name: located.worktree.name });
+  }),
 ).pipe(Command.provideEffectDiscard(refuseUnmigrated), changing);
 
 export const rm = Command.make(
   "rm",
   {
-    ...worktreeFlags,
-    ref: Argument.String("worktree").pipe(Argument.optional),
-    rest,
+    ...worktreeArgs,
     ...removeFlags,
     stack: flag("stack"),
   },

@@ -9,6 +9,7 @@ import {
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Option from "effect/Option";
@@ -75,7 +76,6 @@ export {
   PullRequestUnchecked,
   RelocateRefused,
   TargetError,
-  UNKNOWN_BRANCH,
   WorktreeRefused,
   cleanupErrorOf,
   isShelfable,
@@ -303,6 +303,9 @@ export class Worktrees extends Context.Service<
         readonly keepBranch: boolean;
         readonly skipCleanup: boolean;
         readonly preflighted?: boolean;
+        // A clock on each cleanup script: one that runs past it fails the
+        // cleanup, as a script that failed does.
+        readonly cleanupWithin?: Duration.Input;
         // A transplant's teardown or a mirror's other side: what the
         // worktree must still hold after its cleanup, right before the
         // delete (refuseChangedSince).
@@ -358,14 +361,6 @@ export class Worktrees extends Context.Service<
       { readonly worktree: WorktreeRow; readonly previousId: string },
       WorktreeRefused | UnknownWorktreeError | Git.GitError
     >;
-    // What a move carries once git lists the checkout at `toPath`: what
-    // is kept under the old id, port-pool's lease, and a record of the
-    // move, which the app follows to re-open a mirror rooted there.
-    readonly carryMoved: (
-      project: RegisteredProject,
-      fromPath: string,
-      toPath: string,
-    ) => Effect.Effect<WorktreeRow, WorktreeRefused | Git.GitError>;
     // port-pool's lease carried from the folder a checkout left to the
     // one git lists it at now (`moved`), wherever its path is re-keyed.
     readonly carryLease: (

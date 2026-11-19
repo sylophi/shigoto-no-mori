@@ -18,23 +18,12 @@ import { notifyError } from "@/lib/toast";
 // button once it has lapsed. With every step done it opens the app, and
 // with nothing to migrate at once.
 export function MigrationPage() {
-  return (
-    <SignInStep
-      render={(step, keyDue) => <MigrationSteps step={step} keyDue={keyDue} />}
-    />
-  );
+  return <SignInStep render={(step) => <MigrationSteps step={step} />} />;
 }
 
-function MigrationSteps({
-  step,
-  keyDue,
-}: {
-  step: SignInStepState;
-  keyDue: boolean;
-}) {
+function MigrationSteps({ step }: { step: SignInStepState }) {
   const api = useApi();
   const migration = useMigration();
-  const signIn = keyDue ? step.signIn : null;
   const navigate = useNavigate();
   // The stuck moves tried again: pending while the host tries them, and
   // remembered once one has run, so a move still stuck says so. A retry
@@ -56,7 +45,7 @@ function MigrationSteps({
   const { open } =
     migration == null || account === undefined
       ? { open: false }
-      : migrationEnded(migration, signIn);
+      : migrationEnded(migration, step.signIn);
   // On to the app, for every window: the shell keeps the page until one
   // goes on past it.
   const goOn = () => {
@@ -83,7 +72,7 @@ function MigrationSteps({
   return (
     <MigrationView
       migration={migration}
-      signIn={signIn}
+      signIn={step.signIn}
       onSignIn={step.run}
       onContinue={goOn}
       onRetry={retry}

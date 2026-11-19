@@ -25,7 +25,6 @@ import {
   useMirrors,
   useStartMirror,
 } from "@/hooks/remote/useMirrors";
-import type { MoveMutation } from "@/hooks/remote/useMoveWorktree";
 import { useApi } from "@/lib/runtime/pageApi";
 import { PullFlowFrame, usePullFlow } from "../flow/PullFlow";
 import { LandedPath } from "../flow/FlowChrome";
@@ -166,13 +165,7 @@ function MirrorFlow({
   toPeer?: DestinationPick;
   // The other device while it is offline, which queues the mirror.
   waitsFor: string | null;
-  mirror: MoveMutation<{
-    worktree: Worktree;
-    captured: boolean;
-    dirtyApplied: boolean;
-    session: string;
-    crlfScripts: boolean;
-  }>;
+  mirror: ReturnType<typeof useStartMirror>;
   onClose: () => void;
 }) {
   const flow = usePullFlow({

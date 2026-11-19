@@ -20,6 +20,7 @@ import {
   MIRROR_STATUS_WORDS,
   mirrorProblemCount,
 } from "@shigomori/contracts/modules/mirror";
+import type { FilesBrought } from "@shigomori/contracts/schemas";
 import { listed, pluralize } from "@shigomori/contracts/words";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
@@ -33,15 +34,6 @@ import type { MirrorEngine } from "./MirrorEngine";
 import { MirrorLedger } from "./MirrorLedger";
 import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import { log } from "@shared/log";
-
-export type TransferFilesResult = {
-  crossed: boolean;
-  // Paths both sides held with different content when the session
-  // opened (a setup script's output against the source's, say). The
-  // engine leaves both alone, so the copy here keeps its own version.
-  conflicts: number;
-  error?: string;
-};
 
 type Direction = "pull" | "push" | "replica";
 
@@ -59,7 +51,7 @@ const CONNECT_CEILING_MS = 60_000;
 // ceiling is for a session that never settles.
 const SETTLE_CEILING_MS = 30 * 60_000;
 
-function failed(error: string, conflicts = 0): TransferFilesResult {
+function failed(error: string, conflicts = 0): FilesBrought {
   return { crossed: false, conflicts, error };
 }
 
@@ -88,7 +80,7 @@ export const transferFilesOnce = (
     direction?: Direction;
   },
   onProgress: (bytes: number, totalBytes: number) => void,
-): Effect.Effect<TransferFilesResult, never, MirrorEngine | MirrorLedger> =>
+): Effect.Effect<FilesBrought, never, MirrorEngine | MirrorLedger> =>
   Effect.flatMap(MirrorLedger, (ledger) =>
     Effect.acquireUseRelease(
       Effect.sync(() =>
@@ -155,10 +147,7 @@ function settled(raw: MirrorSessionRaw): boolean {
 // A file one side couldn't write or read never crossed, so a move's
 // source still holds the only one. A replica is a mirror's first pass,
 // and the mirror goes on to show its problems.
-function outcome(
-  raw: MirrorSessionRaw,
-  direction: Direction,
-): TransferFilesResult {
+function outcome(raw: MirrorSessionRaw, direction: Direction): FilesBrought {
   const count = mirrorProblemCount(raw.local, raw.remote);
   if (direction === "replica" || count === 0) {
     return { crossed: true, conflicts: raw.conflicts.length };

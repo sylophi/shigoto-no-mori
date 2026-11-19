@@ -1,7 +1,5 @@
 // The doctor's project checks: each project's repo, worktrees, scripts, launchers and ports.
 import { plural, pluralize } from "@shigomori/contracts/words";
-import { PROJECT_CONFIG_DEFAULTS } from "@shigomori/contracts/schemas/projectConfigDefaults";
-import * as Predicate from "effect/Predicate";
 import { tildify } from "@shigomori/contracts/projectPaths";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
@@ -9,7 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
-import { WORKTREE_INCLUDE } from "../CarryOver.ts";
+import { includeEnabled, WORKTREE_INCLUDE } from "../CarryOver.ts";
 import * as Config from "../Config.ts";
 import { projectSettingsOf } from "../Config.ts";
 import type { ConfigDoc } from "../configDoc.ts";
@@ -582,14 +580,7 @@ export const makeProjectChecks = ({
           ];
         }
         // The integration is opt-out: absent means on.
-        const include = settings?.["useWorktreeInclude"];
-        if (
-          !(Predicate.isBoolean(include)
-            ? include
-            : PROJECT_CONFIG_DEFAULTS.useWorktreeInclude)
-        ) {
-          return [];
-        }
+        if (!includeEnabled(settings)) return [];
         const resolved = yield* git
           .listUntrackedMatching(project.path, file)
           .pipe(
@@ -722,11 +713,7 @@ export const makeProjectChecks = ({
         const config = yield* Config.Config;
         const worktrees = yield* Worktrees.Worktrees;
         const layout = yield* Layout.Layout;
-        const stored = yield* config.read({
-          kind: "project",
-          projectId: project.id,
-          path: project.path,
-        });
+        const stored = yield* config.read(Config.projectScope(project));
         const { settings, defaultBranch } = projectSettingsOf(stored);
         const identities = yield* worktrees
           .identities(project)

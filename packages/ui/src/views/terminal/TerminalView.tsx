@@ -182,8 +182,7 @@ export function TerminalView({
   pathOfFile,
   lineFeedsReturn = false,
 }: {
-  // Null where nothing feeds it (a scene).
-  feed: TerminalFeed | null;
+  feed: TerminalFeed;
   // What its shell reads, which keys and dropped files are typed in.
   syntax: ShellSyntax;
   // Whether keystrokes reach a shell: false once it has exited.
@@ -236,7 +235,7 @@ export function TerminalView({
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host || !feed || !fontsIn) return;
+    if (!host || !fontsIn) return;
     let theme = readTerminalTheme(host);
     const term = new Terminal({
       // The host's `font-terminal text-xs` and the theme's mono weight,

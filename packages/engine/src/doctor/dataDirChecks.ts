@@ -18,6 +18,7 @@ import { storedProblem } from "../Config.ts";
 import type { ConfigDoc } from "../configDoc.ts";
 import { formatSize, launcherProgram, shellWord } from "../doctorParse.ts";
 import { findExecutable } from "../executables.ts";
+import { isDirectory } from "../entries.ts";
 import { flavorNames } from "../flavor.ts";
 import * as NativeFs from "../NativeFs.ts";
 import * as Paths from "../Paths.ts";
@@ -25,7 +26,7 @@ import { isNotFound } from "../platformErrors.ts";
 import { byHostKind } from "../platform.ts";
 import { heldV2Files, removeV2Files, v2Files } from "../v2Files.ts";
 import * as Registry from "../Registry.ts";
-import { acquireStagingLock } from "../stagingLock.ts";
+import { acquireStagingLock, stagingHolder } from "../stagingLock.ts";
 import { updaterFiles } from "../Updater.ts";
 import type { ListedProject } from "../Registry.ts";
 import * as Terrier from "../Terrier.ts";
@@ -155,15 +156,8 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
 
     const { home, dataDir, binaryName, flavor } = paths;
     const names = flavorNames(flavor);
-    const {
-      lstatIn,
-      statOf,
-      isDirectory,
-      isMissing,
-      sameDirectory,
-      readText,
-      listDir,
-    } = reads;
+    const { lstatIn, statOf, isMissing, sameDirectory, readText, listDir } =
+      reads;
     const sourceText = (() => {
       switch (paths.dataDirSource) {
         case "env":
@@ -223,7 +217,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
               `the pointer file names ${target}, which was ignored because ${problem}, so sm is using ${shown}`,
               `Fix ${tildify(file, home)} to name a data dir, or delete it.`,
             ),
-            usable: yield* isDirectory(dataDir),
+            usable: yield* isDirectory(fs, dataDir),
           };
         }
       }
@@ -322,9 +316,6 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
         usable: true,
       };
     });
-
-    const configFile = path.join(dataDir, "config.json");
-    const registryFile = path.join(dataDir, "registry.json");
 
     const registryLine = check("Data dir", "registry", "projects");
 
@@ -480,6 +471,10 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     });
 
     const updater = updaterFiles(path, dataDir);
+    const readStagingHolder = stagingHolder(updater.stagingLock).pipe(
+      Effect.provideService(ProcessTable.ProcessTable, processTable),
+      Effect.provideService(FileSystem.FileSystem, fs),
+    );
 
     // The stager holds its pidfile for a whole download, so a crashed one
     // is told by its pid being dead, not by the file's age.
@@ -745,15 +740,13 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
 
     return {
       checkDataDir,
-      configFile,
-      registryFile,
       checkGlobalConfig,
       registryLine,
       registeredLine,
       checkRegistry,
       checkStaleLocks,
       checkV2Files,
-      stagingLock: updater.stagingLock,
+      readStagingHolder,
       checkStagingLock,
       checkUpdateLeftovers,
       checkPortAllocations,

@@ -490,7 +490,11 @@ function useWorktreeRowMutation<V extends WorktreeVars>(
   call: (api: HostApi, input: V) => Effect.Effect<Worktree, unknown>,
   patch: (worktree: Worktree, input: V) => Worktree,
   errorTitle: string,
-  onSettled?: (scope: RowMutationScope, input: V, worktree: Worktree) => void,
+  afterSuccess?: (
+    scope: RowMutationScope,
+    input: V,
+    worktree: Worktree,
+  ) => void,
 ) {
   const registry = useRegistry();
   const queryClient = useQueryClient();
@@ -514,7 +518,7 @@ function useWorktreeRowMutation<V extends WorktreeVars>(
       }
     },
     onSuccess: (data, vars) =>
-      onSettled?.({ api, queryClient, keys }, vars, data),
+      afterSuccess?.({ api, queryClient, keys }, vars, data),
     meta: { errorTitle },
   });
 }

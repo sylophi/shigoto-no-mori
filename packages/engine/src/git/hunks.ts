@@ -26,7 +26,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import { isNotFound } from "../platformErrors.ts";
-import { GitRefusedError } from "./documents.ts";
+import { decoder, GitRefusedError } from "./documents.ts";
 import type { GitIndexArea } from "./gitIndex.ts";
 import type { RunningArea } from "./running.ts";
 
@@ -160,9 +160,7 @@ export const makeHunks = ({
         const changes = parseChanges(yield* diffHead(worktree, file, false));
         return {
           // A byte order mark stays, as the file has it.
-          tree: splitLines(
-            new TextDecoder("utf-8", { ignoreBOM: true }).decode(raw),
-          ),
+          tree: splitLines(decoder.decode(raw)),
           changes,
         };
       });

@@ -13,29 +13,21 @@ import * as Flag from "effect/cli/Flag";
 import { ExitCode, UsageError } from "../errors.ts";
 import { accessSwitches } from "./access.ts";
 import { deviceCommands } from "./login.ts";
-import { given, here, projectFlags, rest, worktreeFlags } from "../here.ts";
+import {
+  given,
+  here,
+  projectFlags,
+  rest,
+  worktreeArgs,
+  worktreeTarget,
+} from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
 
 // A flag: absent, or given (blank included).
 const raw = (flag: Option.Option<string>) => Option.getOrUndefined(flag);
 
-const target = (input: {
-  readonly ref: Option.Option<string>;
-  readonly project: Option.Option<string>;
-  readonly projectId: Option.Option<string>;
-  readonly worktreeId: Option.Option<string>;
-}) => ({
-  ref: Option.getOrUndefined(given(input.ref)),
-  project: Option.getOrUndefined(given(input.project)),
-  projectId: Option.getOrUndefined(given(input.projectId)),
-  worktreeId: Option.getOrUndefined(given(input.worktreeId)),
-});
-
 const transferFlags = {
-  ...worktreeFlags,
-  ref: Argument.String("worktree").pipe(Argument.optional),
-  // The first positional is read and the rest let be.
-  rest,
+  ...worktreeArgs,
   to: Flag.String("to").pipe(Flag.optional),
   from: Flag.String("from").pipe(Flag.optional),
   leaveOut: Flag.String("leave-out").pipe(Flag.optional),
@@ -111,7 +103,7 @@ const transferVerb = (name: "send" | "bring" | "mirror") =>
       };
       const { document, headline, result } = yield* transfer[name](
         at,
-        target(input),
+        worktreeTarget(input),
         flags,
         yield* onProgress,
       );
@@ -177,9 +169,7 @@ export const cloneProject = Command.make(
 export const unmirror = Command.make(
   "unmirror",
   {
-    ...worktreeFlags,
-    ref: Argument.String("worktree").pipe(Argument.optional),
-    rest,
+    ...worktreeArgs,
     force: Flag.Boolean("force").pipe(
       Flag.withAlias("f"),
       Flag.withDefault(false),
@@ -189,7 +179,7 @@ export const unmirror = Command.make(
     Effect.gen(function* () {
       const stopped = yield* (yield* Transfer.Transfer).unmirror(
         yield* here,
-        target(input),
+        worktreeTarget(input),
         { force: input.force },
       );
       const { document, worktree } = stopped;
@@ -294,19 +284,15 @@ export const devices = Command.make("devices", {}, (input) =>
     yield* out(
       renderTable(
         ["DEVICE", "PLATFORM", "STATUS"],
-        listed.devices.map((device) => {
-          // A reason from a newer app than this build shows as it came.
-          const block: string = device.block ?? "";
-          return [
-            device.name,
-            device.platform,
-            block === ""
-              ? green(scoped ? "ready" : "connected")
-              : yellow(
-                  `${BLOCKS[block as keyof typeof BLOCKS] ?? block}${device.refusal === undefined ? "" : ` (${device.refusal})`}`,
-                ),
-          ];
-        }),
+        listed.devices.map((device) => [
+          device.name,
+          device.platform,
+          device.block === undefined
+            ? green(scoped ? "ready" : "connected")
+            : yellow(
+                `${BLOCKS[device.block]}${device.refusal === undefined ? "" : ` (${device.refusal})`}`,
+              ),
+        ]),
         stdoutColor,
       ),
     );

@@ -30,13 +30,7 @@ import { type LifecycleRuns, makeRuns } from "./scripts/runs";
 import type { PtySpawnError } from "./scripts/ScriptRuns";
 import { makeUnderWay, type ScriptsBusy } from "./scripts/underWay";
 
-export type {
-  Mark,
-  NotifyScriptEvent,
-  RunningScriptWorktree,
-  ScriptEnvValues,
-} from "./scripts/documents";
-export type { LifecycleRuns } from "./scripts/runs";
+export type { NotifyScriptEvent, ScriptEnvValues } from "./scripts/documents";
 
 export class Scripts extends Context.Service<
   Scripts,
@@ -81,9 +75,7 @@ export class Scripts extends Context.Service<
     ) => Effect.Effect<LifecycleRuns>;
     readonly stopWorktree: (worktreeId: string) => Effect.Effect<void>;
     readonly stopProject: (projectId: string) => Effect.Effect<void>;
-    readonly stopAll: (options?: {
-      readonly graceMs?: number;
-    }) => Effect.Effect<void>;
+    readonly stopAll: () => Effect.Effect<void>;
     // The create run that is still working in the worktree's checkout,
     // from the engine's "created" to its last phase.
     readonly markCreate: (worktreeId: string) => void;

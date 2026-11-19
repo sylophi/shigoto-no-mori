@@ -47,8 +47,9 @@ type Removal =
   | { ok: true; cleanupError?: undefined }
   | { ok: false; cleanupError: CleanupError };
 
-// The engine's removal, the scripts it runs to `reporter`, each cleanup
-// script on a clock of `cleanupWithin` ms when given.
+// The engine's removal, held and counted as one (changing), the scripts it
+// runs to `reporter`, each cleanup script on a clock of `cleanupWithin` ms
+// when given.
 const removeWorktree = (
   projectId: string,
   input: {
@@ -60,34 +61,43 @@ const removeWorktree = (
   },
   reporter: EngineWorktrees.Reporter,
 ) =>
-  Effect.gen(function* () {
-    const located = yield* findProjectAndWorktree(projectId, input.worktreeId);
-    return yield* (yield* EngineWorktrees.Worktrees)
-      .remove(
-        located,
-        {
-          force: input.force === true,
-          keepBranch: false,
-          skipCleanup: input.skipCleanup === true,
-          ...(input.cleanupWithin === undefined
-            ? {}
-            : { cleanupWithin: input.cleanupWithin }),
-          ...(input.expect === undefined ? {} : { expect: input.expect }),
-        },
-        reporter,
-      )
-      .pipe(
-        Effect.as<Removal>({ ok: true }),
-        Effect.catchTag("CleanupFailed", (failed) =>
-          Effect.succeed<Removal>({
-            ok: false,
-            cleanupError: decodeCleanupError(
-              EngineWorktrees.cleanupErrorOf(failed),
+  asCall(
+    changing(
+      Effect.gen(function* () {
+        const located = yield* findProjectAndWorktree(
+          projectId,
+          input.worktreeId,
+        );
+        return yield* (yield* EngineWorktrees.Worktrees)
+          .remove(
+            located,
+            {
+              force: input.force === true,
+              keepBranch: false,
+              skipCleanup: input.skipCleanup === true,
+              ...(input.cleanupWithin === undefined
+                ? {}
+                : { cleanupWithin: input.cleanupWithin }),
+              ...(input.expect === undefined ? {} : { expect: input.expect }),
+            },
+            reporter,
+          )
+          .pipe(
+            Effect.as<Removal>({ ok: true }),
+            Effect.catchTag("CleanupFailed", (failed) =>
+              Effect.succeed<Removal>({
+                ok: false,
+                cleanupError: decodeCleanupError(
+                  EngineWorktrees.cleanupErrorOf(failed),
+                ),
+              }),
             ),
-          }),
-        ),
-      );
-  });
+          );
+      }),
+      { projectId, worktreeId: input.worktreeId },
+      "remove",
+    ),
+  );
 
 // The worktrees a stack's plan names, removed together, and on a
 // cleanup failure whatever went before it. `removedOther` hears each of
@@ -209,21 +219,15 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
           [worktreeId],
           { kind: "remove", busy },
           bookingScripts(scripts, notifyScript, (reporter) =>
-            asCall(
-              changing(
-                removeWorktree(
-                  input.projectId,
-                  {
-                    worktreeId,
-                    force: input.force,
-                    skipCleanup: input.skipCleanup,
-                    expect: input.expect,
-                  },
-                  reporter,
-                ),
-                { projectId: input.projectId, worktreeId },
-                "remove",
-              ),
+            removeWorktree(
+              input.projectId,
+              {
+                worktreeId,
+                force: input.force,
+                skipCleanup: input.skipCleanup,
+                expect: input.expect,
+              },
+              reporter,
             ).pipe(oneSide ? thisSideOnly : (deleting) => deleting),
           ).pipe(
             Effect.tap((outcome) =>
@@ -329,7 +333,6 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
     const forceRemove = Effect.fn("Worktrees.forceRemove")(function* (input: {
       readonly projectId: string;
       readonly worktreeId: string;
-      readonly cleanupWithin?: number | undefined;
     }) {
       const worktreeId = yield* currentWorktreeId(
         input.projectId,
@@ -342,25 +345,16 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
           scripts,
           () => {},
           (reporter) =>
-            asCall(
-              changing(
-                removeWorktree(
-                  input.projectId,
-                  {
-                    worktreeId,
-                    force: true,
-                    ...(options.skipCleanup
-                      ? { skipCleanup: true }
-                      : {
-                          cleanupWithin:
-                            input.cleanupWithin ?? FORCED_CLEANUP_MS,
-                        }),
-                  },
-                  reporter,
-                ),
-                { projectId: input.projectId, worktreeId },
-                "remove",
-              ),
+            removeWorktree(
+              input.projectId,
+              {
+                worktreeId,
+                force: true,
+                ...(options.skipCleanup
+                  ? { skipCleanup: true }
+                  : { cleanupWithin: FORCED_CLEANUP_MS }),
+              },
+              reporter,
             ).pipe(thisSideOnly),
         );
       return yield* scripts

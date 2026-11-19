@@ -79,11 +79,7 @@ const worktreeMutationOf = <const Key extends string, P extends ContractSchema>(
   key: Key,
   payload: P,
   busy?: ChangeKind,
-) =>
-  invoke(key, payload, WorktreeSchema, {
-    ...trackedCodeChange,
-    ...(busy === undefined ? {} : { busy }),
-  });
+) => invoke(key, payload, WorktreeSchema, { ...trackedCodeChange, busy });
 const worktreeMutation = <const Key extends string>(
   key: Key,
   busy?: ChangeKind,

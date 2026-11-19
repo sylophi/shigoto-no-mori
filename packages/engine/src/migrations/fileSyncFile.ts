@@ -1,15 +1,9 @@
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Paths from "../Paths.ts";
-import { isAbsent } from "../platformErrors.ts";
-import { dropsKeys, SKIPPED, skip, unknownKeys } from "./importJson.ts";
-
-const JsonObjectText = Schema.fromJsonString(
-  Schema.Record(Schema.String, Schema.Unknown),
-);
+import { dropsKeys, hintDocument, skip, unknownKeys } from "./importJson.ts";
 
 // One of the JSON files a 2.x data dir keeps for the mirrors, in
 // file-sync/, as an object, for the migration whose table takes it
@@ -17,26 +11,9 @@ const JsonObjectText = Schema.fromJsonString(
 // which is skipped with a warning: the file stays where it is.
 export const fileSyncDocument = (name: string) =>
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { dataDir } = yield* Paths.Paths;
-    const file = path.join(dataDir, "file-sync", name);
-    const skipped = Effect.logWarning(SKIPPED).pipe(
-      Effect.annotateLogs({ path: file, what: "the file" }),
-      Effect.as(Option.none<{ readonly [key: string]: unknown }>()),
-    );
-    const text = yield* fs.readFileString(file).pipe(
-      Effect.map(Option.some),
-      Effect.catchIf(isAbsent, () => Effect.succeed(Option.none<string>())),
-      Effect.catchTags({
-        PlatformError: () => Effect.as(skipped, Option.none<string>()),
-      }),
-    );
-    if (Option.isNone(text)) return Option.none();
-    return yield* Schema.decodeUnknownEffect(JsonObjectText)(text.value).pipe(
-      Effect.map(Option.some),
-      Effect.catchTags({ SchemaError: () => skipped }),
-    );
+    return yield* hintDocument(path.join(dataDir, "file-sync", name));
   });
 
 // What a mirror file's migration leaves out, counted as a doubt for the
@@ -47,7 +24,6 @@ export const countDropped = (
   name: string,
   doc: Option.Option<{ readonly [key: string]: unknown }>,
   container: string,
-  shape: "object" | "array",
   entries: ReadonlyArray<unknown>,
   schema: Schema.Decoder<unknown>,
 ) =>
@@ -56,9 +32,7 @@ export const countDropped = (
     const value = doc.value[container];
     const shaped =
       value === undefined ||
-      (shape === "array"
-        ? Array.isArray(value)
-        : typeof value === "object" && value !== null && !Array.isArray(value));
+      (typeof value === "object" && value !== null && !Array.isArray(value));
     const extra = unknownKeys(doc.value, { schemaVersion: 0, [container]: 0 });
     if (
       !shaped ||

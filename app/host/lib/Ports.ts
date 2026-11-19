@@ -11,12 +11,9 @@ import { type WorktreePort } from "@shigomori/contracts/schemas";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
-import { parseWorktreeKey, worktreeKey } from "./config/project";
 import type * as Engine from "./Engine";
 import { isLoopbackPortListening } from "./net";
 import { findProject, findWorktreeIdentity } from "./projects";
@@ -57,9 +54,23 @@ const POOL_TTL = Duration.seconds(10);
 // for a wedged listener, and a short one keeps the list snappy.
 const PROBE_TIMEOUT_MS = 400;
 
+// A worktree's key, for the caches keyed by one.
+function worktreeKey(projectId: string, worktreeId: string): string {
+  return `${projectId}:${worktreeId}`;
+}
+
+function parseWorktreeKey(key: string): {
+  projectId: string;
+  worktreeId: string;
+} {
+  const [projectId, worktreeId, ...extra] = key.split(":");
+  if (projectId === undefined || worktreeId === undefined || extra.length > 0) {
+    throw new Error(`worktree key ${key} is not projectId:worktreeId`);
+  }
+  return { projectId, worktreeId };
+}
+
 const make = Effect.gen(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
   // The engine the reads below go through. A failed one is a defect:
   // the list has no failure of its own.
   const engine = yield* Effect.context<Engine.Services>();
@@ -67,11 +78,7 @@ const make = Effect.gen(function* () {
     effect.pipe(Effect.provide(engine), Effect.orDie);
 
   const installed = yield* keptAnswer(
-    findExecutable("port-pool").pipe(
-      Effect.map(Option.isSome),
-      Effect.provideService(FileSystem.FileSystem, fs),
-      Effect.provideService(Path.Path, path),
-    ),
+    findExecutable("port-pool").pipe(Effect.map(Option.isSome)),
     INSTALLED_TTL,
   );
 

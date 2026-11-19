@@ -29,6 +29,17 @@ function pickOf<Id extends string>(
   return ids.includes(raw as Id) ? (raw as Id) : fallback;
 }
 
+// The client config the fake host session has saved (bridge.ts's
+// clientConfig channels).
+export function storedClientConfig(): Record<string, unknown> {
+  try {
+    return JSON.parse(localStorage.getItem("sm.fakeHost.clientConfig") ?? "{}");
+  } catch {
+    // Corrupt storage reads as defaults.
+    return {};
+  }
+}
+
 export function applyPose(): void {
   const pose = new URLSearchParams(location.search);
   const theme = pose.get("theme") === "dark" ? "dark" : "light";
@@ -50,14 +61,7 @@ export function applyPose(): void {
   // Posed over whatever the fake host session saved, so a reload keeps the
   // rest of the client config (folds, the sidebar view, quick-create
   // picks) the way the real store would.
-  let stored: Record<string, unknown> = {};
-  try {
-    stored = JSON.parse(
-      localStorage.getItem("sm.fakeHost.clientConfig") ?? "{}",
-    );
-  } catch {
-    // Corrupt storage reads as defaults.
-  }
+  const stored = storedClientConfig();
   localStorage.setItem(
     "sm.fakeHost.clientConfig",
     JSON.stringify({

@@ -23,11 +23,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpApiClient from "effect/http-api/HttpApiClient";
-import {
-  HubApi,
-  HubTunnelUnconfiguredError,
-  PROTOCOL_HEADER,
-} from "@shigomori/contracts/hubApi";
+import { HubApi, PROTOCOL_HEADER } from "@shigomori/contracts/hubApi";
 import {
   HubRateLimitedError,
   HubUnreachableError,
@@ -254,14 +250,6 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
           signal,
         );
       } catch (error) {
-        // The one 4xx a retry does change is the Worker's rate limiter,
-        // so it stays retryable with the 5xx and network failures.
-        if (
-          error instanceof HubTunnelUnconfiguredError ||
-          error instanceof HubRateLimitedError
-        ) {
-          throw error;
-        }
         if (isHubRefusal(error) || isRefusedStatus(error)) {
           throw new TunnelProvisionDeniedError(errorMessageOf(error));
         }

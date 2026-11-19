@@ -30,7 +30,6 @@ import {
   type CDPSession,
   type Page,
 } from "playwright-core";
-import type { RendererApi } from "../../renderer/lib/runtime/pageApi.tsx";
 import { createAccountService } from "../../shared/account/service.ts";
 import { signalIfAlive } from "../../../test/testProcesses.mts";
 import { DevApp } from "./devApp.mts";
@@ -40,7 +39,6 @@ import {
   startHubFront,
   startListenerFront,
   startNetworkSwitch,
-  type PortSwitch,
 } from "./networkSwitch.mts";
 import {
   answers,
@@ -53,8 +51,6 @@ import {
   within,
   type TraceLine,
 } from "./util.mts";
-
-export { repoDir, sleep, within, type TraceLine } from "./util.mts";
 
 export const CLIENT_KINDS = ["web", "desktop", "tunnel", "terminal"] as const;
 export type ClientKind = (typeof CLIENT_KINDS)[number];
@@ -230,7 +226,6 @@ export class Lab {
     .replace(/[^a-z0-9-]/g, "-")
     .slice(0, 24);
   readonly profile = `${this.tag}-host`;
-  readonly profileDir = join(homedir(), ".smd-profiles", this.profile);
   readonly browserDir = join(homedir(), ".smd-profiles", `${this.tag}-browser`);
   readonly webPort = Number(envFile(".env.ports").WEB_PORT);
   readonly origin = `http://localhost:${this.webPort}`;
@@ -242,7 +237,6 @@ export class Lab {
   // A, the desktop device under test, and C, the one on the tunnel.
   readonly desk: DevApp | null;
   readonly remote: DevApp | null;
-  browserSwitch: PortSwitch | null = null;
   context!: BrowserContext;
   private webServer: ChildProcess | null = null;
   private readonly logs: WriteStream;
@@ -516,23 +510,6 @@ export class Lab {
     ];
   }
 
-  // Kept for the scenarios written against the host alone.
-  hostPid(): number | null {
-    return this.hostApp.hostPid();
-  }
-
-  async stopHostApp(): Promise<void> {
-    await this.hostApp.stop();
-  }
-
-  async launchHost(fresh: boolean): Promise<void> {
-    await this.hostApp.launch(fresh);
-  }
-
-  async hostEval<T>(fn: (api: RendererApi) => T | Promise<T>): Promise<T> {
-    return await this.hostApp.eval(fn);
-  }
-
   // What the host itself says about the project's worktrees.
   hostBranches(): string[] {
     const rows = this.smdJson<Array<{ branch: string | null }>>([
@@ -546,7 +523,7 @@ export class Lab {
   // ---- the browser ----
 
   async startBrowser(): Promise<void> {
-    this.browserSwitch = this.network.add(await startNetworkSwitch());
+    const browserSwitch = this.network.add(await startNetworkSwitch());
     mkdirSync(this.browserDir, { recursive: true });
     this.context = await chromium.launchPersistentContext(this.browserDir, {
       channel: "chrome",
@@ -559,7 +536,7 @@ export class Lab {
       handleSIGTERM: false,
       handleSIGHUP: false,
       proxy: {
-        server: `http://127.0.0.1:${this.browserSwitch.port}`,
+        server: `http://127.0.0.1:${browserSwitch.port}`,
         bypass: "localhost,127.0.0.1",
       },
     });

@@ -5,6 +5,11 @@ import { cloneFolderName } from "@shared/cloneUrl";
 import { expandHome } from "@shared/paths";
 import { reorderProjects } from "@shared/reorder";
 import type { CloneProgressPush } from "@shigomori/contracts/modules/projects";
+import type {
+  CloneProjectPayload,
+  CreateProjectPayload,
+  ReorderProjectsPayload,
+} from "@shigomori/contracts/schemas";
 import {
   cloneUrlOf,
   githubRepoOf,
@@ -116,12 +121,7 @@ export const addCheckout = Effect.fn("projects.add")(function* (
 });
 
 export const cloneProject = Effect.fn("projects.clone")(function* (
-  input: {
-    readonly url: string;
-    readonly parentDir: string;
-    readonly name?: string | undefined;
-    readonly terrier?: boolean | undefined;
-  },
+  input: CloneProjectPayload,
   notify: (push: CloneProgressPush) => void,
 ) {
   const folder = input.name ?? cloneFolderName(input.url);
@@ -142,11 +142,9 @@ export const cloneProject = Effect.fn("projects.clone")(function* (
   return yield* registerNewCheckout(path, input.terrier, "Cloned into");
 });
 
-export const createProject = Effect.fn("projects.create")(function* (input: {
-  readonly parentDir: string;
-  readonly name: string;
-  readonly terrier?: boolean | undefined;
-}) {
+export const createProject = Effect.fn("projects.create")(function* (
+  input: CreateProjectPayload,
+) {
   const path = yield* (yield* Git.Git).createRepository(
     expandHome(input.parentDir),
     input.name,
@@ -206,11 +204,9 @@ export const deleteProject = Effect.fn("projects.delete")(
 // the order apart from the registry entries, so any project can hold
 // any place. Each move goes over the list as the previous one left it
 // (see reorders).
-export const reorderProject = Effect.fn("projects.reorder")(function* (input: {
-  readonly draggedId: string;
-  readonly targetId: string;
-  readonly position: Parameters<typeof reorderProjects>[3];
-}) {
+export const reorderProject = Effect.fn("projects.reorder")(function* (
+  input: ReorderProjectsPayload,
+) {
   const registry = yield* Registry.Registry;
   const current = yield* registry.listed;
   const next = reorderProjects(

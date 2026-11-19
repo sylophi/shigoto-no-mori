@@ -77,7 +77,7 @@ const LAUNCHER = byPlatform({
 // doesn't, or an export left over from sandboxing the CLI would send
 // the app's children (which resolve the data dir themselves,
 // the engine's Paths.ts) somewhere the app isn't, and put back an update feed
-// stand-in that electron/updateEndpoints.ts took out.
+// stand-in that shared/updater/endpoints.ts took out.
 const APP_CONTRACT_PREFIX = "SHIGOMORI_";
 
 // What a launcher sets for the app itself, kept through the rebuild.
@@ -208,11 +208,7 @@ export const outputUntil = (
 // SIGKILLed either way: an interactive zsh ignores SIGTERM. It shares
 // the app's process group, so what its startup files left behind is
 // not signalled with it.
-const captureShellEnv = (
-  shell: string,
-  base: Env,
-  timeoutMs = CAPTURE_TIMEOUT_MS,
-) =>
+const captureShellEnv = (shell: string, base: Env) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const handle = yield* spawner.spawn(
@@ -234,7 +230,7 @@ const captureShellEnv = (
     return yield* outputUntil(handle, END);
   }).pipe(
     Effect.scoped,
-    Effect.timeoutOption(timeoutMs),
+    Effect.timeoutOption(CAPTURE_TIMEOUT_MS),
     Effect.map((output) =>
       Option.match(Option.flatten(output), {
         onNone: () => null,

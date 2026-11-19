@@ -17,30 +17,25 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 
 const DEFAULT_MODE: PackageScriptSortMode = "frequent";
 
-function usePackageScriptSort(projectId: string | null) {
+function usePackageScriptSort(projectId: string) {
   const { api, keys } = useHostScope();
   return useQuery<PackageScriptSortMode>({
     queryKey: keys.packageScriptSort(projectId),
-    queryFn:
-      projectId !== null
-        ? // This page shows the manual order, so it can be told it.
-          ({ signal }) =>
-            api.run(
-              api.packageScripts.getSort({ projectId, knowsManual: true }),
-              { signal },
-            )
-        : skipToken,
+    // This page shows the manual order, so it can be told it.
+    queryFn: ({ signal }) =>
+      api.run(api.packageScripts.getSort({ projectId, knowsManual: true }), {
+        signal,
+      }),
     staleTime: Number.POSITIVE_INFINITY,
     meta: { errorTitle: "Couldn't read script sort preference" },
   });
 }
 
-export function useSetPackageScriptSort(projectId: string | null) {
+export function useSetPackageScriptSort(projectId: string) {
   const { api, keys } = useHostScope();
   return useOptimisticPreference<PackageScriptSortMode>(
     keys.packageScriptSort(projectId),
     async (mode) => {
-      if (!projectId) return;
       await api.run(api.packageScripts.setSort({ projectId, mode }));
     },
     "Couldn't save script sort preference",
@@ -52,14 +47,14 @@ const NO_ORDER: readonly string[] = [];
 // The stored "manual" order, read only while the sort is manual: the
 // list reads it for nothing else.
 function usePackageScriptOrder(
-  projectId: string | null,
+  projectId: string,
   sortMode: PackageScriptSortMode,
 ) {
   const { api, keys } = useHostScope();
   return useQuery<readonly string[]>({
     queryKey: keys.packageScriptOrder(projectId),
     queryFn:
-      projectId !== null && sortMode === "manual"
+      sortMode === "manual"
         ? ({ signal }) =>
             api.run(api.packageScripts.getOrder({ projectId }), { signal })
         : skipToken,
@@ -87,12 +82,11 @@ export function useSortedPackageScripts(
 // optimistic value, which orders this worktree's list exactly as the
 // host's merged order will. The refetch once the write settles brings
 // in the names only other branches have.
-export function useSetPackageScriptOrder(projectId: string | null) {
+export function useSetPackageScriptOrder(projectId: string) {
   const { api, keys } = useHostScope();
   return useOptimisticPreference<string[]>(
     keys.packageScriptOrder(projectId),
     async (arranged) => {
-      if (!projectId) return;
       await api.run(api.packageScripts.setOrder({ projectId, arranged }));
     },
     "Couldn't save script order",
@@ -105,7 +99,7 @@ export function useSetPackageScriptOrder(projectId: string | null) {
 // settles has the host's say (and undoes a failed write). Only the last:
 // a refetch while another toggle is in flight would read the host from
 // before it and drop that toggle's pin until it settles.
-export function useSetLaunchRowScript(projectId: string | null) {
+export function useSetLaunchRowScript(projectId: string) {
   const { api, keys } = useHostScope();
   const queryClient = useQueryClient();
   const queryKey = keys.packageScriptsAll(projectId);
@@ -113,7 +107,6 @@ export function useSetLaunchRowScript(projectId: string | null) {
   return useMutation<void, Error, { scriptName: string; onRow: boolean }>({
     mutationKey,
     mutationFn: async ({ scriptName, onRow }) => {
-      if (!projectId) return;
       await api.run(
         api.packageScripts.setLaunchRow({ projectId, scriptName, onRow }),
       );

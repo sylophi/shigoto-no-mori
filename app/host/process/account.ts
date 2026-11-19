@@ -28,18 +28,17 @@ export function allowedWebOrigin(): string | undefined {
 
 // The account as the hub socket dials with it (shared/account/hubConnect.ts).
 export function hubAccount(): HubAccount | null {
-  const { facts, service } = account();
-  return facts === null || service === null ? null : { ...facts, service };
+  const current = account();
+  return current.facts === null
+    ? null
+    : { ...current.facts, service: current.service };
 }
 
 // The account's device registry, for the terminal's cross-device verbs.
 export async function listAccountDevices(
   signal: AbortSignal,
 ): Promise<DeviceInfo[]> {
-  const { facts, service } = account();
-  if (facts === null) return [];
-  if (service === null) {
-    throw new Error("signed out or the account service is not configured");
-  }
-  return service.listDevices(facts.credential, signal);
+  const current = account();
+  if (current.facts === null) return [];
+  return current.service.listDevices(current.facts.credential, signal);
 }

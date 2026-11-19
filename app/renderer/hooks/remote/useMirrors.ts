@@ -303,7 +303,7 @@ export function useWorktreeMirrorLinks(
   const serving = served.filter((s) => s.worktreeId === worktree.id);
   // A peer's page read off its cache while it is away: its own session
   // is its last word too.
-  const scopeApi = useLiveApi(scope.remote ? scope.deviceId : undefined);
+  const runnerApi = useLiveApi(scope.deviceId);
   const others = useOtherHostMirrors(scope.deviceId, (list) => {
     const session = list.sessions.find(
       (s) => s.deviceId === scope.deviceId && s.worktreeId === worktree.id,
@@ -316,7 +316,7 @@ export function useWorktreeMirrorLinks(
   if (own !== undefined) {
     links.push({
       runnerDeviceId: scope.deviceId,
-      runnerApi: scope.remote && scopeApi === undefined ? undefined : scope.api,
+      runnerApi,
       otherDeviceId: own.deviceId,
       otherCopy: { projectId: own.projectId, worktreeId: own.worktreeId },
       session: own,

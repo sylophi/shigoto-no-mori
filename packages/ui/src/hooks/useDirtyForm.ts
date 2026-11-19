@@ -57,13 +57,13 @@ export function useDirtyForm<T>(initial: T) {
   // the remote change into the draft.
   const reseed = (
     next: T,
-    mergeWhenDirty?: (prevForm: T, prevSnapshot: T, next: T) => T,
+    mergeWhenDirty: (prevForm: T, prevSnapshot: T, next: T) => T,
   ): void => {
     const { form: prevForm, savedSnapshot: prevSnapshot } = latest.current;
     if (JSON.stringify(next) === JSON.stringify(prevSnapshot)) return;
     if (JSON.stringify(prevForm) === JSON.stringify(prevSnapshot)) {
       setForm(next);
-    } else if (mergeWhenDirty) {
+    } else {
       setForm((prev) => mergeWhenDirty(prev, prevSnapshot, next));
     }
     setSavedSnapshot(next);

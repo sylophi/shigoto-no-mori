@@ -37,17 +37,6 @@ import { useSharedSettingsSettled } from "@/hooks/sharedSettings/useSharedSettin
 import type { PullChoice } from "@/hooks/remote/useMoveWorktree";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 
-// The rule itself (the selection, its mode, the setup default and the
-// patterns it resolves to) lives in contracts' leaveOutRule.ts, which the
-// CLI's control ops read too. Re-exported for the dialogs.
-export {
-  type IgnoreSelection,
-  modeOf,
-  presetOfSelection,
-  resolveIgnores,
-  selectionOfPreset,
-};
-
 // The review state a pull dialog (transplant or mirror) keeps: the
 // leave-out rule, the ignored list the gitignored rule resolves over
 // (read only once that rule is picked, since it walks the checkout
@@ -61,7 +50,7 @@ export {
 export function usePullChoice(
   projectId: string,
   worktreeId: string,
-  identity: string | null | undefined,
+  identity: string,
   deferred: boolean,
 ) {
   const preset = useLeaveOutPreset(identity);
@@ -96,12 +85,9 @@ export function usePullChoice(
     selection,
     setSelection,
     ignored,
-    // The rule on screen is not the project's preset, and can be made
-    // it. Never for an identity-less project, which has none to keep.
+    // The rule on screen is not the project's preset, and can be made it.
     presetDiffers:
-      identity != null &&
-      picked !== null &&
-      !sameSelection(picked, selectionOfPreset(preset)),
+      picked !== null && !sameSelection(picked, selectionOfPreset(preset)),
     saveAsPreset: () => savePreset(presetOfSelection(selection)),
     runSetup,
     setRunSetup: setSetupChoice,

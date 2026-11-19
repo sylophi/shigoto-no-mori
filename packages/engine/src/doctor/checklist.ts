@@ -3,9 +3,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as ProcessTable from "../ProcessTable.ts";
 import * as Config from "../Config.ts";
-import { stagingHolder } from "../stagingLock.ts";
 import * as Terrier from "../Terrier.ts";
 import * as WorktreeData from "../WorktreeData.ts";
 import {
@@ -36,7 +34,6 @@ export const makeChecklist = ({
   readonly projectChecks: ProjectChecksArea;
 }) =>
   Effect.gen(function* () {
-    const processTable = yield* ProcessTable.ProcessTable;
     const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
     const { checkGit, checkGh, checkApp, checkPath, checkShellHook } =
@@ -47,7 +44,7 @@ export const makeChecklist = ({
       checkRegistry,
       checkStaleLocks,
       checkV2Files,
-      stagingLock,
+      readStagingHolder,
       checkStagingLock,
       checkUpdateLeftovers,
       checkPortAllocations,
@@ -98,9 +95,7 @@ export const makeChecklist = ({
             .portPoolListing(yield* config.device("portPool"))
             .pipe(Effect.provideContext(platform)),
         );
-        const holder = yield* stagingHolder(stagingLock).pipe(
-          Effect.provideService(ProcessTable.ProcessTable, processTable),
-        );
+        const holder = yield* readStagingHolder;
         const kept = yield* data.kept;
         const environment = yield* checkEnvironment(input);
         const dir = yield* checkDataDir;

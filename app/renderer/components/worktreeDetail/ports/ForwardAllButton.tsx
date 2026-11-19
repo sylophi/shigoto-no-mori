@@ -141,7 +141,6 @@ export function ForwardAllButton({
     <ForwardAllButtonView
       modes={modes}
       runningMode={bulk.isPending ? (bulk.variables ?? null) : null}
-      canStart={canStart}
       startBlocker={startBlocker}
       waiting={configQuery.isPending}
       onRun={(mode) => bulk.mutate(mode)}

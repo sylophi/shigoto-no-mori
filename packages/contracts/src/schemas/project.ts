@@ -5,7 +5,7 @@ import { strict } from "./strict.ts";
 
 // What `deriveBranch` returns with no branch and no readable detached
 // HEAD, which is not a real branch.
-const UNKNOWN_BRANCH = "(unknown)";
+export const UNKNOWN_BRANCH = "(unknown)";
 
 export const isRealBranch = (branch: string): boolean =>
   branch !== UNKNOWN_BRANCH;
@@ -123,6 +123,7 @@ export const FilesBroughtSchema = strict(
     error: Schema.optional(Schema.String),
   }),
 );
+export type FilesBrought = typeof FilesBroughtSchema.Type;
 
 export const ClonedFromDeviceSchema = Schema.Struct({
   project: ProjectSchema,
@@ -159,6 +160,7 @@ export const ReorderProjectsPayloadSchema = Schema.Struct({
   targetId: Schema.NonEmptyString,
   position: Schema.Literals(["before", "after"]),
 });
+export type ReorderProjectsPayload = typeof ReorderProjectsPayloadSchema.Type;
 
 export const ProjectIconSchema = Schema.Struct({
   mime: Schema.String,

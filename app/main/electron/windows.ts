@@ -140,7 +140,7 @@ function terminalsSizePath(): string {
   return join(app.getPath("userData"), "terminalsWindow.json");
 }
 
-function find(windowId: number): Held | undefined {
+function find(windowId: number | undefined): Held | undefined {
   return held.find((entry) => entry.id === windowId);
 }
 
@@ -602,7 +602,7 @@ export function raisePageWindow(): WebContents | undefined {
 }
 
 export function takeDeepLink(windowId: number | undefined): string | null {
-  const entry = windowId === undefined ? undefined : find(windowId);
+  const entry = find(windowId);
   if (entry === undefined) return null;
   const route = entry.deepLink;
   entry.deepLink = null;
@@ -638,7 +638,7 @@ export function onWindowClosed(
 
 // Keeps the window `width` wider than the user made it.
 export function widenWindow(windowId: number | undefined, width: number): void {
-  const entry = windowId === undefined ? undefined : find(windowId);
+  const entry = find(windowId);
   if (entry === undefined) return;
   entry.wanted = width;
   fitWidth(entry);
@@ -673,6 +673,6 @@ function fitWidth(entry: Held): void {
 }
 
 export function noteShowing(windowId: number | undefined, route: string): void {
-  const entry = windowId === undefined ? undefined : find(windowId);
+  const entry = find(windowId);
   if (entry !== undefined) entry.route = route;
 }

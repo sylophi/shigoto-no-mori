@@ -69,15 +69,14 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Predicate from "effect/Predicate";
 import * as PubSub from "effect/PubSub";
 import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import * as PlatformError from "effect/PlatformError";
 import * as Stream from "effect/Stream";
 import * as Git from "@shigomori/engine/Git";
 import type * as Registry from "@shigomori/engine/Registry";
 import { splitZ } from "@shigomori/engine/gitParse";
+import { isNotFound } from "@shigomori/engine/platformErrors";
 import { listedProjects } from "@host/lib/projects";
 import * as TreeWatch from "@host/lib/watchTree";
 import * as HostPushes from "./HostPushes";
@@ -204,9 +203,6 @@ const workingTreesOf = (projectPath: string, gitDir: string) =>
 // signal. A file that isn't there reads as absent; any other failure
 // (a directory git removed mid-walk, a volume that stalls) fails the
 // reading, which the caller skips rather than read as a change.
-const isNotFound = (error: PlatformError.PlatformError) =>
-  Predicate.isTagged(error.reason, "NotFound");
-
 type GitState = { readonly refs: string; readonly indexes: string };
 
 const gitStateOf = (gitDir: string) =>

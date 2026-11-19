@@ -7,6 +7,7 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { getBrowseParentPath } from "@shigomori/contracts/projectPaths";
 import { notifyError, toast } from "@/lib/toast";
 import { DataLocationSectionView } from "@shigomori/ui/views/settings/DataLocationSectionView.tsx";
+import { revealInFolder } from "@/lib/openExternal";
 import { useApi } from "@/lib/runtime/pageApi";
 
 // Where the shigomori data dir lives (DataLocationSectionView), and
@@ -72,11 +73,7 @@ export function DataLocationSection() {
       atDefault={runtime?.atDefaultDataDir ?? true}
       resetArmed={reset.armed}
       onReveal={() => {
-        if (root) {
-          page
-            .run(page.shell.showItemInFolder({ path: root }))
-            .catch((err) => notifyError("Couldn't reveal folder", err));
-        }
+        if (root) revealInFolder(page, root, "Couldn't reveal folder");
       }}
       onPickParent={() => setPickerOpen(true)}
       onReset={handleReset}

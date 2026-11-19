@@ -235,20 +235,18 @@ function hubHandlers(
 
   function dropPeer(
     deviceId: string,
-    entry?: PeerEntry,
+    entry: PeerEntry,
     selfClosed = false,
   ): void {
-    const cached = peers.get(deviceId);
-    if (cached === undefined) return;
-    // When the caller names an entry, drop only that one: a stale
-    // close must not evict the replacement session.
-    if (entry !== undefined && cached !== entry) return;
+    // Drop only the named entry: a stale close must not evict the
+    // replacement session.
+    if (peers.get(deviceId) !== entry) return;
     peers.delete(deviceId);
     // Only an actual transition notifies: dropping an entry whose dial
     // never completed changed nothing on the status surface. The
     // keeper hears about self-closes only (see onPeerDropped above),
     // and after the delete, so its redial finds an empty slot.
-    if (cached.version !== null) {
+    if (entry.version !== null) {
       deps.onDirectChange();
       if (selfClosed) deps.onPeerDropped(deviceId);
     }

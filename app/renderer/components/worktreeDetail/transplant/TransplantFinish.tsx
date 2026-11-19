@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { UseMutationResult } from "@tanstack/react-query";
 import type {
   SyncPullWorktreeResult,
+  SyncSourceFate,
   SyncTeardownSourceResult,
 } from "@shigomori/contracts/modules/sync";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
@@ -15,14 +16,8 @@ import {
 import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import { useSetShelved } from "@/hooks/worktrees/useWorktreeMutations";
 import { LandedPath } from "../flow/FlowChrome";
-import {
-  type Landing,
-  LANDS_HERE,
-} from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
-import {
-  type SourceChoice,
-  TransplantFinishView,
-} from "@shigomori/ui/views/worktreeDetail/transplant/TransplantFinishView.tsx";
+import type { Landing } from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
+import { TransplantFinishView } from "@shigomori/ui/views/worktreeDetail/transplant/TransplantFinishView.tsx";
 
 export function TransplantFinish({
   result,
@@ -31,7 +26,7 @@ export function TransplantFinish({
   project,
   sourceDeviceLabel,
   thisDeviceLabel,
-  landing = LANDS_HERE,
+  landing,
   teardown,
   onClose,
   onOpen,
@@ -49,7 +44,7 @@ export function TransplantFinish({
   sourceDeviceLabel: string;
   // The device it landed on, and the words for that (pullSteps.ts).
   thisDeviceLabel: string;
-  landing?: Landing;
+  landing: Landing;
   // The source's guarded teardown (sync:teardownSource), on the peer
   // after a pull, on this device after a send.
   teardown: UseMutationResult<SyncTeardownSourceResult, Error, void>;
@@ -80,10 +75,10 @@ export function TransplantFinish({
   // Ignored files the files step meant to bring and could not are only
   // on the source too: tear down stays on offer, but is not the default.
   const filesFailed = result.files !== undefined && !filesCrossed;
-  const [choice, setChoiceState] = useState<SourceChoice>(
+  const [choice, setChoiceState] = useState<SyncSourceFate>(
     stranded || filesFailed ? "keep" : "teardown",
   );
-  const choose = (next: SourceChoice) => {
+  const choose = (next: SyncSourceFate) => {
     // Neither an armed confirm nor a stale failure carries over from
     // one choice to another.
     disarm();

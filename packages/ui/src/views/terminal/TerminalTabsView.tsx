@@ -35,8 +35,6 @@ export function TerminalTabToolbar({ children }: { children: ReactNode }) {
 export type TerminalTab = {
   readonly id: string;
   readonly label: string;
-  // A shell that has exited, or a run that has ended.
-  readonly ended?: boolean;
 };
 
 export function TerminalTabsView({
@@ -132,10 +130,7 @@ export function TerminalTabsView({
                     value={tab.id}
                     data-slot="terminal-tab-pick"
                     aria-label={tab.label}
-                    className={cn(
-                      "flex h-full items-center pl-2.5",
-                      tab.ended && "opacity-60",
-                    )}
+                    className="flex h-full items-center pl-2.5"
                   >
                     <SimpleTooltip whenTruncated tip={tab.label}>
                       <span className="max-w-40 truncate">{tab.label}</span>

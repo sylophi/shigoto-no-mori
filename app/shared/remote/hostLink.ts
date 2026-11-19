@@ -93,8 +93,6 @@ export const hostLink = Effect.fnUntraced(function* (options: {
 
   const up = Effect.flatMap(Ref.get(current), Deferred.await);
   return {
-    // The host is this machine's own build, which decodes what it sends.
-    local: true,
     call: (channel, input) =>
       Effect.flatMap(up, (link) => link.call(channel, input)),
     view: (channel, input) =>

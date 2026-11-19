@@ -35,7 +35,7 @@ export function DeviceBadgeView({ badge }: { badge: SidebarDeviceBadge }) {
 
 // The mark a local worktree wears for the peer it is mirrored with: the
 // mirror glyph and the peer's badge, while this window has Show device
-// icons on (Settings, Appearance, useShowDeviceBadges). Worn in the
+// icons on (Settings, Appearance, showDeviceBadges). Worn in the
 // sidebar's rows and the palette's.
 export function MirrorBadgeView({
   mirror,
@@ -59,7 +59,7 @@ export function MirrorBadgeView({
 
 // The project-header cluster: one badge per contributing peer device,
 // order preserved from the merge. A sidebar row draws its badges only
-// while this window has Show device icons on (useShowDeviceBadges).
+// while this window has Show device icons on (showDeviceBadges).
 // The palette and the inbox's create target draw them bare, since
 // there the device is the choice being made rather than a decoration.
 export function DeviceBadgeClusterView({

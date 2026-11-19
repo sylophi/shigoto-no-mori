@@ -196,16 +196,14 @@ export type WsServerStartOpts = {
   // The configured web client's origin, which the upgrade admits so a
   // browser dialing through the tunnel passes (isAllowedOrigin).
   allowedOrigin?: string;
-  // Test seams. Real callers take the defaults.
+  // Test seam. Real callers take the default.
   helloTimeoutMs?: number;
-  livenessTimeoutMs?: number;
 };
 
 // So a bind failure (a taken port) is not a silent hole.
 type LinkServerStatus = {
   listening: boolean;
   port: number | null;
-  bindAddress: string | null;
   error: string | null;
 };
 
@@ -342,7 +340,6 @@ type Phase =
 
 // One socket, from its accept to its close.
 type Connection = {
-  readonly ws: WebSocket;
   // What the link's frames go through: the socket itself on the
   // loopback, sealed on a peer's.
   readonly wire: Socket.WebSocketLike;
@@ -405,7 +402,6 @@ export const make = (options: {
     let status: LinkServerStatus = {
       listening: false,
       port: null,
-      bindAddress: null,
       error: null,
     };
     let current: {
@@ -948,7 +944,6 @@ export const make = (options: {
             Effect.gen(function* () {
               const pushes = yield* PubSub.sliding<Push>(1024);
               const connection: Connection = {
-                ws,
                 wire:
                   "token" in opens || localKey === null
                     ? ws
@@ -1027,7 +1022,6 @@ export const make = (options: {
           wss.once("listening", () => resume(Effect.void));
         });
         wss.on("error", (error) => {
-          status = { ...status, error: messageOf(error) };
           log.warn(`[link] listener error: ${messageOf(error)}`);
         });
 
@@ -1037,18 +1031,16 @@ export const make = (options: {
         // would cut the app's own windows at every wake. Silence is
         // monotonic elapsed time, which stands still while the machine
         // sleeps.
-        const livenessMs = opts.livenessTimeoutMs ?? HOST_LIVENESS_TIMEOUT_MS;
-        const sweepMs = Math.max(50, Math.floor(livenessMs / 4));
         if (!local)
           yield* Effect.sync(() => {
             const now = elapsedMillisUnsafe(clock);
             for (const connection of connections.values()) {
-              if (now - connection.lastInboundAt > livenessMs) {
+              if (now - connection.lastInboundAt > HOST_LIVENESS_TIMEOUT_MS) {
                 connection.kill(CLOSE_GOING_AWAY, "heartbeat timeout");
               }
             }
           }).pipe(
-            Effect.repeat(Schedule.spaced(sweepMs)),
+            Effect.repeat(Schedule.spaced(HOST_LIVENESS_TIMEOUT_MS / 4)),
             Effect.forkIn(scope),
           );
 
@@ -1100,7 +1092,7 @@ export const make = (options: {
       const running = current;
       if (running === null) return Effect.void;
       current = null;
-      status = { listening: false, port: null, bindAddress: null, error: null };
+      status = { listening: false, port: null, error: null };
       return Scope.close(running.scope, Exit.void);
     });
 
@@ -1143,7 +1135,6 @@ export const make = (options: {
           status = {
             listening: false,
             port: null,
-            bindAddress: opts.bindAddress,
             error,
           };
           log.error(
@@ -1159,7 +1150,6 @@ export const make = (options: {
         status = {
           listening: true,
           port: started.value.port,
-          bindAddress: opts.bindAddress,
           error: null,
         };
       });

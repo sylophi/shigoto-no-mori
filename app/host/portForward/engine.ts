@@ -4,7 +4,7 @@
 // session, opened with forward:open (the host side in
 // host/ipc/modules/forward.ts, the wire rules in
 // packages/contracts/src/modules/forward.ts). Its peer reach is
-// injected (PortForwards.ts passes PeerReach's).
+// PeerReach's.
 //
 // The per-socket bridging (attach, open, the adapter's backpressure and
 // teardown) lives in bridge.ts, shared with the mirror gateway. This
@@ -20,7 +20,7 @@ import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import type { forwardContract } from "@shigomori/contracts/modules/forward";
+import { forwardContract } from "@shigomori/contracts/modules/forward";
 import {
   callFailureOf,
   errorCodeOf,
@@ -31,15 +31,14 @@ import {
   type PortForwardSummary,
   type PortForwardWorktree,
 } from "@shigomori/contracts/modules/portForward";
-import type { PeerCalls } from "@host/ipc/PeerReach";
+import {
+  type PeerCalls,
+  type PeerChannels,
+  PeerReach,
+} from "@host/ipc/PeerReach";
 import { mintHexId } from "@host/lib/hexId";
 import * as HostPushes from "@host/lib/HostPushes";
-import {
-  type BridgedConn,
-  bridgeSocket,
-  listenLoopback,
-  type PeerChannels,
-} from "./bridge";
+import { type BridgedConn, bridgeSocket, listenLoopback } from "./bridge";
 
 export type ForwardApi = PeerCalls<typeof forwardContract>;
 
@@ -82,16 +81,11 @@ type Forward = {
   bridge: (socket: Socket) => void;
 };
 
-export type PortForwardEngine = Effect.Success<
-  ReturnType<typeof makePortForwardEngine>
->;
+export type PortForwardEngine = Effect.Success<typeof makePortForwardEngine>;
 
 // The changed push and every forward run in the caller's scope.
-export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
-  forwardApiFor: (deviceId: string) => ForwardApi;
-  // The peer session's byte channels (bridge.ts PeerChannels).
-  channelsFor: (deviceId: string) => PeerChannels;
-}) {
+export const makePortForwardEngine = Effect.gen(function* () {
+  const reach = yield* PeerReach;
   const engineScope = yield* Effect.scope;
   const pushes = yield* HostPushes.HostPushes;
   // The conns' opens run on the engine's own services, not a caller's.
@@ -207,8 +201,8 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
     existing: Forward | undefined,
     scope: Scope.Closeable,
   ) {
-    const api = deps.forwardApiFor(input.deviceId);
-    const channels = deps.channelsFor(input.deviceId);
+    const api = reach.calls(forwardContract, input.deviceId);
+    const channels = reach.channels(input.deviceId);
     yield* probe(api, channels, input.remotePort);
     // allowHalfOpen: a client FIN must not tear the conn down (the
     // adapter in host/socket/channelStreams.ts ends one direction and

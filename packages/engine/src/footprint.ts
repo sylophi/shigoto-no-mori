@@ -1,11 +1,10 @@
 // Everything of a flavor's on the machine, outside its bundle: the
 // files and folders it makes, each of them its own (the flavor's names
-// key every one), and what it keeps in places other flavors share. A
-// nuke removes the files and folders, and the entries in shared places
-// go with the host's half (the shell hook block, the agent hooks, the
-// login item, the device on the hub). So nothing of one build is
-// another's, and nothing of a nuked build stays (the terminal's `nuke`,
-// commands/nuke.ts).
+// key every one). A nuke removes them, and what it keeps in places
+// other flavors share goes with the host's half (the shell hook block,
+// the agent hooks, the login item, the device on the hub). So nothing
+// of one build is another's, and nothing of a nuked build stays (the
+// terminal's `nuke`, commands/nuke.ts).
 import { readdirSync, rmdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { errorMessageOf } from "@shigomori/contracts/errors";
@@ -75,13 +74,6 @@ export type Footprint = {
       | "fishHook";
     readonly path: string;
   }>;
-  // Kept in a place other flavors share, under this flavor's names.
-  readonly keychainItem: string;
-  readonly shellHookMarker: string;
-  readonly agentHookBinary: string;
-  // The OS's registrations: the login item and the URL scheme, by them.
-  readonly bundleId: string;
-  readonly scheme: string;
 };
 
 export const footprint = (flavor: Flavor, place: FootprintPlace): Footprint => {
@@ -112,11 +104,6 @@ export const footprint = (flavor: Flavor, place: FootprintPlace): Footprint => {
         path: join(place.configHome, "fish", "conf.d", `${names.alias}.fish`),
       },
     ],
-    keychainItem: `${names.appName} Safe Storage`,
-    shellHookMarker: `# >>> ${names.alias} shell integration >>>`,
-    agentHookBinary: names.binaryName,
-    bundleId: names.bundleId,
-    scheme: names.scheme,
   };
 };
 

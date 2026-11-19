@@ -37,8 +37,6 @@ export interface SidebarMarks {
   deviceBadges: boolean;
   // An agent waiting on you, on its worktree's row.
   agentsWaiting: boolean;
-  // Agent-working worktrees filed on their own shelf.
-  allowAgentWorking: boolean;
 }
 
 export interface WorktreeEntry {
@@ -174,11 +172,7 @@ export function WorktreeEntryView({
             (EntryName) plus its marks, and that is what the line
             wraps the pills at. */}
         <span className="flex flex-1 items-center gap-1">
-          <EntryName
-            worktree={worktree}
-            resident={resident}
-            allowAgentWorking={marks.allowAgentWorking}
-          />
+          <EntryName worktree={worktree} resident={resident} />
           {/* Pulled in vertically: the device tile stands taller than
               the line, and letting it set the line's height would make
               a peer's row taller than a local one. The forward mark
@@ -227,19 +221,14 @@ export function WorktreeEntryView({
 function EntryName({
   worktree,
   resident,
-  allowAgentWorking,
 }: {
   worktree: Worktree;
   resident: Resident | null;
-  allowAgentWorking: boolean;
 }) {
   return (
     <>
       {(worktree.isPrimary || worktree.isExternal) && (
-        <WorktreeKindIconView
-          worktree={worktree}
-          allowAgentWorking={allowAgentWorking}
-        />
+        <WorktreeKindIconView worktree={worktree} allowAgentWorking={false} />
       )}
       {resident?.face && (
         <VillagerFaceView

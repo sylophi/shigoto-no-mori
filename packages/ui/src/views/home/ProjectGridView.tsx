@@ -339,11 +339,11 @@ export function ProjectTileView({
 // order, up and down to the nearest tile in the next line of tiles,
 // whichever section it is in, read off the laid-out grid so it holds
 // at any width.
-function moveFocus(event: KeyboardEvent, root: HTMLElement | null) {
+function moveFocus(event: KeyboardEvent, root: HTMLElement) {
   const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: 0, ArrowDown: 0 }[
     event.key
   ];
-  if (!root || step === undefined) return;
+  if (step === undefined) return;
   const tiles = [
     ...root.querySelectorAll<HTMLButtonElement>(
       "button[data-project-tile]:not(:disabled)",

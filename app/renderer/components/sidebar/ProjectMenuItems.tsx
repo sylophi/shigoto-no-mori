@@ -51,7 +51,6 @@ export function ProjectCreateMenuItems({ project }: { project: Project }) {
     openCreateForm,
     isPending: creating,
   } = useQuickCreateWorktree();
-  if (project.pathExists === false) return null;
 
   return (
     <>

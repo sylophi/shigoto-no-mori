@@ -21,11 +21,8 @@ import {
   pullLandingBranch,
   pullWorktreeName,
 } from "@shigomori/contracts/git/branches";
-import { isRealBranch } from "@shigomori/contracts/schemas";
-import {
-  type TransferFilesResult,
-  transferFilesOnce,
-} from "@host/mirror/oneShot";
+import { type FilesBrought, isRealBranch } from "@shigomori/contracts/schemas";
+import { transferFilesOnce } from "@host/mirror/oneShot";
 import {
   peerSyncFor,
   peerWorktree,
@@ -136,7 +133,7 @@ export const pullWorktree = (
     // (host/mirror/oneShot.ts). Gitignored leaves nothing to carry.
     // Never fatal: the worktree is real, and the outcome rides the
     // result.
-    let files: TransferFilesResult | undefined;
+    let files: FilesBrought | undefined;
     if (pullBringsIgnoredFiles(ignoreMode)) {
       progress({ step: "files" });
       // The source device can have gone meanwhile (a lid closed during
@@ -307,7 +304,7 @@ export const sendWorktree = (
 // Removes the copy a cancelled send left on the peer, best effort,
 // like a failed mirror start's rollback. The peer's ordinary delete,
 // so a peer set to keep branches keeps this one too, where the local
-// rollback (rollBackLanded) takes it: the wire has no verb for that.
+// rollback (Worktrees.createHeld) takes it: the wire has no verb for that.
 export const rollBackSent = (
   targetDeviceId: string,
   copy: { projectId: string; id: string },
@@ -422,7 +419,7 @@ const sendWorktreeEffect = (
 
     // The ignored files, pushed into the root the peer's landing
     // answered with (re-parsed above, like everything it sends).
-    let files: TransferFilesResult | undefined;
+    let files: FilesBrought | undefined;
     if (pullBringsIgnoredFiles(ignoreMode)) {
       progress({ step: "files" });
       files = yield* transferFilesOnce(

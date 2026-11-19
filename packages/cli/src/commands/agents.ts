@@ -14,7 +14,7 @@ import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { unlessUnmigrated, UsageError } from "../errors.ts";
-import { cwd, given, resolveWorktree, rest, worktreeFlags } from "../here.ts";
+import { cwd, given, resolveWorktree, rest, worktreeArgs } from "../here.ts";
 import { alignRows, emit, note, out, Output, styles } from "../output.ts";
 import { readStdin } from "../stdin.ts";
 
@@ -56,12 +56,6 @@ const sessionOf = (
     if (Option.isNone(caller)) return yield* new NoAgentSession({ verb });
     return caller.value;
   });
-
-const worktreeArgs = {
-  ...worktreeFlags,
-  ref: Argument.String("worktree").pipe(Argument.optional),
-  rest,
-};
 
 const bind = Command.make(
   "bind",

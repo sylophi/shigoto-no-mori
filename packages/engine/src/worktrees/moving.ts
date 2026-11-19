@@ -352,7 +352,7 @@ export const makeMoving = ({
         ))
       ) {
         return {
-          worktree: yield* carryMoved(project, worktree.path, to),
+          worktree: (yield* carry(project, worktree.path, to)).row,
           previousId: worktree.id,
         };
       }
@@ -499,14 +499,6 @@ export const makeMoving = ({
         }
         return { row: yield* row({ project, worktree: moved }), captured };
       });
-
-    const carryMoved = Effect.fn("Worktrees.carryMoved")(function* (
-      project: RegisteredProject,
-      fromPath: string,
-      toPath: string,
-    ) {
-      return (yield* carry(project, fromPath, toPath)).row;
-    });
 
     // One recorded move whose process is gone, taken over by this one
     // alone. It landed when git lists its own checkout (the link it
@@ -697,7 +689,6 @@ export const makeMoving = ({
     });
     return {
       move,
-      carryMoved,
       carryLease,
       rename,
       rekey,

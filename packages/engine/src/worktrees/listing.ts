@@ -1,6 +1,7 @@
 // Worktrees' listing: which checkouts a project has (their identities),
 // the marks on them, and what each one's row says (its sync, changes,
 // commits and marks), the base every other area builds on.
+import { hasWorktreeData } from "@shigomori/contracts/schemas";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -42,7 +43,6 @@ import {
   across,
   deriveBranch,
   externalWorktreeName,
-  hasWorktreeData,
   isAgentWorking,
   isShelved,
   nonEmpty,
@@ -168,7 +168,7 @@ export const makeListing = Effect.gen(function* () {
   // once it is configured (it has one).
   const projectSettings = (project: RegisteredProject) =>
     config
-      .read({ kind: "project", projectId: project.id, path: project.path })
+      .read(Config.projectScope(project))
       .pipe(Effect.map(Config.projectSettingsOf));
 
   // What `git worktree list` reads, read with no git: where the common

@@ -8,7 +8,10 @@ import type {
   Worktree,
   WorktreeIdentity as WorktreeIdentityRow,
 } from "@shigomori/contracts/schemas";
-import type { ProjectRow } from "@shigomori/contracts/schemas/project";
+import {
+  UNKNOWN_BRANCH,
+  type ProjectRow,
+} from "@shigomori/contracts/schemas/project";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
@@ -47,9 +50,6 @@ export type WorktreeIdentity = {
   // `git worktree lock`ed: git keeps it while its directory is missing.
   readonly locked: boolean;
 };
-
-// What a checkout with neither a branch nor a detached HEAD shows.
-export const UNKNOWN_BRANCH = "(unknown)";
 
 // A worktree and the project it belongs to.
 export type Located = {
@@ -716,11 +716,6 @@ export const primaryFirst = <A extends { readonly isPrimary: boolean }>(
   ...items.filter((item) => item.isPrimary),
   ...items.filter((item) => !item.isPrimary),
 ];
-
-// The primary checkout and the managed worktrees keep data. A checkout
-// outside the layout keeps none.
-export const hasWorktreeData = (worktree: WorktreeIdentity) =>
-  !worktree.isExternal || worktree.isPrimary;
 
 export const RECENT_COMMITS = 4;
 

@@ -125,8 +125,6 @@ export class VillagerData extends Context.Service<
     // here, and answers with the status that leaves: downloading, or
     // ready.
     readonly start: Effect.Effect<VillagerDataStatus>;
-    // Succeeds once the download under way, if any, has ended.
-    readonly settled: Effect.Effect<void>;
     // Stops the download under way and drops what it stored.
     readonly cancel: Effect.Effect<VillagerDataStatus>;
     // Deletes the villager data, stopping a download first.
@@ -141,8 +139,6 @@ export class VillagerData extends Context.Service<
 interface Options {
   // The folder the data lives in, asked for on each use.
   readonly dir: () => string;
-  readonly manifest?: VillagerManifest;
-  readonly fetch?: typeof globalThis.fetch;
 }
 
 // What a folder holds so far: its profiles and the slugs with a face.
@@ -157,15 +153,11 @@ interface Stored {
 const disk = <A, E, R>(work: Effect.Effect<A, E, R>) =>
   Effect.uninterruptible(Effect.orDie(work));
 
-const make = ({
-  dir,
-  manifest = villagerManifest,
-  fetch = globalThis.fetch,
-}: Options) =>
+const make = ({ dir }: Options) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const entries: ManifestEntry[] = Object.entries(manifest.villagers);
+    const entries: ManifestEntry[] = Object.entries(villagerManifest.villagers);
     const slugs = entries.map(([slug]) => slug);
     const total = entries.length;
     const readyDir = () => path.join(dir(), "ready");
@@ -421,8 +413,8 @@ const make = ({
               Effect.gen(function* () {
                 const face = path.join(folder, "faces", `${slug}.png`);
                 // hasOwn, not a lookup: the slugs here are file names.
-                const entry = Object.hasOwn(manifest.villagers, slug)
-                  ? manifest.villagers[slug]
+                const entry = Object.hasOwn(villagerManifest.villagers, slug)
+                  ? villagerManifest.villagers[slug]
                   : undefined;
                 const held =
                   entry !== undefined &&
@@ -470,7 +462,7 @@ const make = ({
 
       const meta: Meta = {
         downloadedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
-        manifest: manifest.source.retrieved,
+        manifest: villagerManifest.source.retrieved,
         villagers: total,
       };
       yield* disk(
@@ -524,7 +516,7 @@ const make = ({
     }).pipe(serial.withPermits(1), Effect.withSpan("VillagerData.remove"));
 
     const face = Effect.fn("VillagerData.face")(function* (slug: string) {
-      if (!Object.hasOwn(manifest.villagers, slug)) return null;
+      if (!Object.hasOwn(villagerManifest.villagers, slug)) return null;
       return yield* disk(
         fs.readFile(path.join(readyDir(), "faces", `${slug}.png`)).pipe(
           Effect.map((bytes): string | null =>
@@ -538,9 +530,6 @@ const make = ({
     return VillagerData.of({
       status,
       start,
-      settled: FiberHandle.awaitEmpty(download).pipe(
-        Effect.withSpan("VillagerData.settled"),
-      ),
       cancel,
       remove,
       face,

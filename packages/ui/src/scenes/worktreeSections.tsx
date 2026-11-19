@@ -68,7 +68,8 @@ import {
   PickSideView,
 } from "../views/worktreeDetail/WorktreeSyncPillView.tsx";
 import { NO_REWRITE } from "../lib/commitRewrite.ts";
-import { IDLE_RUN, noop } from "./world.ts";
+import { LOCAL_DEVICE_ID } from "../fixtures/fixtures.ts";
+import { IDLE_RUN, noop, projectNamed, worktreeNamed } from "./world.ts";
 import type {
   ChangedFile,
   StashEntry,
@@ -309,11 +310,11 @@ export function portsSection() {
 }
 
 // The Git page's sidebar and dialogs, and the sections' other states.
-export function WorktreeSectionsPartsScene({
-  worktree,
-}: {
-  worktree: Worktree;
-}) {
+export function WorktreeSectionsScene() {
+  const worktree = worktreeNamed(
+    projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori"),
+    "happy-hummingbird",
+  );
   const [newest, older] = worktree.recentCommits;
   return (
     <div className="grid h-full grid-cols-3 gap-6 overflow-hidden bg-background p-6 text-foreground">
@@ -645,7 +646,6 @@ export function WorktreeSectionsPartsScene({
                 <ForwardAllButtonView
                   modes={["start", "stop"]}
                   runningMode={null}
-                  canStart
                   startBlocker={undefined}
                   waiting={false}
                   onRun={noop}

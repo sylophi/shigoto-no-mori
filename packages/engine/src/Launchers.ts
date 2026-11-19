@@ -265,11 +265,7 @@ const make = Effect.gen(function* () {
     const [device, stored, installed, stats] = yield* Effect.all(
       [
         settings.read({ kind: "device" }),
-        settings.read({
-          kind: "project",
-          projectId: project.id,
-          path: project.path,
-        }),
+        settings.read(EngineConfig.projectScope(project)),
         Effect.filter(apps, available, { concurrency: "unbounded" }),
         usage.stats("launcher", ""),
       ],
@@ -277,9 +273,7 @@ const make = Effect.gen(function* () {
     );
     const deviceLaunchers = launchersOf(device);
     // A project's own launchers count once it is configured.
-    const configured =
-      typeof stored?.defaultBranch === "string" &&
-      stored.defaultBranch.trim() !== "";
+    const configured = EngineConfig.projectSettingsOf(stored).settings !== null;
     const all: ReadonlyArray<RowEntry> = [
       ...installed.map((app) => ({
         kind: "detected" as const,
@@ -314,11 +308,7 @@ const make = Effect.gen(function* () {
     const [device, stored, installed] = yield* Effect.all(
       [
         settings.read({ kind: "device" }),
-        settings.read({
-          kind: "project",
-          projectId: project.id,
-          path: project.path,
-        }),
+        settings.read(EngineConfig.projectScope(project)),
         Effect.forEach(apps, foundBy, { concurrency: "unbounded" }),
       ],
       { concurrency: "unbounded" },
@@ -337,9 +327,7 @@ const make = Effect.gen(function* () {
             },
           ],
     );
-    const configured =
-      typeof stored?.defaultBranch === "string" &&
-      stored.defaultBranch.trim() !== "";
+    const configured = EngineConfig.projectSettingsOf(stored).settings !== null;
     const custom = [
       ...decodedLaunchers(device).custom,
       ...(configured ? decodedLaunchers(stored).custom : []),

@@ -18,28 +18,31 @@ import { PullRequestStateLabelView } from "@shigomori/ui/views/worktreeDetail/pu
 import { StackListView } from "@shigomori/ui/views/worktreeDetail/pullRequests/StackListView.tsx";
 import { PullRequestTitleLinkView } from "@shigomori/ui/views/worktreeDetail/pullRequests/PullRequestTitleLinkView.tsx";
 import { MERGE_VERB } from "@shigomori/ui/views/worktreeDetail/pullRequests/pullRequestShared.ts";
-import { WorktreeHeaderView } from "@shigomori/ui/views/worktreeDetail/WorktreeHeaderView.tsx";
+import {
+  UntitledHeaderView,
+  WorktreeHeaderView,
+} from "@shigomori/ui/views/worktreeDetail/WorktreeHeaderView.tsx";
 import { GithubLinkView } from "@shigomori/ui/views/worktreeDetail/GithubLinkView.tsx";
 
 export function WorktreeHeader({
   worktree,
   title,
   pr,
-  githubPage = null,
+  githubPage,
 }: {
   worktree: Worktree;
   title: string | null;
   pr: PullRequest | PullRequestDetail | null;
   // The repo's page on GitHub, linked from the branch line.
-  githubPage?: string | null;
+  githubPage: string | null;
 }) {
   const github = githubPage !== null && <GithubLinkView url={githubPage} />;
   if (title === null) {
     return (
-      <div className="flex min-w-0 items-center justify-between gap-3">
-        <BranchTitle worktree={worktree} />
-        {github}
-      </div>
+      <UntitledHeaderView
+        branchTitle={<BranchTitle worktree={worktree} />}
+        github={github}
+      />
     );
   }
   return (

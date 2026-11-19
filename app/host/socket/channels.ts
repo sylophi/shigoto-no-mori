@@ -2,7 +2,7 @@
 // has the dialer's). A handler that opens a channel for its caller
 // attaches the far end here under the id the caller minted. The
 // caller's `read`, `write`, `end` and `reset` calls (modules/link.ts)
-// reach it through the link's serving (server.ts). The caller starts
+// reach it through the link's serving (DeviceLink.ts). The caller starts
 // reading as it attaches its own end, which can be before the open has
 // attached this one, so a call naming an id not attached yet waits for
 // it, briefly. A call naming one this side dropped fails at once: the

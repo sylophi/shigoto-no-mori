@@ -25,7 +25,8 @@ export class StoreImportError extends Schema.TaggedError<StoreImportError>()(
 
 type JsonObject = { readonly [key: string]: unknown };
 
-const JsonObjectText = Schema.fromJsonString(
+// A JSON file the store imports, read as an object.
+export const JsonObjectText = Schema.fromJsonString(
   Schema.Record(Schema.String, Schema.Unknown),
 );
 
@@ -54,9 +55,38 @@ const STATE_BEFORE_REGISTRY = new Set(["projects", "shelvedWorktrees"]);
 
 // A file or key the import does without, logged.
 const skipped = <A>(file: string, what: string, fallback: A) =>
-  Effect.logWarning(SKIPPED).pipe(
-    Effect.annotateLogs({ path: file, what }),
-    Effect.as(fallback),
+  Effect.as(skip(file, what), fallback);
+
+// The document at `file` as an object, none when the file is absent.
+const readDocument = (
+  file: string,
+): Effect.Effect<
+  Option.Option<JsonObject>,
+  StoreImportError,
+  FileSystem.FileSystem
+> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const text = yield* fs.readFileString(file).pipe(
+      Effect.map(Option.some),
+      Effect.catchIf(isAbsent, () => Effect.succeed(Option.none<string>())),
+    );
+    if (Option.isNone(text)) return Option.none();
+    return Option.some(
+      yield* Schema.decodeUnknownEffect(JsonObjectText)(text.value),
+    );
+  }).pipe(
+    Effect.mapError((cause) => new StoreImportError({ path: file, cause })),
+  );
+
+// The document at `file` as a hint: absent is none, and so is one that
+// can't be read or parsed, which is skipped.
+export const hintDocument = (file: string) =>
+  readDocument(file).pipe(
+    Effect.catchTags({
+      StoreImportError: () =>
+        skipped(file, "the file", Option.none<JsonObject>()),
+    }),
   );
 
 // One key's value, `fallback` when absent or when it doesn't parse.
@@ -120,33 +150,8 @@ export const importFiles = (lenient: boolean) =>
     const path = yield* Path.Path;
     const { dataDir } = yield* Paths.Paths;
 
-    // The document at `file` as an object, none when the file is absent.
-    const readDocument = (
-      file: string,
-    ): Effect.Effect<Option.Option<JsonObject>, StoreImportError> =>
-      Effect.gen(function* () {
-        const text = yield* fs.readFileString(file).pipe(
-          Effect.map(Option.some),
-          Effect.catchIf(isAbsent, () => Effect.succeed(Option.none<string>())),
-        );
-        if (Option.isNone(text)) return Option.none();
-        return Option.some(
-          yield* Schema.decodeUnknownEffect(JsonObjectText)(text.value),
-        );
-      }).pipe(
-        Effect.mapError((cause) => new StoreImportError({ path: file, cause })),
-      );
-
-    const lenientDocument = (file: string) =>
-      readDocument(file).pipe(
-        Effect.catchTags({
-          StoreImportError: () =>
-            skipped(file, "the file", Option.none<JsonObject>()),
-        }),
-      );
-
     const strictDocument = (file: string) =>
-      lenient ? lenientDocument(file) : readDocument(file);
+      lenient ? hintDocument(file) : readDocument(file);
 
     // In statements of a few thousand values, under SQLite's limit on
     // bound parameters (a long use log has tens of thousands of rows).
@@ -163,7 +168,7 @@ export const importFiles = (lenient: boolean) =>
     const registryFile = path.join(dataDir, "registry.json");
     const stateFile = path.join(dataDir, "state.json");
     const registry = yield* strictDocument(registryFile);
-    const state = yield* lenientDocument(stateFile);
+    const state = yield* hintDocument(stateFile);
     const stateDoc: JsonObject = Option.getOrElse(state, () => ({}));
     const registryDoc: JsonObject = Option.getOrElse(registry, () => ({}));
     for (const key of unknownKeys(registryDoc, RegistryFileSchema.fields)) {
@@ -351,7 +356,7 @@ export const importFiles = (lenient: boolean) =>
       const configFile = path.join(projectDir, "project.json");
       const projectConfig = registered.has(projectId)
         ? yield* strictDocument(configFile)
-        : yield* lenientDocument(configFile);
+        : yield* hintDocument(configFile);
       yield* insertAll(
         "project_config",
         configRows(Option.getOrElse(projectConfig, () => ({}))).map(
@@ -363,7 +368,7 @@ export const importFiles = (lenient: boolean) =>
       for (const file of yield* listDirectory(worktreesDir)) {
         if (!file.endsWith(".json")) continue;
         const filePath = path.join(worktreesDir, file);
-        const doc = yield* lenientDocument(filePath);
+        const doc = yield* hintDocument(filePath);
         if (Option.isNone(doc)) continue;
         const fields = ShigomoriWorktreeDataSchema.fields;
         for (const key of unknownKeys(doc.value, fields)) {
@@ -393,24 +398,12 @@ export const registryHint = <K extends keyof typeof RegistryFileSchema.fields>(
   fallback: (typeof RegistryFileSchema.fields)[K]["Type"],
 ) =>
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { dataDir } = yield* Paths.Paths;
     const file = path.join(dataDir, "registry.json");
-    const text = yield* fs.readFileString(file).pipe(
-      Effect.map(Option.some),
-      Effect.catchIf(isAbsent, () => Effect.succeed(Option.none<string>())),
-      Effect.catchTags({
-        PlatformError: () => skipped(file, "the file", Option.none<string>()),
-      }),
-    );
-    if (Option.isNone(text)) return fallback;
-    const doc = yield* Schema.decodeUnknownEffect(JsonObjectText)(
-      text.value,
-    ).pipe(
-      Effect.catchTags({
-        SchemaError: () => skipped(file, "the file", {} as JsonObject),
-      }),
+    const doc = Option.getOrElse(
+      yield* hintDocument(file),
+      (): JsonObject => ({}),
     );
     return yield* lenientKey(
       file,

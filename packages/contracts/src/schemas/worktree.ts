@@ -235,18 +235,17 @@ export function hasWorktreeData(
   return !worktree.isExternal || worktree.isPrimary;
 }
 
+// The check keeps reserved names ("root", "..") from `git worktree add`.
+export const WorktreeDirNameSchema = Schema.NonEmptyString.check(
+  Schema.makeFilter(
+    (name: string) => isValidWorktreeDirName(name) || "Not a valid folder name",
+  ),
+);
+
 export const CreateWorktreePayloadSchema = Schema.Struct({
   ...ProjectScopedPayloadSchema.fields,
-  // Picked by the engine when omitted or taken. The check keeps reserved
-  // names ("root", "..") from `git worktree add`.
-  worktreeName: Schema.optional(
-    Schema.NonEmptyString.check(
-      Schema.makeFilter(
-        (name: string) =>
-          isValidWorktreeDirName(name) || "Not a valid folder name",
-      ),
-    ),
-  ),
+  // Picked by the engine when omitted or taken.
+  worktreeName: Schema.optional(WorktreeDirNameSchema),
   // Defaults to the worktree's name.
   branchName: Schema.optional(GitRefNameSchema),
   base: Schema.optional(GitRefNameSchema),
@@ -360,12 +359,7 @@ export type RelocationPlan = typeof RelocationPlanSchema.Type;
 
 export const RenameWorktreePayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
-  name: Schema.NonEmptyString.check(
-    Schema.makeFilter(
-      (name: string) =>
-        isValidWorktreeDirName(name) || "Not a valid folder name",
-    ),
-  ),
+  name: WorktreeDirNameSchema,
 });
 
 // force false refuses a worktree with changes or untracked files, read

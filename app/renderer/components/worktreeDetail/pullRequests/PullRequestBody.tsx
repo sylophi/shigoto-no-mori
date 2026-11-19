@@ -47,11 +47,7 @@ export function PullRequestBody({
         canCommand &&
         !isOpen &&
         !worktree.isPrimary && (
-          <ClosedPullRequestBox
-            key={worktree.id}
-            worktree={worktree}
-            stack={stack}
-          />
+          <ClosedPullRequestBox worktree={worktree} stack={stack} />
         )
       }
       mergedPrimaryBox={

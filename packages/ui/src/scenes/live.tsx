@@ -74,7 +74,7 @@ function deviceHeading(device: typeof MAC, summary: string) {
   );
 }
 
-function script(worktreeId: string, readOnlyNote: string | null = null) {
+function script(worktreeId: string) {
   const run = runOf(worktreeId);
   if (!run) return null;
   return (
@@ -82,7 +82,7 @@ function script(worktreeId: string, readOnlyNote: string | null = null) {
       label={run.slot.kind === "package" ? run.slot.name : "Setup"}
       mono={run.slot.kind === "package"}
       since={run.startedAt}
-      readOnlyNote={readOnlyNote}
+      readOnlyNote={null}
       onOutput={noop}
       restart={{ pending: false, onClick: noop }}
       stopping={false}

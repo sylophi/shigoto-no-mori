@@ -25,7 +25,7 @@ export const makeAdopting = ({
   Effect.gen(function* () {
     const registry = yield* Registry.Registry;
     const git = yield* Git.Git;
-    const { projectSettings, row } = listing;
+    const { projectSettings } = listing;
     const { provision, createLifecycle, addWorktree } = creating;
     const { requireClean, removeCheckout } = removing;
 
@@ -64,7 +64,7 @@ export const makeAdopting = ({
       // them. A crash between leaves both on the branch, never neither,
       // and the add claims its place as git makes it. A detached one's tip
       // is the new checkout's HEAD from the add on.
-      const { made, found, cloned } = yield* Effect.uninterruptible(
+      const adopted = yield* Effect.uninterruptible(
         Effect.gen(function* () {
           const added = yield* addWorktree(project, {
             name,
@@ -136,19 +136,13 @@ export const makeAdopting = ({
           return added;
         }),
       );
-      const adopted = yield* row({ project, worktree: made });
-      if (cloned !== undefined)
-        yield* reporter.report({ event: "cloned", cloned });
-      yield* reporter.report({ event: "created", worktree: adopted });
-      const failures = yield* createLifecycle(
+      return yield* createLifecycle(
         project,
-        made,
-        found,
+        adopted,
         Effect.succeed(""),
         false,
         reporter,
       );
-      return { worktree: adopted, failures };
     });
 
     const setup = Effect.fn("Worktrees.setup")(function* (

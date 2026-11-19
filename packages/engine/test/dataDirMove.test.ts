@@ -279,10 +279,9 @@ it("keeps a copied move's old tree until the store is opened at the new place", 
   writeFileSync(join(old, JOURNAL), JSON.stringify(journal));
   writeFileSync(join(dataDir, JOURNAL), JSON.stringify(journal));
   await box.engine(
-    finishMove(journal, dataDir, {
-      settle: false,
-      file: join(dataDir, JOURNAL),
-    }).pipe(Effect.provide(NodeServices.layer)),
+    finishMove(journal, dataDir, { settle: false }).pipe(
+      Effect.provide(NodeServices.layer),
+    ),
   );
   assert.ok(existsSync(old), "the old tree kept by the moving process");
   await settleAt(dataDir);

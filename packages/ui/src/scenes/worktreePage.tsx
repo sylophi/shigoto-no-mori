@@ -56,7 +56,6 @@ import {
   gitSection,
   portsSection,
   scriptsSection,
-  WorktreeSectionsPartsScene,
 } from "./worktreeSections.tsx";
 import { noop, projectNamed, worktreeNamed } from "./world.ts";
 
@@ -71,6 +70,17 @@ const DESCRIPTION = `Lists every device's worktrees in one sidebar, each badged 
 
 - The daemons' lists merge by repo identity.
 - A peer that drops off keeps its last rows, faded.`;
+
+const FOOTER_ACTIONS = {
+  onCancelCleanupError: noop,
+  onOpenCleanupConsole: noop,
+  onRetryCleanup: noop,
+  onSkipCleanup: noop,
+  onCancelForce: noop,
+  onForceDelete: noop,
+  onCancelCleanup: noop,
+  onDelete: noop,
+};
 
 function branchTitle(worktree: Worktree, subtitle: boolean) {
   return (
@@ -108,16 +118,7 @@ function footer(state: WorktreeFooterState, worktree = HUMMINGBIRD) {
     <WorktreeDetailFooterView
       worktree={worktree}
       state={state}
-      actions={{
-        onCancelCleanupError: noop,
-        onOpenCleanupConsole: noop,
-        onRetryCleanup: noop,
-        onSkipCleanup: noop,
-        onCancelForce: noop,
-        onForceDelete: noop,
-        onCancelCleanup: noop,
-        onDelete: noop,
-      }}
+      actions={FOOTER_ACTIONS}
       leading={
         <FooterActionButtonView
           rank={LABEL_RANK.files}
@@ -379,16 +380,7 @@ export function WorktreePagePartsScene() {
               busy: false,
               deleteBlockedReason: undefined,
             }}
-            actions={{
-              onCancelCleanupError: noop,
-              onOpenCleanupConsole: noop,
-              onRetryCleanup: noop,
-              onSkipCleanup: noop,
-              onCancelForce: noop,
-              onForceDelete: noop,
-              onCancelCleanup: noop,
-              onDelete: noop,
-            }}
+            actions={FOOTER_ACTIONS}
             leading={<NoIdentityNoteView />}
             readOnlyNote={peerReadOnlyNote("MacBook")}
             optionsMenu={null}
@@ -472,10 +464,4 @@ export function WorktreePagePartsScene() {
       </div>
     </div>
   );
-}
-
-// The Git page's parts, and the worktree page's sections in their other
-// states.
-export function WorktreeSectionsScene() {
-  return <WorktreeSectionsPartsScene worktree={HUMMINGBIRD} />;
 }

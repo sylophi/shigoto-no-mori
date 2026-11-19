@@ -7,29 +7,18 @@ import type { ScriptRunState } from "../../lib/scriptRun.ts";
 
 interface ScriptStatusBadgeProps {
   state: ScriptRunState;
-  // "row" = compact label rendered in the worktree's script list.
-  // "header" = inline status sentence under the command on the
-  // full-page console. Both are plain text, neither a chip.
-  variant?: "row" | "header";
 }
 
-export function ScriptStatusBadgeView({
-  state,
-  variant = "row",
-}: ScriptStatusBadgeProps) {
+export function ScriptStatusBadgeView({ state }: ScriptStatusBadgeProps) {
   const now = useNow();
-  const compact = variant === "row";
-  const iconSize = compact ? "size-3" : "size-3.5";
-  const gap = compact ? "gap-1" : "gap-1.5";
 
   if (state.cancelling) {
     // Genuinely waiting (SIGTERM grace before SIGKILL), so spinner is
     // honest here. Active runs use a pulsing dot below.
     return (
       <Indicator
-        gap={gap}
         tone="muted"
-        mark={<Loader2 aria-hidden className={cn(iconSize, "animate-spin")} />}
+        mark={<Loader2 aria-hidden className="size-3 animate-spin" />}
       >
         Stopping…
       </Indicator>
@@ -37,14 +26,14 @@ export function ScriptStatusBadgeView({
   }
   if (state.status === "starting") {
     return (
-      <Indicator gap={gap} tone="muted" mark={LIVE_DOT}>
+      <Indicator tone="muted" mark={LIVE_DOT}>
         Starting…
       </Indicator>
     );
   }
   if (state.status === "running") {
     return (
-      <Indicator gap={gap} tone="foreground" mark={LIVE_DOT}>
+      <Indicator tone="foreground" mark={LIVE_DOT}>
         Running
       </Indicator>
     );
@@ -101,12 +90,10 @@ const LIVE_DOT = (
 // An in-flight state: its mark (the stop spinner or the live dot) and
 // its word.
 function Indicator({
-  gap,
   tone,
   mark,
   children,
 }: {
-  gap: string;
   tone: "muted" | "foreground";
   mark: React.ReactNode;
   children: React.ReactNode;
@@ -114,8 +101,7 @@ function Indicator({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center text-xs",
-        gap,
+        "inline-flex shrink-0 items-center gap-1 text-xs",
         tone === "muted" ? "text-muted-foreground" : "text-foreground",
       )}
     >

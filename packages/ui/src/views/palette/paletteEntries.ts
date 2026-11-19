@@ -43,8 +43,6 @@ export interface PaletteProject {
   // Where ↩ goes: its worktree the list would put first. Undefined
   // for a project with none, whose ↩ is its new-worktree page.
   lead: PaletteEntry | undefined;
-  // This device's checkout, when it has one: where a quick create goes.
-  localProject: Project | undefined;
   worktreeCount: number;
   deviceCount: number;
 }

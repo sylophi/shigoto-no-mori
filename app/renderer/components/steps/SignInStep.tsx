@@ -14,16 +14,16 @@ const SIGN_IN: Record<EnrollmentStep, SignInStepShown> = {
 };
 
 export interface SignInStepState {
-  // None when the build has no account service: sign-in stays off.
+  // None when the build has no account service (sign-in stays off), or
+  // before the device key is due.
   readonly signIn: SignInStepShown | null;
-  readonly needsDeviceKey: boolean;
   readonly run: () => void;
 }
 
-type Steps = (step: SignInStepState, keyDue: boolean) => ReactNode;
+type Steps = (step: SignInStepState) => ReactNode;
 
-// The migration page's sign-in step, and whether the device key is due:
-// shown from the moment it is, and done once it no longer is. A build
+// The migration page's sign-in step, shown from the moment the device
+// key is due, and done once it no longer is. A build
 // with no account service has no ClerkProvider to enroll under
 // (ClerkGate), so it has no sign-in step and calls no Clerk hook. Which
 // of the two is drawn is fixed for the page's life.
@@ -31,13 +31,12 @@ export function SignInStep({ render }: { render: Steps }) {
   return useHasAccountService() ? (
     <EnrollmentStep render={render} />
   ) : (
-    render(NO_SIGN_IN, false)
+    render(NO_SIGN_IN)
   );
 }
 
 const NO_SIGN_IN: SignInStepState = {
   signIn: null,
-  needsDeviceKey: false,
   run: () => {},
 };
 
@@ -45,13 +44,13 @@ function EnrollmentStep({ render }: { render: Steps }) {
   const [keyDue, setKeyDue] = useState(false);
   const step = useSignInStep(keyDue);
   if (step.needsDeviceKey && !keyDue) setKeyDue(true);
-  return render(step, keyDue);
+  return render({ signIn: keyDue ? step.signIn : null, run: step.run });
 }
 
 // On this device's enrollment (useEnrollment): while `due`, a live
 // session enrolls once by itself, and a lapsed one, or a failed
 // enrollment, waits on the button, which tries again.
-function useSignInStep(due: boolean): SignInStepState {
+function useSignInStep(due: boolean) {
   const { step, error, needsDeviceKey, run } = useEnrollment();
   const enrolled = useRef(false);
   useEffect(() => {

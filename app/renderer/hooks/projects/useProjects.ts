@@ -11,6 +11,7 @@ import type {
   CloneProjectPayload,
   CreateProjectPayload,
   Project,
+  ReorderProjectsPayload,
 } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -202,24 +203,18 @@ export function useRelocatingProject(deviceId: string, id: string): boolean {
 const relocateProjectKey = (deviceId: string, id: string) =>
   ["relocateProject", deviceId, id] as const;
 
-type ReorderInput = {
-  draggedId: string;
-  targetId: string;
-  position: "before" | "after";
-};
-
 // The reorder, laid over the list at once and left to the host's stream
 // to settle.
 const reorderProjectsAtom = Atom.family((deviceId: string) =>
   Atom.optimisticFn(shownProjectsAtom(deviceId), {
     reducer: (
       current: AsyncResult.AsyncResult<readonly Project[], unknown>,
-      { draggedId, targetId, position }: ReorderInput,
+      { draggedId, targetId, position }: ReorderProjectsPayload,
     ) =>
       AsyncResult.map(current, (list) =>
         reorderProjects(list, draggedId, targetId, position),
       ),
-    fn: clientAtoms.fn((input: ReorderInput, get) =>
+    fn: clientAtoms.fn((input: ReorderProjectsPayload, get) =>
       Effect.flatMap(deviceApi(deviceId, get(localDeviceIdAtom)), (api) =>
         api.projects.reorder(input),
       ),
@@ -235,7 +230,7 @@ export function useReorderProjects() {
   const reorder = useAtomSet(reorderProjectsAtom(deviceId), {
     mode: "promise",
   });
-  return useMutation<void, Error, ReorderInput>({
+  return useMutation<void, Error, ReorderProjectsPayload>({
     mutationFn: async (input) => {
       await reorder(input);
     },
