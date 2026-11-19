@@ -235,6 +235,33 @@ it("finishes a move past a registered project whose folder is gone", async () =>
   );
 });
 
+// A worktree whose folder was deleted by hand is still in git's list,
+// and `git worktree repair` fails on a path that isn't there: the finish
+// repairs the rest and ends.
+it("finishes a move past a worktree whose folder is gone", async () => {
+  const dataDir = box.side("engine");
+  const repo = box.repo("proj", { "README.md": "hi\n" });
+  await box.engine(
+    Effect.flatMap(Registry.Registry, (registry) =>
+      registry.register({ name: "proj", path: repo }),
+    ),
+  );
+  const from = join(box.home, "moved-from");
+  box.git(repo, "worktree", "add", "-q", "-b", "fox", join(from, "wt", "fox"));
+  rmSync(from, { recursive: true });
+  await box.engine(retireStore);
+  writeFileSync(
+    join(dataDir, JOURNAL),
+    JSON.stringify({ from, to: dataDir, partial: null, moved: [] }),
+  );
+  await settleAt(dataDir);
+  assert.deepEqual(
+    readdirSync(dataDir).filter((name) => name.startsWith("data-dir-move")),
+    [],
+  );
+  assert.equal(await box.engine(retired), false);
+});
+
 // A copy's old tree outlives the move that made it: the first process
 // to open the store at the new place removes it, so a power loss before
 // the copy reached the disk still has it.

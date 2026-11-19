@@ -287,17 +287,13 @@ export const finishMove = (
     }
     const listed = yield* Effect.flatMap(Registry.Registry, (r) => r.listed);
     const worktrees = yield* Worktrees.Worktrees;
+    const present = (folder: string) =>
+      fs.exists(folder).pipe(Effect.orElseSucceed(() => true));
     const repaired = yield* Effect.forEach(
       listed,
       (project) =>
         Effect.gen(function* () {
-          if (
-            !(yield* fs
-              .exists(project.path)
-              .pipe(Effect.orElseSucceed(() => true)))
-          ) {
-            return;
-          }
+          if (!(yield* present(project.path))) return;
           const found = yield* worktrees.identities(project);
           const paths = repairs.get(project.id) ?? new Set<string>();
           for (const one of found) {
@@ -305,8 +301,11 @@ export const finishMove = (
               paths.add(path.join(at, path.relative(journal.from, one.path)));
             }
           }
-          if (paths.size === 0) return;
-          yield* git.run(project.path, ["worktree", "repair", ...paths]);
+          // git lists a worktree whose folder was deleted by hand until
+          // it is pruned, and fails the whole repair on its path.
+          const there = yield* Effect.filter(paths, present);
+          if (there.length === 0) return;
+          yield* git.run(project.path, ["worktree", "repair", ...there]);
         }),
       { discard: true },
     ).pipe((repair) => settled(repair, "a moved worktree's link", "finishing"));

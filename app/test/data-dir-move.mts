@@ -279,6 +279,9 @@ it("a journal naming this folder with a trailing slash finishes the move, never 
 it("a finished move whose worktree links couldn't be repaired keeps its journal for the next start", async () => {
   const old = join(elsewhere, "old-data-unrepaired");
   mkdirSync(old);
+  // A folder that is there and isn't a worktree: one that is gone has
+  // nothing to repair.
+  mkdirSync(join(elsewhere, "not-a-worktree"));
   const journal = join(engineDataDir, JOURNAL);
   writeFileSync(
     journal,
