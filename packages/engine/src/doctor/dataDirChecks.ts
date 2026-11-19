@@ -25,7 +25,7 @@ import { isNotFound } from "../platformErrors.ts";
 import { byHostKind } from "../platform.ts";
 import { heldV2Files, removeV2Files, v2Files } from "../v2Files.ts";
 import * as Registry from "../Registry.ts";
-import { acquireStagingLock } from "../stagingLock.ts";
+import { acquireStagingLock, stagingHolder } from "../stagingLock.ts";
 import { updaterFiles } from "../Updater.ts";
 import type { ListedProject } from "../Registry.ts";
 import * as Terrier from "../Terrier.ts";
@@ -480,6 +480,10 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     });
 
     const updater = updaterFiles(path, dataDir);
+    const readStagingHolder = stagingHolder(updater.stagingLock).pipe(
+      Effect.provideService(ProcessTable.ProcessTable, processTable),
+      Effect.provideService(FileSystem.FileSystem, fs),
+    );
 
     // The stager holds its pidfile for a whole download, so a crashed one
     // is told by its pid being dead, not by the file's age.
@@ -753,7 +757,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       checkRegistry,
       checkStaleLocks,
       checkV2Files,
-      stagingLock: updater.stagingLock,
+      readStagingHolder,
       checkStagingLock,
       checkUpdateLeftovers,
       checkPortAllocations,
