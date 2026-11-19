@@ -148,7 +148,10 @@ const make = Effect.gen(function* () {
 
   // Whether merging the branch into the candidate changes nothing: the
   // state a squash- or rebase-merged branch is left in, which counting
-  // commits can't see. Every failure reads as still carrying work.
+  // commits can't see. Every failure reads as still carrying work, a
+  // conflict among them: git writes the candidate's side of a deleted or
+  // binary file into the tree it prints, which then equals the
+  // candidate's.
   const contentAlreadyIn = (
     repo: string,
     candidate: PrimaryCandidate,
@@ -157,9 +160,7 @@ const make = Effect.gen(function* () {
     candidate.tree === null
       ? Effect.succeed(false)
       : git
-          .run(repo, ["merge-tree", "--write-tree", candidate.full, head], {
-            okExitCodes: [1],
-          })
+          .run(repo, ["merge-tree", "--write-tree", candidate.full, head])
           .pipe(
             Effect.map(
               (merged) => merged.split("\n", 1)[0]?.trim() === candidate.tree,

@@ -179,12 +179,16 @@ export const makeStash = ({
       yield* withIndexLock(
         worktree,
         Effect.gen(function* () {
-          const ref = yield* refOf(worktree, hash);
+          // Every worktree shares the one stash list, and a push or a
+          // drop in another moves a stash's place: it is applied by its
+          // commit once it is known to be listed still, and the drop
+          // finds its place again.
+          yield* refOf(worktree, hash);
           yield* run(worktree, [
             "stash",
             "apply",
             "--end-of-options",
-            ref,
+            hash,
           ]).pipe(
             Effect.catch((error) =>
               Effect.gen(function* () {
@@ -198,7 +202,7 @@ export const makeStash = ({
               }),
             ),
           );
-          if (drop) yield* run(worktree, ["stash", "drop", "--quiet", ref]);
+          if (drop) yield* dropStash(worktree, hash);
         }),
       );
     });

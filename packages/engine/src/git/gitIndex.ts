@@ -353,9 +353,19 @@ export const makeGitIndex = ({
               ["ls-files", "-z", "--others", "--exclude-standard", ...extra],
               added,
             ).pipe(Effect.map((out) => out.flatMap(splitZ)));
-          const [overwritten, ignored] = yield* Effect.all(
-            [others([]), others(["--ignored"])],
-            { concurrency: 2 },
+          // A file added with `git add -N` reads as untracked in the
+          // status, but it is an index entry the target lacks, so the
+          // reset deletes it. Against the index, only those are new.
+          const intentToAdd = run(worktree, [
+            "diff",
+            "--name-only",
+            "--no-renames",
+            "--diff-filter=A",
+            "-z",
+          ]).pipe(Effect.map(splitZ));
+          const [overwritten, ignored, intended] = yield* Effect.all(
+            [others([]), others(["--ignored"]), intentToAdd],
+            { concurrency: 3 },
           );
           if (ignored.length > 0) {
             return yield* new GitRefusedError({
@@ -367,6 +377,7 @@ export const makeGitIndex = ({
               .filter((f) => !isUntracked(f))
               .flatMap((f) => (f.prevPath ? [f.path, f.prevPath] : [f.path])),
             ...overwritten,
+            ...intended,
           ];
           if (restore && paths.length > 0) {
             return yield* new GitRefusedError({

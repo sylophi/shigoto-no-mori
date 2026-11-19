@@ -136,7 +136,14 @@ export const makeCleanup = ({
           );
         }
         yield* git.run(worktree, ["fetch", remote, branch]);
-        yield* git.run(worktree, ["merge", "--ff-only", "FETCH_HEAD"]);
+        // An ignored file the base now tracks stays as it is, and the
+        // catch-up fails on it instead.
+        yield* git.run(worktree, [
+          "merge",
+          "--ff-only",
+          "--no-overwrite-ignore",
+          "FETCH_HEAD",
+        ]);
       });
 
     // Best-effort fast-forward of the checkout holding the PR's base branch

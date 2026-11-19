@@ -53,18 +53,22 @@ export const makeRemote = ({
       yield* run(worktree, ["push", "--force-with-lease"]);
     });
 
+    // Left to itself a merge replaces an ignored file the upstream now
+    // tracks, and nothing keeps what it held. Told not to, git refuses
+    // and names the file, as it does for an untracked one.
+    const fastForward = (worktree: string) =>
+      run(worktree, ["merge", "--ff-only", "--no-overwrite-ignore", "@{u}"]);
+
     const pullFastForward = Effect.fn("Git.pullFastForward")(function* (
       worktree: string,
     ) {
       yield* run(worktree, ["fetch"]);
-      yield* Effect.uninterruptible(
-        run(worktree, ["merge", "--ff-only", "@{u}"]),
-      );
+      yield* Effect.uninterruptible(fastForward(worktree));
     });
 
     const fastForwardToUpstream = Effect.fn("Git.fastForwardToUpstream")(
       function* (worktree: string) {
-        yield* run(worktree, ["merge", "--ff-only", "@{u}"]);
+        yield* fastForward(worktree);
       },
     );
 

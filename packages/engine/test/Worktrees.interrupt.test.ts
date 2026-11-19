@@ -1094,6 +1094,46 @@ it("an adopt whose removal fails takes its replacement back, and adopts when ask
   });
 });
 
+// Something still at work in the external checkout writes to it while
+// the replacement is built: the adopt is refused and takes the
+// replacement back, the edit kept where it was made.
+it("an adopt refuses a checkout edited while its replacement was built", async () => {
+  const result = await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const repo = box.repo("proj", { "README.md": "hi\n" });
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const outside = join(box.home, "outside", "otter");
+      box.git(repo, "worktree", "add", "-q", "-b", "otter", outside);
+      const external = (yield* worktrees.identities(project)).find(
+        (row) => row.path === outside,
+      );
+      assert.ok(external !== undefined);
+      // git that edits the external checkout as the replacement is added.
+      const real = box.git(repo, "--exec-path").trim();
+      box.fakeBin(
+        "git",
+        `case "$*" in *"worktree add"*) echo "late" >> "${outside}/README.md";; esac\nexec "${real}/git" "$@"`,
+      );
+      const failed = yield* Effect.result(
+        worktrees.adopt(
+          { project, worktree: external },
+          { force: false },
+          { report: () => Effect.void, color: false },
+        ),
+      );
+      process.env["PATH"] = path;
+      return {
+        failed: Result.isFailure(failed),
+        checkouts: (yield* worktrees.identities(project)).length,
+        edit: readFileSync(join(outside, "README.md"), "utf8"),
+      };
+    }),
+  );
+  assert.deepEqual(result, { failed: true, checkouts: 2, edit: "hi\nlate\n" });
+});
+
 // git can let go of the external checkout and then fail to delete its
 // folder: the replacement stays, holding a detached checkout's commits.
 it("an adopt whose removal fails after git let go keeps the replacement, the detached commit held", async () => {
