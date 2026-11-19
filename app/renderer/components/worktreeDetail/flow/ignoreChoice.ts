@@ -50,7 +50,7 @@ import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths"
 export function usePullChoice(
   projectId: string,
   worktreeId: string,
-  identity: string | null | undefined,
+  identity: string,
   deferred: boolean,
 ) {
   const preset = useLeaveOutPreset(identity);
@@ -85,12 +85,9 @@ export function usePullChoice(
     selection,
     setSelection,
     ignored,
-    // The rule on screen is not the project's preset, and can be made
-    // it. Never for an identity-less project, which has none to keep.
+    // The rule on screen is not the project's preset, and can be made it.
     presetDiffers:
-      identity != null &&
-      picked !== null &&
-      !sameSelection(picked, selectionOfPreset(preset)),
+      picked !== null && !sameSelection(picked, selectionOfPreset(preset)),
     saveAsPreset: () => savePreset(presetOfSelection(selection)),
     runSetup,
     setRunSetup: setSetupChoice,
