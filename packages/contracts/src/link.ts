@@ -5,15 +5,13 @@ import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import { allContractModules } from "./allModules.ts";
 import {
-  annotation,
   callsOf,
   channelOf,
   type ContractCall,
   type ContractModule,
-  isPush,
   moduleOf,
-  Remote,
   nameOf,
+  reachesPeer,
   scopeOf,
   versionOf,
 } from "./contract.ts";
@@ -140,14 +138,8 @@ const handshakeOf = (calls: Calls) =>
 const restOf = (calls: Calls) =>
   RpcGroup.make(...calls.filter((call) => !handshake.has(channelOf(call))));
 
-// Every host push is here: one not annotated `remote` reaches a peer
-// only as its own call's push, never as a fan-out.
 const remoteCalls = [linkContract, ...allContractModules].flatMap((module) =>
-  callsOf(module).filter(
-    (call) =>
-      annotation(call, Remote) === true ||
-      (isPush(call) && scopeOf(module) === "host"),
-  ),
+  callsOf(module).filter(reachesPeer),
 );
 
 export const LinkGroup = handshakeOf(remoteCalls).merge(

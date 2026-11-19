@@ -238,17 +238,9 @@ export const defineContract = <
       if (gap !== null) throw new Error(gap);
     }
   }
-  // Fails closed on a module a peer reaches that never versioned
-  // itself: the device link carries every remote call and every host
-  // push (link.ts).
-  if (
-    version === undefined &&
-    callsOf(module).some(
-      (call) =>
-        annotation(call, Remote) === true ||
-        (scopeName === "host" && isPush(call)),
-    )
-  ) {
+  // Fails closed on a module a peer reaches (reachesPeer) that never
+  // versioned itself.
+  if (version === undefined && callsOf(module).some(reachesPeer)) {
     throw new Error(`${name} reaches another device but names no version`);
   }
   return module;
@@ -353,6 +345,16 @@ export function versionOf(call: ContractCall): number | undefined {
     annotation(call, Remote) !== true
     ? undefined
     : annotation(call, Version);
+}
+
+// What the device link carries (link.ts): every remote call and every
+// host push. A host push not annotated `remote` reaches a peer only as
+// its own call's push, never as a fan-out.
+export function reachesPeer(call: ContractCall): boolean {
+  return (
+    annotation(call, Remote) === true ||
+    (isPush(call) && annotation(call, Scope) === "host")
+  );
 }
 
 // Read off the AST's tag, not by identity: the renderer's bundle can
