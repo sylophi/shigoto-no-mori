@@ -10,7 +10,7 @@
 // puts it (devProfileUserData). The launchers set both env vars, so
 // the app AND every CLI child it spawns land on the profile's data dir
 // (children inherit the launcher's environment, the app itself never
-// injects SHIGOMORI_DATA_DIR, see host/lib/util/paths.ts).
+// injects SHIGOMORI_DATA_DIR, see shared/paths.ts).
 import {
   copyFileSync,
   existsSync,
