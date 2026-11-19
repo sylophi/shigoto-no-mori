@@ -645,7 +645,6 @@ export function WorktreeSectionsPartsScene({
                 <ForwardAllButtonView
                   modes={["start", "stop"]}
                   runningMode={null}
-                  canStart
                   startBlocker={undefined}
                   waiting={false}
                   onRun={noop}

@@ -18,7 +18,6 @@ const MODE_FACE: Record<ForwardAllMode, { icon: ReactNode; label: string }> = {
 export function ForwardAllButtonView({
   modes,
   runningMode,
-  canStart,
   startBlocker,
   waiting,
   onRun,
@@ -26,7 +25,6 @@ export function ForwardAllButtonView({
   modes: readonly ForwardAllMode[];
   // The bulk action under way.
   runningMode: ForwardAllMode | null;
-  canStart: boolean;
   // Why nothing can start, when nothing can.
   startBlocker: string | undefined;
   // The local ports each start lands on are still being read.
@@ -58,7 +56,7 @@ export function ForwardAllButtonView({
               disabled={
                 runningMode !== null ||
                 waiting ||
-                (mode === "start" && !canStart)
+                (mode === "start" && startBlocker !== undefined)
               }
               onClick={() => onRun(mode)}
             >
