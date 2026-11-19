@@ -329,7 +329,6 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
     const forceRemove = Effect.fn("Worktrees.forceRemove")(function* (input: {
       readonly projectId: string;
       readonly worktreeId: string;
-      readonly cleanupWithin?: number | undefined;
     }) {
       const worktreeId = yield* currentWorktreeId(
         input.projectId,
@@ -351,10 +350,7 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
                     force: true,
                     ...(options.skipCleanup
                       ? { skipCleanup: true }
-                      : {
-                          cleanupWithin:
-                            input.cleanupWithin ?? FORCED_CLEANUP_MS,
-                        }),
+                      : { cleanupWithin: FORCED_CLEANUP_MS }),
                   },
                   reporter,
                 ),
