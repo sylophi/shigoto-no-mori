@@ -108,7 +108,6 @@ export type ConnectTicketStore = {
 
 export type ConnectTicketStoreOpts = {
   // Test seams. Real callers take the defaults and real time.
-  ttlMs?: number;
   now?: () => number;
 };
 
@@ -118,7 +117,6 @@ const setKey = (peer: TicketPeer) => `${peer.deviceId}\n${peer.connectionId}`;
 export function createConnectTicketStore(
   opts: ConnectTicketStoreOpts = {},
 ): ConnectTicketStore {
-  const ttlMs = opts.ttlMs ?? DIRECT_TICKET_TTL_MS;
   // oxlint-disable-next-line shigomori/no-wall-clock -- a ticket expires by real time, so a sleep expires it too; tests pass their own
   const now = opts.now ?? Date.now;
   // The lookup consume needs, ticket string to its binding.
@@ -210,7 +208,7 @@ export function createConnectTicketStore(
         dropSet(oldest);
       }
       if (pending.size + kinds.length > MAX_PENDING_TICKETS) return null;
-      const expiresAt = now() + ttlMs;
+      const expiresAt = now() + DIRECT_TICKET_TTL_MS;
       const tickets: string[] = [];
       const set = new Set<string>();
       for (const kind of kinds) {
