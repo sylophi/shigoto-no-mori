@@ -53,8 +53,6 @@ export class Loopback extends Context.Service<
     // data dir off: a terminal then reads the app as not running rather
     // than dialing one about to relaunch.
     readonly unpublish: Effect.Effect<void>;
-    // Writes it again, after a data wipe took it along.
-    readonly publish: Effect.Effect<void>;
   }
 >()("sm/host/Loopback") {}
 
@@ -122,7 +120,6 @@ const make = (options: {
     return Loopback.of({
       address: Effect.succeed({ port, token, shellToken }),
       unpublish,
-      publish,
     });
   });
 
