@@ -57,7 +57,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Git from "@shigomori/engine/Git";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
+import { isNotFound } from "@shigomori/engine/platformErrors";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import { untilWatchable } from "@host/lib/watchPath";
 import * as ScratchIndex from "./ScratchIndex";
@@ -202,10 +202,7 @@ const copyIndexToScratch = Effect.fnUntraced(function* (
     // Either the source index vanished (nothing to retry) or the
     // scratch directory did. Mint it again and let a second NotFound
     // stand.
-    Effect.catchIf(
-      (error) => Predicate.isTagged(error.reason, "NotFound"),
-      () => Effect.flatMap(scratch.remint, copyInto),
-    ),
+    Effect.catchIf(isNotFound, () => Effect.flatMap(scratch.remint, copyInto)),
   );
 });
 
@@ -538,10 +535,7 @@ export const watchIndexFile = (
           (info) =>
             `${Option.getOrUndefined(info.ino)}:${Option.getOrUndefined(Option.map(info.mtime, (at) => at.getTime()))}:${info.size}`,
         ),
-        Effect.catchIf(
-          (error) => Predicate.isTagged(error.reason, "NotFound"),
-          () => Effect.succeed("-"),
-        ),
+        Effect.catchIf(isNotFound, () => Effect.succeed("-")),
         Effect.orElseSucceed(() => null),
       );
       // The index's stamp as of the last signal, read as each one fires.
