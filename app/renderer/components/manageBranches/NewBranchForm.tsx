@@ -23,15 +23,7 @@ export function NewBranchForm({
 
   const submit = () => {
     if (!canSubmit) return;
-    create.mutate(
-      { projectId, name: trimmed, base },
-      {
-        onSuccess: () => {
-          setName("");
-          onDone();
-        },
-      },
-    );
+    create.mutate({ projectId, name: trimmed, base }, { onSuccess: onDone });
   };
 
   return (
