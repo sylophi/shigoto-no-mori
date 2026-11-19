@@ -208,11 +208,7 @@ export const outputUntil = (
 // SIGKILLed either way: an interactive zsh ignores SIGTERM. It shares
 // the app's process group, so what its startup files left behind is
 // not signalled with it.
-const captureShellEnv = (
-  shell: string,
-  base: Env,
-  timeoutMs = CAPTURE_TIMEOUT_MS,
-) =>
+const captureShellEnv = (shell: string, base: Env) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const handle = yield* spawner.spawn(
@@ -234,7 +230,7 @@ const captureShellEnv = (
     return yield* outputUntil(handle, END);
   }).pipe(
     Effect.scoped,
-    Effect.timeoutOption(timeoutMs),
+    Effect.timeoutOption(CAPTURE_TIMEOUT_MS),
     Effect.map((output) =>
       Option.match(Option.flatten(output), {
         onNone: () => null,

@@ -29,8 +29,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
-export type { DataDirSource };
-
 type Found = {
   readonly dataDir: string;
   readonly source: DataDirSource;
@@ -82,14 +80,11 @@ export async function initDataDir(flavor: Flavor): Promise<void> {
 }
 
 // For the proofs, which sandbox the data dir without a flavor.
-export function initDataDirAt(
-  dir: string,
-  source: DataDirSource = "env",
-): void {
+export function initDataDirAt(dir: string): void {
   if (found !== null) throw new Error("dataDir already initialized");
   found = {
     dataDir: dir,
-    source,
+    source: "env",
     dataDirName: ".sm",
     defaultDataDir: join(home(), ".sm"),
     pointer: null,
