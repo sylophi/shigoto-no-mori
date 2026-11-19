@@ -125,8 +125,6 @@ export class VillagerData extends Context.Service<
     // here, and answers with the status that leaves: downloading, or
     // ready.
     readonly start: Effect.Effect<VillagerDataStatus>;
-    // Succeeds once the download under way, if any, has ended.
-    readonly settled: Effect.Effect<void>;
     // Stops the download under way and drops what it stored.
     readonly cancel: Effect.Effect<VillagerDataStatus>;
     // Deletes the villager data, stopping a download first.
@@ -532,9 +530,6 @@ const make = ({ dir }: Options) =>
     return VillagerData.of({
       status,
       start,
-      settled: FiberHandle.awaitEmpty(download).pipe(
-        Effect.withSpan("VillagerData.settled"),
-      ),
       cancel,
       remove,
       face,
