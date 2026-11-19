@@ -26,10 +26,10 @@ import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import * as Git from "@shigomori/engine/Git";
-import { findProjectInsideDataDir, listedProjects } from "./projects";
+import { listedProjects } from "./projects";
 import * as Scripts from "./Scripts";
 import * as Worktrees from "./Worktrees";
-import { dataDir, home } from "@shared/paths";
+import { dataDir, home, toAbsolute } from "@shared/paths";
 
 class NukeRefusedError extends Schema.TaggedError<NukeRefusedError>()(
   "NukeRefusedError",
@@ -55,7 +55,9 @@ export function nukeTrap(
       "home folder. Point SHIGOMORI_DATA_DIR or the data folder elsewhere first."
     );
   }
-  const trapped = findProjectInsideDataDir(projects, [root]);
+  const trapped = projects.find((p) =>
+    isSameOrInside(toAbsolute(p.path), root),
+  );
   if (trapped !== undefined) {
     return (
       `Refusing to nuke: project "${trapped.name}" lives inside ${root}, ` +
