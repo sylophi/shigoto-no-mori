@@ -87,7 +87,6 @@ const MAX_REDIRECTS = 3;
 export const fetchRemoteImage = Effect.fn("Projects.remoteImage")(function* (
   remotes: readonly string[],
   src: string,
-  fetchImpl: typeof fetch = fetch,
 ) {
   let url = yield* Effect.try({
     try: () => new URL(src),
@@ -108,7 +107,7 @@ export const fetchRemoteImage = Effect.fn("Projects.remoteImage")(function* (
       const target = url;
       const response = yield* Effect.tryPromise({
         try: () =>
-          fetchImpl(target, {
+          fetch(target, {
             signal,
             redirect: "manual",
             headers: { accept: "image/*" },
