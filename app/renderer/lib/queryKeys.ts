@@ -138,7 +138,7 @@ function buildQueryKeys(deviceId: string) {
       worktreeId: string | undefined,
       hash: string,
     ) => host("commitSummary", projectId, worktreeId, hash),
-    pickedWorktreeName: (projectId: string | null) =>
+    pickedWorktreeName: (projectId: string) =>
       host("pickedWorktreeName", projectId),
 
     // Tidy-the-forest data. Split in two because the git facts are cheap
