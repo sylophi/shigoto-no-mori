@@ -45,10 +45,9 @@ import { isWindowsPath } from "@shigomori/contracts/projectPaths";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { PeerReach, peerMirrorFor } from "@host/ipc/PeerReach";
 import * as DeviceId from "@host/lib/config/DeviceId";
-import { EngineChanges } from "@host/lib/Engine";
 import { findWorktreePath } from "@host/lib/projects";
 import * as Moves from "@host/lib/sync/Moves";
-import { rollBackSent, sendWorktree } from "@host/lib/sync/move";
+import { counted, rollBackSent, sendWorktree } from "@host/lib/sync/move";
 import { readOriginal } from "./checkout";
 import { transferFilesOnce } from "./oneShot";
 import {
@@ -116,16 +115,12 @@ export const startMirrorTo = (
     }
     const { ignoreMode, ignores, ...sendInput } = input;
     const moves = yield* Moves.Moves;
-    const changes = yield* EngineChanges;
     const noteCopy = (worktreeId: string) =>
       ledger.noteStarting({
         localWorktreeId: input.worktreeId,
         deviceId: input.targetDeviceId,
         worktreeId,
       });
-    // Counted as a send for the whole start, the send's own count
-    // joining it, so a quit asks first: past the send, the files'
-    // first pass and the session's open go with it too.
     return yield* moves.run(
       ctx,
       input.worktreeId,
@@ -219,8 +214,11 @@ export const startMirrorTo = (
         Effect.onError(() =>
           Effect.sync(() => ledger.forgetStarting(input.worktreeId)),
         ),
+        // A send for the whole start, the send's own count joining it,
+        // so a quit asks first: past the send, the files' first pass
+        // and the session's open go with it too.
         (start) =>
-          changes.counted(
+          counted(
             start,
             { projectId: input.projectId, worktreeId: input.worktreeId },
             "send",
