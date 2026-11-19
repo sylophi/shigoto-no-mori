@@ -6,6 +6,7 @@
 // folder come from the DESTINATION project's config, not the source's,
 // and so does the pre-flight: a branch that device already holds fails
 // the pull at step 2, so the review says so here and keeps Start off.
+import type { SyncSourceFate } from "@shigomori/contracts/modules/sync";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { changeEntries } from "@shigomori/ui/lib/patchFiles.ts";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
@@ -17,10 +18,7 @@ import {
   ChangedFilesView,
   TransplantDetailsView,
 } from "@shigomori/ui/views/worktreeDetail/transplant/TransplantReviewView.tsx";
-import {
-  type SourceChoice,
-  SourceFateView,
-} from "@shigomori/ui/views/worktreeDetail/transplant/TransplantFinishView.tsx";
+import { SourceFateView } from "@shigomori/ui/views/worktreeDetail/transplant/TransplantFinishView.tsx";
 
 export function TransplantReview({
   fate,
@@ -28,8 +26,8 @@ export function TransplantReview({
   ...props
 }: PullReviewProps & {
   // What a queued transplant does with its source once it lands.
-  fate: SourceChoice;
-  onFate: (fate: SourceChoice) => void;
+  fate: SyncSourceFate;
+  onFate: (fate: SyncSourceFate) => void;
 }) {
   const { worktree, project, target, sourceDeviceLabel, thisDeviceLabel } =
     props;

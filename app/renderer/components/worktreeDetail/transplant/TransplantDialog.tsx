@@ -14,6 +14,7 @@ import type { UseMutationResult } from "@tanstack/react-query";
 import {
   pullBringsIgnoredFiles,
   type SyncPullWorktreeResult,
+  type SyncSourceFate,
   type SyncTeardownSourceResult,
 } from "@shigomori/contracts/modules/sync";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
@@ -34,7 +35,6 @@ import {
   usePeerDestination,
   useSourceWaits,
 } from "../flow/peerTargets";
-import type { SourceChoice } from "@shigomori/ui/views/worktreeDetail/transplant/TransplantFinishView.tsx";
 import { TransplantHeadlineView } from "@shigomori/ui/views/worktreeDetail/transplant/TransplantDialogView.tsx";
 import { TransplantFinish } from "./TransplantFinish";
 import { TransplantReview } from "./TransplantReview";
@@ -181,7 +181,7 @@ function TransplantFlow({
   // What a queued transplant does with its source once it lands, the
   // last step's question asked ahead. It runs with nobody there, so
   // nothing goes unless asked.
-  const [fate, setFate] = useState<SourceChoice>("keep");
+  const [fate, setFate] = useState<SyncSourceFate>("keep");
   const flow = usePullFlow({
     mutation: pull,
     worktree,
