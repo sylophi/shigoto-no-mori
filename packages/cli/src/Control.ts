@@ -13,7 +13,6 @@ import {
   errorMessageOf,
   isHubRateLimitedError,
   isProtocolVersionMismatchError,
-  LinkRefusedError,
   RemoteCallError,
 } from "@shigomori/contracts/errors";
 import {
@@ -331,7 +330,6 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
         said: error.text,
       });
     }
-    if (error instanceof LinkRefusedError) return notRunning;
     if (error instanceof CommandRefusedError) {
       return new ControlRefused({
         channel,
