@@ -136,15 +136,11 @@ export function PhoneBackBarView({
 }: {
   // The forest tab it returns to.
   label: string;
-  onBack?: () => void;
+  onBack: () => void;
 }) {
   return (
     <header className="flex shrink-0 items-center border-b border-border bg-card px-4 py-1">
-      <BackButton
-        label={label}
-        onClick={() => onBack?.()}
-        className="min-h-10 text-sm"
-      />
+      <BackButton label={label} onClick={onBack} className="min-h-10 text-sm" />
     </header>
   );
 }
