@@ -32,6 +32,9 @@ export class Layout extends Context.Service<
   }
 >()("sm/engine/Layout") {}
 
+const text = (value: unknown) =>
+  typeof value === "string" ? value : undefined;
+
 const make = Effect.gen(function* () {
   const config = yield* Config.Config;
   const fs = yield* FileSystem.FileSystem;
@@ -47,19 +50,12 @@ const make = Effect.gen(function* () {
   // The project's layout settings, which count only once the project is
   // configured (it has a default branch).
   const projectSettings = Effect.fn(function* (project: ProjectPlace) {
-    const stored = yield* config.read({
-      kind: "project",
-      projectId: project.id,
-      path: project.path,
-    });
-    const configured =
-      typeof stored?.defaultBranch === "string" &&
-      stored.defaultBranch.trim() !== "";
-    const text = (value: unknown) =>
-      configured && typeof value === "string" ? value : undefined;
+    const { settings } = Config.projectSettingsOf(
+      yield* config.read(Config.projectScope(project)),
+    );
     return {
-      worktreeLayout: text(stored?.worktreeLayout),
-      customWorktreePath: text(stored?.customWorktreePath),
+      worktreeLayout: text(settings?.["worktreeLayout"]),
+      customWorktreePath: text(settings?.["customWorktreePath"]),
     };
   });
 

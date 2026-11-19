@@ -419,11 +419,6 @@ export const projectSettingsOf = (doc: ConfigDoc | null) => {
     : { settings: null, defaultBranch: undefined };
 };
 
-const missingBranch = (doc: ConfigDoc) => {
-  const [branch] = docGet(doc, "defaultBranch");
-  return typeof branch !== "string" || branch.trim() === "";
-};
-
 // A stored document less the keys `fields` models whose value isn't of
 // their type: one setting of the wrong type is ignored, as `device`
 // reads it, not the whole document.
@@ -616,7 +611,10 @@ const make = Effect.gen(function* () {
           const before = (yield* load(scope)) ?? {};
           const next = structuredClone(before);
           if (change(next) === false) return false;
-          if (scope.kind === "project" && missingBranch(next)) {
+          if (
+            scope.kind === "project" &&
+            projectSettingsOf(next).settings === null
+          ) {
             if (Option.isNone(fallbackBranch)) {
               const [row] = yield* sql<{ readonly name: string }>`
                 SELECT name FROM projects WHERE id = ${scope.projectId}`;
