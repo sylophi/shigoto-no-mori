@@ -498,10 +498,7 @@ export const makeRemoving = ({
           return outcome;
         }),
       );
-      if (
-        Result.isFailure(removed) &&
-        !(removed.failure instanceof OrphanedWorktree)
-      ) {
+      if (Result.isFailure(removed)) {
         const failure = removed.failure;
         if (
           !options.force &&
@@ -517,7 +514,6 @@ export const makeRemoving = ({
         }
         return yield* failure;
       }
-      if (Result.isFailure(removed)) return yield* removed.failure;
       return {
         id: worktree.id,
         name: worktree.name,
