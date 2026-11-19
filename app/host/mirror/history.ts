@@ -75,19 +75,14 @@ function gitTroubled(
   return status === "diverged" || status === "blocked" || status === "error";
 }
 
-export type MirrorHistoryStore = {
-  load: () => Record<string, readonly MirrorEvent[]>;
-  save: (events: Record<string, readonly MirrorEvent[]>) => void;
-};
-
 export function createMirrorHistory(deps: {
-  store: MirrorHistoryStore;
-  now?: () => number;
+  threads: Record<string, readonly MirrorEvent[]>;
+  save: (threads: Record<string, readonly MirrorEvent[]>) => void;
   onChange?: () => void;
 }) {
   // oxlint-disable-next-line shigomori/no-wall-clock -- an event's time, for display; history keeps insertion order
-  const now = deps.now ?? Date.now;
-  let events: Record<string, readonly MirrorEvent[]> | null = null;
+  const now = Date.now;
+  const events = deps.threads;
   const seen = new Map<string, Seen>();
   // Writes are coalesced to one per turn: an observe pass can note
   // several events off one snapshot, and the save rewrites the file.
@@ -98,24 +93,9 @@ export function createMirrorHistory(deps: {
     flushQueued = true;
     queueMicrotask(() => {
       flushQueued = false;
-      try {
-        deps.store.save(all());
-      } catch {
-        // A failed save loses persistence, not the in-memory thread.
-      }
+      deps.save(events);
       deps.onChange?.();
     });
-  }
-
-  function all(): Record<string, readonly MirrorEvent[]> {
-    if (events === null) {
-      try {
-        events = deps.store.load();
-      } catch {
-        events = {};
-      }
-    }
-    return events;
   }
 
   function note(
@@ -124,8 +104,7 @@ export function createMirrorHistory(deps: {
     detail: string,
   ): void {
     if (localWorktreeId === "") return;
-    const store = all();
-    const thread = store[localWorktreeId] ?? [];
+    const thread = events[localWorktreeId] ?? [];
     // The link flips more than once around a pause or a re-open (the
     // session that replaced the old one is observed from scratch), and
     // two "disconnected" rows in a row say nothing the first did not.
@@ -142,7 +121,7 @@ export function createMirrorHistory(deps: {
     }
     // Newest first, so the page reads top-down and the cap drops the
     // oldest.
-    store[localWorktreeId] = [{ at: now(), kind, detail }, ...thread].slice(
+    events[localWorktreeId] = [{ at: now(), kind, detail }, ...thread].slice(
       0,
       MIRROR_HISTORY_LIMIT,
     );
@@ -154,25 +133,23 @@ export function createMirrorHistory(deps: {
   // one thread per worktree ever mirrored.
   // The thread's newest word on the link, for a session's baseline.
   function lastLinkEvent(localWorktreeId: string): MirrorEventKind | null {
-    const thread = all()[localWorktreeId] ?? [];
+    const thread = events[localWorktreeId] ?? [];
     return thread.find((event) => LINK_KINDS.has(event.kind))?.kind ?? null;
   }
 
   function forget(localWorktreeId: string): void {
-    const store = all();
-    if (!(localWorktreeId in store)) return;
-    delete store[localWorktreeId];
+    if (!(localWorktreeId in events)) return;
+    delete events[localWorktreeId];
     queueFlush();
   }
 
   // The worktree moved, and its id (path derived) with it: the thread
   // follows, ahead of anything the new id already had.
   function move(from: string, to: string): void {
-    const store = all();
-    const thread = store[from];
+    const thread = events[from];
     if (thread === undefined || from === to) return;
-    delete store[from];
-    store[to] = [...thread, ...(store[to] ?? [])].slice(
+    delete events[from];
+    events[to] = [...thread, ...(events[to] ?? [])].slice(
       0,
       MIRROR_HISTORY_LIMIT,
     );
@@ -288,6 +265,6 @@ export function createMirrorHistory(deps: {
     restarted,
     observe,
     eventsFor: (localWorktreeId: string): readonly MirrorEvent[] =>
-      all()[localWorktreeId] ?? [],
+      events[localWorktreeId] ?? [],
   };
 }
