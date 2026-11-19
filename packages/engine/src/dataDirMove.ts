@@ -232,7 +232,7 @@ const settled = <A, E, R>(
     ),
   );
 
-// The end of a move that landed at `at`, its journal at `file`. In the
+// The end of a move that landed at `at`, its journal in it. In the
 // moving process (`settle` false) only git's links are re-pointed: its
 // store is the old place's. The first engine graph to come up at the
 // new place (`settle` true, and not the doctor's) then:
