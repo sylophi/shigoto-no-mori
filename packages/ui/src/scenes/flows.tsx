@@ -26,6 +26,7 @@ import {
   SourceCardView,
 } from "../views/worktreeDetail/flow/PullReviewView.tsx";
 import {
+  type CloneDestination,
   type FlowStage,
   LANDS_HERE,
   landsOnPeer,
@@ -284,6 +285,14 @@ export function MirrorReviewScene() {
     pickedId: MINI_ID,
     onPick: noop,
   };
+  const clone: CloneDestination = {
+    projectName: SM.name,
+    cloneInto: { parentDir: "~/Code/", name: "shigoto-no-mori" },
+    dest: "~/Code/shigoto-no-mori",
+    ready: true,
+    found: "free",
+    setParent: noop,
+  };
   return (
     <div className="h-full overflow-hidden bg-background p-6 text-foreground">
       <FlowDialog
@@ -321,31 +330,12 @@ export function MirrorReviewScene() {
               heading="Copy"
               icon={MINI.icon}
               deviceLabel={MINI.label}
-              target={{
-                clone: {
-                  projectName: SM.name,
-                  cloneInto: { parentDir: "~/Code/", name: "shigoto-no-mori" },
-                  dest: "~/Code/shigoto-no-mori",
-                  ready: true,
-                  found: "free",
-                  setParent: noop,
-                },
-              }}
+              target={{ clone }}
               toPeer={toPeer}
               setup={null}
               lines={
                 <CloneLinesView
-                  clone={{
-                    projectName: SM.name,
-                    cloneInto: {
-                      parentDir: "~/Code/",
-                      name: "shigoto-no-mori",
-                    },
-                    dest: "~/Code/shigoto-no-mori",
-                    ready: true,
-                    found: "free",
-                    setParent: noop,
-                  }}
+                  clone={clone}
                   title={null}
                   worktree={BADGER}
                   offline={false}
@@ -667,8 +657,7 @@ function manageDialog(
 // rule being changed, and the same mirror paused, its stop asked for
 // before git agreed.
 export function MirrorManageScene() {
-  const copy = worktreeNamed(MB_SM, "gentle-gecko");
-  const session = mirrorSessionFixture(BADGER, MACBOOK_ID, copy);
+  const session = mirrorSessionFixture(BADGER, MACBOOK_ID, GECKO);
   return (
     <div className="grid h-full grid-cols-2 items-start gap-6 overflow-hidden bg-background p-6 text-foreground">
       {manageDialog({ ...session, conflicts: CONFLICTS }, STOP_IDLE, true)}
