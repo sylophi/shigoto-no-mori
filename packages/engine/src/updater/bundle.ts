@@ -17,6 +17,7 @@ import {
   SwapFailed,
   type UpdateInput,
   asideName,
+  bundleOfBinary,
   bundleVersionArgs,
   incomingName,
   isAsideName,
@@ -46,27 +47,17 @@ export const makeBundle = ({
     // beside its binary, and the app's own updater graph never swaps).
     const nativeFs = yield* Effect.serviceOption(NativeFs.NativeFs);
 
-    // The installed bundle: two folders above the terminal's binary, which
-    // runs from <bundle>/Contents/Resources (the command on PATH links
-    // there). Anything else refuses, so a stray copy never swaps
-    // /Applications.
+    // The installed bundle the terminal's binary runs from. Anything else
+    // refuses, so a stray copy never swaps /Applications.
     const installed = Effect.fn("Updater.installedBundle")(function* (
       executable: string,
     ) {
       const resolved = yield* fs
         .realPath(executable)
         .pipe(Effect.orElseSucceed(() => executable));
-      const resources = path.dirname(resolved);
-      const contents = path.dirname(resources);
-      const bundle = path.dirname(contents);
-      if (
-        path.basename(resources) !== "Resources" ||
-        path.basename(contents) !== "Contents" ||
-        !bundle.endsWith(".app")
-      ) {
-        return yield* new NotInBundle();
-      }
-      return bundle;
+      const bundle = bundleOfBinary(path, resolved);
+      if (Option.isNone(bundle)) return yield* new NotInBundle();
+      return bundle.value;
     });
 
     // An aside bundle (<target>.old-*) goes only while the target exists:

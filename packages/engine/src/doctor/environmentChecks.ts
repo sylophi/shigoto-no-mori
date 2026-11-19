@@ -36,7 +36,11 @@ import {
 } from "../shellHook.ts";
 import { type RunInput, check } from "./documents.ts";
 import type { ReadsArea } from "./reads.ts";
-import { bundleVersionArgs, isAsideName } from "../updater/documents.ts";
+import {
+  bundleOfBinary,
+  bundleVersionArgs,
+  isAsideName,
+} from "../updater/documents.ts";
 
 // How each OS gets the programs sm runs.
 const INSTALL_HINTS = byPlatform({
@@ -148,18 +152,12 @@ export const makeEnvironmentChecks = ({
     // The prod binary runs from <bundle>/Contents/Resources (the PATH
     // command is a symlink there), so its bundle is two folders up.
     const installedBundle = (executable: string) =>
-      Effect.map(realPath(executable), (resolved) => {
-        const resources = path.dirname(
+      Effect.map(realPath(executable), (resolved) =>
+        bundleOfBinary(
+          path,
           Option.getOrElse(resolved, () => executable),
-        );
-        const contents = path.dirname(resources);
-        const bundle = path.dirname(contents);
-        return path.basename(resources) === "Resources" &&
-          path.basename(contents) === "Contents" &&
-          bundle.endsWith(".app")
-          ? Option.some(bundle)
-          : Option.none<string>();
-      });
+        ),
+      );
 
     // The app in one of the conventional install locations.
     const findInstalledBundle = Effect.gen(function* () {
