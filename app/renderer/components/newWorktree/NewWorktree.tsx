@@ -293,7 +293,6 @@ function NewWorktreeForm({
       prSource={
         <PullRequestSourceView
           query={candidates}
-          unavailableText={prUnavailable}
           selected={selectedPr}
           onSelect={setSelectedPr}
           worktreeByBranch={worktreeByBranch}

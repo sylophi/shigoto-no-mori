@@ -112,7 +112,6 @@ export function NewWorktreeScene() {
             isError: false,
             data: { status: "ok", pullRequests: CANDIDATES },
           }}
-          unavailableText={undefined}
           selected={selected}
           onSelect={noop}
           worktreeByBranch={WORKTREE_BY_BRANCH}
