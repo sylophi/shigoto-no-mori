@@ -37,6 +37,19 @@ export type WorktreeMark = "shelved" | "autoPull";
 // they were bound.
 export type BoundSessions = Map<string, Array<AgentSession>>;
 
+export const findBound = (
+  bound: BoundSessions,
+  ref: { readonly harness: string; readonly session: string },
+) => {
+  for (const [id, list] of bound) {
+    const index = list.findIndex(
+      (s) => s.harness === ref.harness && s.session === ref.session,
+    );
+    if (index >= 0) return { id, list, index };
+  }
+  return undefined;
+};
+
 export class ProjectAlreadyAdded extends Schema.TaggedError<ProjectAlreadyAdded>()(
   "ProjectAlreadyAdded",
   { path: Schema.String },
@@ -501,13 +514,10 @@ const make = Effect.gen(function* () {
   ) {
     const now = yield* Clock.currentTimeMillis;
     yield* updateAgentSessions((bound) => {
-      for (const [id, list] of bound) {
-        const index = list.findIndex(
-          (s) => s.harness === session.harness && s.session === session.session,
-        );
-        if (index < 0) continue;
-        if (id === worktreeId) return false;
-        const [moved] = list.splice(index, 1);
+      const found = findBound(bound, session);
+      if (found !== undefined) {
+        if (found.id === worktreeId) return false;
+        const [moved] = found.list.splice(found.index, 1);
         if (moved !== undefined) {
           bound.set(worktreeId, [...(bound.get(worktreeId) ?? []), moved]);
         }

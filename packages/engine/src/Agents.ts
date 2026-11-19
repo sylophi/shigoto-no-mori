@@ -225,16 +225,6 @@ export class Agents extends Context.Service<
   }
 >()("sm/engine/Agents") {}
 
-const find = (bound: Registry.BoundSessions, ref: SessionRef) => {
-  for (const [id, list] of bound) {
-    const index = list.findIndex(
-      (s) => s.harness === ref.harness && s.session === ref.session,
-    );
-    if (index >= 0) return { id, list, index };
-  }
-  return undefined;
-};
-
 // `binary` is the terminal `sm` the hooks run. Absolute, since a
 // GUI-launched harness may not have the user's PATH.
 const make = (binary: string) =>
@@ -508,7 +498,10 @@ const make = (binary: string) =>
         ) {
           return;
         }
-        if (find(yield* registry.agentSessions, ref.value)?.id === current.id) {
+        if (
+          Registry.findBound(yield* registry.agentSessions, ref.value)?.id ===
+          current.id
+        ) {
           return;
         }
         yield* registry.bindAgentSession(
@@ -530,7 +523,7 @@ const make = (binary: string) =>
     const unbind = Effect.fn("Agents.unbind")(function* (ref: SessionRef) {
       let unbound = false;
       yield* registry.updateAgentSessions((bound) => {
-        const found = find(bound, ref);
+        const found = Registry.findBound(bound, ref);
         if (found === undefined) return false;
         found.list.splice(found.index, 1);
         unbound = true;
@@ -636,7 +629,7 @@ const make = (binary: string) =>
         }
         const ref = { harness: harnessId, session: key };
         const now = yield* Clock.currentTimeMillis;
-        const found = find(yield* registry.agentSessions, ref);
+        const found = Registry.findBound(yield* registry.agentSessions, ref);
         if (found === undefined) {
           // An unbound session started in a managed worktree belongs to it.
           const next = applyAgentEvent(
@@ -661,7 +654,7 @@ const make = (binary: string) =>
           return;
         }
         yield* registry.updateAgentSessions((bound) => {
-          const again = find(bound, ref);
+          const again = Registry.findBound(bound, ref);
           const current = again?.list[again.index];
           if (again === undefined || current === undefined) return false;
           const next = applyAgentEvent(current, event, now);
