@@ -46,33 +46,26 @@ export function useViewErrorToast(
   }, [message, quiet]);
 }
 
-// The view's first value, or undefined if none comes within `withinMs`
+// The view's first value, or undefined if none comes within five seconds
 // (or it fails), for a caller that reads it once.
 export function firstValueOf<A>(
   registry: AtomRegistry.AtomRegistry,
   view: Atom.Atom<AsyncResult.AsyncResult<A, unknown>>,
-  withinMs = 5_000,
 ): Promise<A | undefined> {
   let value: A | undefined;
-  return whenViewShows(
-    registry,
-    view,
-    (shown) => {
-      value = shown;
-      return true;
-    },
-    withinMs,
-  ).then(() => value);
+  return whenViewShows(registry, view, (shown) => {
+    value = shown;
+    return true;
+  }).then(() => value);
 }
 
-// Settles once the view's value passes `shows`, or after `withinMs`
+// Settles once the view's value passes `shows`, or after five seconds
 // whatever it shows (the caller goes on either way, as it would with a
 // list a moment stale).
 export function whenViewShows<A>(
   registry: AtomRegistry.AtomRegistry,
   view: Atom.Atom<AsyncResult.AsyncResult<A, unknown>>,
   shows: (value: A) => boolean,
-  withinMs = 5_000,
 ): Promise<void> {
   return new Promise((resolve) => {
     let done = false;
@@ -84,7 +77,7 @@ export function whenViewShows<A>(
       unsubscribe?.();
       resolve();
     };
-    const timer = setTimeout(finish, withinMs);
+    const timer = setTimeout(finish, 5_000);
     unsubscribe = registry.subscribe(
       view,
       (result) => {
