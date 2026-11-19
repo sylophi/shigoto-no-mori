@@ -99,8 +99,7 @@ const make = Effect.gen(function* () {
   const context = yield* Effect.context<FetchServices>();
   const runs = yield* FiberSet.make();
   // Signals from outside any effect (the shell's focus report).
-  const inbox =
-    yield* Queue.unbounded<Effect.Effect<void, never, FetchServices>>();
+  const inbox = yield* Queue.unbounded<Effect.Effect<void>>();
   const lastFetchedAt = new Map<string, Stamp>();
   const fetchInFlight = new Map<string, Deferred.Deferred<boolean>>();
   const lastPullRequestSweepAt = new Map<string, Stamp>();
@@ -272,13 +271,7 @@ const make = Effect.gen(function* () {
       ),
     ).pipe(Effect.provide(context));
 
-  yield* Effect.forkScoped(
-    Effect.forever(
-      Effect.flatMap(Queue.take(inbox), (work) =>
-        Effect.provide(work, context),
-      ),
-    ),
-  );
+  yield* Effect.forkScoped(Effect.forever(Effect.flatten(Queue.take(inbox))));
   // The first pass, then a pass a minute while someone is looking.
   yield* sweepProjects();
   yield* Effect.forkScoped(
@@ -323,7 +316,7 @@ const make = Effect.gen(function* () {
       attendedUntil = now() + ATTENTION_LEASE_MS;
       yield* sweepProjects(SWEEP_INTERVAL_MS);
       return { leaseMs: ATTENTION_LEASE_MS };
-    }, Effect.provide(context)),
+    }),
     setWindowFocused: (focused) => {
       const wasFocused = windowFocused;
       windowFocused = focused;
