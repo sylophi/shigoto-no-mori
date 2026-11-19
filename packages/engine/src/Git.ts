@@ -62,28 +62,15 @@ import {
   type UpstreamSync,
 } from "./git/documents.ts";
 export {
-  BranchMovedError,
   GitRefusedError,
   BranchNotMergedError,
-  CloneDestinationError,
   GitCommandError,
-  GitOutputTooLargeError,
-  NestedRepositoryError,
-  NoRemoteError,
   RefUnreadable,
-  UndoRefusedError,
   PATHSPEC_CHUNK,
-  UnknownRevisionError,
   ABSENT_REF,
   stderrOf,
 } from "./git/documents.ts";
-export type {
-  CommitRequest,
-  GitError,
-  PrimaryRelation,
-  RunOptions,
-  UpstreamSync,
-} from "./git/documents.ts";
+export type { GitError, UpstreamSync } from "./git/documents.ts";
 
 // A project's common git directory, read off its files with no git:
 // `.git` itself for an ordinary checkout, or the common dir behind a
