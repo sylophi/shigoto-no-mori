@@ -4,6 +4,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Git from "../Git.ts";
 import * as GitHub from "../GitHub.ts";
+import { isRealBranch } from "@shigomori/contracts/schemas/project";
 import type { MergeMethod } from "@shigomori/contracts/schemas/pullRequest";
 import type { PullRequestSummary } from "../GitHub.ts";
 import type { RegisteredProject } from "../Registry.ts";
@@ -78,8 +79,7 @@ export const makeVerbs = ({
       located: Worktrees.Located,
       verb: LandingRefused["verb"],
     ) =>
-      located.worktree.detached ||
-      located.worktree.branch === Worktrees.UNKNOWN_BRANCH
+      located.worktree.detached || !isRealBranch(located.worktree.branch)
         ? Effect.fail(refuse(verb, "no-branch"))
         : Effect.succeed(located.worktree.branch);
 

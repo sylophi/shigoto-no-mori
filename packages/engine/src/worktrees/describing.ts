@@ -11,6 +11,7 @@
 // that fails otherwise (gh timing out, GitHub erroring) changes nothing:
 // an open PR it missed would hide the write.
 import { hasWorktreeData } from "@shigomori/contracts/schemas";
+import { isRealBranch } from "@shigomori/contracts/schemas/project";
 import * as Effect from "effect/Effect";
 import * as GitHub from "../GitHub.ts";
 import * as Paths from "../Paths.ts";
@@ -26,7 +27,6 @@ import {
   PullRequestHoldsDescription,
   PullRequestNeedsTitle,
   PullRequestUnchecked,
-  UNKNOWN_BRANCH,
   type WorktreeIdentity,
   isShelfable,
   trimGoSpace,
@@ -73,7 +73,7 @@ export const makeDescribing = ({
     // primary branch, which a fork's branch of the same name would be.
     const owningPullRequest = Effect.fn(function* (located: Located) {
       const { project, worktree } = located;
-      if (worktree.detached || worktree.branch === UNKNOWN_BRANCH) {
+      if (worktree.detached || !isRealBranch(worktree.branch)) {
         return { found: null };
       }
       const primary = yield* primaryRefOf(project);

@@ -5,7 +5,7 @@ import { strict } from "./strict.ts";
 
 // What `deriveBranch` returns with no branch and no readable detached
 // HEAD, which is not a real branch.
-const UNKNOWN_BRANCH = "(unknown)";
+export const UNKNOWN_BRANCH = "(unknown)";
 
 export const isRealBranch = (branch: string): boolean =>
   branch !== UNKNOWN_BRANCH;

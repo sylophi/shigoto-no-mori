@@ -20,6 +20,7 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { movedSourceChange } from "@shigomori/contracts/movedSource";
 import type { MovedSource } from "@shigomori/contracts/schemas";
+import { isRealBranch } from "@shigomori/contracts/schemas/project";
 import * as Config from "../Config.ts";
 import * as Dirty from "../Dirty.ts";
 import * as Git from "../Git.ts";
@@ -40,7 +41,6 @@ import {
   type Located,
   OrphanedWorktree,
   type Reporter,
-  UNKNOWN_BRANCH,
   type WorktreeIdentity,
   WorktreeRefused,
 } from "./documents.ts";
@@ -291,7 +291,7 @@ export const makeRemoving = ({
         keepBranch ||
         worktree.isExternal ||
         worktree.detached ||
-        worktree.branch === UNKNOWN_BRANCH ||
+        !isRealBranch(worktree.branch) ||
         !(yield* config.device("deleteBranchOnRemove"))
       ) {
         return false;

@@ -76,7 +76,6 @@ export {
   PullRequestUnchecked,
   RelocateRefused,
   TargetError,
-  UNKNOWN_BRANCH,
   WorktreeRefused,
   cleanupErrorOf,
   isShelfable,
