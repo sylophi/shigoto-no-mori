@@ -10,6 +10,7 @@
 // the app can't find the PR then either and shows the local text. One
 // that fails otherwise (gh timing out, GitHub erroring) changes nothing:
 // an open PR it missed would hide the write.
+import { hasWorktreeData } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as GitHub from "../GitHub.ts";
 import * as Paths from "../Paths.ts";
@@ -27,7 +28,6 @@ import {
   PullRequestUnchecked,
   UNKNOWN_BRANCH,
   type WorktreeIdentity,
-  hasWorktreeData,
   isShelfable,
   trimGoSpace,
 } from "./documents.ts";

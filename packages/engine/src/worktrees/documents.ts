@@ -717,11 +717,6 @@ export const primaryFirst = <A extends { readonly isPrimary: boolean }>(
   ...items.filter((item) => !item.isPrimary),
 ];
 
-// The primary checkout and the managed worktrees keep data. A checkout
-// outside the layout keeps none.
-export const hasWorktreeData = (worktree: WorktreeIdentity) =>
-  !worktree.isExternal || worktree.isPrimary;
-
 export const RECENT_COMMITS = 4;
 
 // Each row starts five gits, and the app lists every project at once,
