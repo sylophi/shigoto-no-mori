@@ -158,6 +158,7 @@
     "cli": "xed",
     "editor": true
   },
+  { "id": "unity", "label": "Unity", "cli": "unity" },
   { "id": "cmux", "label": "cmux", "bundleNames": ["cmux.app"], "cli": "cmux" },
   { "id": "ghostty", "label": "Ghostty", "bundleNames": ["Ghostty.app"] },
   { "id": "iterm", "label": "iTerm", "bundleNames": ["iTerm.app"] },
