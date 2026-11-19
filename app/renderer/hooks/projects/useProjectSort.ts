@@ -15,12 +15,12 @@ import { useClientConfigPatch } from "@/hooks/config/useClientConfigPatch";
 
 export function useProjectSort(): ProjectSortMode {
   const { data: config } = useClientConfig();
-  return config?.projectsSort ?? "manual";
+  return clientSetting(config ?? {}, "projectsSort");
 }
 
 export function useSetProjectSort() {
   return useClientConfigPatch<ProjectSortMode>(
-    (mode) => ({ projectsSort: mode === "manual" ? undefined : mode }),
+    (mode) => ({ projectsSort: storedClientSetting("projectsSort", mode) }),
     "Couldn't save project sort preference",
   );
 }

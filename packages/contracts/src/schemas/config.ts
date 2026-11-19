@@ -504,6 +504,7 @@ const CLIENT_CONFIG_DEFAULTS = {
   darkTerminals: false,
   widenForSideTerminals: false,
   keepReachable: true,
+  projectsSort: "manual",
   groupProjectsByOwner: true,
 } satisfies {
   readonly [K in keyof ClientConfig]?: NonNullable<ClientConfig[K]>;
