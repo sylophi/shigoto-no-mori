@@ -10,6 +10,15 @@ import {
   VoidSchema,
 } from "../schemas/index.ts";
 
+const LaunchersForProjectSchema = Schema.Struct({
+  entries: Schema.Array(LauncherEntrySchema),
+  // How many resolvable entries the user's hidden list filtered out.
+  // Lets the row tell "nothing installed" apart from "you hid it all"
+  // without re-deriving the filter in the renderer.
+  hiddenCount: Schema.Natural,
+});
+export type LaunchersForProject = typeof LaunchersForProjectSchema.Type;
+
 // Tagged host: launch executes where the project files live, which is
 // the host by design, and a GUI app it starts opens on that machine.
 export const launchersContract = defineContract(
@@ -19,13 +28,7 @@ export const launchersContract = defineContract(
   invoke(
     "forProject",
     ProjectScopedPayloadSchema,
-    Schema.Struct({
-      entries: Schema.Array(LauncherEntrySchema),
-      // How many resolvable entries the user's hidden list filtered out.
-      // Lets the row tell "nothing installed" apart from "you hid it all"
-      // without re-deriving the filter in the renderer.
-      hiddenCount: Schema.Natural,
-    }),
+    LaunchersForProjectSchema,
     ungated,
   ),
   // launch is remote false: it spawns an arbitrary shell command from

@@ -1,9 +1,6 @@
 import { useMutation, useQuery, skipToken } from "@tanstack/react-query";
-import type {
-  DetectedLauncher,
-  Launched,
-  LauncherEntry,
-} from "@shigomori/contracts/schemas";
+import type { LaunchersForProject } from "@shigomori/contracts/modules/launchers";
+import type { DetectedLauncher, Launched } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 
@@ -21,18 +18,11 @@ export function useDetectedLaunchers() {
   });
 }
 
-interface LauncherForProjectResult {
-  readonly entries: readonly LauncherEntry[];
-  // Resolvable entries the user hid in Settings. Only used to explain an
-  // otherwise-empty row.
-  readonly hiddenCount: number;
-}
-
 const LAUNCHER_ROW_STALE_MS = 5 * 60_000;
 
 export function useLauncherForProject(projectId: string | null) {
   const { api, keys } = useHostScope();
-  return useQuery<LauncherForProjectResult>({
+  return useQuery<LaunchersForProject>({
     queryKey: keys.projectLaunchers(projectId),
     queryFn:
       projectId !== null
