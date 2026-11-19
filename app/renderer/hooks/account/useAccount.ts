@@ -156,7 +156,7 @@ export function useWatchAccountChanges(): void {
 // would only duplicate it.
 
 // Every enrollment's key, so a reader can see one running anywhere
-// (useDeviceKeyStep).
+// (useEnrollment).
 export const ENROLL_MUTATION_KEY = ["account", "enroll"];
 
 // Exchanges a fresh Clerk session token for the hub device
