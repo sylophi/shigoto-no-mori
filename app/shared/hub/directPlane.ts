@@ -8,13 +8,13 @@
 // Pure aside from the injected deps (no electron, no node builtins). It
 // lives as long as the scope it is made in (quit, a tab's teardown).
 
-import type { KeyPair } from "@shared/crypto/noise";
 import type { DeviceKind } from "@shigomori/contracts/modules/link";
 import { callOf, channelOf, payloadOf } from "@shigomori/contracts/contract";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
 import type { HubPeerPush, HubStatus } from "@shigomori/contracts/modules/hub";
+import type { HubConnection } from "@shared/hub/connection";
 import type { HubConnectionStatus } from "@shared/hub/connectionTypes";
 import { makeHubHandlers, type HubHandlers } from "@shared/hub/bridgeHandlers";
 import { createDirectDialer, type DirectDialer } from "@shared/hub/directDial";
@@ -37,17 +37,10 @@ const SHARING_CHANGED = callOf(sharingContract, "changed");
 // The slice of a hub connection the plane composes over, common to
 // the node connection (host/hub/connection.ts) and the browser one
 // (web/hub/connection.ts).
-type DirectPlaneConnection = {
-  status(): HubConnectionStatus;
-  localKey(): KeyPair | null;
-  peerKey(deviceId: string): Uint8Array | undefined;
-  askConnectInfo(
-    deviceId: string,
-    input: unknown,
-    timeoutMs: number,
-    signal?: AbortSignal,
-  ): Promise<unknown>;
-};
+type DirectPlaneConnection = Pick<
+  HubConnection,
+  "status" | "localKey" | "peerKey" | "askConnectInfo"
+>;
 
 export type DirectPlaneDeps = {
   // The hub connection, as a getter because the owner wires the
