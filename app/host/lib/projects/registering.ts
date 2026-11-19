@@ -8,6 +8,7 @@ import type { CloneProgressPush } from "@shigomori/contracts/modules/projects";
 import type {
   CloneProjectPayload,
   CreateProjectPayload,
+  ReorderProjectsPayload,
 } from "@shigomori/contracts/schemas";
 import {
   cloneUrlOf,
@@ -203,11 +204,9 @@ export const deleteProject = Effect.fn("projects.delete")(
 // the order apart from the registry entries, so any project can hold
 // any place. Each move goes over the list as the previous one left it
 // (see reorders).
-export const reorderProject = Effect.fn("projects.reorder")(function* (input: {
-  readonly draggedId: string;
-  readonly targetId: string;
-  readonly position: Parameters<typeof reorderProjects>[3];
-}) {
+export const reorderProject = Effect.fn("projects.reorder")(function* (
+  input: ReorderProjectsPayload,
+) {
   const registry = yield* Registry.Registry;
   const current = yield* registry.listed;
   const next = reorderProjects(

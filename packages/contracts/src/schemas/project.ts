@@ -159,6 +159,7 @@ export const ReorderProjectsPayloadSchema = Schema.Struct({
   targetId: Schema.NonEmptyString,
   position: Schema.Literals(["before", "after"]),
 });
+export type ReorderProjectsPayload = typeof ReorderProjectsPayloadSchema.Type;
 
 export const ProjectIconSchema = Schema.Struct({
   mime: Schema.String,
