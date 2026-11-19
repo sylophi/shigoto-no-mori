@@ -13,6 +13,7 @@ import type { ControlTransferResult } from "@shigomori/contracts/modules/control
 import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { scriptEventNotifier } from "@host/ipc/scriptRun";
+import type * as Engine from "@host/lib/Engine";
 import * as Worktrees from "@host/lib/Worktrees";
 import * as Moves from "@host/lib/sync/Moves";
 import { messageOf } from "@shigomori/engine/errorDocument";
@@ -48,15 +49,9 @@ class NoReceiptError extends Schema.TaggedError<NoReceiptError>()(
 // source, so a refused or failed one can be retried. A pull's source is
 // the peer's worktree, checked over a link and removed through the
 // peer's grant-gated delete. A send's is this device's own.
-const teardownSource = Effect.fn("Sync.teardownSource")(function* <E, R>(
+export const teardownMoveSource = Effect.fn("Sync.teardownSource")(function* (
   move: SyncMoveRef,
-  removeHere: (removal: {
-    projectId: string;
-    worktreeId: string;
-    force: boolean;
-    refuseRunningScripts: boolean;
-    expect: MovedSource;
-  }) => Effect.Effect<unknown, E, R>,
+  ctx: HandlerContext,
 ) {
   const moves = yield* Moves.Moves;
   const receipt = yield* moves.receiptOf(move);
@@ -81,21 +76,21 @@ const teardownSource = Effect.fn("Sync.teardownSource")(function* <E, R>(
   if (changed !== undefined) {
     return { sourceRemoved: false, sourceError: changed } as const;
   }
-  const result = yield* tearDown<R | PeerReach>(
-    receipt,
-    pulled ? "here" : "on the other device",
-    (force) => {
-      const removal = {
-        ...target,
-        force,
-        refuseRunningScripts: true,
-        expect: moved,
-      };
-      return pulled
-        ? peerWorktreesFor(move.deviceId).delete(removal)
-        : removeHere(removal);
-    },
-  );
+  const result = yield* tearDown<
+    PeerReach | Worktrees.Worktrees | Engine.Services
+  >(receipt, pulled ? "here" : "on the other device", (force) => {
+    const removal = {
+      ...target,
+      force,
+      refuseRunningScripts: true,
+      expect: moved,
+    };
+    return pulled
+      ? peerWorktreesFor(move.deviceId).delete(removal)
+      : Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+          worktrees.remove(removal, scriptEventNotifier(ctx)),
+        );
+  });
   if (result.sourceRemoved) yield* moves.forget(move);
   return result;
 });
@@ -218,15 +213,6 @@ const tearDown = <R>(
     ),
   );
 };
-
-// The teardown as a caller asks it: a send's source is this device's
-// own, removed by the ordinary delete.
-export const teardownMoveSource = (move: SyncMoveRef, ctx: HandlerContext) =>
-  teardownSource(move, (removal) =>
-    Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
-      worktrees.remove(removal, scriptEventNotifier(ctx)),
-    ),
-  );
 
 // A transfer done, with how to settle its source.
 type Settle<R> = {
