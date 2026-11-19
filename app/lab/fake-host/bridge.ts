@@ -877,7 +877,7 @@ function hostHandlersFor(
         );
       const cleanup = stack ? stackCleanupFor(stack, rows) : null;
       if (!cleanup) {
-        const branch = rows.find((w) => w.id === worktreeId)?.branch ?? "";
+        const branch = own?.branch ?? "";
         throw new Error(
           `No pull request found for branch ${branch}, so no stack to clean up`,
         );
