@@ -248,10 +248,6 @@ export class Tunnel extends Context.Service<
   }
 >()("sm/host/Tunnel") {}
 
-// How long a SIGTERM'd child gets before SIGKILL. cloudflared closes
-// its edge connections promptly, so this only bounds a wedged one.
-const KILL_GRACE_MS = 3_000;
-
 // One readiness probe attempt, true when the hostname routes from the
 // edge to the local listener: a plain HTTPS GET of the tunnel
 // hostname. The direct listener is a ws server, so a non-upgrade GET
@@ -615,7 +611,6 @@ const make = (options: Options) =>
                   // the host's crash leaves is reaped through the pid
                   // file as the next host starts.
                   detached: false,
-                  forceKillAfter: KILL_GRACE_MS,
                 }),
               )
               .pipe(Effect.result);
