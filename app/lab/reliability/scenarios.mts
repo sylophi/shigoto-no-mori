@@ -581,7 +581,7 @@ const hostKill: Scenario = {
   does: "The host's process is killed (SIGKILL). Its shell forks it again and every client has to find it.",
   boundMs: 60_000,
   async run(lab) {
-    const pid = lab.hostPid();
+    const pid = lab.hostApp.hostPid();
     if (pid === null) throw new Error("no host process to kill");
     lab.note(`killing the host process ${pid}`);
     process.kill(pid, "SIGKILL");
@@ -596,10 +596,10 @@ const appRelaunch: Scenario = {
   boundMs: 60_000,
   async run(lab) {
     lab.note("stopping the host app");
-    await lab.stopHostApp();
+    await lab.hostApp.stop();
     changeHost(lab);
     lab.note("launching the host app again");
-    await lab.launchHost(false);
+    await lab.hostApp.launch(false);
     lab.note("the host app is up");
     return Date.now();
   },
@@ -880,7 +880,7 @@ const signOutWithSibling: Scenario = {
     if (enrolls.length > 0) {
       throw new Error(`enrolled again from ${enrolls.join(", ")}`);
     }
-    const listed = await lab.hostEval((api) =>
+    const listed = await lab.hostApp.eval((api) =>
       api.run(api.account.listDevices()),
     );
     if (listed.some((device) => device.deviceId === deviceId)) {

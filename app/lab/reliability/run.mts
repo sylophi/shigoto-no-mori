@@ -279,9 +279,9 @@ async function heal(): Promise<void> {
   for (const extra of deskWindows.slice(2)) {
     await lab.closeWindow(extra).catch(() => {});
   }
-  if (lab.hostPid() === null) {
-    await lab.stopHostApp();
-    await lab.launchHost(false);
+  if (lab.hostApp.hostPid() === null) {
+    await lab.hostApp.stop();
+    await lab.hostApp.launch(false);
   }
   for (const page of lab.pages()) {
     await within(60_000, "the reload", page.page.reload()).catch(() => {});

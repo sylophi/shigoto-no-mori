@@ -30,7 +30,6 @@ import {
   type CDPSession,
   type Page,
 } from "playwright-core";
-import type { RendererApi } from "../../renderer/lib/runtime/pageApi.tsx";
 import { createAccountService } from "../../shared/account/service.ts";
 import { signalIfAlive } from "../../../test/testProcesses.mts";
 import { DevApp } from "./devApp.mts";
@@ -514,23 +513,6 @@ export class Lab {
       ...(this.desk?.logSince(at, "A") ?? []),
       ...(this.remote?.logSince(at, "C") ?? []),
     ];
-  }
-
-  // Kept for the scenarios written against the host alone.
-  hostPid(): number | null {
-    return this.hostApp.hostPid();
-  }
-
-  async stopHostApp(): Promise<void> {
-    await this.hostApp.stop();
-  }
-
-  async launchHost(fresh: boolean): Promise<void> {
-    await this.hostApp.launch(fresh);
-  }
-
-  async hostEval<T>(fn: (api: RendererApi) => T | Promise<T>): Promise<T> {
-    return await this.hostApp.eval(fn);
   }
 
   // What the host itself says about the project's worktrees.
