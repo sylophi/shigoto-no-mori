@@ -15,14 +15,10 @@
 // ways with the channel's backpressure, so a slow local consumer pauses
 // the peer's source and the reverse.
 import type { Server, Socket } from "node:net";
-import type { ChannelHandle, LinkChannels } from "@shigomori/contracts/link";
+import type { ChannelHandle } from "@shigomori/contracts/link";
+import type { PeerChannels } from "@host/ipc/PeerReach";
 import { mintHexId } from "@host/lib/hexId";
 import { bridgeDuplexToChannel } from "@host/socket/channelStreams";
-
-// How a caller reaches a peer's channels: the session's multiplexer,
-// resolving once the direct session exists (joining an in-flight
-// keeper dial), rejecting when there is none.
-export type PeerChannels = () => Promise<Pick<LinkChannels, "attach" | "has">>;
 
 // How long a refused open's socket may linger for the peer to read the
 // answer and close before it is destroyed.

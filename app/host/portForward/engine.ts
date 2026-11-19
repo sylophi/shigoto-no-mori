@@ -31,15 +31,10 @@ import {
   type PortForwardSummary,
   type PortForwardWorktree,
 } from "@shigomori/contracts/modules/portForward";
-import type { PeerCalls } from "@host/ipc/PeerReach";
+import type { PeerCalls, PeerChannels } from "@host/ipc/PeerReach";
 import { mintHexId } from "@host/lib/hexId";
 import * as HostPushes from "@host/lib/HostPushes";
-import {
-  type BridgedConn,
-  bridgeSocket,
-  listenLoopback,
-  type PeerChannels,
-} from "./bridge";
+import { type BridgedConn, bridgeSocket, listenLoopback } from "./bridge";
 
 export type ForwardApi = PeerCalls<typeof forwardContract>;
 
@@ -89,7 +84,6 @@ export type PortForwardEngine = Effect.Success<
 // The changed push and every forward run in the caller's scope.
 export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
   forwardApiFor: (deviceId: string) => ForwardApi;
-  // The peer session's byte channels (bridge.ts PeerChannels).
   channelsFor: (deviceId: string) => PeerChannels;
 }) {
   const engineScope = yield* Effect.scope;
