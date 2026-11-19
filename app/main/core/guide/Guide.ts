@@ -494,11 +494,14 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const objectId = yield* objectOf(page, ref);
       // One the page couldn't say (it threw) is gone as far as an action
-      // on it goes.
+      // on it goes, and one that is the user's alone is refused.
       const spot = Option.getOrNull(
         decodeSpot(yield* call(page, objectId, INSPECT)),
       );
       if (spot === null) return yield* new GuideTargetGone({ ref });
+      const alone = aloneFor(spot);
+      if (alone !== undefined)
+        return yield* new GuideRefused({ reason: alone });
       return { ...spot, objectId };
     });
 
@@ -527,9 +530,6 @@ const make = Effect.gen(function* () {
       click: ({ ref }) =>
         Effect.gen(function* () {
           const spot = yield* spotOf(page, ref);
-          const alone = aloneFor(spot);
-          if (alone !== undefined)
-            return yield* new GuideRefused({ reason: alone });
           yield* mouse(page, "mouseMoved", spot);
           yield* mouse(page, "mousePressed", spot);
           yield* mouse(page, "mouseReleased", spot);
@@ -538,9 +538,6 @@ const make = Effect.gen(function* () {
       fill: ({ ref, text }) =>
         Effect.gen(function* () {
           const spot = yield* spotOf(page, ref);
-          const alone = aloneFor(spot);
-          if (alone !== undefined)
-            return yield* new GuideRefused({ reason: alone });
           yield* page.send("DOM.focus", { backendNodeId: ref });
           yield* call(page, spot.objectId, SELECT);
           yield* text === ""
