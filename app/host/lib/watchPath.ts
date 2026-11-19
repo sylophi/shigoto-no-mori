@@ -49,18 +49,13 @@ const done = (): void => {
 };
 
 // How a path is opened to see whether it can be watched.
-type Opener = (path: string) => Promise<{
-  stat(): Promise<{ isDirectory(): boolean; isFile(): boolean }>;
-  close(): Promise<void>;
-}>;
-const openToProbe: Opener = (path) =>
-  open(path, constants.O_RDONLY | constants.O_NONBLOCK);
-
-const opened = (path: string, openPath: Opener): Promise<string | null> => {
+const opened = (path: string): Promise<string | null> => {
   const held = opening.get(path);
   if (held !== undefined) return held;
   const attempt = turn()
-    .then(() => openPath(path).finally(done))
+    .then(() =>
+      open(path, constants.O_RDONLY | constants.O_NONBLOCK).finally(done),
+    )
     .then(async (handle) => {
       try {
         const stat = await handle.stat();
@@ -79,57 +74,42 @@ const opened = (path: string, openPath: Opener): Promise<string | null> => {
   return attempt;
 };
 
-// An open of `path` that did not come back within `within`, in words.
+// An open of `path` that did not come back within `OPEN_WITHIN`, in words.
 // Off the startup disk, that is macOS holding it for the Files and
 // Folders prompt.
-const heldOpen = (path: string, within: Duration.Input): string =>
+const heldOpen = (path: string): string =>
   path.startsWith("/Volumes/")
     ? "is waiting for permission to read files on a removable or network volume (System Settings, Privacy & Security, Files and Folders)"
-    : `did not open within ${Duration.format(Duration.fromInputUnsafe(within))}`;
-
-export type Probe = {
-  readonly within?: Duration.Input;
-  readonly retryEvery?: Duration.Input;
-  readonly open?: Opener;
-};
+    : `did not open within ${Duration.format(Duration.fromInputUnsafe(OPEN_WITHIN))}`;
 
 // Why `path` can't be watched right now, or none when its open came
 // back in time on a folder or a file.
-const unwatchable = (
-  path: string,
-  probe: Probe = {},
-): Effect.Effect<Option.Option<string>> => {
-  const within = probe.within ?? OPEN_WITHIN;
-  return Effect.promise(() => opened(path, probe.open ?? openToProbe)).pipe(
-    Effect.timeoutOption(within),
+const unwatchable = (path: string): Effect.Effect<Option.Option<string>> =>
+  Effect.promise(() => opened(path)).pipe(
+    Effect.timeoutOption(OPEN_WITHIN),
     Effect.map((result) =>
       Option.isNone(result)
-        ? Option.some(heldOpen(path, within))
+        ? Option.some(heldOpen(path))
         : Option.fromNullishOr(result.value),
     ),
   );
-};
 
 // Settles once `path` opens promptly, trying again on an interval until
 // it does. Says once in the log why a path waits, and again once it is
 // watched.
-export const untilWatchable = (
-  path: string,
-  probe: Probe = {},
-): Effect.Effect<void> =>
+export const untilWatchable = (path: string): Effect.Effect<void> =>
   Effect.gen(function* () {
-    const every = probe.retryEvery ?? RETRY_EVERY;
     let waited = false;
     while (true) {
-      const reason = yield* unwatchable(path, probe);
+      const reason = yield* unwatchable(path);
       if (Option.isNone(reason)) break;
       if (!waited) {
         log.warn(
-          `[watch] ${path} ${reason.value}: not watched for now, trying again every ${Duration.format(Duration.fromInputUnsafe(every))}`,
+          `[watch] ${path} ${reason.value}: not watched for now, trying again every ${Duration.format(Duration.fromInputUnsafe(RETRY_EVERY))}`,
         );
         waited = true;
       }
-      yield* Effect.sleep(every);
+      yield* Effect.sleep(RETRY_EVERY);
     }
     if (waited) log.info(`[watch] ${path} opens again: watched`);
   });
@@ -139,8 +119,5 @@ export const watchPath = (
   fs: FileSystem.FileSystem,
   path: string,
   options?: FileSystem.WatchOptions,
-  probe: Probe = {},
 ): Stream.Stream<FileSystem.WatchEvent, PlatformError> =>
-  Stream.unwrap(
-    untilWatchable(path, probe).pipe(Effect.as(fs.watch(path, options))),
-  );
+  Stream.unwrap(untilWatchable(path).pipe(Effect.as(fs.watch(path, options))));
