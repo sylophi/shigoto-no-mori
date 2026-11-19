@@ -33,13 +33,9 @@ export const makeFileReads = ({
     const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
     const { home, dataDir } = paths;
-    const {
-      configFile,
-      registryFile,
-      checkGlobalConfig,
-      registryLine,
-      registeredLine,
-    } = dataDirChecks;
+    const { checkGlobalConfig, registryLine, registeredLine } = dataDirChecks;
+    const configFile = path.join(dataDir, "config.json");
+    const registryFile = path.join(dataDir, "registry.json");
     const stateFile = path.join(dataDir, "state.json");
 
     // A JSON file the store imports.

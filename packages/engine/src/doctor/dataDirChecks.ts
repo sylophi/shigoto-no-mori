@@ -323,9 +323,6 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       };
     });
 
-    const configFile = path.join(dataDir, "config.json");
-    const registryFile = path.join(dataDir, "registry.json");
-
     const registryLine = check("Data dir", "registry", "projects");
 
     // The registry's line, by its projects, and how an incomplete one
@@ -749,8 +746,6 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
 
     return {
       checkDataDir,
-      configFile,
-      registryFile,
       checkGlobalConfig,
       registryLine,
       registeredLine,
