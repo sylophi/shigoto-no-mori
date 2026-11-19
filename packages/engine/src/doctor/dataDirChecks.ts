@@ -18,6 +18,7 @@ import { storedProblem } from "../Config.ts";
 import type { ConfigDoc } from "../configDoc.ts";
 import { formatSize, launcherProgram, shellWord } from "../doctorParse.ts";
 import { findExecutable } from "../executables.ts";
+import { isDirectory } from "../entries.ts";
 import { flavorNames } from "../flavor.ts";
 import * as NativeFs from "../NativeFs.ts";
 import * as Paths from "../Paths.ts";
@@ -155,15 +156,8 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
 
     const { home, dataDir, binaryName, flavor } = paths;
     const names = flavorNames(flavor);
-    const {
-      lstatIn,
-      statOf,
-      isDirectory,
-      isMissing,
-      sameDirectory,
-      readText,
-      listDir,
-    } = reads;
+    const { lstatIn, statOf, isMissing, sameDirectory, readText, listDir } =
+      reads;
     const sourceText = (() => {
       switch (paths.dataDirSource) {
         case "env":
@@ -223,7 +217,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
               `the pointer file names ${target}, which was ignored because ${problem}, so sm is using ${shown}`,
               `Fix ${tildify(file, home)} to name a data dir, or delete it.`,
             ),
-            usable: yield* isDirectory(dataDir),
+            usable: yield* isDirectory(fs, dataDir),
           };
         }
       }

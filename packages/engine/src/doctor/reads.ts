@@ -34,12 +34,6 @@ export const makeReads = Effect.gen(function* () {
 
   const statOf = (target: string) => fs.stat(target).pipe(Effect.option);
 
-  const isDirectory = (target: string) =>
-    Effect.map(
-      statOf(target),
-      (info) => Option.isSome(info) && info.value.type === "Directory",
-    );
-
   const isMissing = (target: string) =>
     fs.stat(target).pipe(
       Effect.as(false),
@@ -96,7 +90,6 @@ export const makeReads = Effect.gen(function* () {
     portPoolListing,
     lstatIn,
     statOf,
-    isDirectory,
     isMissing,
     realPath,
     sameDirectory,
