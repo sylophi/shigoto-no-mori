@@ -1,7 +1,5 @@
 import { SubPageNotFoundView } from "./SubPageNotFoundView.tsx";
 
-const WORKTREE_DELETED_MESSAGE = "This worktree was deleted.";
-
 // The shared "resolve a worktree out of the list query" fallback.
 // Pending renders nothing. On a cold cache (e.g. a reload landing
 // directly on the route) absence doesn't mean missing. A failed list
@@ -15,14 +13,12 @@ export function WorktreeMissingView({
   deleted,
   refetch,
   onBack,
-  message = "Worktree not found.",
 }: {
   isPending: boolean;
   isError: boolean;
   deleted: boolean;
   refetch: () => void;
   onBack: () => void;
-  message?: string;
 }) {
   if (isPending) return null;
   if (isError) {
@@ -37,7 +33,7 @@ export function WorktreeMissingView({
   return (
     <SubPageNotFoundView
       onBack={onBack}
-      message={deleted ? WORKTREE_DELETED_MESSAGE : message}
+      message={deleted ? "This worktree was deleted." : "Worktree not found."}
     />
   );
 }
