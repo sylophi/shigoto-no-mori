@@ -30,7 +30,7 @@ const seedProject = (files: Record<string, string>) => {
   return { repo, tree };
 };
 
-it("tells merged, squash-merged, unique, detached and primary work apart", async () => {
+it("tells merged, squash-merged, unique, conflicting, detached and primary work apart", async () => {
   const { repo, tree } = seedProject({ "a.txt": "a\n" });
   const untouched = tree("untouched");
   writeFileSync(join(untouched, "scratch.txt"), "untracked\n");
@@ -52,6 +52,13 @@ it("tells merged, squash-merged, unique, detached and primary work apart", async
   box.git(repo, "tag", "main", "refs/heads/unique");
   const detached = tree("detached");
   box.git(detached, "checkout", "-q", "--detach");
+  // Deletes a file main goes on to edit: the tree git prints for that
+  // conflict keeps main's side, so it equals main's.
+  const conflicting = tree("conflicting");
+  box.git(conflicting, "rm", "-q", "a.txt");
+  box.git(conflicting, "commit", "-q", "-m", "drop a");
+  writeFileSync(join(repo, "a.txt"), "a, edited\n");
+  box.git(repo, "commit", "-q", "-am", "edit a");
 
   const facts = (await box.engine(
     Effect.flatMap(Effect.service(Hygiene.Hygiene), (hygiene) =>
@@ -81,13 +88,17 @@ it("tells merged, squash-merged, unique, detached and primary work apart", async
     [null, false, true],
   );
   assert.deepEqual(
-    [of(untouched), of(squashed), of(unique), of(detached)].map(
-      ({ uniqueCommits, contentAlreadyInPrimary, untracked }) => ({
-        uniqueCommits,
-        contentAlreadyInPrimary,
-        untracked,
-      }),
-    ),
+    [
+      of(untouched),
+      of(squashed),
+      of(unique),
+      of(detached),
+      of(conflicting),
+    ].map(({ uniqueCommits, contentAlreadyInPrimary, untracked }) => ({
+      uniqueCommits,
+      contentAlreadyInPrimary,
+      untracked,
+    })),
     [
       { uniqueCommits: 0, contentAlreadyInPrimary: true, untracked: true },
       { uniqueCommits: 1, contentAlreadyInPrimary: true, untracked: false },
@@ -97,6 +108,7 @@ it("tells merged, squash-merged, unique, detached and primary work apart", async
         contentAlreadyInPrimary: false,
         untracked: false,
       },
+      { uniqueCommits: 1, contentAlreadyInPrimary: false, untracked: false },
     ],
   );
 });

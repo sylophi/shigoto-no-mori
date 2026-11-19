@@ -55,7 +55,8 @@ export const makeAdopting = ({
         });
       }
       // Adopting re-checks-out the branch tip, so what is uncommitted goes.
-      yield* requireClean(worktree, options.force, "adopt", "adopting");
+      const clean = requireClean(worktree, options.force, "adopt", "adopting");
+      yield* clean;
       const name = adoptedDirName(worktree);
       // The replacement first, then the checkout it replaces. A removal
       // that fails takes the replacement back only while the original
@@ -73,6 +74,28 @@ export const makeAdopting = ({
             clone: true,
             replacing: worktree.id,
           });
+          // git's listing can outlive the checkout's HEAD, so the
+          // original holds the commits only while its own HEAD still
+          // resolves to the one the replacement has.
+          const takeBack = Effect.gen(function* () {
+            const [held, tip] = yield* Effect.all([
+              git.verifyRev(worktree.path, "HEAD").pipe(Effect.option),
+              git.verifyRev(added.made.path, "HEAD").pipe(Effect.option),
+            ]);
+            if (
+              Option.isSome(held) &&
+              Option.isSome(tip) &&
+              held.value === tip.value
+            ) {
+              yield* Effect.ignore(
+                removeCheckout(project.path, added.made.path, true),
+              );
+            }
+          });
+          // Building the replacement took a while, and the forced
+          // removal looks at nothing: what was written to the original
+          // meanwhile is in neither checkout, so it is asked again.
+          yield* clean.pipe(Effect.onError(() => takeBack));
           // A commit made in the original since it was listed is in no
           // ref the replacement holds: just before the removal its HEAD
           // must still be the replacement's, or both checkouts stay, the
@@ -93,26 +116,7 @@ export const makeAdopting = ({
             });
           }
           yield* removeCheckout(project.path, worktree.path, true).pipe(
-            Effect.onError(() =>
-              Effect.gen(function* () {
-                // git's listing can outlive the checkout's HEAD, so the
-                // original holds the commits only while its own HEAD
-                // still resolves to the one the replacement has.
-                const [held, tip] = yield* Effect.all([
-                  git.verifyRev(worktree.path, "HEAD").pipe(Effect.option),
-                  git.verifyRev(added.made.path, "HEAD").pipe(Effect.option),
-                ]);
-                if (
-                  Option.isSome(held) &&
-                  Option.isSome(tip) &&
-                  held.value === tip.value
-                ) {
-                  yield* Effect.ignore(
-                    removeCheckout(project.path, added.made.path, true),
-                  );
-                }
-              }),
-            ),
+            Effect.onError(() => takeBack),
           );
           yield* registry.setMark("shelved", worktree.id, false);
           // The checkout moved, so its id did too, like after a move.
