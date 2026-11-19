@@ -38,7 +38,7 @@ export const AFTER_PULL_POSITION = TIMELINE.length;
 // from the start. A run that clones the repo first opens on that.
 export function framePosition(
   frame: SyncPullProgress | null,
-  cloning = false,
+  cloning: boolean,
 ): number {
   return stepPosition(
     frame?.createPhase ?? frame?.step ?? (cloning ? "clone" : "capture"),
@@ -146,7 +146,7 @@ export function landsOnPeer(label: string): Landing {
 export function stepHeadline(
   frame: SyncPullProgress | null,
   sourceDeviceLabel: string,
-  landing: Landing = LANDS_HERE,
+  landing: Landing,
 ): string {
   const here = landing.on;
   switch (frame?.step ?? "capture") {
