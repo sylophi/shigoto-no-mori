@@ -125,7 +125,6 @@ async function harness(answer: (request: Request) => Answer) {
     MirrorGateway.MirrorGateway,
     MirrorGateway.MirrorGateway.of({
       listening: Effect.succeedSome({ address: "127.0.0.1:1", token: "token" }),
-      streamCount: Effect.succeed(0),
     }),
   );
   const daemonRuntime = ManagedRuntime.make(
