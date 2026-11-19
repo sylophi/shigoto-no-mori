@@ -35,7 +35,6 @@ export const mirrorAgreements = Effect.gen(function* () {
     "git-follow.json",
     doc,
     "agreed",
-    "object",
     entries.map(([, state]) => state),
     GitStateCoreSchema,
   );

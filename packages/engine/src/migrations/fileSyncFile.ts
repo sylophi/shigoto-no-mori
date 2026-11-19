@@ -24,7 +24,6 @@ export const countDropped = (
   name: string,
   doc: Option.Option<{ readonly [key: string]: unknown }>,
   container: string,
-  shape: "object" | "array",
   entries: ReadonlyArray<unknown>,
   schema: Schema.Decoder<unknown>,
 ) =>
@@ -33,9 +32,7 @@ export const countDropped = (
     const value = doc.value[container];
     const shaped =
       value === undefined ||
-      (shape === "array"
-        ? Array.isArray(value)
-        : typeof value === "object" && value !== null && !Array.isArray(value));
+      (typeof value === "object" && value !== null && !Array.isArray(value));
     const extra = unknownKeys(doc.value, { schemaVersion: 0, [container]: 0 });
     if (
       !shaped ||

@@ -36,7 +36,6 @@ export const mirrorHistory = Effect.gen(function* () {
     "mirror-history.json",
     doc,
     "events",
-    "object",
     threads.map(([, thread]) => thread),
     ThreadSchema,
   );
