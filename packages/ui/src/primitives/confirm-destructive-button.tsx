@@ -19,8 +19,6 @@ interface ConfirmDestructiveButtonProps {
   // The button's mark, armed or not: a bin unless the act is not a
   // removal (the Live page's Stop all takes the stop square).
   icon?: React.ReactNode;
-  // A hint that leaves the button live, where disabledReason would not.
-  tip?: string;
   variant?: ButtonProps["variant"];
   size?: ButtonProps["size"];
   // For a split button's half (ClosedPullRequestBox).
@@ -41,13 +39,12 @@ export function ConfirmDestructiveButton({
   disabled = false,
   disabledReason,
   icon = BIN,
-  tip,
   variant = "outline-destructive",
   size = "sm",
   className,
 }: ConfirmDestructiveButtonProps) {
   return (
-    <SimpleTooltip tip={disabledReason ?? tip}>
+    <SimpleTooltip tip={disabledReason}>
       <Button
         type="button"
         size={size}
