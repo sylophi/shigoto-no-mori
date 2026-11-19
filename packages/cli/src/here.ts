@@ -145,6 +145,13 @@ export const worktreeFlags = {
   worktreeId: Flag.String("worktree-id").pipe(Flag.optional),
 };
 
+// The worktree as the positional, the positionals past it let be.
+export const worktreeArgs = {
+  ...worktreeFlags,
+  ref: Argument.String("worktree").pipe(Argument.optional),
+  rest,
+};
+
 // The worktree a command's flags name. An empty flag is no flag.
 export const worktreeTarget = (ref: {
   readonly ref?: Option.Option<string>;

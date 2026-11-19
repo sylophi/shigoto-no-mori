@@ -25,6 +25,7 @@ import {
   resolveProject,
   resolveWorktree,
   rest,
+  worktreeArgs,
   worktreeFlags,
 } from "../here.ts";
 import { emit, note, out, Output, styles } from "../output.ts";
@@ -146,9 +147,7 @@ export const create = Command.make(
 export const adopt = Command.make(
   "adopt",
   {
-    ...worktreeFlags,
-    ref: Argument.String("worktree").pipe(Argument.optional),
-    rest,
+    ...worktreeArgs,
     force: Flag.Boolean("force").pipe(
       Flag.withAlias("f"),
       Flag.withDefault(false),
@@ -180,9 +179,7 @@ export const adopt = Command.make(
 export const setup = Command.make(
   "setup",
   {
-    ...worktreeFlags,
-    ref: Argument.String("worktree").pipe(Argument.optional),
-    rest,
+    ...worktreeArgs,
   },
   (input) =>
     Effect.gen(function* () {
@@ -221,9 +218,7 @@ export const setup = Command.make(
 export const rm = Command.make(
   "rm",
   {
-    ...worktreeFlags,
-    ref: Argument.String("worktree").pipe(Argument.optional),
-    rest,
+    ...worktreeArgs,
     ...removeFlags,
     stack: flag("stack"),
   },

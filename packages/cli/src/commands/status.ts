@@ -7,10 +7,9 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as DateTime from "effect/DateTime";
-import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
-import { resolveWorktree, rest, worktreeFlags } from "../here.ts";
+import { resolveWorktree, worktreeArgs } from "../here.ts";
 import {
   alignRows,
   emit,
@@ -180,10 +179,7 @@ const card = (
 export const status = Command.make(
   "status",
   {
-    ...worktreeFlags,
-    ref: Argument.String("worktree").pipe(Argument.optional),
-    // The first is read and the rest let be.
-    rest,
+    ...worktreeArgs,
     noPr: Flag.Boolean("no-pr").pipe(Flag.withDefault(false)),
   },
   (input) =>

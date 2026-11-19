@@ -9,11 +9,17 @@ import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { UsageError } from "../errors.ts";
-import { given, here, resolveWorktree, rest, worktreeFlags } from "../here.ts";
+import {
+  given,
+  here,
+  resolveWorktree,
+  rest,
+  worktreeArgs,
+  worktreeFlags,
+} from "../here.ts";
 import {
   emit,
   note,
@@ -241,10 +247,7 @@ const identityTable = (
 const path = Command.make(
   "path",
   {
-    ...worktreeFlags,
-    ref: Argument.String("worktree").pipe(Argument.optional),
-    // The first is read and the rest let be.
-    rest,
+    ...worktreeArgs,
   },
   (input) =>
     Effect.gen(function* () {
@@ -270,9 +273,7 @@ const path = Command.make(
 export const link = Command.make(
   "link",
   {
-    ...worktreeFlags,
-    ref: Argument.String("worktree").pipe(Argument.optional),
-    rest,
+    ...worktreeArgs,
   },
   (input) =>
     Effect.gen(function* () {

@@ -8,17 +8,14 @@ import * as Option from "effect/Option";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import { UsageError } from "../errors.ts";
-import { resolveWorktree, rest, worktreeFlags } from "../here.ts";
+import { resolveWorktree, worktreeArgs, worktreeFlags } from "../here.ts";
 import { emit, out, Output, styles } from "../output.ts";
 
 const shelf = (name: "shelve" | "unshelve") =>
   Command.make(
     name,
     {
-      ...worktreeFlags,
-      ref: Argument.String("worktree").pipe(Argument.optional),
-      // The first is read and the rest let be.
-      rest,
+      ...worktreeArgs,
     },
     (input) =>
       Effect.gen(function* () {

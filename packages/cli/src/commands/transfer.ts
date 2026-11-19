@@ -18,7 +18,7 @@ import {
   here,
   projectFlags,
   rest,
-  worktreeFlags,
+  worktreeArgs,
   worktreeTarget,
 } from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
@@ -27,10 +27,7 @@ import { emit, note, out, Output, renderTable, styles } from "../output.ts";
 const raw = (flag: Option.Option<string>) => Option.getOrUndefined(flag);
 
 const transferFlags = {
-  ...worktreeFlags,
-  ref: Argument.String("worktree").pipe(Argument.optional),
-  // The first positional is read and the rest let be.
-  rest,
+  ...worktreeArgs,
   to: Flag.String("to").pipe(Flag.optional),
   from: Flag.String("from").pipe(Flag.optional),
   leaveOut: Flag.String("leave-out").pipe(Flag.optional),
@@ -172,9 +169,7 @@ export const cloneProject = Command.make(
 export const unmirror = Command.make(
   "unmirror",
   {
-    ...worktreeFlags,
-    ref: Argument.String("worktree").pipe(Argument.optional),
-    rest,
+    ...worktreeArgs,
     force: Flag.Boolean("force").pipe(
       Flag.withAlias("f"),
       Flag.withDefault(false),

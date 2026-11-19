@@ -15,7 +15,6 @@ import type * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import { changing, refuseUnmigrated } from "../engine.ts";
 import { childEnv } from "@shigomori/engine/processes";
@@ -26,8 +25,7 @@ import {
   given,
   resolveProject,
   resolveWorktree,
-  rest,
-  worktreeFlags,
+  worktreeArgs,
 } from "../here.ts";
 import { emit, note, out, Output, styles } from "../output.ts";
 import { reporter } from "../reporter.ts";
@@ -59,13 +57,6 @@ const methodOf = (flag: Option.Option<string>) => {
 };
 
 const stackFlag = Flag.Boolean("stack").pipe(Flag.withDefault(false));
-
-// The positionals it needs are read and the rest let be.
-const target = {
-  ...worktreeFlags,
-  ref: Argument.String("worktree").pipe(Argument.optional),
-  rest,
-};
 
 // A merge as a person reads it: merged, queued, or auto-merge armed.
 const mergeLine = (
@@ -182,7 +173,7 @@ const reportCleanup = (
     }
   });
 
-export const pr = Command.make("pr", target, (input) =>
+export const pr = Command.make("pr", worktreeArgs, (input) =>
   Effect.gen(function* () {
     const { located } = yield* resolveWorktree(input);
     const found = yield* (yield* Landing.Landing).pullRequest(located);
@@ -217,7 +208,7 @@ export const pr = Command.make("pr", target, (input) =>
 export const merge = Command.make(
   "merge",
   {
-    ...target,
+    ...worktreeArgs,
     method: methodFlag,
     number: Flag.String("number").pipe(Flag.optional),
     stack: stackFlag,
@@ -266,7 +257,7 @@ export const merge = Command.make(
 
 export const land = Command.make(
   "land",
-  { ...target, ...removeFlags, method: methodFlag, stack: stackFlag },
+  { ...worktreeArgs, ...removeFlags, method: methodFlag, stack: stackFlag },
   (input) =>
     Effect.gen(function* () {
       const method = yield* methodOf(input.method);
@@ -308,7 +299,7 @@ export const land = Command.make(
 export const done = Command.make(
   "done",
   {
-    ...target,
+    ...worktreeArgs,
     force: Flag.Boolean("force").pipe(
       Flag.withAlias("f"),
       Flag.withDefault(false),
