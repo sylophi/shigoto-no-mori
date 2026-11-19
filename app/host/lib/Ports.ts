@@ -11,10 +11,8 @@ import { type WorktreePort } from "@shigomori/contracts/schemas";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import type * as Engine from "./Engine";
 import { isLoopbackPortListening } from "./net";
@@ -73,8 +71,6 @@ function parseWorktreeKey(key: string): {
 }
 
 const make = Effect.gen(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
   // The engine the reads below go through. A failed one is a defect:
   // the list has no failure of its own.
   const engine = yield* Effect.context<Engine.Services>();
@@ -82,11 +78,7 @@ const make = Effect.gen(function* () {
     effect.pipe(Effect.provide(engine), Effect.orDie);
 
   const installed = yield* keptAnswer(
-    findExecutable("port-pool").pipe(
-      Effect.map(Option.isSome),
-      Effect.provideService(FileSystem.FileSystem, fs),
-      Effect.provideService(Path.Path, path),
-    ),
+    findExecutable("port-pool").pipe(Effect.map(Option.isSome)),
     INSTALLED_TTL,
   );
 
