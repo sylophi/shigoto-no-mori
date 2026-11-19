@@ -131,10 +131,9 @@ export interface StackPlacement<T> {
 export function placeByStack<T>(
   items: readonly T[],
   branchOf: (item: T) => string,
-  prs: Record<string, PullRequest> | undefined,
+  prs: Record<string, PullRequest>,
   trunk?: string,
 ): StackPlacement<T>[] {
-  if (!prs) return items.map((item) => ({ item, position: null }));
   // By position, not identity: two rows may be equal values.
   const placed = new Set<number>();
   const out: StackPlacement<T>[] = [];
@@ -176,11 +175,10 @@ export function placeByStack<T>(
 }
 
 export function pullRequestStackPosition(
-  prs: Record<string, PullRequest> | undefined,
+  prs: Record<string, PullRequest>,
   branch: string,
   trunk?: string,
 ): StackPosition | null {
-  if (!prs) return null;
   const stack = pullRequestStackFor(prs, branch, trunk);
   return stack ? { index: stack.index, size: stack.entries.length } : null;
 }
