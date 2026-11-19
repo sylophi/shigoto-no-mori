@@ -488,13 +488,7 @@ function makeFollower(
       const last = copyGoneAt.get(session.session);
       if (last !== undefined && now - last < COPY_GONE_EVERY_MS) return;
       copyGoneAt.set(session.session, now);
-      try {
-        deps.onCopyGone(session);
-      } catch (error) {
-        warn(
-          `[mirror] git follow ${session.session}: ending a gone copy failed: ${messageOf(error)}`,
-        );
-      }
+      deps.onCopyGone(session);
     });
 
   const fork = <R>(effect: Effect.Effect<void, never, R>) =>
