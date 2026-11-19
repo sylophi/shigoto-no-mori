@@ -6,12 +6,10 @@ import { ChipButton } from "../../primitives/chip-button.tsx";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
 import { UpdateMark } from "../../primitives/status-dot.tsx";
 import { cn } from "../../lib/utils.ts";
-import type { SettingsSection } from "./settingsSections.ts";
-
-export type SettingsSectionLists = {
-  client: SettingsSection[];
-  host: SettingsSection[];
-};
+import type {
+  SettingsSection,
+  SettingsSectionLists,
+} from "./settingsSections.ts";
 
 // A row leading to a page beside Settings (the account, Tidy).
 export type SettingsPageRow = {
