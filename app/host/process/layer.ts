@@ -65,7 +65,6 @@ import {
   remotePlanesLayer,
   tunnelLayer,
   followDeviceSettings,
-  refreshDirectHost,
 } from "./wires";
 import { onQuit, starts } from "@shared/lifetimes";
 import * as Migration from "@shigomori/engine/Migration";
@@ -305,7 +304,7 @@ const below = (options: Parameters<typeof layer>[0]) =>
     Layer.provideMerge(mirrorChangesLayer),
     Layer.provideMerge(mirrors),
     Layer.provideMerge(remotePlanes),
-    Layer.provideMerge(followDeviceSettings(Effect.promise(refreshDirectHost))),
+    Layer.provideMerge(followDeviceSettings),
     // The cloudflared child, fronting the device link's listener.
     Layer.provideMerge(tunnelLayer),
     // The listener peers dial, which connected peers see go away
