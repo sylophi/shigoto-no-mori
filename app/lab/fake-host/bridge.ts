@@ -2335,6 +2335,16 @@ export function installFakeHostBridge(
       ),
     );
   }
+  // A hop to a peer: the peer's wire, or what refuses the hop.
+  const peerHop = (deviceId: string, channel: string): FixtureWire | Error => {
+    const wire = peerWires.get(deviceId);
+    if (wire === undefined) {
+      return new Error(`[fake-host] unknown peer ${deviceId}`);
+    }
+    // The peer's SharingGate.
+    if (notSharing.has(deviceId)) return new NotSharingError();
+    return outdatedRefusal(deviceId, channel) ?? wire;
+  };
 
   // The web shell has no local forest: its host wire serves nothing, so
   // every host read falls back to the schema stubs (empty lists),
@@ -2516,19 +2526,9 @@ export function installFakeHostBridge(
     "clientConfig:rotate": () => null,
     "hub:status": hubSnapshot,
     "hub:invokePeer": ({ deviceId, channel, input }, signal?: AbortSignal) => {
-      const wire = peerWires.get(deviceId);
-      if (wire === undefined) {
-        return Promise.reject(
-          new Error(`[fake-host] unknown peer ${deviceId}`),
-        );
-      }
-      // The peer's SharingGate.
-      if (notSharing.has(deviceId)) {
-        return Promise.reject(new NotSharingError());
-      }
-      const outdated = outdatedRefusal(deviceId, channel);
-      if (outdated !== undefined) return Promise.reject(outdated);
-      return wire.answer(channel, input, signal).finally(wire.touch);
+      const hop = peerHop(deviceId, channel);
+      if (hop instanceof Error) return Promise.reject(hop);
+      return hop.answer(channel, input, signal).finally(hop.touch);
     },
     "shell:openExternal": ({ url }) => {
       window.open(url, "_blank", "noopener,noreferrer");
@@ -2598,18 +2598,10 @@ export function installFakeHostBridge(
         channel: string;
         input?: unknown;
       };
-      const wire = peerWires.get(hop.deviceId);
-      if (wire === undefined) {
-        return Stream.fail(
-          new Error(`[fake-host] unknown peer ${hop.deviceId}`),
-        );
-      }
-      // The peer's SharingGate.
-      if (notSharing.has(hop.deviceId))
-        return Stream.fail(new NotSharingError());
-      const outdated = outdatedRefusal(hop.deviceId, hop.channel);
-      if (outdated !== undefined) return Stream.fail(outdated);
-      return wire.link.view(hop.channel, hop.input);
+      const peer = peerHop(hop.deviceId, hop.channel);
+      return peer instanceof Error
+        ? Stream.fail(peer)
+        : peer.link.view(hop.channel, hop.input);
     },
   );
   pushFromPeer = (deviceId, channel, payload) =>
