@@ -91,7 +91,7 @@ commits it (`EFFECT.md`, section 5); the engine's are in
 - **Nuke** (`lib/nuke.ts`, then the shell's `main/electron/nuke.ts`):
   the marker the shell writes in userData commits it. The start that
   finds it deletes what it names and userData, the marker last, and
-  one that can't read it deletes nothing (`main/core/nuke/finish.ts`).
+  one that can't read it deletes nothing (`shared/nuke.ts`).
 
 ## A new call, end to end
 

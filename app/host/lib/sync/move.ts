@@ -304,7 +304,7 @@ export const sendWorktree = (
 // Removes the copy a cancelled send left on the peer, best effort,
 // like a failed mirror start's rollback. The peer's ordinary delete,
 // so a peer set to keep branches keeps this one too, where the local
-// rollback (rollBackLanded) takes it: the wire has no verb for that.
+// rollback (Worktrees.createHeld) takes it: the wire has no verb for that.
 export const rollBackSent = (
   targetDeviceId: string,
   copy: { projectId: string; id: string },
