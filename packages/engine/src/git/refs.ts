@@ -275,18 +275,6 @@ export const makeRefs = ({ running }: { readonly running: RunningArea }) =>
       );
     });
 
-    const worktreeConfigOn = Effect.fn("Git.worktreeConfigOn")(function* (
-      repo: string,
-    ) {
-      const out = yield* run(
-        repo,
-        ["config", "--type=bool", "--get", "extensions.worktreeConfig"],
-        // Unset.
-        { okExitCodes: [1] },
-      );
-      return out.trim() === "true";
-    });
-
     return {
       verifyRev,
       refTip,
@@ -305,7 +293,6 @@ export const makeRefs = ({ running }: { readonly running: RunningArea }) =>
       localBranchTips,
       snapshotRemoteRefs,
       refTips,
-      worktreeConfigOn,
     };
   });
 
