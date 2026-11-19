@@ -150,8 +150,7 @@ function buildQueryKeys(deviceId: string) {
       host("worktreeDiskUsage", projectId, worktreeId),
 
     branches: (projectId: string | null) => host("branches", projectId),
-    defaultBranch: (projectId: string | null) =>
-      host("defaultBranch", projectId),
+    defaultBranch: (projectId: string) => host("defaultBranch", projectId),
     branchCommits: (
       projectId: string,
       worktreeId: string,
