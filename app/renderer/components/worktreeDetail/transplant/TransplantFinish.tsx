@@ -15,10 +15,7 @@ import {
 import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import { useSetShelved } from "@/hooks/worktrees/useWorktreeMutations";
 import { LandedPath } from "../flow/FlowChrome";
-import {
-  type Landing,
-  LANDS_HERE,
-} from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
+import type { Landing } from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
 import {
   type SourceChoice,
   TransplantFinishView,
@@ -31,7 +28,7 @@ export function TransplantFinish({
   project,
   sourceDeviceLabel,
   thisDeviceLabel,
-  landing = LANDS_HERE,
+  landing,
   teardown,
   onClose,
   onOpen,
@@ -49,7 +46,7 @@ export function TransplantFinish({
   sourceDeviceLabel: string;
   // The device it landed on, and the words for that (pullSteps.ts).
   thisDeviceLabel: string;
-  landing?: Landing;
+  landing: Landing;
   // The source's guarded teardown (sync:teardownSource), on the peer
   // after a pull, on this device after a send.
   teardown: UseMutationResult<SyncTeardownSourceResult, Error, void>;
