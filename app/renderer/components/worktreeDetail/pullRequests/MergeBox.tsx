@@ -109,6 +109,13 @@ export function MergeBox({
   );
 }
 
+// Which chips keep their icon alone, their words in the tooltip: when
+// the row can't hold everything on one line with them, the reviews'
+// words go first, then the status's. Each one's width is kept from
+// when it last showed, so the answer doesn't flip back and forth as
+// the words come and go. `reviewsSaid`: the reviews show no words
+// anyway (the status says them), so they make no room. `present`: the
+// row is drawn (the box has a merge button), so there is one to watch.
 function useCompactChips(
   rowRef: React.RefObject<HTMLElement | null>,
   reviewsSaid: boolean,
