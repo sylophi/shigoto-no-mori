@@ -169,6 +169,7 @@ import {
 } from "@shigomori/contracts/projectPaths";
 import { devicePaths } from "@shigomori/ui/lib/devicePaths.ts";
 import { villagerHandlersFor } from "./villagerData";
+import { storedClientConfig } from "./pose";
 
 // The launch row's tools that run in a terminal.
 const FAKE_TERMINAL_TOOLS: ReadonlySet<string> = new Set([
@@ -2492,14 +2493,7 @@ export function installFakeHostBridge(
     // has saved, so a shot can open on either view.
     "clientConfig:read": () => {
       const posedView = new URLSearchParams(location.search).get("view");
-      let stored: Record<string, unknown> = {};
-      try {
-        stored = JSON.parse(
-          localStorage.getItem("sm.fakeHost.clientConfig") ?? "{}",
-        );
-      } catch {
-        // Corrupt storage reads as defaults.
-      }
+      const stored = storedClientConfig();
       // The web shell has no Village life to pose.
       const posed =
         villageLife && !WEB_SHELL ? { ...stored, villageLife } : stored;
@@ -2508,14 +2502,7 @@ export function installFakeHostBridge(
         : posed;
     },
     "clientConfig:patch": ({ set, clear }) => {
-      let next: Record<string, unknown> = {};
-      try {
-        next = JSON.parse(
-          localStorage.getItem("sm.fakeHost.clientConfig") ?? "{}",
-        );
-      } catch {
-        // Corrupt storage reads as defaults.
-      }
+      const next = storedClientConfig();
       for (const [key, value] of Object.entries(set)) {
         if (value !== undefined) next[key] = value;
       }
