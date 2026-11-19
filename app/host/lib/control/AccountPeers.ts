@@ -50,20 +50,19 @@ export class AccountPeers extends Context.Service<
   }
 >()("sm/host/AccountPeers") {}
 
+const ACCOUNT_READ_SECONDS = 15;
+
 // The device list as the terminal's verbs wait on it: a hub that takes
 // the read and never answers, through a wait this host ran (not one it
 // was stopped for, answerWithin), ends as the account out of reach.
-export const withinAccountRead = <A, E, R>(
-  read: Effect.Effect<A, E, R>,
-  seconds = 15,
-) =>
-  answerWithin(read, seconds * 1_000).pipe(
+export const withinAccountRead = <A, E, R>(read: Effect.Effect<A, E, R>) =>
+  answerWithin(read, ACCOUNT_READ_SECONDS * 1_000).pipe(
     Effect.flatMap((answered): Effect.Effect<A, E | AccountUnreachableError> =>
       Option.isSome(answered)
         ? answered.value
         : Effect.fail(
             new AccountUnreachableError({
-              reason: `it didn't answer in ${seconds} s`,
+              reason: `it didn't answer in ${ACCOUNT_READ_SECONDS} s`,
             }),
           ),
     ),
