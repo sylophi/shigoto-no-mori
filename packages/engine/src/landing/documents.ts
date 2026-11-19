@@ -15,8 +15,6 @@ import type { MergeMethod } from "@shigomori/contracts/schemas/pullRequest";
 import type { PullRequestSummary } from "../GitHub.ts";
 import * as Worktrees from "../Worktrees.ts";
 
-// What landing won't do, the reason in its message. `numbers` and
-// `names` are the PRs, branches and paths the message names, in order.
 // A done whose checkout failed after it freed the branch, and whose
 // branch delete then failed too: both said, the checkout's first.
 export class DoneUnfinished extends Schema.TaggedError<DoneUnfinished>()(
@@ -31,6 +29,8 @@ export class DoneUnfinished extends Schema.TaggedError<DoneUnfinished>()(
   }
 }
 
+// What landing won't do, the reason in its message. `numbers` and
+// `names` are the PRs, branches and paths the message names, in order.
 export class LandingRefused extends Schema.TaggedError<LandingRefused>()(
   "LandingRefused",
   {
