@@ -264,9 +264,12 @@ function createFixtureWire(
   const index = invokeIndexFor(scope, true);
   // Every push on the wire, whatever its channel, for the views.
   const moved = new Set<() => void>();
+  const touch = () => {
+    for (const listener of moved) listener();
+  };
   const emit: FixtureWire["emit"] = (channel, payload) => {
     fanOut.emit(channel, payload);
-    for (const listener of moved) listener();
+    touch();
   };
   // Read by channel name off the wire, which loses the link between a
   // channel and its input type. The parse below restores it. A handler
@@ -315,7 +318,7 @@ function createFixtureWire(
           answer(channel, input, signal).then(
             (value) => {
               resume(Effect.succeed(value));
-              for (const listener of moved) listener();
+              touch();
             },
             (error: unknown) => resume(Effect.fail(error)),
           );
@@ -366,9 +369,7 @@ function createFixtureWire(
       pushes: fanOut.pushes,
     },
     answer,
-    touch: () => {
-      for (const listener of moved) listener();
-    },
+    touch,
     emit,
   };
 }
