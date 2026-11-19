@@ -95,7 +95,8 @@
         "paused": false,
         "status": "",
         "statusText": "",
-        "conflicts": 4
+        "conflicts": 4,
+        "notInStep": "a file couldn't be copied"
       }
     }
   },
