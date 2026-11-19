@@ -151,7 +151,6 @@ export function createLocalRegistrar(options: {
   };
 
   const link: Link = {
-    local: true,
     call(channel, input) {
       const call = invokeIndex.get(channel);
       if (call === undefined) {

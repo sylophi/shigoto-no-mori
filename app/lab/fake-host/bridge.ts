@@ -304,7 +304,6 @@ function createFixtureWire(
     // a fixture rejects with (a posed contract error) is the call's
     // failure as it is.
     link: {
-      local: true,
       // A call may move the fixture world the way a host's store write
       // does, so the views read again after it.
       call: (channel, input) =>
