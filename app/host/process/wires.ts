@@ -107,7 +107,7 @@ export const tunnelLayer = TunnelService.layer({
 export const loopbackLayer = Layer.unwrap(
   Effect.map(DeviceId.current, (deviceId) =>
     Loopback.layer({
-      deviceId: () => deviceId,
+      deviceId,
       appVersion: hostFacts().appVersion,
       file: () => join(dataDir(), LOOPBACK_FILE),
       // The window's own page dials it, from the renderer scheme.
