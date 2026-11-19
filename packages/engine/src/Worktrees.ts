@@ -9,6 +9,7 @@ import {
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Option from "effect/Option";
@@ -303,6 +304,9 @@ export class Worktrees extends Context.Service<
         readonly keepBranch: boolean;
         readonly skipCleanup: boolean;
         readonly preflighted?: boolean;
+        // A clock on each cleanup script: one that runs past it fails the
+        // cleanup, as a script that failed does.
+        readonly cleanupWithin?: Duration.Input;
         // A transplant's teardown or a mirror's other side: what the
         // worktree must still hold after its cleanup, right before the
         // delete (refuseChangedSince).
