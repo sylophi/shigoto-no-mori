@@ -11,7 +11,7 @@ import {
 } from "@/hooks/worktrees/useWorktreeFile";
 import { formatBytes } from "@shigomori/ui/lib/formatBytes.ts";
 import { queryKeys } from "@/lib/queryKeys";
-import { notifyError } from "@/lib/toast";
+import { revealInFolder } from "@/lib/openExternal";
 import type { WorktreeFile } from "@shigomori/contracts/schemas";
 import {
   CodeFileView,
@@ -78,15 +78,12 @@ export function FileViewer({
       onReveal={
         revealRoot === null
           ? null
-          : () => {
-              api
-                .run(
-                  api.shell.showItemInFolder({ path: `${revealRoot}/${path}` }),
-                )
-                .catch((err: unknown) =>
-                  notifyError("Couldn't reveal the file", err),
-                );
-            }
+          : () =>
+              revealInFolder(
+                api,
+                `${revealRoot}/${path}`,
+                "Couldn't reveal the file",
+              )
       }
       reading={isPending}
       find={find.toggle}
