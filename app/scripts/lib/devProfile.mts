@@ -38,7 +38,6 @@ export type DevProfile = {
   name: string;
   dir: string;
   dataDir: string;
-  repos: string;
   userData: string;
 };
 
@@ -49,7 +48,6 @@ export function devProfilePaths(name: string): DevProfile {
     name,
     dir,
     dataDir: join(dir, "data"),
-    repos: join(dir, "repos"),
     userData: devProfileUserData(devUserDataDir(), name),
   };
 }
