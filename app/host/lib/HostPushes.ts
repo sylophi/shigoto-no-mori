@@ -24,8 +24,6 @@ export type Push = {
   readonly channel: string;
   // Checked against the push's schema already.
   readonly payload: unknown;
-  // The push's `remote` annotation: whether a peer may hear it.
-  readonly remote: boolean;
 };
 
 type Publish<R> = <M extends ContractModule, K extends PushKeys<M>>(
