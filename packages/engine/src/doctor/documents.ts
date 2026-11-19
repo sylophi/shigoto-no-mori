@@ -101,7 +101,6 @@ export class MovedWorktreePending extends Schema.TaggedError<MovedWorktreePendin
   }
 }
 
-// A v2 worktree the retried move still couldn't take.
 // port-pool refused to lease a worktree its ports.
 export class LeaseRefused extends Schema.TaggedError<LeaseRefused>()(
   "LeaseRefused",
@@ -112,6 +111,7 @@ export class LeaseRefused extends Schema.TaggedError<LeaseRefused>()(
   }
 }
 
+// A v2 worktree the retried move still couldn't take.
 export class WorktreesNotMoved extends Schema.TaggedError<WorktreesNotMoved>()(
   "WorktreesNotMoved",
   { why: Schema.String },
