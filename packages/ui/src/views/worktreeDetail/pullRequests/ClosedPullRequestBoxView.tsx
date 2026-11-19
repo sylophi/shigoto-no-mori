@@ -75,6 +75,14 @@ export function ClosedPullRequestBoxView({
   onDismissStackError: () => void;
 }) {
   const pending = stackPending || deletePending;
+  const deleteOne = {
+    pending: deletePending,
+    disabled: stackPending,
+    pendingLabel: "Deleting…",
+    idleLabel: "Delete worktree",
+    onClick: onDelete,
+    disabledReason: deleteBlockedReason,
+  };
   const deleteButton = (
     <ConfirmDestructiveButton
       armed={armed}
@@ -87,14 +95,7 @@ export function ClosedPullRequestBoxView({
             idleLabel: `Delete ${count} stack worktrees`,
             onClick: onDeleteStack,
           }
-        : {
-            pending: deletePending,
-            disabled: stackPending,
-            pendingLabel: "Deleting…",
-            idleLabel: "Delete worktree",
-            onClick: onDelete,
-            disabledReason: deleteBlockedReason,
-          })}
+        : deleteOne)}
       className={cn(count > 1 && SPLIT_BUTTON_MAIN)}
     />
   );
@@ -113,13 +114,8 @@ export function ClosedPullRequestBoxView({
             </Button>
             <ConfirmDestructiveButton
               armed={armed}
-              pending={deletePending}
-              disabled={stackPending}
-              pendingLabel="Deleting…"
-              idleLabel="Delete worktree"
               armedLabel="Confirm delete?"
-              onClick={onDelete}
-              disabledReason={deleteBlockedReason}
+              {...deleteOne}
             />
             {stackError.kind === "cleanup" ? (
               <>
