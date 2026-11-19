@@ -5,10 +5,7 @@ import {
 } from "@shigomori/contracts/schemas";
 
 type TitledWorktree = Pick<Worktree, "title" | "branch" | "primaryBranch">;
-type TitlePullRequest = Pick<
-  PullRequest,
-  "title" | "state" | "isCrossRepository"
->;
+type TitlePullRequest = Pick<PullRequest, "title" | "isCrossRepository">;
 
 // Whether a PR found by the worktree's branch name is the worktree's
 // own: one from this repository (isFromThisRepository), and not on the
