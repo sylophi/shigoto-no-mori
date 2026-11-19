@@ -123,7 +123,6 @@ const settingsFor = (flags: Parameters<typeof resolveProject>[0]) =>
     const settings: Settings = {
       scope: { kind: "project", projectId: project.id, path: project.path },
       project: project.name,
-      listCommand: "projects config list",
       descriptions: keyDescriptions(ShigomoriConfigSchema),
     };
     return { settings, project };
