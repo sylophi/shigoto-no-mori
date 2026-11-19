@@ -12,25 +12,20 @@ import { resolveWorktree, worktreeArgs, worktreeFlags } from "../here.ts";
 import { emit, out, Output, styles } from "../output.ts";
 
 const shelf = (name: "shelve" | "unshelve") =>
-  Command.make(
-    name,
-    {
-      ...worktreeArgs,
-    },
-    (input) =>
-      Effect.gen(function* () {
-        const shelved = name === "shelve";
-        const { worktree } = (yield* resolveWorktree(input, false)).located;
-        yield* (yield* Worktrees.Worktrees).setShelved(worktree, shelved);
-        const { json, stdoutColor } = yield* Effect.service(Output);
-        yield* json
-          ? emit({ ok: true, name: worktree.name, id: worktree.id, shelved })
-          : out(
-              styles(stdoutColor).green(
-                `${shelved ? "shelved" : "unshelved"} ${worktree.name}`,
-              ),
-            );
-      }),
+  Command.make(name, worktreeArgs, (input) =>
+    Effect.gen(function* () {
+      const shelved = name === "shelve";
+      const { worktree } = (yield* resolveWorktree(input, false)).located;
+      yield* (yield* Worktrees.Worktrees).setShelved(worktree, shelved);
+      const { json, stdoutColor } = yield* Effect.service(Output);
+      yield* json
+        ? emit({ ok: true, name: worktree.name, id: worktree.id, shelved })
+        : out(
+            styles(stdoutColor).green(
+              `${shelved ? "shelved" : "unshelved"} ${worktree.name}`,
+            ),
+          );
+    }),
   );
 
 export const shelve = shelf("shelve");
