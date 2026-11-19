@@ -28,13 +28,13 @@ export function WorktreeHeader({
   worktree,
   title,
   pr,
-  githubPage = null,
+  githubPage,
 }: {
   worktree: Worktree;
   title: string | null;
   pr: PullRequest | PullRequestDetail | null;
   // The repo's page on GitHub, linked from the branch line.
-  githubPage?: string | null;
+  githubPage: string | null;
 }) {
   const github = githubPage !== null && <GithubLinkView url={githubPage} />;
   if (title === null) {
