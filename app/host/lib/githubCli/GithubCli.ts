@@ -4,7 +4,6 @@
 // sidebar, the open worktree and the repo queries all ask on every
 // worktree open.
 import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import { findExecutable } from "@shigomori/engine/executables";
 import type {
   GhUnavailableReason,
@@ -16,7 +15,6 @@ import { GhUnavailableError } from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as EngineConfig from "@shigomori/engine/Config";
@@ -154,8 +152,6 @@ const decodePullRequestOptions = Schema.decodeUnknownEffect(
 );
 
 const make = Effect.gen(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
   // The device settings, for the integration's switch.
   const engineConfig = yield* EngineConfig.Config;
   const github = yield* GitHub.GitHub;
@@ -178,12 +174,7 @@ const make = Effect.gen(function* () {
   // UNANSWERED_PROBE_TTL.
   const probe = (yield* keptAnswer(
     Effect.gen(function* () {
-      const installed = Option.isSome(
-        yield* findExecutable("gh").pipe(
-          Effect.provideService(FileSystem.FileSystem, fs),
-          Effect.provideService(Path.Path, path),
-        ),
-      );
+      const installed = Option.isSome(yield* findExecutable("gh"));
       if (!installed) return { installed, authed: false };
       const asks = [
         [] as string[],
