@@ -186,6 +186,7 @@ const make = Effect.gen(function* () {
       "fetch",
       "--no-tags",
       "--no-write-fetch-head",
+      "--recurse-submodules=no",
       "--quiet",
       "--end-of-options",
       bundle,
