@@ -184,9 +184,10 @@ export type WsServerStartOpts = {
   // falls back to any, so a remembered port never keeps a host from
   // listening.
   port: number;
-  // The host binds "::" (dual stack), because it advertises IPv6
-  // candidates too. Tests bind loopback.
-  bindAddress: string;
+  // Unset, every address: "::" (dual stack, as the host advertises IPv6
+  // candidates too), or 0.0.0.0 on a machine with no IPv6, which Node
+  // falls back to only for no address given. Tests bind loopback.
+  bindAddress?: string;
   // This device's id and app version, for the welcome.
   deviceId: string;
   appVersion: string;
@@ -1084,7 +1085,7 @@ export const make = (options: {
           typeof address === "object" && address !== null
             ? address.port
             : opts.port;
-        log.info(`[link] listening on ${opts.bindAddress}:${port}`);
+        log.info(`[link] listening on ${opts.bindAddress ?? "*"}:${port}`);
         return { port, connections };
       });
 
@@ -1138,7 +1139,7 @@ export const make = (options: {
             error,
           };
           log.error(
-            `[link] bind failed on ${opts.bindAddress}:${opts.port}: ${error}`,
+            `[link] bind failed on ${opts.bindAddress ?? "*"}:${opts.port}: ${error}`,
           );
           return;
         }
