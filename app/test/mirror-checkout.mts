@@ -20,6 +20,9 @@
 //     write (LF where it writes CRLF) reads clean on the copy, and the
 //     original's staged and unstaged changes read there as they do on
 //     the original,
+//   - files whose bytes the other end's checkout wrote, with the same
+//     content, read clean once checked after a sync, and a file edited
+//     before its entry is reset reads modified with nothing staged,
 //   - the copy's device's other worktrees keep their own config,
 //   - a copy whose device's checkout is the original's own writes
 //     nothing into its repository's config.
@@ -55,6 +58,8 @@ import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { mirrorHandlers } from "@host/ipc/modules/mirror";
+import { clearStaleSizes } from "@host/mirror/checkout";
+import * as Git from "@shigomori/engine/Git";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
@@ -451,6 +456,46 @@ it("a windows original's file whose bytes on disk aren't what git would write re
       args.join(" "),
     );
   }
+});
+
+it("files whose bytes the other side's checkout wrote with the same content read clean after a sync, and one edited before its entry is reset reads modified with nothing staged", async () => {
+  await setKind(sourceRepo, "windows");
+  const side = await original("checked-out-again", "main");
+  writeFileSync(join(side, "kept.txt"), "kept\n");
+  writeFileSync(join(side, "edited.txt"), "edited\n");
+  await git(side, ["add", "kept.txt", "edited.txt"]);
+  await git(side, ["commit", "-qm", "lf"]);
+  // The other side checked them out again (CRLF), and the sync carried
+  // its bytes here, over the LF ones this index recorded.
+  writeFileSync(join(side, "kept.txt"), "kept\r\n");
+  writeFileSync(join(side, "edited.txt"), "edited\r\n");
+  assert.equal(await status(side), " M edited.txt\n M kept.txt");
+  assert.equal(await gitOut(side, "diff"), "");
+
+  // An edit lands between the check and the reset of its entry.
+  await runHost(
+    Effect.gen(function* () {
+      const real = yield* Git.Git;
+      yield* clearStaleSizes(side).pipe(
+        Effect.provideService(Git.Git, {
+          ...real,
+          run: (cwd, args, options) =>
+            Effect.andThen(
+              Effect.sync(() => {
+                if (args[0] === "update-index") {
+                  writeFileSync(join(side, "edited.txt"), "by hand\r\n");
+                }
+              }),
+              real.run(cwd, args, options),
+            ),
+        }),
+      );
+    }),
+  );
+  assert.equal(await status(side), " M edited.txt");
+  assert.equal(await gitOut(side, "diff", "--cached"), "");
+  assert.equal(await gitOut(side, "diff-files", "--name-only"), "edited.txt");
+  assert.match(await gitOut(side, "diff"), /^\+by hand$/m);
 });
 
 it("a mac original's tracked symlink is a link on the copy where this OS makes links, and the start is refused where it can't", async () => {

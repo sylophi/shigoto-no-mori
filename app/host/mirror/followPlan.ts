@@ -59,6 +59,7 @@ export type FollowableSession = {
   session: string;
   paused: boolean;
   status: MirrorStatus;
+  successfulCycles: number;
   deviceId: string;
   projectId: string;
   worktreeId: string;

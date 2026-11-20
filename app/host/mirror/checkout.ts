@@ -3,7 +3,7 @@
 // mirror starts (sessions.ts), and the copy's landing
 // (host/lib/sync/landing.ts) refuses the links its device can't make
 // and gives the copy's worktree what its repo wouldn't give it alone.
-// Once the original's files are over it, the copy's index is told
+// Once the other side's files are over a side's, its index is told
 // their sizes (clearStaleSizes).
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -120,38 +120,51 @@ export const copyCheckoutConfig = Effect.fnUntraced(function* (
     : checkout;
 });
 
-// The copy's checkout recorded the size of each file as git wrote it,
-// and the original's bytes the mirror wrote over it can differ in size
-// with the same content: a file the original holds with LF where its
-// checkout writes CRLF. git reads a tracked file whose size differs
-// from the recorded one as modified without looking at its content, a
-// refresh included, until it hashes the file again. So the paths git
-// reads as changed by their stat alone are hashed again, which stages
-// nothing: their content is the index's already. A submodule is never
-// one, and `git diff` may be told to hide it.
+// A side's index recorded the size of each file as its own git wrote
+// it, and the other side's bytes the mirror writes over it can differ
+// in size with the same content: a file one side holds with LF where
+// the other's checkout writes CRLF, or one either side checked out
+// again. git reads a tracked file whose size differs from the recorded
+// one as modified without looking at its content, a refresh included.
+// So each path git reads as changed by its stat alone gets its index
+// entry back as it was, the same blob without its stat, and the
+// refresh then records the file's stat only where its content is that
+// blob: a file edited since `git diff` looked reads modified, and
+// nothing is staged. A submodule is never one, and `git diff` may be
+// told to hide it. Under the index lock, so a git follow's apply
+// (gitState.ts) never lands between the read and the write.
 export const clearStaleSizes = Effect.fnUntraced(function* (
   worktreePath: string,
 ) {
   const git = yield* Git.Git;
-  const [byStat, byContent] = yield* Effect.all(
-    [
-      git.run(worktreePath, [
-        "diff-files",
-        "--name-only",
-        "--ignore-submodules",
-        "-z",
-      ]),
-      git.run(worktreePath, ["diff", "--name-only", "-z"]),
-    ],
-    { concurrency: 2 },
-  );
-  const changed = new Set(splitZ(byContent));
-  const stale = splitZ(byStat).filter((file) => !changed.has(file));
-  if (stale.length === 0) return;
   yield* git.withIndexLock(
     worktreePath,
-    git.run(worktreePath, ["update-index", "-z", "--stdin"], {
-      stdin: stale.map((file) => `${file}\0`).join(""),
+    Effect.gen(function* () {
+      const byStat = yield* git.run(worktreePath, [
+        "diff-files",
+        "--ignore-submodules",
+        "-z",
+      ]);
+      if (byStat === "") return;
+      const changed = new Set(
+        splitZ(yield* git.run(worktreePath, ["diff", "--name-only", "-z"])),
+      );
+      const parts = splitZ(byStat);
+      let entries = "";
+      // ":<index mode> <file mode> <index blob> <file blob> <status>",
+      // then the path.
+      for (let i = 0; i < parts.length; i += 2) {
+        const [mode, , blob, , status] = (parts[i] ?? "").slice(1).split(" ");
+        const file = parts[i + 1] ?? "";
+        if (status === "M" && !changed.has(file)) {
+          entries += `${mode} ${blob}\t${file}\0`;
+        }
+      }
+      if (entries === "") return;
+      yield* git.run(worktreePath, ["update-index", "-z", "--index-info"], {
+        stdin: entries,
+      });
+      yield* git.refreshIndex(worktreePath);
     }),
   );
 });
