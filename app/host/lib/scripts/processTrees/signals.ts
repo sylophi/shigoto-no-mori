@@ -2,12 +2,16 @@
 // the process (its group, when it leads one) and to the descendants
 // still reachable by their ppid (one that called setsid() and left the
 // group).
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schedule from "effect/Schedule";
 import { readDescendants } from "@shigomori/engine/processTable/ps";
+import { pidAlive } from "@shigomori/engine/processes";
 import { exitedWithin, type Stop, type Tree } from "./tree";
 
 const SIGNALS = { stop: "SIGTERM", hangup: "SIGHUP" } as const;
+const GROUP_POLL_MS = 100;
 
 function safeKill(pid: number, signal: NodeJS.Signals): void {
   // kill(-1) signals every process the user may signal, kill(0) our
@@ -60,10 +64,28 @@ export const makeSignals = Effect.gen(function* () {
 
   return {
     stop: Effect.fn("ProcessTrees.stop")(function* (tree: Tree, stop: Stop) {
+      // A stopped group is down once it is empty, not once its leader
+      // exits: a runner the stop ends can leave a child in it that
+      // ignores the stop, which launchd would adopt. The pid can't name
+      // another group while this one has a member. A hangup leaves what
+      // outlives it, as a closed terminal does.
+      const down =
+        tree.ownGroup && stop.how === "stop"
+          ? stop.exited.pipe(
+              Effect.andThen(
+                pidAlive(-tree.pid).pipe(
+                  Effect.repeat({
+                    schedule: Schedule.spaced(Duration.millis(GROUP_POLL_MS)),
+                    while: (alive) => alive,
+                  }),
+                ),
+              ),
+            )
+          : stop.exited;
       yield* send(tree, SIGNALS[stop.how]);
-      if (yield* exitedWithin(stop.exited, stop.graceMs)) return true;
+      if (yield* exitedWithin(down, stop.graceMs)) return true;
       yield* send(tree, "SIGKILL");
-      if (yield* exitedWithin(stop.exited, stop.endMs)) return true;
+      if (yield* exitedWithin(down, stop.endMs)) return true;
       yield* Effect.logWarning(
         `[scripts] ${stop.name} (pid ${tree.pid}) survived SIGKILL, giving up on it`,
       );
