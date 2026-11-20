@@ -12,8 +12,6 @@ import { useLocalGlobalConfig } from "./useGlobalConfig";
 // - markTerrierProjects: terrier's paw on the projects it lists. Off
 //   unless switched on, and then shown only where terrierMarksHere
 //   holds too.
-// - showDeviceBadges: the device badges on project headers and worktree
-//   rows. On unless switched off.
 // - allowAgentWorking: whether a worktree an agent session is working in
 //   (`sm agents`) goes on its own shelf (isAgentWorking). Off unless
 //   switched on.
@@ -27,7 +25,6 @@ import { useLocalGlobalConfig } from "./useGlobalConfig";
 //   the window (TerminalDrawer). Off unless switched on.
 type ClientFlag =
   | "markTerrierProjects"
-  | "showDeviceBadges"
   | "allowAgentWorking"
   | "markAgentsWaiting"
   | "inlineWorktrees"
@@ -36,6 +33,16 @@ type ClientFlag =
 export function useClientFlag(key: ClientFlag): boolean {
   const { data } = useClientConfig();
   return data !== undefined && clientSetting(data, key);
+}
+
+// Whether worktree rows and project headers wear the device badges
+// (showDeviceIcons). Neither until the config has loaded, as a flag
+// reads false.
+export function useDeviceIcons(): { worktrees: boolean; projects: boolean } {
+  const { data } = useClientConfig();
+  const shown =
+    data === undefined ? "none" : clientSetting(data, "showDeviceIcons");
+  return { worktrees: shown !== "none", projects: shown === "all" };
 }
 
 // Whether Mark terrier projects can mark anything from this window,
@@ -61,9 +68,11 @@ function useTerrierMarksHere(): boolean {
 export function useSidebarMarks(): SidebarMarks {
   const markTerrier = useClientFlag("markTerrierProjects");
   const terrierHere = useTerrierMarksHere();
+  const deviceIcons = useDeviceIcons();
   return {
     terrier: markTerrier && terrierHere,
-    deviceBadges: useClientFlag("showDeviceBadges"),
+    worktreeDevices: deviceIcons.worktrees,
+    projectDevices: deviceIcons.projects,
     agentsWaiting: useClientFlag("markAgentsWaiting"),
   };
 }

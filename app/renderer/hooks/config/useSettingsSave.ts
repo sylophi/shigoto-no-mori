@@ -32,9 +32,9 @@ function toClientConfig(state: ClientFormState): ClientConfig {
       "markTerrierProjects",
       state.markTerrierProjects,
     ),
-    showDeviceBadges: storedClientSetting(
-      "showDeviceBadges",
-      state.showDeviceBadges,
+    showDeviceIcons: storedClientSetting(
+      "showDeviceIcons",
+      state.showDeviceIcons,
     ),
     allowAgentWorking: storedClientSetting(
       "allowAgentWorking",

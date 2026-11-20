@@ -23,7 +23,7 @@ import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree
 import { useWarmWorktreePage } from "@/hooks/worktrees/useWarmWorktreePage";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { readWorktreeVisits } from "@/lib/recentWorktrees";
-import { useClientFlag } from "@/hooks/config/useSidebarMarks";
+import { useDeviceIcons } from "@/hooks/config/useSidebarMarks";
 import { useForestSources } from "@/components/sidebar/forestSources";
 import {
   ProjectGroupActions,
@@ -201,7 +201,7 @@ function ProjectTile({
   work: GroupWork | undefined;
   onOpen: () => void;
 }) {
-  const showBadges = useClientFlag("showDeviceBadges");
+  const showBadges = useDeviceIcons().projects;
   const { project, branches, pinned } = row;
   const [hovered, setHovered] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);

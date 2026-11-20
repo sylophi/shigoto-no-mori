@@ -158,7 +158,7 @@ export function ProjectRow({
           project={project}
           icon={<ProjectIcon {...icon} name={project.name} />}
           badges={
-            marks.deviceBadges && <DeviceBadgeClusterView devices={devices} />
+            marks.projectDevices && <DeviceBadgeClusterView devices={devices} />
           }
           terrier={marks.terrier && terrierInGroup}
           pinned={pinned}

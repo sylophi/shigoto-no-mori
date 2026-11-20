@@ -413,6 +413,12 @@ export const DEVICE_CONFIG_DEFAULTS = {
   directConnections: true,
 };
 
+// Which rows wear the badges of the other devices they're on: none,
+// worktrees, or worktrees and project headers (the home grid's tiles
+// among them).
+const ShowDeviceIconsSchema = Schema.Literals(["none", "worktrees", "all"]);
+export type ShowDeviceIcons = typeof ShowDeviceIconsSchema.Type;
+
 // How this app instance looks, owned by the main process. The CLI never
 // reads it. Must not become strict: a newer build's key has to pass
 // through.
@@ -431,7 +437,7 @@ export const ClientConfigSchema = Schema.Struct({
   villageLife: Schema.optional(Schema.Boolean),
   villageNews: Schema.optional(Schema.Boolean),
   markTerrierProjects: Schema.optional(Schema.Boolean),
-  showDeviceBadges: Schema.optional(Schema.Boolean),
+  showDeviceIcons: Schema.optional(ShowDeviceIconsSchema),
   allowAgentWorking: Schema.optional(Schema.Boolean),
   markAgentsWaiting: Schema.optional(Schema.Boolean),
   notifyAgentWaiting: Schema.optional(Schema.Boolean),
@@ -494,7 +500,7 @@ const CLIENT_CONFIG_DEFAULTS = {
   villageLife: false,
   villageNews: true,
   markTerrierProjects: false,
-  showDeviceBadges: true,
+  showDeviceIcons: "all",
   allowAgentWorking: false,
   markAgentsWaiting: true,
   notifyAgentWaiting: true,

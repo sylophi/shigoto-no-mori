@@ -33,8 +33,9 @@ import { TerminalMarkView } from "./TerminalMarkView.tsx";
 export interface SidebarMarks {
   // Terrier's paw on a terrier-sourced project.
   terrier: boolean;
-  // A peer's badge on its rows and project headers.
-  deviceBadges: boolean;
+  // A peer's badge on its worktree rows, and on project headers.
+  worktreeDevices: boolean;
+  projectDevices: boolean;
   // An agent waiting on you, on its worktree's row.
   agentsWaiting: boolean;
 }
@@ -181,9 +182,12 @@ export function WorktreeEntryView({
           <span className="-my-1 inline-flex shrink-0 items-center gap-1">
             {forwardTip !== undefined && <ForwardMarkView tip={forwardTip} />}
             {inline && mirror && (
-              <MirrorBadgeView mirror={mirror} showBadge={marks.deviceBadges} />
+              <MirrorBadgeView
+                mirror={mirror}
+                showBadge={marks.worktreeDevices}
+              />
             )}
-            {inline && device && marks.deviceBadges && (
+            {inline && device && marks.worktreeDevices && (
               <DeviceBadgeView badge={device} />
             )}
           </span>
