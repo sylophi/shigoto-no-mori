@@ -84,9 +84,14 @@ export function InboxRowView({
           <SimpleTooltip whenTruncated tip={project.name}>
             <span className="min-w-0 truncate font-medium">{project.name}</span>
           </SimpleTooltip>
-          {device && marks.deviceBadges && <DeviceBadgeView badge={device} />}
+          {device && marks.worktreeDevices && (
+            <DeviceBadgeView badge={device} />
+          )}
           {mirror && (
-            <MirrorBadgeView mirror={mirror} showBadge={marks.deviceBadges} />
+            <MirrorBadgeView
+              mirror={mirror}
+              showBadge={marks.worktreeDevices}
+            />
           )}
           <TrailingSlot worktree={worktree} look={entry.look} />
         </div>

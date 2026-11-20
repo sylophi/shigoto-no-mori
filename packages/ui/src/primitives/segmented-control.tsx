@@ -35,6 +35,7 @@ export function SegmentedControl<T extends string>({
   optionClassName,
   warm,
   "aria-label": ariaLabel,
+  "aria-describedby": ariaDescribedBy,
 }: {
   value: T;
   onChange: (next: T) => void;
@@ -47,6 +48,7 @@ export function SegmentedControl<T extends string>({
   // Sizing knobs only: color and selection stay uniform across call sites.
   optionClassName?: string;
   "aria-label"?: string;
+  "aria-describedby"?: string;
 }) {
   return (
     <RadioGroup
@@ -54,6 +56,7 @@ export function SegmentedControl<T extends string>({
       onValueChange={(next) => onChange(next as T)}
       disabled={disabled}
       aria-label={ariaLabel}
+      aria-describedby={ariaDescribedBy}
       data-slot="segmented-control"
       className={cn(
         "inline-flex shrink-0 rounded-md border border-input p-0.5",

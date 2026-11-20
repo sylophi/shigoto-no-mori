@@ -4,6 +4,7 @@ import {
   DEVICE_SETTINGS_DEFAULTS as DEFAULTS,
   type DeviceSettingsPatch,
   type GlobalConfig,
+  type ShowDeviceIcons,
   type Theme,
   type ThemeRotation,
 } from "@shigomori/contracts/schemas";
@@ -31,7 +32,7 @@ export interface ClientFormState {
   villageLife: boolean;
   villageNews: boolean;
   markTerrierProjects: boolean;
-  showDeviceBadges: boolean;
+  showDeviceIcons: ShowDeviceIcons;
   allowAgentWorking: boolean;
   markAgentsWaiting: boolean;
   notifyAgentWaiting: boolean;
@@ -67,7 +68,7 @@ export function fromClientConfig(clientConfig: ClientConfig): ClientFormState {
     villageLife: clientSetting(clientConfig, "villageLife"),
     villageNews: clientSetting(clientConfig, "villageNews"),
     markTerrierProjects: clientSetting(clientConfig, "markTerrierProjects"),
-    showDeviceBadges: clientSetting(clientConfig, "showDeviceBadges"),
+    showDeviceIcons: clientSetting(clientConfig, "showDeviceIcons"),
     allowAgentWorking: clientSetting(clientConfig, "allowAgentWorking"),
     markAgentsWaiting: clientSetting(clientConfig, "markAgentsWaiting"),
     notifyAgentWaiting: clientSetting(clientConfig, "notifyAgentWaiting"),

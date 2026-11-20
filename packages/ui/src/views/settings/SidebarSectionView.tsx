@@ -1,8 +1,20 @@
-import type { Dispatch, SetStateAction } from "react";
+import { type Dispatch, type SetStateAction, useId } from "react";
+import type { ShowDeviceIcons } from "@shigomori/contracts/schemas";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
+import {
+  SegmentedControl,
+  type SegmentedOption,
+} from "../../primitives/segmented-control.tsx";
 import { ToggleRowView } from "../shared/ToggleRowView.tsx";
 import type { ClientFormState } from "../../lib/settingsForm.ts";
 import { fieldSetter } from "../../hooks/useDirtyForm.ts";
+import { cn } from "../../lib/utils.ts";
+
+const DEVICE_ICONS: SegmentedOption<ShowDeviceIcons>[] = [
+  { value: "none", label: "None" },
+  { value: "worktrees", label: "Worktrees" },
+  { value: "all", label: "Worktrees and projects" },
+];
 
 // How the sidebar dresses its rows, in Appearance: settings of this
 // window, saved with its other settings. A row with nothing to mark is
@@ -23,6 +35,7 @@ export function SidebarSectionView({
   terrierOn: boolean;
 }) {
   const setField = fieldSetter(setForm);
+  const deviceIconsHint = useId();
   return (
     <section className="space-y-3">
       <SectionHeading className="mb-1">Sidebar</SectionHeading>
@@ -32,17 +45,25 @@ export function SidebarSectionView({
         label="Show worktrees inline"
         description="Lists every project's worktrees under it, instead of one project at a time."
       />
-      <ToggleRowView
-        checked={signedIn && form.showDeviceBadges}
-        onCheckedChange={setField("showDeviceBadges")}
-        disabled={!signedIn}
-        label="Show device icons"
-        description={
-          signedIn
-            ? "Marks projects and worktrees with the other devices they're on."
-            : "Sign in to see which of your devices each project and worktree is on."
-        }
-      />
+      <div className="space-y-2 pl-11">
+        <div className={cn("flex flex-col", !signedIn && "opacity-50")}>
+          <span className="text-sm">Show device icons</span>
+          <span id={deviceIconsHint} className="text-xs text-muted-foreground">
+            {signedIn
+              ? "Marks rows with the other devices they're on."
+              : "Sign in to see which of your devices each project and worktree is on."}
+          </span>
+        </div>
+        <SegmentedControl
+          aria-label="Show device icons"
+          aria-describedby={deviceIconsHint}
+          value={signedIn ? form.showDeviceIcons : "none"}
+          onChange={setField("showDeviceIcons")}
+          options={DEVICE_ICONS}
+          disabled={!signedIn}
+          optionClassName="px-3 py-1.5 text-xs"
+        />
+      </div>
       <ToggleRowView
         checked={terrierOn && form.markTerrierProjects}
         onCheckedChange={setField("markTerrierProjects")}

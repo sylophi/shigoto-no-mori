@@ -82,7 +82,8 @@ type SceneShell = "desktop" | "web";
 // What a settled sidebar marks with the default settings.
 const MARKS: SidebarMarks = {
   terrier: true,
-  deviceBadges: true,
+  worktreeDevices: true,
+  projectDevices: true,
   agentsWaiting: true,
 };
 
