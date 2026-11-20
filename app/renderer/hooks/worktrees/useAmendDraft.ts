@@ -37,13 +37,14 @@ export function useAmendDraft({
     enabled: amending && hash !== undefined,
   });
   // The draft that was in the box before amend mode replaced it, keyed
-  // by the commit so a HEAD that changes underneath seeds again.
+  // by the commit so a HEAD that changes underneath seeds again from
+  // that draft, not from the old commit's message.
   const parked = useRef<{ hash: string; draft: CommitDraft } | null>(null);
 
   useLayoutEffect(() => {
     const ref = { deviceId, projectId, worktreeId };
     if (amending && hash && message && parked.current?.hash !== hash) {
-      const draft = commitDraftOf(ref);
+      const draft = parked.current?.draft ?? commitDraftOf(ref);
       parked.current = { hash, draft };
       if (isEmptyDraft(draft)) setCommitDraft(ref, message);
     } else if (!amending && parked.current) {
@@ -51,6 +52,21 @@ export function useAmendDraft({
       parked.current = null;
     }
   }, [deviceId, projectId, worktreeId, amending, hash, message]);
+
+  // Leaving the page mid-amend puts the draft back too, since the draft
+  // outlives the page.
+  useLayoutEffect(
+    () => () => {
+      if (parked.current) {
+        setCommitDraft(
+          { deviceId, projectId, worktreeId },
+          parked.current.draft,
+        );
+        parked.current = null;
+      }
+    },
+    [deviceId, projectId, worktreeId],
+  );
 
   return () => {
     parked.current = null;

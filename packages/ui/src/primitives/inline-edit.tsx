@@ -97,6 +97,7 @@ export function InlineEdit({
         setDraft(sanitize ? sanitize(event.target.value) : event.target.value)
       }
       onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing) return;
         if (event.key === "Enter") {
           event.preventDefault();
           save();
