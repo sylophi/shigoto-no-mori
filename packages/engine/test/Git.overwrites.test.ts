@@ -1,7 +1,7 @@
 // Files git would replace or delete without a word: a hard reset keeps
 // them in its snapshot, a fast-forward leaves them where they are, a
-// pop takes the stash it was asked for, and a sync leaves another
-// program's merge be.
+// pop takes the stash it was asked for, a sync leaves another
+// program's merge be, and a discard it can't finish doesn't start.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "../src/canonicalPath.ts";
@@ -122,4 +122,19 @@ exec "${real}/git" "$@"`,
   assert.equal(synced?.ok, false, JSON.stringify(synced));
   assert.ok(existsSync(join(clone, ".git", "MERGE_HEAD")));
   assert.equal(readFileSync(join(clone, "a.txt"), "utf8"), "resolved\n");
+});
+
+it("a discard with a nested repository among its paths refuses before discarding the rest", async () => {
+  const repo = box.repo("repo", { "a.txt": "a\n" });
+  writeFileSync(join(repo, "a.txt"), "edited\n");
+  writeFileSync(join(repo, "new.txt"), "new\n");
+  const nested = box.repo("repo/nested");
+
+  const discarded = (await withGit((git) =>
+    git.discard({ worktree: repo, paths: ["a.txt", "new.txt", "nested/"] }),
+  )) as { ok?: boolean } | undefined;
+  assert.equal(discarded?.ok, false, JSON.stringify(discarded));
+  assert.equal(readFileSync(join(repo, "a.txt"), "utf8"), "edited\n");
+  assert.equal(readFileSync(join(repo, "new.txt"), "utf8"), "new\n");
+  assert.ok(existsSync(join(nested, ".git")));
 });

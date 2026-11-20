@@ -110,14 +110,14 @@ export class UndoRefusedError extends Schema.TaggedError<UndoRefusedError>()(
   }
 }
 
-// A discard that left untracked paths behind: `clean` walks past a
-// nested repository, and the snapshot holds only its gitlink.
+// A discard refused over a nested repository among its paths, which
+// `clean` won't remove and the snapshot would hold only as a gitlink.
 export class NestedRepositoryError extends Schema.TaggedError<NestedRepositoryError>()(
   "NestedRepositoryError",
   { paths: Schema.Array(Schema.String), count: Schema.Int },
 ) {
   override get message(): string {
-    return `Couldn't remove ${listed(this.paths, this.count)}. A nested git repository has to be removed by hand.`;
+    return `Nothing was discarded. Remove ${listed(this.paths, this.count)} by hand first: a nested git repository can't be discarded.`;
   }
 }
 
