@@ -3,7 +3,8 @@
 // (host/mirror/gitState.ts defines that state), so a commit, a stage,
 // a checkout or a reset on either machine shows up on the other within
 // a moment. The file-sync engine owns the files. This owns HEAD, the
-// tip and the staged tree.
+// tip and the staged tree, and after each sync cycle the sizes both
+// indexes recorded (checkout.ts's resetStaleSizes).
 //
 // Which way git follows is followPlan.ts's to decide, and the
 // transfers are followTransfer.ts's.
@@ -74,6 +75,7 @@ import {
 } from "./followPlan";
 import { chooseDirection, pull, push } from "./followTransfer";
 import type * as ScratchIndex from "./ScratchIndex";
+import { resetStaleSizes } from "./checkout";
 import {
   type GitState,
   type GitStateCore,
@@ -102,6 +104,10 @@ type FollowRecord = {
   // A follow that moves the tip or the branch was held back for the
   // files to settle. The next idle snapshot re-triggers it.
   waitingForFiles: boolean;
+  // The engine's cycle count as the last idle snapshot had it, and
+  // whether both sides' index sizes are due a check (resetSizes).
+  cycles: number;
+  sizesDue: boolean;
 };
 
 // The backstop only: every real change arrives as a signal, so the
@@ -523,6 +529,31 @@ function makeFollower(
       return false;
     });
 
+  // A cycle may have written the other side's bytes over a side's
+  // files with the same content (checkout.ts's resetStaleSizes), so
+  // once git agrees both sides' indexes are checked. A peer on a build
+  // without the call answers that it has none, and only this side is.
+  const unchecked = (cause: Cause.Cause<unknown>) =>
+    Effect.sync(() =>
+      warn(
+        `[mirror] the index sizes went unchecked: ${messageOf(Cause.squash(cause))}`,
+      ),
+    );
+  const resetSizes = (session: FollowableSession) =>
+    Effect.all(
+      [
+        Effect.catchCause(resetStaleSizes(session.localRoot), unchecked),
+        Effect.catchCause(
+          peerMirrorFor(session.deviceId).resetStaleSizes({
+            projectId: session.projectId,
+            worktreeId: session.worktreeId,
+          }),
+          unchecked,
+        ),
+      ],
+      { concurrency: 2, discard: true },
+    );
+
   const reconcile = reconcileOf(deps, {
     setStatus,
     setAgreed,
@@ -545,6 +576,11 @@ function makeFollower(
         do {
           record.pending = false;
           yield* reconcile(record);
+          // Apart from the loop, which a stop's check waits on.
+          if (record.sizesDue && record.status.status === "synced") {
+            record.sizesDue = false;
+            yield* fork(resetSizes(record.session));
+          }
         } while (
           record.pending &&
           records.get(record.session.session) === record
@@ -599,6 +635,14 @@ function makeFollower(
           existing.waitingForFiles = false;
           yield* trigger(existing);
         }
+        if (
+          session.status === "watching" &&
+          session.successfulCycles !== existing.cycles
+        ) {
+          existing.cycles = session.successfulCycles;
+          existing.sizesDue = true;
+          yield* trigger(existing);
+        }
         continue;
       }
       changed = true;
@@ -609,6 +653,8 @@ function makeFollower(
         running: null,
         pending: false,
         waitingForFiles: false,
+        cycles: session.successfulCycles,
+        sizesDue: true,
       };
       records.set(id, record);
       if (runIn !== null) {

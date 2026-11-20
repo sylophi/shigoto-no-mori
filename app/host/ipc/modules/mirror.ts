@@ -12,7 +12,7 @@ import { MirrorEngine } from "@host/mirror/MirrorEngine";
 import { MirrorLedger } from "@host/mirror/MirrorLedger";
 import {
   applyServedGitState,
-  clearServedStaleSizes,
+  resetServedStaleSizes,
   servedGitState,
   serveStream,
 } from "@host/mirror/serving";
@@ -45,5 +45,5 @@ export const mirrorHandlers = {
   openStream: (input, ctx: HandlerContext) => serveStream(input, ctx),
   gitState: (input) => servedGitState(input),
   applyGitState: (input) => applyServedGitState(input),
-  clearStaleSizes: (input) => clearServedStaleSizes(input),
+  resetStaleSizes: (input) => resetServedStaleSizes(input),
 } satisfies EffectHandlers<typeof mirrorContract, HandlerContext, HostServices>;

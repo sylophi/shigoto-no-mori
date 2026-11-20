@@ -109,7 +109,7 @@
       "starting": []
     }
   },
-  "mirror:clearStaleSizes": {
+  "mirror:resetStaleSizes": {
     "payload": {
       "projectId": "\n",
       "worktreeId": "db1a5ad23ae8"
