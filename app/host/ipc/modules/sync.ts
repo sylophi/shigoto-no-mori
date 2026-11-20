@@ -71,6 +71,14 @@ export const syncHandlers = {
         ),
     ),
 
+  // Read fresh, not from the picker's kept answer: a file missing from
+  // it stays on a source the move may tear down.
+  allIgnoredPaths: (input) =>
+    Effect.flatMap(
+      Effect.all([findWorktreePath(input), Git.Git]),
+      ([path, git]) => git.listIgnoredPaths(path),
+    ),
+
   // Where a move to this device would clone the repo, asked by its
   // dialog before it starts.
   cloneDestination: ({ cloneInto, identity }) =>

@@ -1,4 +1,11 @@
 {
+  "sync:allIgnoredPaths": {
+    "payload": {
+      "projectId": "1,",
+      "worktreeId": "1bb84a77e6a0"
+    },
+    "success": []
+  },
   "sync:cancelMove": {
     "payload": {
       "sourceWorktreeId": "4e64cca988f8"

@@ -15,6 +15,13 @@
 // many conflicts, or why not) rides the pull's result.
 import { messageOf } from "@shigomori/engine/errorDocument";
 import {
+  anchorIgnoredPath,
+  broughtPaths,
+  onlyIgnores,
+  unanchorIgnoredPath,
+} from "@shigomori/contracts/mirrorIgnores";
+import type { MirrorIgnoreMode } from "@shigomori/contracts/modules/sync";
+import {
   isHaltedStatus,
   MIRROR_LABEL_MODE,
   MIRROR_STATUS_WORDS,
@@ -44,8 +51,8 @@ const POLL_MS = 250;
 // it had, which nothing carries. Missing, or with no daemon running, for
 // longer than this, the transfer is lost.
 const MISSING_CEILING_MS = 10_000;
-// An error with no cycle behind it for this long is a session that
-// cannot connect (the peer's engine, the grant), not a slow one.
+// Not connected for this long is a session that cannot connect (the
+// peer's engine, the grant), not a slow one.
 const CONNECT_CEILING_MS = 60_000;
 // A whole node_modules over a slow link takes as long as it takes. The
 // ceiling is for a session that never settles.
@@ -131,6 +138,59 @@ export const transferFilesOnce = (
     ),
   );
 
+// A move's files step: the source's ignored paths the leave-out rule
+// admits, and nothing else. Tracked files are git's, and a pass over
+// the whole worktree counts each one the two checkouts write
+// differently (line endings, Windows against the rest) as a conflict.
+// The paths past the engine's cap on patterns stay on the source, and
+// the outcome says so, so a teardown keeps it.
+export const carryIgnoredOnce = <R>(
+  {
+    ignoreMode,
+    ignores,
+    ignoredPaths,
+    ...input
+  }: Omit<Parameters<typeof transferFilesOnce>[0], "ignores"> & {
+    direction: "pull" | "push";
+    ignoreMode: MirrorIgnoreMode;
+    ignores: readonly string[];
+    // The source's topmost ignored paths (Git.listIgnoredPaths).
+    ignoredPaths: Effect.Effect<readonly string[], unknown, R>;
+  },
+  onProgress: (bytes: number, totalBytes: number) => void,
+) =>
+  Effect.gen(function* () {
+    // Any other rule's ignores are the paths it leaves out, kept last
+    // too for one inside a folder git lists whole.
+    const leftOut = ignores.map(unanchorIgnoredPath);
+    const paths =
+      ignoreMode === "bring"
+        ? broughtPaths(ignores)
+        : (yield* ignoredPaths).filter((path) => {
+            const bare = path.replace(/\/+$/, "");
+            return !leftOut.some(
+              (left) => bare === left || bare.startsWith(`${left}/`),
+            );
+          });
+    const carry = onlyIgnores(paths);
+    const left = paths.filter(
+      (path) => !carry.includes(`!${anchorIgnoredPath(path)}/**`),
+    ).length;
+    const files = yield* transferFilesOnce(
+      {
+        ...input,
+        ignores: ignoreMode === "bring" ? carry : [...carry, ...ignores],
+      },
+      onProgress,
+    );
+    return left > 0 && files.crossed
+      ? failed(
+          `${pluralize(left, "ignored path")} didn't fit in one pass`,
+          files.conflicts,
+        )
+      : files;
+  }).pipe(Effect.catch((error) => Effect.succeed(failed(messageOf(error)))));
+
 // One full cycle with both sides scanned and nothing left staging is
 // the files across. Staging figures feed the progress bar.
 function settled(raw: MirrorSessionRaw): boolean {
@@ -178,7 +238,8 @@ const waitSettled = (
     // When a side that had connected stopped being connected, so a
     // peer lost mid-transfer (its session closed under a sign-out or
     // a revoke, on either end) fails at the connect ceiling like a
-    // peer never reached, instead of polling out the settle ceiling.
+    // peer never reached, instead of polling out the settle ceiling,
+    // and a link that drops once has that long to come back.
     let disconnectedSince: number | null = null;
     let everConnected = false;
     while (now() - startedAt < SETTLE_CEILING_MS) {
@@ -203,19 +264,7 @@ const waitSettled = (
         if (isHaltedStatus(raw.status)) {
           return failed(raw.lastError ?? MIRROR_STATUS_WORDS[raw.status]);
         }
-        // No cycle yet after the connect ceiling, and either an error
-        // or a side still not connected (a source that went away, which
-        // reports no error at all): the session is not going to.
         const connected = raw.local.connected && raw.remote.connected;
-        if (
-          raw.successfulCycles === 0 &&
-          now() - startedAt > CONNECT_CEILING_MS &&
-          (raw.lastError !== undefined || !connected)
-        ) {
-          return failed(
-            raw.lastError ?? "the other device could not be reached",
-          );
-        }
         if (connected) {
           everConnected = true;
           disconnectedSince = null;
@@ -226,6 +275,13 @@ const waitSettled = (
               raw.lastError ?? "the other device went away mid-transfer",
             );
           }
+        }
+        // Never connected by the connect ceiling (a source that went
+        // away reports no error at all): the session is not going to.
+        if (!everConnected && now() - startedAt > CONNECT_CEILING_MS) {
+          return failed(
+            raw.lastError ?? "the other device could not be reached",
+          );
         }
         if (settled(raw)) return outcome(raw, direction);
       }

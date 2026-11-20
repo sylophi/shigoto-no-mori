@@ -22,13 +22,14 @@ import {
   pullWorktreeName,
 } from "@shigomori/contracts/git/branches";
 import { type FilesBrought, isRealBranch } from "@shigomori/contracts/schemas";
-import { transferFilesOnce } from "@host/mirror/oneShot";
+import { carryIgnoredOnce } from "@host/mirror/oneShot";
 import {
   peerSyncFor,
   peerWorktree,
   peerWorktreesFor,
 } from "@host/ipc/PeerReach";
 import { EngineChanges } from "@host/lib/Engine";
+import * as Git from "@shigomori/engine/Git";
 import * as Identity from "@shigomori/engine/Identity";
 import { findProjectAndWorktree } from "@host/lib/projects";
 import { followDescription } from "@host/lib/sync/worktreeDescription";
@@ -157,7 +158,7 @@ export const pullWorktree = (
       files =
         typeof source === "string"
           ? { crossed: false, conflicts: 0, error: source }
-          : yield* transferFilesOnce(
+          : yield* carryIgnoredOnce(
               {
                 localRoot: landed.worktree.path,
                 localWorktreeId: landed.worktree.id,
@@ -166,7 +167,13 @@ export const pullWorktree = (
                 sourceWorktreeId,
                 remoteRoot: source.path,
                 name: branch,
+                ignoreMode,
                 ignores: ignores ?? [],
+                ignoredPaths: peerSyncFor(sourceDeviceId).allIgnoredPaths({
+                  projectId: sourceProjectId,
+                  worktreeId: sourceWorktreeId,
+                }),
+                direction: "pull",
               },
               (bytes, totalBytes) =>
                 progress({ step: "files", bytes, totalBytes }),
@@ -422,7 +429,7 @@ const sendWorktreeEffect = (
     let files: FilesBrought | undefined;
     if (pullBringsIgnoredFiles(ignoreMode)) {
       progress({ step: "files" });
-      files = yield* transferFilesOnce(
+      files = yield* carryIgnoredOnce(
         {
           localRoot: worktree.path,
           localWorktreeId: worktree.id,
@@ -431,7 +438,11 @@ const sendWorktreeEffect = (
           sourceWorktreeId: landed.worktree.id,
           remoteRoot: landed.worktree.path,
           name: branch,
+          ignoreMode,
           ignores: ignores ?? [],
+          ignoredPaths: Effect.flatMap(Git.Git, (git) =>
+            git.listIgnoredPaths(worktree.path),
+          ),
           direction: "push",
         },
         (bytes, totalBytes) => progress({ step: "files", bytes, totalBytes }),

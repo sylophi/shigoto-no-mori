@@ -98,7 +98,7 @@ import {
   type MirrorSessionRaw,
   ORIGINAL_GONE_DETAIL,
 } from "@host/mirror/registry";
-import { transferFilesOnce } from "@host/mirror/oneShot";
+import { carryIgnoredOnce, transferFilesOnce } from "@host/mirror/oneShot";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as MirrorDaemon from "../host/mirror/MirrorDaemon.ts";
 import * as MirrorGateway from "../host/mirror/MirrorGateway.ts";
@@ -880,6 +880,85 @@ it("one-shot transfer: a file the receiving side couldn't write keeps the files 
   await waitFor(
     () => daemon.sessions().length === 0,
     "the one-shot sessions to be gone",
+  );
+});
+
+it("a move's files step carries only the source's ignored files: a tracked file a Windows checkout writes with CRLF is no conflict, and ignored paths past the cap keep the files from counting as crossed", async () => {
+  // The listener is the Windows source (core.autocrlf), the dialer the
+  // Mac destination: the tracked readme.txt differs only in line
+  // endings. The ignored node_modules crosses. Of 300 ignored logs,
+  // what the engine's cap on patterns leaves out stays on the source,
+  // and the outcome says so, so a teardown keeps it.
+  listener.setAccepts(true);
+  standInMirror(inertImpl());
+  rmSync(join(listenerWorktree, "readme.txt"));
+  await git(listenerWorktree, [
+    "-c",
+    "core.autocrlf=true",
+    "checkout",
+    "--",
+    "readme.txt",
+  ]);
+  writeFileSync(join(listenerWorktree, ".gitignore"), "node_modules/\n*.log\n");
+  mkdirSync(join(listenerWorktree, "node_modules", "pkg"), { recursive: true });
+  writeFileSync(
+    join(listenerWorktree, "node_modules", "pkg", "index.js"),
+    "built\n",
+  );
+  for (let at = 0; at < 300; at++) {
+    writeFileSync(join(listenerWorktree, `zz-${at}.log`), "log\n");
+  }
+  try {
+    assert.equal(read(join(listenerWorktree, "readme.txt")), "base\r\n");
+    assert.equal(read(join(dialerRoot, "readme.txt")), "base\n");
+    const files = await runHost(
+      carryIgnoredOnce(
+        {
+          localRoot: dialerRoot,
+          localWorktreeId: dialerWorktreeId,
+          sourceDeviceId: LISTENER,
+          sourceProjectId: listenerProjectId,
+          sourceWorktreeId: listenerWorktreeId,
+          remoteRoot: listenerWorktree,
+          name: "feature",
+          ignoreMode: "everything",
+          ignores: [],
+          ignoredPaths: PeerReach.peerSyncFor(LISTENER).allIgnoredPaths({
+            projectId: listenerProjectId,
+            worktreeId: listenerWorktreeId,
+          }),
+          direction: "pull",
+        },
+        () => {},
+      ),
+    );
+    assert.deepEqual(files, {
+      crossed: false,
+      conflicts: 0,
+      error: "46 ignored paths didn't fit in one pass",
+    });
+    assert.equal(
+      read(join(dialerRoot, "node_modules", "pkg", "index.js")),
+      "built\n",
+    );
+    assert.equal(read(join(dialerRoot, "zz-0.log")), "log\n");
+    assert.equal(existsSync(join(dialerRoot, "zz-99.log")), false);
+    assert.equal(read(join(dialerRoot, "readme.txt")), "base\n");
+    assert.equal(existsSync(join(dialerRoot, ".gitignore")), false);
+  } finally {
+    for (const root of [listenerWorktree, dialerRoot]) {
+      rmSync(join(root, "node_modules"), { recursive: true, force: true });
+      rmSync(join(root, ".gitignore"), { force: true });
+      for (let at = 0; at < 300; at++) {
+        rmSync(join(root, `zz-${at}.log`), { force: true });
+      }
+    }
+    rmSync(join(listenerWorktree, "readme.txt"));
+    await git(listenerWorktree, ["checkout", "--", "readme.txt"]);
+  }
+  await waitFor(
+    () => daemon.sessions().length === 0,
+    "the files step's session to be gone",
   );
 });
 
