@@ -314,7 +314,12 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
         }
         yield* git.updateRef({ repo: partial, ref: branchRef, commit: tip });
         yield* git.deleteRef(partial, incomingRef);
-        yield* git.run(partial, ["reset", "--quiet", "--hard"]);
+        // LFS content never crosses in the bundle, and the remote it is on
+        // isn't added yet: the files land as their pointers, for a
+        // `git lfs pull` to fill.
+        yield* git.run(partial, ["reset", "--quiet", "--hard"], {
+          env: { GIT_LFS_SKIP_SMUDGE: "1" },
+        });
         // The remote as `git clone` would leave it: origin, its HEAD on the
         // branch, the branch tracking it. The source answered the URL with
         // the clone payload's own rule (shared/cloneUrl.ts), re-checked

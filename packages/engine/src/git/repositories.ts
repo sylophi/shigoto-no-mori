@@ -160,7 +160,9 @@ export const makeRepositories = ({
       // is off and an unauthenticated remote fails rather than waits.
       // `config` is written into the new checkout's config too.
       // Interrupted (a caller's cancel), the runner ends git and waits
-      // for it, and git removes the folder it made on its way out.
+      // for it. Git removes the folder it made only until its checkout
+      // starts, so the folder, which checkDestination found absent, is
+      // removed here.
       yield* run(
         input.parentDir,
         [
@@ -192,6 +194,9 @@ export const makeRepositories = ({
                 ),
               })
             : error,
+        ),
+        Effect.onError(() =>
+          Effect.ignore(fs.remove(dest, { recursive: true })),
         ),
       );
       return dest;

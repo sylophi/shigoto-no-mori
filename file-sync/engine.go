@@ -79,6 +79,7 @@ import (
 
 	"github.com/mutagen-io/mutagen/pkg/encoding"
 	"github.com/mutagen-io/mutagen/pkg/filesystem"
+	"github.com/mutagen-io/mutagen/pkg/housekeeping"
 	"github.com/mutagen-io/mutagen/pkg/identifier"
 	"github.com/mutagen-io/mutagen/pkg/logging"
 	"github.com/mutagen-io/mutagen/pkg/selection"
@@ -381,6 +382,9 @@ func runMirrorDaemon(ctx context.Context, in io.Reader, out io.Writer, gateway, 
 	if err := os.Setenv("MUTAGEN_DATA_DIRECTORY", dataDir); err != nil {
 		return err
 	}
+	// Staging roots and caches a session left when it ended mid-cycle,
+	// which Mutagen's own daemon clears the same way.
+	go housekeeping.Housekeep()
 	// Registered before the manager loads persisted sessions, which
 	// start connecting immediately.
 	synchronization.ProtocolHandlers[urlpkg.Protocol_SSH] = mirrorGatewayHandler{gateway: gateway}

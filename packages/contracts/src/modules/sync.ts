@@ -2,6 +2,7 @@ import { MIRROR_VERSION } from "../protocol.ts";
 import * as Schema from "effect/Schema";
 import { errorMessageOf } from "../errors.ts";
 import { MIRROR_IGNORES_LIMIT } from "../mirrorIgnores.ts";
+import { isFullRefName } from "../predicates/refName.ts";
 import { isSafeRelPath } from "../predicates/relPath.ts";
 import { push, defineContract, invoke, gatedBy, view } from "../contract.ts";
 import { DeviceIdSchema } from "../hubProtocol.ts";
@@ -30,20 +31,12 @@ import { strict } from "../schemas/strict.ts";
 
 // The refs a peer may request into a bundle: a branch, a remote-tracking
 // branch (a clone's default branch, when the project's is one), a dirty
-// capture, a mirror's index snapshot. These cross into git argv, hence
-// the narrow charset. The engine's gate (Bundle.ts) differs on purpose:
-// it admits any refs/* but bans a trailing "/" or ".lock", which this
-// one admits. Only what clears both goes through.
-const BUNDLE_REF_RE =
-  /^refs\/((heads|remotes)\/[A-Za-z0-9][A-Za-z0-9._/-]*|shigomori\/(dirty|index)\/[0-9a-f]{12})$/;
-
+// capture, a mirror's index snapshot.
 export const SyncBundleRefSchema = Schema.String.check(
-  Schema.isPattern(BUNDLE_REF_RE, {
-    message: "Ref outside the sync allowlist",
-  }),
   Schema.makeFilter(
     (ref: string) =>
-      (!ref.includes("..") && !ref.includes("//")) ||
+      (/^refs\/(heads|remotes)\//.test(ref) && isFullRefName(ref)) ||
+      /^refs\/shigomori\/(dirty|index)\/[0-9a-f]{12}$/.test(ref) ||
       "Ref outside the sync allowlist",
   ),
 );
@@ -51,10 +44,9 @@ const isSyncBundleRef = Schema.is(SyncBundleRefSchema);
 
 // Never a branch or a tag. Also the refs a mirror apply may sweep.
 export const SyncLandingRefSchema = Schema.String.check(
-  Schema.isPattern(/^refs\/shigomori\/[A-Za-z0-9][A-Za-z0-9._/-]*$/),
   Schema.makeFilter(
     (ref: string) =>
-      (!ref.includes("..") && !ref.includes("//")) ||
+      (ref.startsWith("refs/shigomori/") && isFullRefName(ref)) ||
       "Ref outside the app's namespace",
   ),
 );

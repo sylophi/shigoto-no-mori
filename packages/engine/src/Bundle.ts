@@ -7,6 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import { isFullRefName } from "@shigomori/contracts/predicates/refName";
 import * as Git from "./Git.ts";
 
 export type RefTip = { readonly ref: string; readonly commit: string };
@@ -56,17 +57,6 @@ const SHIGOMORI_REFS = "refs/shigomori/";
 export const INCOMING_PREFIX = `${SHIGOMORI_REFS}incoming/`;
 export const incomingRef = (branch: string) => `${INCOMING_PREFIX}${branch}`;
 
-const REF = /^refs\/[A-Za-z0-9][A-Za-z0-9._/-]*$/;
-
-// A full ref git takes without question: no `..`, `//`, trailing slash
-// or .lock.
-const validRef = (ref: string) =>
-  REF.test(ref) &&
-  !ref.includes("..") &&
-  !ref.includes("//") &&
-  !ref.endsWith("/") &&
-  !ref.endsWith(".lock");
-
 export class Bundle extends Context.Service<
   Bundle,
   {
@@ -109,7 +99,7 @@ const make = Effect.gen(function* () {
     haves: ReadonlyArray<string>,
   ) {
     for (const ref of refs) {
-      if (!validRef(ref)) {
+      if (!isFullRefName(ref)) {
         return yield* new BundleRefused({ reason: "bad-ref", subject: ref });
       }
       const exists = yield* git
@@ -159,8 +149,8 @@ const make = Effect.gen(function* () {
         at < 0 ? ["", ""] : [spec.slice(0, at), spec.slice(at + 1)];
       if (
         at < 0 ||
-        !validRef(src) ||
-        !validRef(dst) ||
+        !isFullRefName(src) ||
+        !isFullRefName(dst) ||
         !dst.startsWith(SHIGOMORI_REFS)
       ) {
         return yield* new BundleRefused({
