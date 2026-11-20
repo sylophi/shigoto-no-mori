@@ -1,7 +1,6 @@
-// A full ref under refs/ that git's check-ref-format accepts. These
-// cross between devices into git argv, and git's own rules already keep
-// out what a revision, a refspec or a path would read: starting with
-// refs/, none can read as an option either.
+// What git's check-ref-format accepts under refs/. Refs cross between
+// devices into git argv: git's rules keep out what a revision or a
+// refspec would read, and starting with refs/, none reads as an option.
 const REFUSED = /[\p{Cc} ~^:?*[\\]|\.\.|@\{|\/\/|\/\.|\.lock(\/|$)|[/.]$/u;
 
 export function isFullRefName(ref: string): boolean {
