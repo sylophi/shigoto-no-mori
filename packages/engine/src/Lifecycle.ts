@@ -14,6 +14,7 @@ import {
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
@@ -22,6 +23,8 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { fileUntilExit } from "./processes.ts";
 import * as Paths from "./Paths.ts";
+import { byFamily } from "./platform.ts";
+import { readDescendants } from "./processTable/ps.ts";
 import * as Shells from "./Shells.ts";
 import { scriptOutputDir, scriptOutputPath } from "./scriptOutput.ts";
 
@@ -93,6 +96,29 @@ const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const paths = yield* Paths.Paths;
   const shells = yield* Shells.Shells;
+
+  // An interrupt (a cancelled create, a teardown out of time) ends the
+  // shell through the spawner, which reaches only its pid, as it leads
+  // no group. What the shell started goes with it, read before the
+  // shell dies and leaves them to init. Windows's taskkill ends the
+  // whole tree already.
+  const endDescendants = (pid: number) =>
+    byFamily({
+      posix: readDescendants(pid).pipe(
+        Effect.map((descendants) => {
+          for (const descendant of descendants) {
+            try {
+              process.kill(descendant, "SIGTERM");
+            } catch {
+              // Gone already.
+            }
+          }
+        }),
+        Effect.ignore,
+        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      ),
+      windows: Effect.void,
+    });
 
   const run = Effect.fn("Lifecycle.run")(function* (input: RunInput) {
     const { context, slot, report } = input;
@@ -169,6 +195,13 @@ const make = Effect.gen(function* () {
           });
           return yield* exit(null);
         }
+        // Added after the spawner's release, so the scope runs it first,
+        // while the shell is still the parent of what it started.
+        yield* Effect.addFinalizer((ended) =>
+          Exit.hasInterrupts(ended)
+            ? endDescendants(handle.success.pid)
+            : Effect.void,
+        );
         // Started before any output is read, so it comes first.
         yield* started(handle.success.pid);
         // One decoder for the run, so a character split across two reads
