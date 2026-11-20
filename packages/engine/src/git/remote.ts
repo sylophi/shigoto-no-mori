@@ -106,8 +106,9 @@ export const makeRemote = ({
         worktree,
         Effect.uninterruptible(
           Effect.gen(function* () {
+            const safe = yield* rebaseIsSafe(worktree, ref);
             yield* operation.refuseMidOperation(worktree);
-            if (yield* rebaseIsSafe(worktree, ref)) {
+            if (safe) {
               const rebased = yield* run(worktree, [
                 "rebase",
                 "--end-of-options",

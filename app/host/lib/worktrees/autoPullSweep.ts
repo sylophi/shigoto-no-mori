@@ -13,8 +13,10 @@
 // is what `git merge` would refuse to touch or, for an untracked file
 // the upstream now tracks, refuse on. A worktree with a script the
 // app started in it is left alone too: the tree moving under a running
-// dev server is the one way a pull the user never clicked could bite.
-// So is a data-folder move, which the pull waits out by skipping.
+// dev server is one way a pull the user never clicked could bite. So
+// is one being moved or removed, whose copy or removal the pull would
+// land partway through, and a data-folder move, which the pull waits
+// out by skipping.
 import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -41,11 +43,12 @@ const skipped = (reason: AutoPullSkipReason): AutoPullOutcome => ({
 
 // Fast-forward one worktree onto its (already fetched) upstream when
 // nothing local stands in the way. `busy` is the caller's knowledge of
-// processes the app started in this worktree. Git cannot see those,
-// and it is required so no caller forgets to ask.
+// processes the app started in this worktree, or a move or removal of
+// it, asked right before the pull. Git cannot see those, and it is
+// required so no caller forgets to ask.
 const autoPullWorktree = Effect.fnUntraced(function* (
   worktree: Pick<WorktreeIdentity, "projectId" | "id" | "path" | "detached">,
-  options: { busy: boolean },
+  options: { busy: () => boolean },
 ) {
   if (worktree.detached) return skipped("detached");
   const upstream = yield* (yield* Git.Git).aheadBehind(worktree.path, "@{u}");
@@ -53,7 +56,7 @@ const autoPullWorktree = Effect.fnUntraced(function* (
   const counts = upstream.value;
   if (counts.behind === 0) return skipped("synced");
   if (counts.ahead > 0) return skipped("ahead");
-  if (options.busy) return skipped("busy");
+  if (options.busy()) return skipped("busy");
   return yield* changing(
     Effect.gen(function* () {
       const git = yield* Git.Git;
@@ -87,19 +90,19 @@ interface AutoPullSweepResult {
 // Every marked worktree of one project's `identities`, sequentially: a marked
 // worktree is rare (the primary, maybe a release branch), and one git
 // at a time keeps the sweep from stacking onto the row probes the same
-// fetch just triggered. `busyWorktreeIds` are the worktrees with an
-// app-started process in them. Marks for worktrees that no longer
-// exist simply match nothing, so an `sm rm` in a terminal leaves no
-// pull behind.
+// fetch just triggered. `isBusy` tells a worktree with an app-started
+// process in it or a move or removal under way. Marks for worktrees
+// that no longer exist simply match nothing, so an `sm rm` in a
+// terminal leaves no pull behind.
 export const sweepAutoPull = Effect.fnUntraced(function* (
   identities: readonly WorktreeIdentity[],
-  busyWorktreeIds: ReadonlySet<string>,
+  isBusy: (worktreeId: string) => boolean,
 ) {
   const result: AutoPullSweepResult = { pulled: [], failed: [] };
   for (const worktree of identities) {
     if (!worktree.autoPull) continue;
     const outcome = yield* autoPullWorktree(worktree, {
-      busy: busyWorktreeIds.has(worktree.id),
+      busy: () => isBusy(worktree.id),
     });
     if (outcome.kind === "pulled") {
       result.pulled.push({ worktree, commits: outcome.commits });

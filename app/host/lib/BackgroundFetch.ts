@@ -130,7 +130,9 @@ const make = Effect.gen(function* () {
       );
       const { pulled, failed } = yield* sweepAutoPull(
         identities.rows,
-        new Set(scripts.worktrees().map(({ worktreeId }) => worktreeId)),
+        (worktreeId) =>
+          scripts.runningIn(worktreeId) > 0 ||
+          scripts.deleteIds().has(worktreeId),
       );
       for (const { worktree, commits } of pulled) {
         log.info(
