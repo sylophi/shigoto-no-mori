@@ -180,11 +180,21 @@ export const makeRemoving = ({
     // started since.
     const reapRemovedProjects = Effect.gen(function* () {
       const runsBefore = runs.list().filter(({ interactive }) => interactive);
-      const projects = yield* registry.listed;
+      // registry.listed's list, over the one terrier answer that also
+      // says whether terrier answered.
+      const listing = yield* terrier.listing;
+      const registered = yield* registry.projects;
+      const projects = [
+        ...registered,
+        ...Terrier.terrierProjects(
+          new Set(registered.map(({ path }) => path)),
+          listing.paths,
+        ),
+      ];
       const sourceOf = sources;
       sources = sourcesOf(projects);
       const listed = new Set(projects.map(({ id }) => id));
-      const terrierTold = Option.isNone((yield* terrier.listing).trouble);
+      const terrierTold = Option.isNone(listing.trouble);
       const gone = (projectId: string) =>
         !listed.has(projectId) &&
         (terrierTold || sourceOf.get(projectId) === "registry");

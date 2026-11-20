@@ -109,13 +109,17 @@ const RELEVANT = [
   /^(HEAD|ORIG_HEAD|packed-refs)$/,
   /^refs(\/|$)/,
   /^worktrees\/[^/]+(\/(HEAD|ORIG_HEAD))?$/,
+  // A reftable repository's refs, a worktree's own among them: HEAD and
+  // refs/ there are stubs that never move.
+  /^(worktrees\/[^/]+\/)?reftable\/tables\.list$/,
   new RegExp(
     String.raw`^(worktrees\/[^/]+\/)?(${OPERATION_MARKERS.join("|")})$`,
   ),
 ];
 // The folders of a git directory the allowlist's paths are in: refs/
-// and all below it, and each linked worktree's own.
-const RELEVANT_FOLDER = /^(refs(\/.*)?|worktrees(\/[^/]+)?)$/;
+// and all below it, each linked worktree's own, and the reftables.
+const RELEVANT_FOLDER =
+  /^(refs(\/.*)?|worktrees(\/[^/]+)?|(worktrees\/[^/]+\/)?reftable)$/;
 const outsideRelevant: TreeWatch.LeaveOut = (folders) =>
   Effect.succeed(
     new Set(folders.filter((folder) => !RELEVANT_FOLDER.test(folder))),
@@ -259,6 +263,7 @@ const gitStateOf = (gitDir: string) =>
       for (const marker of OPERATION_MARKERS) {
         parts.push(yield* stamp(`${dir}${marker}`));
       }
+      parts.push(yield* stamp(`${dir}reftable/tables.list`));
       indexes.push(yield* stamp(`${dir}index`));
     }
     for (const ref of (yield* listed("refs", true)).toSorted()) {

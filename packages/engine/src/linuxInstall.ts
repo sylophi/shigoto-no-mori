@@ -6,6 +6,7 @@
 // nothing that runs, and the next start is the new version. The
 // terminal command links to `current`'s, so it moves on with it.
 import { basename, dirname, join } from "node:path";
+import { realpath } from "./canonicalPath.ts";
 import { type Flavor, flavorNames } from "./flavor.ts";
 import type { FootprintPlace } from "./footprint.ts";
 
@@ -31,13 +32,20 @@ export const linuxInstall = (
 };
 
 // The version a file of the install is from (its real path, a binary's
-// beside the host), or undefined for one from anywhere else.
+// beside the host), or undefined for one from anywhere else. versions/
+// by its real path too, for a home reached through a link.
 export const installedVersionOf = (
   install: LinuxInstall,
   realPath: string,
 ): string | undefined => {
   const folder = dirname(realPath);
-  return dirname(folder) === install.versions ? basename(folder) : undefined;
+  try {
+    return dirname(folder) === realpath(install.versions)
+      ? basename(folder)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 };
 
 // `current`, from the folder of one of the install's versions.

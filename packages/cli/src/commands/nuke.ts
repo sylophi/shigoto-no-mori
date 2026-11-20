@@ -13,6 +13,7 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, realpathSync, rmSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { TERMINAL_ID_ENV } from "@shigomori/contracts/modules/control";
 import { programFile } from "@shigomori/engine/executables";
 import {
   NUKE_EXIT,
@@ -197,6 +198,11 @@ export const nuke = Command.make(
       const names = flavorNames(paths.flavor);
       if (input.rest.length > 0) {
         return yield* new UsageError({ problem: "nuke takes no arguments." });
+      }
+      if (process.env[TERMINAL_ID_ENV] !== undefined) {
+        return yield* new UsageError({
+          problem: `nuke quits ${names.appName}, which would end this terminal and the nuke with it. Run it from a terminal outside ${names.appName}.`,
+        });
       }
       if (!input.yes) {
         return yield* new UsageError({

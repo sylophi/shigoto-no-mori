@@ -63,7 +63,7 @@ follows.
 workflow: `sm-basics` (register, relocate or unregister a project, create
 a worktree, rename its branch, land it and tear it down),
 `sm-for-agents` (the features built for agentic work: a worktree's
-title and description, agent sessions, links into the app) and
+title and description, links into the app) and
 `sm-remote` (send a worktree to another of your machines, bring one
 over, or mirror it).
 Install with [Vercel skills](https://github.com/vercel-labs/skills)
