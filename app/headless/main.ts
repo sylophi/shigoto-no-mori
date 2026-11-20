@@ -58,8 +58,10 @@ async function main(): Promise<void> {
   // no other host is using them.
   const nuked = finishPendingNuke(facts.userDataPath);
   if (nuked !== null) finishNuke(nuked.left);
-  process.on("SIGTERM", () => quit(false));
-  process.on("SIGINT", () => quit(false));
+  // A nuke's start stopped part way didn't finish: only finishNuke's
+  // exit says it did.
+  process.on("SIGTERM", () => quit(false, nuking ? 1 : 0));
+  process.on("SIGINT", () => quit(false, nuking ? 1 : 0));
   const account = headlessAccount(facts);
   await runHost({
     facts,
