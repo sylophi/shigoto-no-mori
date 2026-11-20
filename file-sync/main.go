@@ -14,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/mutagen-io/mutagen/pkg/housekeeping"
 )
 
 func main() {
@@ -58,6 +60,7 @@ func run(args []string) int {
 			fmt.Fprintln(os.Stderr, "file-sync serve:", err)
 			return 1
 		}
+		go housekeeping.Housekeep()
 		// stdout IS the protocol stream here, so nothing else may print
 		// to it. Diagnostics go to stderr.
 		err := serveMirrorEndpoint(stdioStream{in: os.Stdin, out: os.Stdout}, *root, os.Stderr)

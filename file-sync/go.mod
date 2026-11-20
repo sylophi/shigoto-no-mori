@@ -18,6 +18,7 @@ require (
 	github.com/hectane/go-acl v0.0.0-20230122075934-ca0b05cb1adb // indirect
 	github.com/klauspost/compress v1.18.7 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.8 // indirect
+	github.com/mutagen-io/extstat v0.0.0-20210224131814-32fa3f057fa8 // indirect
 	github.com/mutagen-io/fsevents v0.0.0-20230629001834-f53e17b91ebc // indirect
 	github.com/mutagen-io/gopass v0.0.0-20230214181532-d4b7cdfe054c // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect

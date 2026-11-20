@@ -19,6 +19,7 @@ export class CloneFailed extends Schema.TaggedError<CloneFailed>()(
       "index-changed",
       "attributes-changed",
       "unknown-format",
+      "refused-path",
       "read",
       "clone",
       "write",
@@ -34,6 +35,8 @@ export class CloneFailed extends Schema.TaggedError<CloneFailed>()(
         return "attributes changed while cloning";
       case "unknown-format":
         return "unknown object format";
+      case "refused-path":
+        return "the tree has a path git refuses";
       case "read":
         return "couldn't read the source";
       case "clone":
