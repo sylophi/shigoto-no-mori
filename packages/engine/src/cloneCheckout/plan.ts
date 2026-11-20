@@ -22,6 +22,25 @@ const nanos = (sec: number, nsec: number) =>
 const maxOf = (...values: bigint[]) =>
   values.reduce((a, b) => (a > b ? a : b), 0n);
 
+// A path git's verify_path refuses: "." or "..", or ".git" however HFS+
+// or NTFS spell it (for a symlink, ".gitmodules" too). Git's own
+// checkout then turns the tree down, where a clone would put that .git
+// in place of the worktree's link.
+const HFS_IGNORED = /[\u200c-\u200f\u202a-\u202e\u206a-\u206f\ufeff]/g;
+const DOT_GIT = /^(\.git|git~1)[. ]*(:.*)?$/i;
+const DOT_GITMODULES = /^(\.gitmodules|gitmod~[1-4]|gi7eba~[1-9])[. ]*(:.*)?$/i;
+
+export const refusedByGit = ({ path, mode }: TreeEntry) =>
+  path.split(/[/\\]/).some((part) => {
+    const name = part.replace(HFS_IGNORED, "");
+    return (
+      part === "." ||
+      part === ".." ||
+      DOT_GIT.test(name) ||
+      (mode === 0o120000 && DOT_GITMODULES.test(name))
+    );
+  });
+
 // Names a case-insensitive disk takes for one are left to git, which
 // writes them in index order as a checkout does. APFS also folds
 // Unicode normalization, so names outside ASCII go to git too.

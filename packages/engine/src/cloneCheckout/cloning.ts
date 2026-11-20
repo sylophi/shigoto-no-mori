@@ -29,6 +29,7 @@ import {
   caseCollisions,
   clonablePaths,
   planUnits,
+  refusedByGit,
   stale,
   verdicts,
 } from "./plan.ts";
@@ -95,6 +96,9 @@ export const makeCloning = ({
           .run(worktree, ["ls-tree", "-r", "-z", "--full-tree", "HEAD"])
           .pipe(Effect.mapError(fail("read"))),
       );
+      if (targets.some(refusedByGit)) {
+        return yield* new CloneFailed({ reason: "refused-path" });
+      }
       const targetPaths = targets.map((target) => `${target.path}\0`).join("");
       const targetOids = targets
         .filter((target) => target.mode !== 0o160000)
