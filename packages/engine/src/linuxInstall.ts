@@ -5,8 +5,8 @@
 // its end, so `current` moving on (an install or an update) changes
 // nothing that runs, and the next start is the new version. The
 // terminal command links to `current`'s, so it moves on with it.
-import { realpathSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { realpath } from "./canonicalPath.ts";
 import { type Flavor, flavorNames } from "./flavor.ts";
 import type { FootprintPlace } from "./footprint.ts";
 
@@ -40,7 +40,7 @@ export const installedVersionOf = (
 ): string | undefined => {
   const folder = dirname(realPath);
   try {
-    return dirname(folder) === realpathSync(install.versions)
+    return dirname(folder) === realpath(install.versions)
       ? basename(folder)
       : undefined;
   } catch {
