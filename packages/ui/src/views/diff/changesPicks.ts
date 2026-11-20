@@ -111,7 +111,8 @@ export function setHunksTicked(
 
 // The picks still about something on screen: rows that are gone (a
 // file committed, discarded or reverted in an editor) drop theirs, so
-// one that turns up again comes in ticked, and the file in the pane
+// one that turns up again comes in ticked, as do conflicted rows, which
+// have no checkbox and go in whole once resolved. The file in the pane
 // drops the changes it no longer has (all of them, read against another
 // HEAD).
 export function prunedPicks(
@@ -119,7 +120,9 @@ export function prunedPicks(
   files: readonly ChangedFile[],
   pane?: { key: string; hunks: FileHunks },
 ): ChangesPicks {
-  const listed = new Set(files.map(changeKey));
+  const listed = new Set(
+    files.filter((file) => !file.conflicted).map(changeKey),
+  );
   let next = picks;
   for (const key of picks.keys()) {
     if (!listed.has(key)) next = setFilesTicked(next, [key], true);

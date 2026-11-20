@@ -24,6 +24,9 @@ file here, and `lib/` holds what they share.
   reads both ends as clean, the copy's device's other worktrees keep
   their own config, and a copy whose device checks out alike writes
   nothing into its repository's config.
+- `changes-picks.mts`: a file left out of a commit that turns
+  conflicted comes back ticked, so a merge commit takes its resolution
+  and "Discard unticked" leaves it alone.
 - `control.mts`: an unmirror removes the copy only once the follower
   holds it, and never the original.
 
