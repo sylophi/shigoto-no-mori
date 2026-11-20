@@ -66,7 +66,7 @@ export {
   BranchNotMergedError,
   GitCommandError,
   RefUnreadable,
-  PATHSPEC_CHUNK,
+  pathspecChunks,
   ABSENT_REF,
   stderrOf,
 } from "./git/documents.ts";

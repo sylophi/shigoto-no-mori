@@ -264,8 +264,26 @@ export const PATCH_CONFIG = [
 export const PATCH_FLAGS = ["--no-ext-diff", "--no-textconv"] as const;
 
 // Pathspecs travel as argv, and a big refactor can carry enough paths
-// to brush the OS's limit, so they go one chunk per git.
-export const PATHSPEC_CHUNK = 500;
+// to pass the OS's limit, so they go one chunk per git. Windows caps a
+// whole command line at 32,767 characters, so a chunk is cut by length:
+// each path with the space before it and the quotes a space in it takes,
+// leaving room for git's own arguments.
+export const pathspecChunks = (paths: readonly string[]) => {
+  const chunks: string[][] = [];
+  let chunk: string[] = [];
+  let length = 0;
+  for (const path of paths) {
+    if (chunk.length > 0 && length + path.length > 24_000) {
+      chunks.push(chunk);
+      chunk = [];
+      length = 0;
+    }
+    chunk.push(path);
+    length += path.length + 3;
+  }
+  if (chunk.length > 0) chunks.push(chunk);
+  return chunks;
+};
 
 // Past this many changed paths the newest change is almost certainly
 // seen, and a huge dirty tree shouldn't cost a stat per file.
