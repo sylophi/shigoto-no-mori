@@ -393,6 +393,29 @@ function normalizeEntry(key: string, value: LicenseInfo): LicenseEntry {
   };
 }
 
+// The licenses several launcher icons share, each under the copyright
+// lines its project publishes.
+const mit = (copyright: string) =>
+  `MIT License\n\n${copyright}\n\n` +
+  "Permission is hereby granted, free of charge, to any person obtaining a copy " +
+  'of this software and associated documentation files (the "Software"), to deal ' +
+  "in the Software without restriction, including without limitation the rights " +
+  "to use, copy, modify, merge, publish, distribute, sublicense, and/or sell " +
+  "copies of the Software, and to permit persons to whom the Software is " +
+  "furnished to do so, subject to the following conditions:\n\n" +
+  "The above copyright notice and this permission notice shall be included in all " +
+  "copies or substantial portions of the Software.\n\n" +
+  'THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR ' +
+  "IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, " +
+  "FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE " +
+  "AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER " +
+  "LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, " +
+  "OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE " +
+  "SOFTWARE.";
+const apache = (notice: string) =>
+  `${notice}\n\n` +
+  readFileSync(join(appRoot, "scripts", "Apache-2.0.txt"), "utf8");
+
 // Binaries the packaged app ships beside its npm dependencies. Not npm
 // packages, so pnpm cannot see them. Listed by hand from
 // the same pinned metadata the fetch script reads, through the same
@@ -487,6 +510,77 @@ const BUNDLED_DATA = [
       "ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF " +
       "OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.",
   }),
+  // The other launcher icons whose artwork is under a license that asks
+  // for a notice: PNGs in packages/ui/src/app-icons, and the GitUI and
+  // Neovim marks drawn inline.
+  normalizeEntry("aider-icon", {
+    licenses: "Apache-2.0",
+    repository: "https://github.com/Aider-AI/aider",
+    publisher: "Aider contributors",
+    licenseText: apache(
+      "Aider's website icon, resized and rounded for the launcher.",
+    ),
+  }),
+  normalizeEntry("alacritty-logo", {
+    licenses: "Apache-2.0",
+    repository: "https://github.com/alacritty/alacritty",
+    publisher: "The Alacritty Project",
+    licenseText: apache(
+      "Alacritty's logo, resized for the launcher.\n" +
+        "Copyright 2020 The Alacritty Project",
+    ),
+  }),
+  normalizeEntry("ghostty-icon", {
+    licenses: "MIT",
+    repository: "https://github.com/ghostty-org/ghostty",
+    publisher: "Mitchell Hashimoto, Ghostty contributors",
+    licenseText: mit(
+      "Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors",
+    ),
+  }),
+  normalizeEntry("gitui-logo", {
+    licenses: "MIT",
+    repository: "https://github.com/gitui-org/gitui",
+    publisher: "gitui-org",
+    licenseText: mit("Copyright (c) 2025 gitui-org"),
+  }),
+  normalizeEntry("neovim-logo", {
+    licenses: "CC-BY-3.0",
+    repository: "https://github.com/neovim/neovim",
+    publisher: "Jason Long",
+    licenseText:
+      "Neovim logo by Jason Long, redrawn as an inline SVG.\n" +
+      "Creative Commons Attribution 3.0 Unported: " +
+      "https://creativecommons.org/licenses/by/3.0/",
+  }),
+  normalizeEntry("opencode-icon", {
+    licenses: "MIT",
+    repository: "https://github.com/anomalyco/opencode",
+    publisher: "opencode",
+    licenseText: mit("Copyright (c) 2025 opencode"),
+  }),
+  normalizeEntry("vscodium-icon", {
+    licenses: "MIT",
+    repository: "https://github.com/VSCodium/vscodium",
+    publisher: "The VSCodium contributors",
+    licenseText: mit(
+      "Copyright (c) 2018-present The VSCodium contributors\n" +
+        "Copyright (c) 2018-present Peter Squicciarini\n" +
+        "Copyright (c) 2015-present Microsoft Corporation",
+    ),
+  }),
+  normalizeEntry("wezterm-icon", {
+    licenses: "MIT",
+    repository: "https://github.com/wezterm/wezterm",
+    publisher: "Wez Furlong",
+    licenseText: mit("Copyright (c) 2018-Present Wez Furlong"),
+  }),
+  normalizeEntry("yazi-logo", {
+    licenses: "MIT",
+    repository: "https://github.com/sxyazi/yazi",
+    publisher: "sxyazi",
+    licenseText: mit("Copyright (c) 2023 - sxyazi"),
+  }),
 ];
 
 function isMissingLicense(entry: LicenseEntry): boolean {
@@ -513,7 +607,7 @@ function renderText(entries: LicenseEntry[]): string {
   const body = entries.flatMap((entry) => {
     const lines = [
       "--------------------------------------------------------------------------------",
-      `${entry.name}@${entry.version}`,
+      entry.version === "" ? entry.name : `${entry.name}@${entry.version}`,
       `License: ${entry.licenses}`,
     ];
 
