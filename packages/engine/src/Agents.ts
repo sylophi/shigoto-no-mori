@@ -51,15 +51,18 @@ import {
 } from "./agentSessions.ts";
 import { canonicalPath } from "./canonicalPath.ts";
 import { envVar } from "./environment.ts";
+import { programFile } from "./executables.ts";
 import { installedVersionOf, linuxInstall } from "./linuxInstall.ts";
 import * as Launchers from "./Launchers.ts";
 import * as Open from "./Open.ts";
 import * as Paths from "./Paths.ts";
+import { byFamily } from "./platform.ts";
 import { errnoText, isNotFound } from "./platformErrors.ts";
 import * as Registry from "./Registry.ts";
 import * as Shells from "./Shells.ts";
 import * as Worktrees from "./Worktrees.ts";
 import { isDirectory } from "./entries.ts";
+import { windowsCliBinDir } from "./windowsInstall.ts";
 
 // A session as its harness and id name it.
 export type SessionRef = {
@@ -242,16 +245,28 @@ const make = (binary: string) =>
     // By its real path, so the app (its bundled copy) and a terminal
     // (through the linked command) write the same entry and agree on
     // whether it is current. One not built yet (a dev run) keeps the
-    // path given. A Linux install's goes through `current`, which an
-    // update moves on, where its version's folder is pruned.
+    // path given. An install's version folder is pruned by updates, so
+    // a Linux install's goes through `current`, which an update moves
+    // on, and a Windows install's through the CLI's launcher, which runs
+    // the newest version, while the CLI is on PATH.
     const realBinary = yield* fs
       .realPath(binary)
       .pipe(Effect.orElseSucceed(() => binary));
     const linux = linuxInstall(paths.flavor, paths);
+    const launcher = path.join(
+      windowsCliBinDir(path.dirname(realBinary)),
+      programFile(binaryName),
+    );
+    const launched = yield* byFamily({
+      posix: Effect.succeed(false),
+      windows: fs.exists(launcher).pipe(Effect.orElseSucceed(() => false)),
+    });
     const sm =
-      installedVersionOf(linux, realBinary) === undefined
-        ? realBinary
-        : path.join(linux.current, binaryName);
+      installedVersionOf(linux, realBinary) !== undefined
+        ? path.join(linux.current, binaryName)
+        : launched
+          ? launcher
+          : realBinary;
     // The provider the engine was built with, not the caller's: a fiber
     // with none set reads a copy of the environment taken once.
     const configProvider = yield* ConfigProvider.ConfigProvider;

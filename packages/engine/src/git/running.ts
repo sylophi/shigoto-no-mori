@@ -20,7 +20,7 @@ import {
   DEFAULT_MAX_OUTPUT,
   GitCommandError,
   GitOutputTooLargeError,
-  PATHSPEC_CHUNK,
+  pathspecChunks,
   type RunOptions,
   SLOTTED_SUBCOMMANDS,
   SPAWN_SLOTS,
@@ -398,7 +398,7 @@ export const makeRunning = Effect.gen(function* () {
     paths: readonly string[],
     options?: RunOptions,
   ) =>
-    Effect.forEach(Arr.chunksOf(paths, PATHSPEC_CHUNK), (chunk) =>
+    Effect.forEach(pathspecChunks(paths), (chunk) =>
       run(worktree, ["--literal-pathspecs", ...args, "--", ...chunk], options),
     );
 

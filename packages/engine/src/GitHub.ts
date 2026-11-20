@@ -28,6 +28,7 @@ import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { elapsedMillis } from "./elapsed.ts";
 import { envVar } from "./environment.ts";
+import { byFamily } from "./platform.ts";
 import { ghHostFor, ghKnownHosts } from "./ghHost.ts";
 import * as Git from "./Git.ts";
 import * as GoJson from "./goJson.ts";
@@ -480,11 +481,17 @@ const make = Effect.gen(function* () {
   const paths = yield* Paths.Paths;
 
   // gh's own precedence for its hosts.yml: GH_CONFIG_DIR, then the XDG
-  // config directory. Missing for most users and on a fresh install.
+  // config directory, which on Windows only counts when set. Missing
+  // for most users and on a fresh install.
   const knownHosts = Effect.gen(function* () {
     const dir = yield* envVar("GH_CONFIG_DIR");
+    const xdg = yield* envVar("XDG_CONFIG_HOME");
     const file = path.join(
-      dir !== "" ? dir : path.join(paths.configHome, "gh"),
+      dir !== ""
+        ? dir
+        : byFamily({ posix: false, windows: xdg === "" })
+          ? path.join(paths.appData, "GitHub CLI")
+          : path.join(paths.configHome, "gh"),
       "hosts.yml",
     );
     return ghKnownHosts(

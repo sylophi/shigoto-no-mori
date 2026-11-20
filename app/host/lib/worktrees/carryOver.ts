@@ -20,7 +20,6 @@ import type {
 } from "@shigomori/contracts/schemas";
 import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync";
 import * as Git from "@shigomori/engine/Git";
-import * as Arr from "effect/Array";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -207,7 +206,7 @@ const ruleIgnoredFolders = (worktreePath: string, folders: readonly string[]) =>
   Effect.map(
     Effect.flatMap(Git.Git, (git) =>
       Effect.forEach(
-        Arr.chunksOf(folders, Git.PATHSPEC_CHUNK),
+        Git.pathspecChunks(folders),
         (chunk) =>
           git.runLenient(worktreePath, [
             "-c",
