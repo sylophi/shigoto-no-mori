@@ -182,13 +182,14 @@ export const makeStash = ({
           // Every worktree shares the one stash list, and a push or a
           // drop in another moves a stash's place: it is applied by its
           // commit once it is known to be listed still, and the drop
-          // finds its place again.
+          // finds its place again. `^0` names the same commit, since git
+          // reads a hash of only digits as a place, stash@{n}.
           yield* refOf(worktree, hash);
           yield* run(worktree, [
             "stash",
             "apply",
             "--end-of-options",
-            hash,
+            `${hash}^0`,
           ]).pipe(
             Effect.catch((error) =>
               Effect.gen(function* () {

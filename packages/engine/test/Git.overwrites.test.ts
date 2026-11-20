@@ -78,7 +78,10 @@ esac
 exec "${real}/git" "$@"`,
   );
 
-  await withGit((git) => git.applyStash({ worktree: repo, hash, drop: true }));
+  const popped = await withGit((git) =>
+    git.applyStash({ worktree: repo, hash, drop: true }),
+  );
+  assert.equal(popped, undefined, JSON.stringify(popped));
   assert.equal(readFileSync(join(repo, "a.txt"), "utf8"), "asked for\n");
   assert.equal(readFileSync(join(repo, "b.txt"), "utf8"), "b\n");
   assert.equal(box.git(repo, "stash", "list").trim().split("\n").length, 1);
