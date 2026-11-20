@@ -1,6 +1,7 @@
 // Files git would replace or delete without a word: a hard reset keeps
-// them in its snapshot, a fast-forward leaves them where they are, and
-// a pop takes the stash it was asked for.
+// them in its snapshot, a fast-forward leaves them where they are, a
+// pop takes the stash it was asked for, and a sync leaves another
+// program's merge be.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "../src/canonicalPath.ts";
@@ -81,4 +82,44 @@ exec "${real}/git" "$@"`,
   assert.equal(readFileSync(join(repo, "a.txt"), "utf8"), "asked for\n");
   assert.equal(readFileSync(join(repo, "b.txt"), "utf8"), "b\n");
   assert.equal(box.git(repo, "stash", "list").trim().split("\n").length, 1);
+});
+
+// Another program merges, stops on a conflict and starts resolving it
+// while the sync fetches.
+it("a sync leaves alone a merge another program stopped in during its fetch", async () => {
+  const upstream = box.repo("upstream", { "a.txt": "a\n" });
+  const clone = join(dirname(upstream), "clone");
+  box.git(upstream, "clone", "-q", upstream, clone);
+  box.git(clone, "checkout", "-q", "-b", "side");
+  writeFileSync(join(clone, "a.txt"), "side\n");
+  box.git(clone, "commit", "-q", "-am", "side");
+  box.git(clone, "checkout", "-q", "main");
+  writeFileSync(join(clone, "a.txt"), "main\n");
+  box.git(clone, "commit", "-q", "-am", "main");
+  const real = box.git(clone, "--exec-path").trim();
+  const once = join(dirname(clone), "merged");
+  box.fakeBin(
+    "git",
+    `case "$*" in *fetch*)
+  "${real}/git" "$@"; fetched=$?
+  if [ ! -e "${once}" ]; then
+    : > "${once}"
+    "${real}/git" -C "${clone}" merge -q side >/dev/null 2>&1
+    echo resolved > "${clone}/a.txt"
+  fi
+  exit $fetched;;
+esac
+exec "${real}/git" "$@"`,
+  );
+
+  const synced = (await withGit((git) =>
+    git.syncWithPrimary({
+      worktree: clone,
+      repo: clone,
+      primaryRef: "origin/main",
+    }),
+  )) as { ok?: boolean } | undefined;
+  assert.equal(synced?.ok, false, JSON.stringify(synced));
+  assert.ok(existsSync(join(clone, ".git", "MERGE_HEAD")));
+  assert.equal(readFileSync(join(clone, "a.txt"), "utf8"), "resolved\n");
 });
