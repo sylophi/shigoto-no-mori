@@ -47,7 +47,7 @@ import type {
 import { type Flavor, flavorNames, isFlavor } from "@shigomori/engine/flavor";
 import { answerWithin } from "@shigomori/engine/liveness";
 import * as Paths from "@shigomori/engine/Paths";
-import { byHostKind } from "@shigomori/engine/platform";
+import { byFamily, byHostKind } from "@shigomori/engine/platform";
 import { pidAlive } from "@shigomori/engine/processes";
 import * as Registry from "@shigomori/engine/Registry";
 import {
@@ -81,7 +81,10 @@ class AppNotRunning extends Schema.TaggedError<AppNotRunning>()(
       app: `The Shigoto no Mori app isn't running, and it is what reaches your other devices. ${
         this.flavor === "dev"
           ? "Start it with `pnpm dev` in a checkout, sign in, and try again."
-          : `Open it (${bin} app), sign in, and try again.`
+          : byFamily({
+              posix: `Open it (${bin} app), sign in, and try again.`,
+              windows: "Open it from the Start menu, sign in, and try again.",
+            })
       }`,
       headless: `This machine's host isn't running, and it is what reaches your other devices. ${
         this.flavor === "dev"

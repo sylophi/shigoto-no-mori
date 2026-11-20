@@ -4,8 +4,9 @@ description: "Move or mirror a Shigoto no Mori (sm) worktree between the user's 
 ---
 
 The app must be open and signed in on both machines. If a command says
-it isn't running, open it with `sm app` (on a Linux machine, where it
-runs with no window, `sm service start`) and retry once `sm devices`
+it isn't running, open it with `sm app` (on Windows, ask the user to
+open it from the Start menu; on a Linux machine, where it runs with no
+window, `sm service start`) and retry once `sm devices`
 shows the other machine as ready, or as connected when run outside a
 project. A Linux machine signs in with `sm login`, which prints a link
 and a code: pass both on, since it waits for the user to approve them.
