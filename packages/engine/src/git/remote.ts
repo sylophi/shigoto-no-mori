@@ -27,7 +27,7 @@ export const makeRemote = ({
   readonly merging: MergingArea;
 }) =>
   Effect.gen(function* () {
-    const { run } = running;
+    const { run, withIndexLock } = running;
     // A sync is cancelled by interrupting it, which ends the git under
     // way. The network steps can end anywhere, but a merge, a rebase or
     // a reset ended partway leaves the working tree half changed, so
@@ -95,51 +95,63 @@ export const makeRemote = ({
     // A rebase for linear history where that is safe (rebaseIsSafe), and
     // a whole-tree merge otherwise or on a per-commit conflict. Each
     // merge passes `--ff`, git's own default, over a `merge.ff` setting
-    // that would refuse it. Its callers refuse an operation already under
-    // way first, before their fetch. A merge that conflicts fails with
-    // SyncConflictsError, which the page offers the merge kept on its
-    // conflicts for. Neither command takes a trailing `--`, which it
+    // that would refuse it. An operation already under way is refused
+    // here, after the callers' fetch, so a stop left by another program
+    // meanwhile isn't undone as this one's. A merge that conflicts fails
+    // with SyncConflictsError, which the page offers the merge kept on
+    // its conflicts for. Neither command takes a trailing `--`, which it
     // would read as a second revision.
     const rebaseOrMerge = (worktree: string, ref: string) =>
-      Effect.gen(function* () {
-        if (yield* rebaseIsSafe(worktree, ref)) {
-          const rebased = yield* run(worktree, [
-            "rebase",
-            "--end-of-options",
-            ref,
-          ]).pipe(
-            Effect.as(true),
-            Effect.catch(() =>
-              operation.undoStopped(worktree, "rebase").pipe(Effect.as(false)),
-            ),
-          );
-          if (rebased) return;
-        }
-        yield* run(worktree, ["merge", "--ff", "--end-of-options", ref]).pipe(
-          Effect.catch((error) =>
-            Effect.gen(function* () {
-              // Git reports conflicts on stdout, so the files say it.
-              const conflicted =
-                (yield* operation.conflictedPaths(worktree)).length > 0;
-              yield* operation.undoStopped(worktree, "merge");
-              return yield* conflicted
-                ? Effect.fail(new SyncConflictsError({ ref }))
-                : Effect.fail(error);
-            }),
-          ),
-        );
-      });
+      withIndexLock(
+        worktree,
+        Effect.uninterruptible(
+          Effect.gen(function* () {
+            const safe = yield* rebaseIsSafe(worktree, ref);
+            yield* operation.refuseMidOperation(worktree);
+            if (safe) {
+              const rebased = yield* run(worktree, [
+                "rebase",
+                "--end-of-options",
+                ref,
+              ]).pipe(
+                Effect.as(true),
+                Effect.catch(() =>
+                  operation
+                    .undoStopped(worktree, "rebase")
+                    .pipe(Effect.as(false)),
+                ),
+              );
+              if (rebased) return;
+            }
+            yield* run(worktree, [
+              "merge",
+              "--ff",
+              "--end-of-options",
+              ref,
+            ]).pipe(
+              Effect.catch((error) =>
+                Effect.gen(function* () {
+                  // Git reports conflicts on stdout, so the files say it.
+                  const conflicted =
+                    (yield* operation.conflictedPaths(worktree)).length > 0;
+                  yield* operation.undoStopped(worktree, "merge");
+                  return yield* conflicted
+                    ? Effect.fail(new SyncConflictsError({ ref }))
+                    : Effect.fail(error);
+                }),
+              ),
+            );
+          }),
+        ),
+      );
 
     // The diverged-but-mergeable resolution: fetch, rebase or merge onto
     // the upstream, push. The merge-tree probe that offers this already
     // found the whole-tree merge clean.
     const pullRebaseOrMergeAndPush = Effect.fn("Git.pullRebaseOrMergeAndPush")(
       function* (worktree: string) {
-        yield* operation.refuseMidOperation(worktree);
         yield* run(worktree, ["fetch"]);
-        yield* Effect.uninterruptible(
-          rebaseOrMerge(worktree, yield* upstreamRef(worktree)),
-        );
+        yield* rebaseOrMerge(worktree, yield* upstreamRef(worktree));
         yield* run(worktree, ["push"]);
       },
     );
@@ -153,11 +165,8 @@ export const makeRemote = ({
       readonly repo: string;
       readonly primaryRef: string;
     }) {
-      yield* operation.refuseMidOperation(input.worktree);
       yield* fetchAll(input.repo);
-      yield* Effect.uninterruptible(
-        rebaseOrMerge(input.worktree, input.primaryRef),
-      );
+      yield* rebaseOrMerge(input.worktree, input.primaryRef);
     });
 
     // The ways on from a sync that conflicts, from the upstream or from

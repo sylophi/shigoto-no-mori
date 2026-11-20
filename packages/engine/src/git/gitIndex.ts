@@ -203,6 +203,21 @@ export const makeGitIndex = ({
       return yield* withIndexLock(
         worktree,
         Effect.gen(function* () {
+          // `clean` walks past a nested repository, so the discard would
+          // stop after the rest had gone. Git lists one as its folder.
+          const nested = (yield* runChunked(
+            worktree,
+            ["ls-files", "-z", "--others", "--exclude-standard"],
+            paths,
+          ))
+            .flatMap(splitZ)
+            .filter((p) => p.endsWith("/"));
+          if (nested.length > 0) {
+            return yield* new NestedRepositoryError({
+              paths: nested.slice(0, SHOWN),
+              count: nested.length,
+            });
+          }
           // Without its snapshot the discard is off: that would be the
           // only copy of the work.
           const snapshot = yield* snapshotPaths(worktree, paths);
@@ -224,21 +239,9 @@ export const makeGitIndex = ({
               ["restore", "--worktree"],
               [...tracked],
             );
-          if (untracked.length > 0) {
-            // -d: an untracked path can be the last file in a new folder.
+          // -d: an untracked path can be the last file in a new folder.
+          if (untracked.length > 0)
             yield* runChunked(worktree, ["clean", "-fdq"], untracked);
-            const left = (yield* runChunked(
-              worktree,
-              ["ls-files", "-z", "--others", "--exclude-standard"],
-              untracked,
-            )).flatMap(splitZ);
-            if (left.length > 0) {
-              return yield* new NestedRepositoryError({
-                paths: left.slice(0, SHOWN),
-                count: left.length,
-              });
-            }
-          }
           return snapshot;
         }),
       );

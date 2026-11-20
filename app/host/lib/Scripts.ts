@@ -102,6 +102,8 @@ export class Scripts extends Context.Service<
       worktreeIds: readonly string[],
       kind: MarkKind,
     ) => Effect.Effect<void, never, Scope.Scope>;
+    // The worktrees being removed or moved.
+    readonly deleteIds: () => ReadonlySet<string>;
     readonly removingProject: <A, E, R>(
       projectId: string,
       effect: Effect.Effect<A, E, R>,
@@ -142,6 +144,7 @@ const make = (options: Options) =>
       markCreate: marks.markCreate,
       clearCreate: marks.clearCreate,
       deleting: marks.deleting,
+      deleteIds: marks.deleteIds,
       removingProject: marks.removingProject,
       refuseNew: marks.refuseNew,
       ...removing,
