@@ -151,7 +151,7 @@ export const MirrorIgnoresSchema = Schema.Array(
 // all behind.
 export function pullBringsIgnoredFiles(
   mode: MirrorIgnoreMode | undefined,
-): boolean {
+): mode is Exclude<MirrorIgnoreMode, "gitignored"> {
   return mode !== undefined && mode !== "gitignored";
 }
 
@@ -500,6 +500,14 @@ export const syncContract = defineContract(
     "ignoredPaths",
     SyncIgnoredPathsPayloadSchema,
     SyncIgnoredPathsResultSchema,
+    gatedBy("browseFiles"),
+  ),
+  // Every topmost ignored path, which a move's files step carries
+  // alone.
+  invoke(
+    "allIgnoredPaths",
+    SyncIgnoredPathsPayloadSchema,
+    Schema.Array(Schema.String),
     gatedBy("browseFiles"),
   ),
   // Discloses whether a path is there, as fs:listDirectory does.
