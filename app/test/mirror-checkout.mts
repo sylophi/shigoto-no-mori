@@ -58,7 +58,7 @@ import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { mirrorHandlers } from "@host/ipc/modules/mirror";
-import { clearStaleSizes } from "@host/mirror/checkout";
+import { resetStaleSizes } from "@host/mirror/checkout";
 import * as Git from "@shigomori/engine/Git";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
@@ -476,7 +476,7 @@ it("files whose bytes the other side's checkout wrote with the same content read
   await runHost(
     Effect.gen(function* () {
       const real = yield* Git.Git;
-      yield* clearStaleSizes(side).pipe(
+      yield* resetStaleSizes(side).pipe(
         Effect.provideService(Git.Git, {
           ...real,
           run: (cwd, args, options) =>

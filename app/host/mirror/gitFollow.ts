@@ -4,7 +4,7 @@
 // a checkout or a reset on either machine shows up on the other within
 // a moment. The file-sync engine owns the files. This owns HEAD, the
 // tip and the staged tree, and after each sync cycle the sizes both
-// indexes recorded (checkout.ts's clearStaleSizes).
+// indexes recorded (checkout.ts's resetStaleSizes).
 //
 // Which way git follows is followPlan.ts's to decide, and the
 // transfers are followTransfer.ts's.
@@ -75,7 +75,7 @@ import {
 } from "./followPlan";
 import { chooseDirection, pull, push } from "./followTransfer";
 import type * as ScratchIndex from "./ScratchIndex";
-import { clearStaleSizes } from "./checkout";
+import { resetStaleSizes } from "./checkout";
 import {
   type GitState,
   type GitStateCore,
@@ -105,7 +105,7 @@ type FollowRecord = {
   // files to settle. The next idle snapshot re-triggers it.
   waitingForFiles: boolean;
   // The engine's cycle count as the last idle snapshot had it, and
-  // whether both sides' index sizes are due a check (clearSizes).
+  // whether both sides' index sizes are due a check (resetSizes).
   cycles: number;
   sizesDue: boolean;
 };
@@ -530,20 +530,21 @@ function makeFollower(
     });
 
   // A cycle may have written the other side's bytes over a side's
-  // files with the same content (checkout.ts's clearStaleSizes), so
-  // once git agrees both sides' indexes are checked.
+  // files with the same content (checkout.ts's resetStaleSizes), so
+  // once git agrees both sides' indexes are checked. A peer on a build
+  // without the call answers that it has none, and only this side is.
   const unchecked = (cause: Cause.Cause<unknown>) =>
     Effect.sync(() =>
       warn(
         `[mirror] the index sizes went unchecked: ${messageOf(Cause.squash(cause))}`,
       ),
     );
-  const clearSizes = (session: FollowableSession) =>
+  const resetSizes = (session: FollowableSession) =>
     Effect.all(
       [
-        Effect.catchCause(clearStaleSizes(session.localRoot), unchecked),
+        Effect.catchCause(resetStaleSizes(session.localRoot), unchecked),
         Effect.catchCause(
-          peerMirrorFor(session.deviceId).clearStaleSizes({
+          peerMirrorFor(session.deviceId).resetStaleSizes({
             projectId: session.projectId,
             worktreeId: session.worktreeId,
           }),
@@ -575,9 +576,10 @@ function makeFollower(
         do {
           record.pending = false;
           yield* reconcile(record);
+          // Apart from the loop, which a stop's check waits on.
           if (record.sizesDue && record.status.status === "synced") {
             record.sizesDue = false;
-            yield* clearSizes(record.session);
+            yield* fork(resetSizes(record.session));
           }
         } while (
           record.pending &&

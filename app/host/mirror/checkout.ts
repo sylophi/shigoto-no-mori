@@ -4,7 +4,7 @@
 // (host/lib/sync/landing.ts) refuses the links its device can't make
 // and gives the copy's worktree what its repo wouldn't give it alone.
 // Once the other side's files are over a side's, its index is told
-// their sizes (clearStaleSizes).
+// their sizes (resetStaleSizes).
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -130,33 +130,36 @@ export const copyCheckoutConfig = Effect.fnUntraced(function* (
 // entry back as it was, the same blob without its stat, and the
 // refresh then records the file's stat only where its content is that
 // blob: a file edited since `git diff` looked reads modified, and
-// nothing is staged. A submodule is never one, and `git diff` may be
+// nothing is staged. The blob is read just before it is written back,
+// so a stage made in a terminal meanwhile is kept, and a path git
+// printed in bytes that aren't UTF-8 is left alone, since it would come
+// back as another path. A submodule is never one, and `git diff` may be
 // told to hide it. Under the index lock, so a git follow's apply
 // (gitState.ts) never lands between the read and the write.
-export const clearStaleSizes = Effect.fnUntraced(function* (
+export const resetStaleSizes = Effect.fnUntraced(function* (
   worktreePath: string,
 ) {
   const git = yield* Git.Git;
   yield* git.withIndexLock(
     worktreePath,
     Effect.gen(function* () {
-      const byStat = yield* git.run(worktreePath, [
-        "diff-files",
-        "--ignore-submodules",
-        "-z",
-      ]);
-      if (byStat === "") return;
       const changed = new Set(
         splitZ(yield* git.run(worktreePath, ["diff", "--name-only", "-z"])),
       );
-      const parts = splitZ(byStat);
+      const parts = splitZ(
+        yield* git.run(worktreePath, [
+          "diff-files",
+          "--ignore-submodules",
+          "-z",
+        ]),
+      );
       let entries = "";
       // ":<index mode> <file mode> <index blob> <file blob> <status>",
       // then the path.
       for (let i = 0; i < parts.length; i += 2) {
         const [mode, , blob, , status] = (parts[i] ?? "").slice(1).split(" ");
         const file = parts[i + 1] ?? "";
-        if (status === "M" && !changed.has(file)) {
+        if (status === "M" && !changed.has(file) && !file.includes("\uFFFD")) {
           entries += `${mode} ${blob}\t${file}\0`;
         }
       }

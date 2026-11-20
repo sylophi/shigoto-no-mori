@@ -165,7 +165,7 @@ export const startMirrorTo = (
           // The copy's files are right either way: without this some of
           // them only read changed, which is no reason to fail the start.
           yield* peerMirrorFor(input.targetDeviceId)
-            .clearStaleSizes({ projectId: copy.projectId, worktreeId: copy.id })
+            .resetStaleSizes({ projectId: copy.projectId, worktreeId: copy.id })
             .pipe(
               Effect.catchCause((cause) =>
                 Effect.logWarning(

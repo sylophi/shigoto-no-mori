@@ -265,7 +265,7 @@ beforeAll(async () => {
     openStream: mirrorHandlers.openStream,
     gitState: onListener(mirrorHandlers.gitState),
     applyGitState: onListener(mirrorHandlers.applyGitState),
-    clearStaleSizes: onListener(mirrorHandlers.clearStaleSizes),
+    resetStaleSizes: onListener(mirrorHandlers.resetStaleSizes),
   };
   const { listener, toListener } = await bootDirectWire(track, {
     contracts: [

@@ -718,10 +718,10 @@ export const mirrorContract = defineContract(
     MirrorApplyGitStateResultSchema,
     gatedBy("changeCode"),
   ),
-  // The copy's index told the sizes of the original's files written
-  // over its checkout's (host/mirror/checkout.ts).
+  // A side's index told the sizes of the other side's files written
+  // over its own (host/mirror/checkout.ts).
   invoke(
-    "clearStaleSizes",
+    "resetStaleSizes",
     MirrorWorktreePayloadSchema,
     VoidSchema,
     gatedBy("changeCode"),
