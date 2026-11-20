@@ -140,8 +140,9 @@ export function isOurCommand(
     }
   }
   rest = rest.trim().replace(/ \|\| true$/, "");
+  // On Windows the binary is sm.exe.
   return (
-    basename(bin) === binaryName &&
+    basename(bin, ".exe") === binaryName &&
     rest === `agents event --harness ${harness.id}`
   );
 }
