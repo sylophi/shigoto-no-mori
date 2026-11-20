@@ -17,8 +17,9 @@ EOF_DESC
 ```
 
 Write them like a PR's title and body: short, what and why, and what's
-left to do. Run it again whenever they stop being true. Once there's a
-PR, it edits the PR's title and body.
+left to do. Run it again whenever they stop being true. Once the branch
+has an open PR, the PR's title and body take over and describe refuses
+to change them.
 
 ## Agent sessions
 
