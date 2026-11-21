@@ -1027,12 +1027,14 @@ it("a move's files step that carries a repository nested in an ignored folder do
     rmSync(join(dialerRoot, "vendor"), { recursive: true, force: true });
     rmSync(join(dialerRoot, "build.log"), { force: true });
 
-    assert.deepEqual(await carry("custom", ["/vendor"]), {
+    writeFileSync(join(listenerWorktree, "vendor", "other.txt"), "other\n");
+    assert.deepEqual(await carry("custom", ["/vendor/tool"]), {
       crossed: true,
       conflicts: 0,
     });
     assert.equal(read(join(dialerRoot, "build.log")), "log\n");
-    assert.equal(existsSync(join(dialerRoot, "vendor")), false);
+    assert.equal(read(join(dialerRoot, "vendor", "other.txt")), "other\n");
+    assert.equal(existsSync(join(dialerRoot, "vendor", "tool")), false);
   } finally {
     for (const root of [listenerWorktree, dialerRoot]) {
       rmSync(join(root, "vendor"), { recursive: true, force: true });

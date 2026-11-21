@@ -172,15 +172,13 @@ export const carryIgnoredOnce = <R>(
     // Any other rule's ignores are the paths it leaves out, kept last
     // too for one inside a folder git lists whole.
     const leftOut = ignores.map(unanchorIgnoredPath);
+    const isLeftOut = (path: string) =>
+      ignoreMode !== "bring" &&
+      leftOut.some((left) => isSameOrInside(path, left));
     const paths =
       ignoreMode === "bring"
         ? broughtPaths(ignores)
-        : (yield* ignoredPaths).filter((path) => {
-            const bare = path.replace(/\/+$/, "");
-            return !leftOut.some(
-              (left) => bare === left || bare.startsWith(`${left}/`),
-            );
-          });
+        : (yield* ignoredPaths).filter((path) => !isLeftOut(path));
     const carry = onlyIgnores(paths);
     const left = paths.filter(
       (path) => !carry.includes(`!${anchorIgnoredPath(path)}/**`),
@@ -199,12 +197,21 @@ export const carryIgnoredOnce = <R>(
         files.conflicts,
       );
     }
-    const repos = (yield* ignoredRepos)
-      .filter((repo) => paths.some((path) => isSameOrInside(repo, path)))
-      .map(trimTrailingSlashes);
+    const repos =
+      paths.length === 0
+        ? []
+        : (yield* ignoredRepos)
+            .filter(
+              (repo) =>
+                paths.some((path) => isSameOrInside(repo, path)) &&
+                !isLeftOut(repo),
+            )
+            .map(trimTrailingSlashes);
     if (repos.length > 0) {
+      const named = repos.slice(0, 3);
+      const more = repos.length - named.length;
       return failed(
-        `the git history of ${listed(repos)} isn't copied`,
+        `the git history of ${listed(more > 0 ? [...named, `${more} more`] : named)} isn't copied`,
         files.conflicts,
       );
     }
