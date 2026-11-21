@@ -20,6 +20,7 @@ import { makeHubHandlers, type HubHandlers } from "@shared/hub/bridgeHandlers";
 import * as DirectKeeper from "@shared/hub/directKeeper";
 import { type DialedDevice, peerLink } from "@shared/remote/deviceLink";
 import { decodeWelcome, encodeHello } from "@shared/remote/greeting";
+import { log } from "@shared/log";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -199,13 +200,30 @@ export const make = (
         ),
         Effect.forkScoped,
       );
+    // The hub socket's and the roster's transitions, which Colibrii
+    // keeps to itself, go in the log.
     yield* follow(deps.device.account, (account) => {
-      socket = socketOf(account);
+      const next = socketOf(account);
+      if (next.phase !== socket.phase) {
+        if (next.phase === "blocked") {
+          log.warn(`[hub] socket blocked (${next.reason}): ${next.message}`);
+        } else {
+          log.info(`[hub] socket ${next.phase}`);
+        }
+      }
+      socket = next;
     });
     // The peers to keep a session with. Colibrii closes the links of a
     // peer that left.
     yield* follow(deps.device.roster, (peers) => {
-      online = peers.map((peer) => peer.deviceId);
+      const next = peers.map((peer) => peer.deviceId);
+      for (const id of next) {
+        if (!online.includes(id)) log.info(`[hub] ${id} came online`);
+      }
+      for (const id of online) {
+        if (!next.includes(id)) log.info(`[hub] ${id} went offline`);
+      }
+      online = next;
       keeper.reconcile(online);
     });
     if (deps.tunnel !== undefined) {

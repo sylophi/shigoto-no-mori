@@ -29,6 +29,7 @@ import {
   NoDirectConnectionError,
 } from "@shigomori/contracts/errors";
 import { RemoteDisconnectedError } from "@shared/remote/rpcTransport";
+import { log } from "@shared/log";
 
 type DirectPeerFacts = Pick<
   HubStatus,
@@ -227,7 +228,10 @@ function hubHandlers(
     // and after the delete, so its redial finds an empty slot.
     if (entry.version !== null) {
       deps.onDirectChange();
-      if (selfClosed) deps.onPeerDropped(deviceId);
+      if (selfClosed) {
+        log.info(`[peers] session to ${deviceId} closed`);
+        deps.onPeerDropped(deviceId);
+      }
     }
   }
 
