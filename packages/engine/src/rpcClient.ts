@@ -23,14 +23,13 @@ export type FlatClient = (
 ) => Effect.Effect<unknown, unknown> | Stream.Stream<unknown, unknown>;
 
 // The protocol over `socket`, which never gives the link up on its
-// pings: Effect's pinger condemns a link on the age of the last frame
-// before it sends, on the wall clock, so a sleep, a stopped process or
-// an idle hour would cut links both ends still serve (EFFECT.md,
-// section 8). A link to another machine is judged by watchLiveness
-// (liveness.ts), one to this machine's own app by nothing here. Pings
-// still go every `pingInterval`, for a far end that times a quiet link
-// out. One socket, no redial: a dropped link is its owner's to dial
-// again.
+// pings: Effect's pinger condemns a link with a ping out on the age of
+// its last frame, on the wall clock, so a sleep or a stopped process
+// would cut links both ends still serve (EFFECT.md, section 8). A link
+// to another machine is judged by watchLiveness (liveness.ts), one to
+// this machine's own app by nothing here. Pings still go every
+// `pingInterval`, for a far end that times a quiet link out. One
+// socket, no redial: a dropped link is its owner's to dial again.
 export const quietProtocol = (
   socket: Socket.Socket,
   options: {

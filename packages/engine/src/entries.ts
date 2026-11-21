@@ -1,7 +1,7 @@
 // Whole folder entries: whether one is there, whether it is a folder,
 // copying a tree as `cp` does, linking a folder and removing an empty
-// one. The calls Effect's FileSystem lacks (rmdir, a link's type, lstat)
-// are Node's, as in executables.ts.
+// one. The calls Effect's FileSystem lacks (rmdir, a link's type) are
+// Node's, as in executables.ts.
 import { rmdir, symlink } from "node:fs/promises";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";

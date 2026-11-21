@@ -9,7 +9,7 @@
 // two switches a link keeps current (account's command access,
 // sharing) are at the core's version: a session reads what its peer
 // allows from their pushes, whatever else the two disagree on.
-export const CORE_VERSION = 21;
+export const CORE_VERSION = 22;
 
 // A mirror runs on sync's calls (its follower takes the bundles sync
 // receives), so the two change as one.

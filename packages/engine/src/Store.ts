@@ -220,8 +220,9 @@ const owesImport = (dataDir: string) =>
     return imported === undefined;
   });
 
-// A store that failed to open: an import that refused a file comes back
-// out as its own error, and anything else as a store that can't open.
+// A store that failed to open. The migrator wraps a migration's failure
+// in its own error: an import that refused a file comes back out as
+// itself, and anything else as a store that can't open.
 const openFailure = (path: string) => (cause: unknown) =>
   cause instanceof Migrator.MigrationError &&
   cause.cause instanceof StoreImportError

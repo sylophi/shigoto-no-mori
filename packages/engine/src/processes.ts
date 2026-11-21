@@ -72,9 +72,9 @@ const windowsSpawner = Effect.fnUntraced(function* (
       if (!ChildProcess.isStandardCommand(command)) {
         return yield* inner.spawn(command);
       }
-      const path = command.options.env?.["PATH"];
-      const searched =
-        path === undefined ? (process.env["PATH"] ?? "") : wordText(path);
+      const searched = wordText(
+        command.options.env?.["PATH"] ?? process.env["PATH"] ?? "",
+      );
       const started = yield* startOnWindows(
         (name) => found.get([searched, name]),
         command.command,

@@ -232,7 +232,7 @@ export const dialDevice = (
     });
     // A frame this end cannot decode (one past LINK_MAX_FRAME_BYTES)
     // leaves the RPC client's parser unable to find the next, so every
-    // later answer fails too while the socket stays up (effect 4.0.2's
+    // later answer fails too while the socket stays up (Effect's
     // makeProtocolSocket). The link drops instead, and is dialed again.
     const protocol = RpcClient.Protocol.of({
       ...socketProtocol,
