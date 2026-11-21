@@ -1,6 +1,7 @@
 // A Colibrii link (@colibrii/sdk) as the socket sm's RPC runs on, at
 // either end: open from the start, each app message one frame, and
-// closed as the link is. The link stays the caller's to close.
+// closed as the link is. The link stays the caller's to close, unless a
+// read or a write fails, which ends it.
 import type { Link } from "@colibrii/sdk";
 import * as Effect from "effect/Effect";
 import * as Queue from "effect/Queue";
@@ -31,13 +32,14 @@ export const linkSocket = (
     const outbound = yield* Queue.unbounded<Uint8Array>();
     yield* Stream.fromQueue(outbound).pipe(
       Stream.runForEach((frame) => link.send(frame)),
-      Effect.ignore,
+      Effect.catchCause(() => link.close),
       Effect.forkScoped,
     );
     yield* link.messages.pipe(
       Stream.runForEach((data) =>
         Effect.sync(() => emit("message", { type: "message", data })),
       ),
+      Effect.catchCause(() => link.close),
       Effect.andThen(link.closed),
       Effect.flatMap(({ code, cause }) =>
         Effect.sync(() => {
