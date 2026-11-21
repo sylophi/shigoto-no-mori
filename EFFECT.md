@@ -8,8 +8,11 @@ modules (the menu, windows, deep links) are plain Electron code, and
 `app/main/README.md` says which of the shell is Effect.
 
 Effect is pinned to one exact version, the latest stable release (the
-workspace catalog), and a bump is a PR of its own. Effect itself is
-never patched. A gap is wrapped on our side. Read Effect's own
+workspace catalog), and a bump is a PR of its own. A gap in Effect is
+wrapped on our side. Effect is patched only for a bug no wrapper can
+reach, because much of what the repo uses is unstable and a patch has
+to be redone against each release. Such a patch names the upstream
+issue or fix, and goes at the bump that carries it. Read Effect's own
 guidance for that version before writing Effect code: `AGENTS.md` in
 the installed package (`node_modules/effect` in any package of the
 workspace, such as `app/node_modules/effect/AGENTS.md`), the `ai-docs/`
