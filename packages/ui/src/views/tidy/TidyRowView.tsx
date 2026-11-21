@@ -69,6 +69,7 @@ export function TidyRowView({
 
   return (
     <label
+      data-tick-drag
       className={cn(
         "group flex items-start gap-3 px-3 py-3 text-sm",
         disabled && "opacity-70",

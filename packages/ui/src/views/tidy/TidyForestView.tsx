@@ -12,6 +12,7 @@ import { TIDY_SORT_OPTIONS, type TidySort } from "./tidyModel.ts";
 import { TidyStatView } from "./TidyStatView.tsx";
 import { pluralize } from "@shigomori/contracts/words";
 import { EmptyPanel } from "../../primitives/empty-panel.tsx";
+import { startTickDrag } from "../../lib/tickDrag.ts";
 
 export function TidyPageView({
   tabs,
@@ -162,7 +163,12 @@ export function TidyBodyView({
                 </div>
               </div>
 
-              <div className="flex flex-col gap-4">{lists}</div>
+              <div
+                onPointerDown={startTickDrag}
+                className="flex flex-col gap-4"
+              >
+                {lists}
+              </div>
 
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs text-muted-foreground">
