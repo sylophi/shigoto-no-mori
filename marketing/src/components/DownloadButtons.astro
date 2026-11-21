@@ -3,6 +3,20 @@ import { LATEST_RELEASE, REPO } from "../site";
 ---
 
 <div class="actions">
-  <a class="button" data-download href={LATEST_RELEASE}>Download for Mac</a>
+  <a class="button" data-for="mac" data-download href={LATEST_RELEASE}
+    >Download for Mac</a
+  >
+  <a class="button" data-for="windows" data-download href={LATEST_RELEASE}
+    >Download for Windows</a
+  >
   <a class="button quiet" href={REPO}>Source on GitHub</a>
 </div>
+<p class="fine" data-for="mac">
+  For Apple Silicon Macs. Signed, notarized, free and open source. Also for
+  <a data-download="windows" href={LATEST_RELEASE}>Windows</a>.
+</p>
+<p class="fine" data-for="windows">
+  For 64-bit Windows. Free and open source. Also for
+  <a data-download="mac" href={LATEST_RELEASE}>Mac</a>.<br />
+  It's unsigned, so Windows warns before it runs: choose More info, then Run anyway.
+</p>

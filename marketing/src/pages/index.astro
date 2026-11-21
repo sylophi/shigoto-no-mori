@@ -6,7 +6,7 @@ import Frame from "../components/Frame.astro";
 import Icon from "../components/Icon.astro";
 import SectionHead from "../components/SectionHead.astro";
 import Page from "../layouts/Page.astro";
-import { WEB_APP } from "../site";
+import { REPO, WEB_APP } from "../site";
 import {
   CreateScene,
   DevicesScene,
@@ -28,7 +28,7 @@ const LAUNCH = [257, 317, 831, 150] as const;
 // the order the legend lists them.
 const PINS = [
   { x: "27.7%", y: "13%", part: "The project" },
-  { x: "50.4%", y: "15.7%", part: "The Mac it lives on, when that's not this one" },
+  { x: "50.4%", y: "15.7%", part: "The machine it lives on, when that's not this one" },
   { x: "88.2%", y: "13%", part: "Last activity" },
   { x: "2%", y: "48.6%", part: "What it's called" },
   { x: "54.9%", y: "85.7%", part: "Files with uncommitted changes" },
@@ -41,16 +41,13 @@ const PINS = [
 <Page>
   <Band color="mint" wall="leaf" kanji="mori" kanjiClass="hero-kanji" class="hero">
     <div class="wrap hero-copy">
-      <h1>A Mac app for managing git worktrees</h1>
+      <h1>A desktop app for managing git worktrees</h1>
       <p class="lede">
         Create a worktree in two clicks, open it in the tools you already use,
-        and see where each branch stands, whether it's on this Mac or another
-        one of yours.
+        and see where each branch stands, whether it's on this machine or
+        another one of yours.
       </p>
       <DownloadButtons />
-      <p class="fine">
-        For Apple Silicon Macs. Signed, notarized, free and open source.
-      </p>
     </div>
     <div class="wrap wide stage">
       <Frame
@@ -242,7 +239,7 @@ const PINS = [
   <Band color="amber" wall="triangle" kanji="kidou">
     <div class="wrap">
       <SectionHead kicker="Launch" title="Opens in the tools you already use" center>
-        Every worktree gets a row of buttons for the apps on your Mac: editors,
+        Every worktree gets a row of buttons for the apps on your machine: editors,
         terminals, Git clients and agent apps. Add your own shell commands too,
         per project or for all of them, like starting an agent CLI in that
         folder.
@@ -257,8 +254,11 @@ const PINS = [
         alt="A worktree's launch row: buttons with app icons for VS Code, Terminal, Ghostty, Finder, ChatGPT, Claude Code, Neovim and lazygit, a Deploy preview command and GitHub, and under them the project's package.json scripts."
       />
       <div class="launch-notes">
-        <div class="keys" role="img" aria-label="Command 1 to Command 9">
+        <div class="keys" data-for="mac" role="img" aria-label="Command 1 to Command 9">
           <kbd>⌘1</kbd><kbd>⌘2</kbd><kbd>⌘3</kbd><span>…</span><kbd>⌘9</kbd>
+        </div>
+        <div class="keys" data-for="windows" role="img" aria-label="Ctrl 1 to Ctrl 9">
+          <kbd>Ctrl+1</kbd><kbd>Ctrl+2</kbd><kbd>Ctrl+3</kbd><span>…</span><kbd>Ctrl+9</kbd>
         </div>
         <p>
           The first nine have shortcuts. Scripts from <code>package.json</code>
@@ -268,14 +268,14 @@ const PINS = [
       <div class="cards two launch-cards">
         <Card icon="square-terminal" chip="mint" title="A terminal in every worktree" row>
           <p>
-            Press Ctrl+` for a shell in the worktree's folder, on this Mac or
+            Press Ctrl+` for a shell in the worktree's folder, on this machine or
             another of yours that allows control, in as many tabs as you like.
             After a quit, each tab comes back with its output.
           </p>
         </Card>
         <Card icon="radio" chip="sky" title="Everything running, on one page" row>
           <p>
-            The Live page lists what's running on each of your Macs, worktree
+            The Live page lists what's running on each of your machines, worktree
             by worktree: agents waiting on you, scripts, terminals, mirrors
             and forwarded ports.
           </p>
@@ -292,10 +292,10 @@ const PINS = [
     <div class="wrap">
       <SectionHead
         kicker="Other machines"
-        title="Worktrees on your other Macs, without the networking"
+        title="Worktrees on your other machines, without the networking"
         center
       >
-        Sign in on each Mac and their worktrees show up in the same list, looking
+        Sign in on each machine and their worktrees show up in the same list, looking
         just like the local ones. Machines connect directly on the same network,
         or through a tunnel when they aren't. There's no VPN, SSH key or router
         setting to deal with.
@@ -345,7 +345,7 @@ const PINS = [
           <p>
             <a href={WEB_APP}>{new URL(WEB_APP).host}</a> shows the same forest
             in any browser, with a layout made for phones. It doesn't hold
-            projects itself. It works through the Macs on your account.
+            projects itself. It works through the machines on your account.
           </p>
         </Card>
         <Card
@@ -459,7 +459,7 @@ const PINS = [
         </Card>
         <Card icon="badge-check" title="Quiet updates" class="tile mint wide">
           <p>
-            Builds are signed and notarized. New versions download in the
+            Mac builds are signed and notarized. New versions download in the
             background and install the next time you restart.
           </p>
         </Card>
@@ -473,10 +473,12 @@ const PINS = [
       <h2>What it doesn't do</h2>
       <dl class="limits">
         <div class="card">
-          <dt>Mac only, Apple Silicon only.</dt>
+          <dt>Apple Silicon Macs and 64-bit Windows only.</dt>
           <dd>
-            There are no Windows, Linux or Intel builds. The web app runs in any
-            browser, but it needs a Mac on your account to work through.
+            There's no Intel Mac build. Linux runs it
+            <a href={`${REPO}#on-linux`}>without a window</a>, as a host your
+            other devices drive. The web app runs in any browser, but it needs
+            one of your machines to work through.
           </dd>
         </div>
         <div class="card">
@@ -495,7 +497,7 @@ const PINS = [
         </div>
         <div class="card">
           <dt>An account only for the multi-machine part.</dt>
-          <dd>Everything on a single Mac works without signing in.</dd>
+          <dd>Everything on a single machine works without signing in.</dd>
         </div>
         <div class="card">
           <dt>Made by one developer.</dt>
@@ -512,7 +514,6 @@ const PINS = [
     <div class="wrap narrow center">
       <img class="closing-icon framed" src="/img/icon.png" alt="" width="96" height="96" />
       <h2>Download Shigoto no Mori</h2>
-      <p class="fine">For Apple Silicon Macs. Free and open source.</p>
       <DownloadButtons />
     </div>
   </Band>

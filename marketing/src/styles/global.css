@@ -611,6 +611,12 @@
     font-size: 0.88rem;
     color: var(--muted-foreground);
   }
+  /* What's for one platform shows for its visitors (platform.js), and
+     without it, the Mac's. */
+  :scope:not([data-platform="windows"]) [data-for="windows"],
+  :scope[data-platform="windows"] [data-for="mac"] {
+    display: none;
+  }
 
   /* --- Shared pieces -------------------------------------------------- */
 
@@ -1145,9 +1151,6 @@
   .closing-icon {
     margin: 0 auto 1.5rem;
     border-radius: 22px;
-  }
-  .closing h2 {
-    margin-bottom: 0.3rem;
   }
 
   /* --- Footer --------------------------------------------------------- */
