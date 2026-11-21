@@ -13,10 +13,8 @@
 // the copy reads as stayed. The delete is forced, since the copy holds
 // the original's uncommitted state by design. The original's delete
 // expects what the copy's device read of it when the two were found in
-// step, so a copy changed since stays. A stop expects the branch and
-// the tip the two agreed on, so a copy committed to since stays, and a
-// forced one a worktree a mirror landed, so one made at the folder the
-// copy was renamed out of stays.
+// step, so a copy changed since stays, and a stop's expects what
+// CopyExpects holds.
 import * as Effect from "effect/Effect";
 import type { DeleteWorktreePayloadSchema } from "@shigomori/contracts/schemas";
 import { messageOf } from "@shigomori/engine/errorDocument";

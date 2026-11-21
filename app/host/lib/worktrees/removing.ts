@@ -87,9 +87,7 @@ const removeWorktree = (
                 ? {}
                 : { cleanupWithin: input.cleanupWithin }),
               ...(input.expect === undefined ? {} : { expect: input.expect }),
-              ...(input.expectHead === undefined
-                ? {}
-                : { expectHead: input.expectHead }),
+              expectHead: input.expectHead,
             },
             reporter,
           )
@@ -256,8 +254,8 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
                 worktreeId,
                 force: input.force,
                 skipCleanup: input.skipCleanup,
-                expect: input.expect,
-                expectHead: input.expectHead,
+                expect,
+                expectHead,
               },
               reporter,
             ).pipe(oneSide ? thisSideOnly : (deleting) => deleting),

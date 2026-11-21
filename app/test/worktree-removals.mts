@@ -84,6 +84,7 @@ import { MirrorLedger } from "../host/mirror/MirrorLedger.ts";
 import * as PeerRemovals from "../host/mirror/peerRemovals.ts";
 import { annotateMirrorSession } from "../host/mirror/plan.ts";
 import { stopMirror } from "../host/mirror/sessions.ts";
+import type { CopyExpects } from "../host/mirror/ledger/ends.ts";
 import { markMirrorMade } from "../host/mirror/gitState.ts";
 import { MIRROR_LABEL_LOCAL_PROJECT } from "../host/mirror/registry.ts";
 import type { HandlerContext } from "../shared/ipc/transport.ts";
@@ -461,6 +462,26 @@ const holding = (worktree: Worktree) => ({
   branchTip: git(worktree.path, "rev-parse", "HEAD").trim(),
 });
 
+// The other device's delete of the worktree, held to `expects`.
+const takeCopy = (project: Project, worktree: Worktree, expects: CopyExpects) =>
+  runHost(
+    Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
+      worktrees.remove(
+        {
+          projectId: project.id,
+          worktreeId: worktree.id,
+          force: true,
+          oneSide: true,
+          ...expects,
+        },
+        () => {},
+      ),
+    ),
+  ).then(
+    () => "removed",
+    () => "refused",
+  );
+
 // A worktree fox mirrored to a peer's copy, in step unless `session`
 // or `copy` say otherwise, against a recording daemon and a peer whose
 // copy holds `copy` (fox's tip by default) and whose copy's delete
@@ -565,12 +586,9 @@ const mirroredFox = async (
                   const { expect, expectHead, mirrorCopy } =
                     decodeDelete(input);
                   deletes.push(
-                    expectHead === undefined && mirrorCopy === undefined
-                      ? expect
-                      : {
-                          ...(expectHead === undefined ? {} : { expectHead }),
-                          ...(mirrorCopy === undefined ? {} : { mirrorCopy }),
-                        },
+                    JSON.parse(
+                      JSON.stringify({ expect, expectHead, mirrorCopy }),
+                    ),
                   );
                   return deleteCopy();
                 },
@@ -607,7 +625,7 @@ it("deleting a mirrored worktree pauses its mirror first, then deletes the copy 
     "terminate",
     "delete copy, fox gone",
   ]);
-  assert.deepEqual(deletes, [held]);
+  assert.deepEqual(deletes, [{ expect: held }]);
   assert.ok(!existsSync(fox.path));
 });
 
@@ -863,24 +881,7 @@ it("an original taken by its copy's delete goes only if it still holds what its 
     assert.doesNotThrow(() => process.kill(pid, 0), "fox's script still runs");
     assert.ok(!existsSync(teardowns), "no teardown ran");
   };
-  const take = () =>
-    runHost(
-      Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
-        worktrees.remove(
-          {
-            projectId: project.id,
-            worktreeId: fox.id,
-            force: true,
-            oneSide: true,
-            expect: held,
-          },
-          () => {},
-        ),
-      ),
-    ).then(
-      () => "removed",
-      () => "refused",
-    );
+  const take = () => takeCopy(project, fox, { expect: held });
   writeFileSync(join(fox.path, "since.txt"), "an edit after the look\n");
   assert.equal(await take(), "refused");
   assert.ok(existsSync(join(fox.path, "since.txt")));
@@ -927,27 +928,7 @@ it("a copy taken by its mirror's stop goes only from the branch and the tip the 
   const { project } = await repoAt("copy-taken");
   const fox = await create(project, { worktreeName: "fox" });
   const expectHead = { branch: fox.branch, tip: holding(fox).branchTip };
-  const take = (expects: {
-    expectHead?: { branch: string; tip: string };
-    mirrorCopy?: boolean;
-  }) =>
-    runHost(
-      Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
-        worktrees.remove(
-          {
-            projectId: project.id,
-            worktreeId: fox.id,
-            force: true,
-            oneSide: true,
-            ...expects,
-          },
-          () => {},
-        ),
-      ),
-    ).then(
-      () => "removed",
-      () => "refused",
-    );
+  const take = (expects: CopyExpects) => takeCopy(project, fox, expects);
   writeFileSync(join(fox.path, "edit.txt"), "uncommitted\n");
   assert.equal(await take({ mirrorCopy: true }), "refused");
   git(fox.path, "commit", "-q", "--allow-empty", "-m", "since");
@@ -960,24 +941,10 @@ it("a copy taken by its mirror's stop goes only from the branch and the tip the 
   const owl = await create(project, { worktreeName: "owl" });
   writeFileSync(join(owl.path, "edit.txt"), "uncommitted\n");
   assert.equal(
-    await runHost(
-      Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
-        worktrees.remove(
-          {
-            projectId: project.id,
-            worktreeId: owl.id,
-            force: true,
-            oneSide: true,
-            expectHead: {
-              branch: owl.branch,
-              tip: holding(owl).branchTip,
-            },
-          },
-          () => {},
-        ),
-      ),
-    ).then(({ ok }) => ok),
-    true,
+    await takeCopy(project, owl, {
+      expectHead: { branch: owl.branch, tip: holding(owl).branchTip },
+    }),
+    "removed",
   );
   assert.ok(!existsSync(owl.path));
 });

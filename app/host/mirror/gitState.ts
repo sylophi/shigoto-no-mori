@@ -368,7 +368,7 @@ const madeBranches = Effect.fnUntraced(function* (worktreePath: string) {
   );
   const listed = yield* fs.readFileString(file).pipe(
     Effect.map((text) => text.split("\n").filter((line) => line !== "")),
-    Effect.option,
+    Effect.orElseSucceed(() => undefined),
   );
   return {
     listed,
@@ -380,15 +380,14 @@ const madeBranches = Effect.fnUntraced(function* (worktreePath: string) {
 // A git dir that can't be read is no proof of one.
 export const isMirrorCopy = (worktreePath: string) =>
   madeBranches(worktreePath).pipe(
-    Effect.map(({ listed }) => Option.isSome(listed)),
+    Effect.map(({ listed }) => listed !== undefined),
     Effect.orElseSucceed(() => false),
   );
 
 export const markMirrorMade = Effect.fnUntraced(
   function* (worktreePath: string, branch: string) {
-    const made = yield* madeBranches(worktreePath);
-    const listed = Option.getOrElse(made.listed, (): string[] => []);
-    if (!listed.includes(branch)) yield* made.write([...listed, branch]);
+    const { listed = [], write } = yield* madeBranches(worktreePath);
+    if (!listed.includes(branch)) yield* write([...listed, branch]);
   },
   (marking) => Effect.ignore(marking),
 );
@@ -401,11 +400,10 @@ const dropMirrorMade = Effect.fnUntraced(
     branch: string,
     tip: string,
   ) {
-    const made = yield* madeBranches(worktreePath);
-    const listed = Option.getOrElse(made.listed, (): string[] => []);
+    const { listed = [], write } = yield* madeBranches(worktreePath);
     if (!listed.includes(branch)) return;
     yield* (yield* Git.Git).deleteRef(projectPath, `refs/heads/${branch}`, tip);
-    yield* made.write(listed.filter((name) => name !== branch));
+    yield* write(listed.filter((name) => name !== branch));
   },
   (dropping) => Effect.ignore(dropping),
 );

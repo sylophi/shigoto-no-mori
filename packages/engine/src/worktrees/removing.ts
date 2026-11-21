@@ -299,36 +299,40 @@ export const makeRemoving = ({
       return worktree.branch !== (yield* primaryRefOf(project)).primaryBranch;
     });
 
+    const head = Effect.fn("Worktrees.head")(function* ({
+      project,
+      worktree,
+    }: Located) {
+      const ref = yield* git
+        .run(worktree.path, ["symbolic-ref", "--quiet", "HEAD"])
+        .pipe(
+          Effect.map((out) => out.trim()),
+          Effect.orElseSucceed(() => null),
+        );
+      if (ref !== `refs/heads/${worktree.branch}`) return undefined;
+      const tip = yield* git.refTip(project.path, ref);
+      return Option.isSome(tip)
+        ? { branch: worktree.branch, tip: tip.value }
+        : undefined;
+    });
+
     // Refused unless the worktree still holds `expect`: HEAD on its
     // branch, the branch at its tip and its uncommitted work the same
     // tree, read on this device as `expect` was. What can't be read is
     // no proof it does.
     const refuseChangedSince = Effect.fn("Worktrees.refuseChangedSince")(
-      function* ({ project, worktree }: Located, expect: MovedSource) {
+      function* (located: Located, expect: MovedSource) {
+        const { project, worktree } = located;
         const change = yield* Effect.gen(function* () {
-          const head = yield* git
-            .run(worktree.path, ["symbolic-ref", "--quiet", "HEAD"])
-            .pipe(
-              Effect.map((out) => out.trim()),
-              Effect.orElseSucceed(() => null),
-            );
-          if (
-            worktree.branch !== expect.branch ||
-            head !== `refs/heads/${expect.branch}`
-          ) {
-            return "moved" as const;
-          }
-          const tip = yield* git.refTip(
-            project.path,
-            `refs/heads/${expect.branch}`,
-          );
+          const now = yield* head(located);
+          if (now?.branch !== expect.branch) return "moved" as const;
           const fresh = yield* dirty.capture({
             projectPath: project.path,
             worktreePath: worktree.path,
             worktreeId: worktree.id,
           });
           return movedSourceChange(expect, {
-            tip: Option.getOrNull(tip),
+            tip: now.tip,
             ...(fresh.captured
               ? { captureTree: yield* git.treeOf(project.path, fresh.commit) }
               : {}),
@@ -347,23 +351,6 @@ export const makeRemoving = ({
         }
       },
     );
-
-    const head = Effect.fn("Worktrees.head")(function* ({
-      project,
-      worktree,
-    }: Located) {
-      const ref = yield* git
-        .run(worktree.path, ["symbolic-ref", "--quiet", "HEAD"])
-        .pipe(
-          Effect.map((out) => out.trim()),
-          Effect.orElseSucceed(() => null),
-        );
-      if (ref !== `refs/heads/${worktree.branch}`) return undefined;
-      const tip = yield* git.refTip(project.path, ref);
-      return Option.isSome(tip)
-        ? { branch: worktree.branch, tip: tip.value }
-        : undefined;
-    });
 
     const refuseHeadMoved = Effect.fn("Worktrees.refuseHeadMoved")(function* (
       located: Located,

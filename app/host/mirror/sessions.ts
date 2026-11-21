@@ -332,10 +332,8 @@ export const stopMirror = (session: string, force: boolean) =>
     // last verdict (a commit on the copy a moment ago is exactly what
     // must not be lost), and the files settled, since git says nothing
     // about an edit the engine has not carried yet or holds still as a
-    // conflict. The copy's delete expects the branch and the tip the
-    // look agreed on, so a commit made on it after the look keeps it. A
-    // forced stop expects only a worktree a mirror landed, wherever its
-    // HEAD is: the copy, and never one made at its old folder.
+    // conflict. A commit made on the copy after the look keeps it (the
+    // delete's `expectHead`).
     if (!force) {
       const git = yield* daemon.refreshGit(session);
       const live = (yield* findSession(daemon, session)) ?? raw;
@@ -350,7 +348,6 @@ export const stopMirror = (session: string, force: boolean) =>
         return yield* new MirrorError({ reason: mirrorStopRefusal(blocker) });
       }
     }
-    const agreed = daemon.copyHead(session);
     yield* ledger.whileStopping(
       session,
       {
@@ -361,11 +358,7 @@ export const stopMirror = (session: string, force: boolean) =>
         daemon,
         ledger,
         raw,
-        force
-          ? { mirrorCopy: true }
-          : agreed === undefined
-            ? {}
-            : { expectHead: agreed },
+        force ? { mirrorCopy: true } : { expectHead: daemon.copyHead(session) },
       ),
     );
     return { removedCopy: true };

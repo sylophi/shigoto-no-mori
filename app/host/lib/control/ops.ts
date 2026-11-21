@@ -687,6 +687,8 @@ export const mirrorStop = (({ force, ...target }, ctx) =>
         ),
     ).pipe(Effect.mapError(hostCallFailure));
     const before = force === true ? undefined : yield* head;
+    const unmoved = (now: typeof before) =>
+      now?.branch === before?.branch && now?.tip === before?.tip;
     let copyStayed = yield* stopMirror(
       afar.api.stop({ session: afar.session.session, force }),
     );
@@ -699,7 +701,7 @@ export const mirrorStop = (({ force, ...target }, ctx) =>
     // and a commit made since is what kept the copy.
     if (
       copyStayed !== undefined &&
-      (before === undefined || (yield* head)?.tip === before.tip)
+      (before === undefined || unmoved(yield* head))
     ) {
       const removed = yield* (yield* Worktrees.Worktrees).remove(
         {
