@@ -7,6 +7,7 @@
 // to stop (quit).
 import { closeSync, openSync, renameSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
+import * as ColibriiNode from "@colibrii/sdk/node";
 import { isTestFlavor } from "@shigomori/engine/flavor";
 import { childDefaults } from "@shigomori/engine/processes";
 import type { HostFailureSchema } from "@shigomori/contracts/modules/shellCalls";
@@ -139,6 +140,12 @@ export async function runHost<E>(root: {
   const { facts } = root;
   setHostFacts(facts);
   const flavor = facts.flavor;
+  // The connector a host that died unasked left running, ended before
+  // the graph: its device runs the tunnel only while signed in and
+  // listening, and a boot that stalls later must not leave it running.
+  const reaped = Effect.runPromise(
+    ColibriiNode.endLeftoverCloudflared(facts.userDataPath),
+  );
   const nativefs = nativefsPath(facts);
   // The shell has opened the data folder already, and says so when it
   // can't: this only names it for the host.
@@ -148,6 +155,7 @@ export async function runHost<E>(root: {
     nativefs,
     sm: bundledBinaryPath(facts, CLI_DIST_DIR, cliBinaryName(flavor)),
   };
+  await reaped;
   const migration = await Effect.runPromise(Migration.make);
   // The root's door on top: open once every service is up (graph.ts).
   const graph = ManagedRuntime.make(
