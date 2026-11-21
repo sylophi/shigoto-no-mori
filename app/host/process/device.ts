@@ -5,7 +5,7 @@
 import type { AccountState, Device } from "@colibrii/sdk";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import type { DeviceData } from "@shigomori/contracts/modules/session";
-import { deviceInfoOf } from "@shared/account/deviceInfo";
+import { listDevicesOf } from "@shared/account/deviceInfo";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
@@ -28,8 +28,7 @@ export const deviceCalls = {
   }): Promise<void> => onDevice((device) => device.enroll(input)),
   signOut: (): Promise<boolean> => onDevice((device) => device.signOut),
   listDevices: async (): Promise<DeviceInfo[]> => {
-    const records = await onDevice((device) => device.devices.list);
-    const devices = records.map(deviceInfoOf);
+    const devices = await onDevice(listDevicesOf);
     noteAccountDevices(devices.map((device) => device.deviceId));
     return devices;
   },

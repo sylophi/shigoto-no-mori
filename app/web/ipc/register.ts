@@ -14,7 +14,7 @@
 import * as Colibrii from "@colibrii/sdk";
 import * as ColibriiBrowser from "@colibrii/sdk/browser";
 import { accountIdOf, makeAccountHandlers } from "@shared/account/handlers";
-import { deviceInfoOf } from "@shared/account/deviceInfo";
+import { listDevicesOf } from "@shared/account/deviceInfo";
 import { profileStore } from "@shared/account/profile";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -233,12 +233,7 @@ export async function createWebBridge(deps: WebBridgeDeps): Promise<WebBridge> {
         return run(device.enroll(input));
       },
       signOut: () => run(device.signOut),
-      list: () =>
-        run(
-          Effect.map(device.devices.list, (records) =>
-            records.map(deviceInfoOf),
-          ),
-        ),
+      list: () => run(listDevicesOf(device)),
       rename: (id, name) => run(device.devices.rename(id, name)),
       setData: (id, data) => run(device.devices.setData(id, data)),
       remove: (id) => run(device.devices.remove(id)),
