@@ -80,11 +80,17 @@ const windowsSpawner = Effect.fnUntraced(function* (
         command.command,
         command.args.map(wordText),
       );
+      // Only a batch file's line is written out, so anything else keeps
+      // its words as given, a Redacted one hidden in what fails.
       return yield* inner.spawn(
-        ChildProcess.make(started.command, started.args, {
-          ...command.options,
-          shell: started.shell,
-        }),
+        ChildProcess.make(
+          started.command,
+          started.shell ? started.args : command.args,
+          {
+            ...command.options,
+            shell: started.shell,
+          },
+        ),
       );
     });
 });
