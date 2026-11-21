@@ -2,9 +2,9 @@
 
 `pnpm reliability` runs every client (the web client, the desktop
 app, a device on the tunnel, the terminal) through what breaks
-connections in real use, against the dev hub, and reports whether each
-recovered on its own, how long it took, and the trace it left. Looped
-for hours it is the soak.
+connections in real use, against the Colibrii instance `.env.local`
+names, and reports whether each recovered on its own, how long it
+took, and the trace it left. Looped for hours it is the soak.
 
 ```sh
 pnpm reliability                            # every scenario once, every client
@@ -16,14 +16,13 @@ pnpm reliability --soak 4h                  # random order and gaps, for 4 hours
 | Flag | Effect |
 | --- | --- |
 | `--clients a,b` | Which clients run: `web`, `desktop`, `tunnel`, `terminal` (default all). `terminal` brings the desktop device without its windows. |
-| `--scenarios a,b` | Run these, in this order. `hub-redeploy` and `sign-out-with-sibling` run only when named. |
+| `--scenarios a,b` | Run these, in this order. `hub-redeploy` and `sign-out-with-sibling` run only when named. `hub-redeploy` deploys the Colibrii service at `COLIBRII_SERVICE_DIR`. |
 | `--soak <d>` | Loop the soak's scenarios for `<d>` (`90m`, `4h`), in random order, with a random gap between them. |
 | `--gap <min>-<max>` | The soak's gap, default `30s-3m`. |
 | `--seed <n>` | Replay a soak's order and gaps (the report names its seed). |
 | `--headed` | Show the browser, for watching. |
 | `--keep` | Leave every profile and its device enrolled, for a quicker next run. |
 | `--revoke-host` | Sign B out at the end and delete its profile, which is kept otherwise. `--keep` wins. |
-| `--deploy-local-hub` | Let a named `hub-redeploy` deploy this checkout's `hub/` when it differs from main. |
 
 ## What it sets up
 
@@ -43,14 +42,15 @@ sleeps.
 - **The web client** (`pnpm web:dev` on this worktree's `WEB_PORT`),
   unless it already answers, and **a browser**: the system Chrome with
   a profile of its own (`~/.smd-profiles/<worktree>-browser`) and a tab
-  on the web client, reaching B through the dev hub over B's tunnel.
-  Its traffic goes through a CONNECT proxy the harness owns: Chrome's
-  offline emulation leaves an open socket untouched.
+  on the web client, reaching B over B's tunnel. Its traffic goes
+  through a CONNECT proxy the harness owns: Chrome's offline emulation
+  leaves an open socket untouched.
 - **The desktop device (A)**: the profile `<worktree>-desk`, a clone of
   B's repo, with two windows. Its hub is a local front the harness
-  owns (`SM_DEVICE_HUB_URL`), forwarding to the dev hub, and it reaches
-  B over the LAN. It launches first: the first window of a worktree
-  serves the renderer the others load, and B must be free to quit.
+  owns (`SM_DEVICE_HUB_URL`), forwarding to the Colibrii instance, and
+  it reaches B over the LAN. It launches first: the first window of a
+  worktree serves the renderer the others load, and B must be free to
+  quit.
 - **The device on the tunnel (C)**: the profile `<worktree>-tunnel`,
   one window, its hub behind the same front, dialing B's tunnel only
   (`SHIGOMORI_DIAL_KINDS=tunnel`), as a device on another network does.
@@ -63,16 +63,18 @@ offline emulation. Down, new connections are refused and open ones
 stall. Back up, the stalled flows resume or are cut.
 
 The browser profile keeps its sign-in between runs. A profile with
-none signs in as B: the hub mints a sign-in token for B's session,
-which the tab redeems for its own.
+none signs in to the dev account with a sign-in token Colibrii makes
+from the account's kept refresh token (`../devSignIn.mts`), which the
+tab redeems.
 
 At the end it signs the browser, A and C out (revoking their devices)
 and deletes A's and C's profiles, unless `--keep`. The browser profile
 stays, and enrolls again on the next run. B stays enrolled, with its
 profile and its tunnel, until a run with `--revoke-host` (or a run
 whose B reads signed out, so the next starts afresh), once B is up to
-sign itself out. Run one before the worktree goes: the account holds
-16 devices, past which the hub drops its stalest offline one.
+sign itself out. Run one before the worktree goes: the app holds 16
+devices on an account, past which a new one takes the place of the
+offline device seen longest ago.
 
 ## The scenarios
 
@@ -104,9 +106,9 @@ What the scenarios cannot do: a desktop app's own processes get no
 online or offline signal from the OS (the network is cut at the
 proxies, not the interface), and under SIGSTOP a process's monotonic
 and wall clocks both run on, where a real sleep stops the first. So
-after a long freeze the host's sweep can cut a peer's link for silence
-("heartbeat timeout" in its log), which a real sleep doesn't. The peer
-redials.
+a frozen device never reads as woken, and after a long freeze B's
+listener can close a peer's link for 120 s of silence, which a real
+sleep doesn't. The peer redials.
 
 ## The report
 
@@ -114,7 +116,7 @@ redials.
 soak cut short keeps what it had: a table per scenario (runs,
 recoveries, median and longest recovery, the bound), then each run with
 its trace: the harness's steps, every page's console (the web client's
-`[hub]` and `[direct]` lines, toasts, failed requests), each terminal
+`[hub]`, `[peers]` and `[link]` lines, toasts, failed requests), each terminal
 run with its exit and first line, and each device's `main.log` with
 every span its shell or host ended in failure (`trace.log`,
 `host-trace.log`), in time order (sources `host` for B, `A`, `C`). `report.json` has the same outcomes, and a

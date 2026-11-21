@@ -301,7 +301,8 @@ removed one the next time they read the registry. A relaunch after
   tunnel data path on one machine. Launch the desktop with
   `SM_ACCOUNT_WEB_ORIGIN` set to the web client's origin so it admits
   it:
-  `SM_ACCOUNT_WEB_ORIGIN=http://localhost:$(sed -n 's/^WEB_PORT=//p' .env.ports) pnpm dev`. The dev hub needs the tunnel secrets configured. The web
+  `SM_ACCOUNT_WEB_ORIGIN=http://localhost:$(sed -n 's/^WEB_PORT=//p' .env.ports) pnpm dev`. The dev hub has to list the web client's origin among the
+  app's origins (`http://localhost:*` takes any port). The web
   client is a hostless controller: it is the desktop with no local
   projects, so anything a desktop can do to a peer (browse its
   worktrees, run and watch its scripts, change its settings) works
