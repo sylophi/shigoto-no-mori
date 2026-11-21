@@ -29,7 +29,6 @@ export function CreateForm({
   name,
   setName,
   addToTerrier,
-  setAddToTerrier,
   setWorking,
   onClose,
 }: {
@@ -37,7 +36,6 @@ export function CreateForm({
   name: string;
   setName: (value: string) => void;
   addToTerrier: boolean;
-  setAddToTerrier: (value: boolean) => void;
   setWorking: (working: boolean) => void;
   onClose: () => void;
 }) {
@@ -60,7 +58,6 @@ export function CreateForm({
     folder: trimmed,
     pickerTitle: "Create in",
     addToTerrier,
-    setAddToTerrier,
     onClose,
   });
 
@@ -150,7 +147,6 @@ export function CreateForm({
       onOwner={setPickedOwner}
       visibility={visibility}
       onVisibility={setVisibility}
-      terrierOptIn={checkout.terrierOptIn}
       picker={checkout.picker}
     />
   );

@@ -1,9 +1,4 @@
 import type { KeyboardEvent } from "react";
-import { ChipButton } from "../../primitives/chip-button.tsx";
-import {
-  FILE_MANAGER_NAME,
-  FileManagerIcon,
-} from "../../primitives/file-manager.tsx";
 import type { BrowseListing } from "../../lib/browseListing.ts";
 import { PathBrowserView } from "./PathBrowserView.tsx";
 
@@ -27,7 +22,7 @@ export function FolderPickerView({
   canBrowseUp,
   canConfirm,
   onConfirm,
-  onOpenFinder,
+  onPickFolder,
   confirmKeys,
 }: {
   title: string;
@@ -45,7 +40,7 @@ export function FolderPickerView({
   onConfirm: () => void;
   // The native dialog, this machine's window manager's: absent on a
   // peer's picker, which keeps the typed listing alone.
-  onOpenFinder?: () => void;
+  onPickFolder?: () => void;
   // The keys that pick what is typed past a highlighted row (the
   // keymap's).
   confirmKeys: string;
@@ -68,15 +63,8 @@ export function FolderPickerView({
         onClick: onConfirm,
       }}
       confirmKeys={confirmKeys}
+      onPickFolder={onPickFolder}
       hint={hint}
-      footerEnd={
-        onOpenFinder && (
-          <ChipButton onClick={onOpenFinder}>
-            <FileManagerIcon />
-            Reveal in {FILE_MANAGER_NAME}
-          </ChipButton>
-        )
-      }
     />
   );
 }

@@ -11,18 +11,22 @@ const MODE_OPTIONS = [
   { value: "create", label: "Create new" },
 ] as const;
 
-// The add-project dialog's head: how to add it, and on which device.
-// Held still while a clone or a new repository is under way.
+// The add-project dialog's head: how to add it, on which device, and
+// whether terrier lists it too. Held still while a clone or a new
+// repository is under way.
 export function AddProjectHeaderView({
   mode,
   onMode,
   tabs,
+  terrierOptIn,
   working = false,
 }: {
   mode: AddProjectMode;
   onMode: (mode: AddProjectMode) => void;
   // The device tab bar, when there is a pick.
   tabs: ReactNode;
+  // The terrier box, where the device offers it.
+  terrierOptIn: ReactNode;
   working?: boolean;
 }) {
   return (
@@ -33,13 +37,15 @@ export function AddProjectHeaderView({
         working && "opacity-50",
       )}
     >
-      <SegmentedControl
-        value={mode}
-        onChange={onMode}
-        options={MODE_OPTIONS}
-        aria-label="How to add the project"
-        className="mx-3 self-start"
-      />
+      <div className="mx-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <SegmentedControl
+          value={mode}
+          onChange={onMode}
+          options={MODE_OPTIONS}
+          aria-label="How to add the project"
+        />
+        {terrierOptIn}
+      </div>
       {tabs}
     </div>
   );

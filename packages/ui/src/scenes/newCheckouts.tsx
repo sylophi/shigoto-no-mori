@@ -174,6 +174,7 @@ function addProject(mode: AddProjectMode, body: ReactNode) {
       <AddProjectHeaderView
         mode={mode}
         onMode={noop}
+        terrierOptIn={terrierOptIn}
         tabs={
           <DeviceTabBarView
             tabs={DEVICE_TABS}
@@ -233,7 +234,6 @@ export function AddProjectScene() {
               onPrimary={noop}
               canBrowseUp
               onAdd={noop}
-              terrierOptIn={terrierOptIn}
               onPickFolder={noop}
               confirmKeys={defaultBinding("confirm").label}
             />,
@@ -265,7 +265,6 @@ export function AddProjectPartsScene() {
             onClone={noop}
             dest={`${DEV}/kawaii-cam`}
             onChangeParent={noop}
-            terrierOptIn={terrierOptIn}
             picker={null}
           />,
         )}
@@ -289,7 +288,6 @@ export function AddProjectPartsScene() {
             onOwner={noop}
             visibility="private"
             onVisibility={noop}
-            terrierOptIn={terrierOptIn}
             picker={null}
           />,
         )}
@@ -313,7 +311,6 @@ export function AddProjectPartsScene() {
           bulkAdding={false}
           onKeyDown={noop}
           confirmKeys={defaultBinding("confirm").label}
-          terrierOptIn={terrierOptIn}
         />
       </ModalBox>
       <ModalBox>

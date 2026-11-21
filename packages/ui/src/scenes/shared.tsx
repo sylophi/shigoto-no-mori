@@ -349,7 +349,7 @@ export function FolderPickerScene() {
               jumpTo: noop,
               paths: devicePaths(null),
             }}
-            onOpenFinder={noop}
+            onPickFolder={noop}
           />
         </SceneDialog>
       }

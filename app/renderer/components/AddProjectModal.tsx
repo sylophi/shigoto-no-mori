@@ -8,10 +8,12 @@ import {
 } from "@/components/shared/DeviceTabs";
 import { DeviceTabBarView } from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
+import { DeviceScope } from "@/hooks/remote/useHostScope";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { AddExistingForm } from "./addProject/AddExistingForm";
 import { CloneForm } from "./addProject/CloneForm";
 import { CreateForm } from "./addProject/CreateForm";
+import { TerrierOptIn } from "./addProject/TerrierOptIn";
 import {
   type AddProjectMode,
   AddProjectHeaderView,
@@ -101,6 +103,23 @@ function AddProjectDialog() {
             />
           )
         }
+        terrierOptIn={
+          picked &&
+          picked.block !== "no-grant" && (
+            // Scoped the way DeviceTabPanel scopes the form, so the box
+            // shows exactly when the form would add to terrier.
+            <DeviceScope
+              key={picked.deviceId}
+              deviceId={picked.deviceId}
+              absent={picked.block === "offline" ? null : undefined}
+            >
+              <TerrierOptIn
+                checked={addToTerrier}
+                onCheckedChange={setAddToTerrier}
+              />
+            </DeviceScope>
+          )
+        }
       />
       {picked ? (
         <DeviceTabPanel tab={picked} subject="its folder listing">
@@ -109,7 +128,6 @@ function AddProjectDialog() {
               query={query}
               setQuery={setPathOrUrl}
               addToTerrier={addToTerrier}
-              setAddToTerrier={setAddToTerrier}
               setWorking={setWorking}
               onClose={onClose}
               escapeRef={escapeRef}
@@ -120,7 +138,6 @@ function AddProjectDialog() {
               url={url}
               setUrl={setUrl}
               addToTerrier={addToTerrier}
-              setAddToTerrier={setAddToTerrier}
               setWorking={setWorking}
               onClose={onClose}
             />
@@ -130,7 +147,6 @@ function AddProjectDialog() {
               name={name}
               setName={setName}
               addToTerrier={addToTerrier}
-              setAddToTerrier={setAddToTerrier}
               setWorking={setWorking}
               onClose={onClose}
             />

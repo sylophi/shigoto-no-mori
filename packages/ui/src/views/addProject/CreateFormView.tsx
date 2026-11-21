@@ -45,7 +45,6 @@ export function CreateFormView({
   onOwner,
   visibility,
   onVisibility,
-  terrierOptIn,
   picker,
 }: {
   name: string;
@@ -67,7 +66,6 @@ export function CreateFormView({
   onOwner: (owner: string) => void;
   visibility: Visibility;
   onVisibility: (visibility: Visibility) => void;
-  terrierOptIn: ReactNode;
   // The folder picker, while it is open.
   picker: ReactNode;
 }) {
@@ -78,8 +76,6 @@ export function CreateFormView({
         onChange={onName}
         placeholder="Name of the new repository"
         inputRef={inputRef}
-        icon={<FolderPlus className="size-3.5" />}
-        label="Create"
         canSubmit={canCreate}
         onSubmit={onCreate}
       />
@@ -121,7 +117,12 @@ export function CreateFormView({
           )}
         </div>
       </div>
-      <FormFooterView label="Create">{terrierOptIn}</FormFooterView>
+      <FormFooterView
+        icon={<FolderPlus className="size-3.5" />}
+        label="Create"
+        canSubmit={canCreate}
+        onSubmit={onCreate}
+      />
       {picker}
     </>
   );

@@ -101,7 +101,7 @@ export function FolderPickerModal({
     }
   };
 
-  const openFinder = async () => {
+  const pickViaDialog = async () => {
     // Opens where the picker is, not at ~.
     const defaultPath = listing?.path;
     let picked: string | null;
@@ -141,7 +141,7 @@ export function FolderPickerModal({
         canBrowseUp={canBrowseUp}
         canConfirm={canConfirm}
         onConfirm={confirm}
-        onOpenFinder={remote ? undefined : () => void openFinder()}
+        onPickFolder={remote ? undefined : () => void pickViaDialog()}
         confirmKeys={confirmKeys.label}
       />
     </ModalShell>

@@ -11,7 +11,13 @@ import {
   keepFocusInInput,
   MODAL_COMMAND_CLASS,
 } from "../../primitives/cmdk-classes.ts";
+import {
+  FILE_MANAGER_NAME,
+  FileManagerIcon,
+} from "../../primitives/file-manager.tsx";
 import { FooterRow } from "../../primitives/footer-row.tsx";
+import { IconButton } from "../../primitives/icon-button.tsx";
+import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import {
   BrowseKeyHintsView,
   BrowseListView,
@@ -21,9 +27,9 @@ import {
 type BrowseEntry = BrowseListing["filtered"][number];
 
 // A typed path browsed as folders, for the folder picker and Add
-// Project's browse stage: the input is the path, listed live, beside the
-// button that takes it, over the `..` row and the folders, with the key
-// hints in the footer. The keys on the input are the container's. The
+// Project's browse stage: the input is the path, listed live, over the
+// `..` row and the folders, with the key hints and the button that takes
+// it in the footer. The keys on the input are the container's. The
 // query is spelled as the engine spells it, and the input shows and
 // reads it as the device's paths go.
 export function PathBrowserView({
@@ -40,10 +46,10 @@ export function PathBrowserView({
   canBrowseUp,
   primary,
   confirmKeys,
+  onPickFolder,
   hint,
   renderIcon,
   renderTrailing,
-  footerEnd,
 }: {
   label: string;
   placeholder: string;
@@ -62,13 +68,15 @@ export function PathBrowserView({
   // The keys that press the primary button past a highlighted row (the
   // keymap's). With none highlighted ↩ does.
   confirmKeys: string;
+  // The native folder dialog, this machine's alone: absent on a peer's
+  // disk.
+  onPickFolder?: () => void;
   // One line under the input saying what the folder is for.
   hint?: string;
   // A folder's mark, a plain folder unless given.
   renderIcon?: (entry: BrowseEntry) => ReactNode;
   // What ends a folder's row, by its path.
   renderTrailing?: (entry: BrowseEntry, path: string) => ReactNode;
-  footerEnd?: ReactNode;
 }) {
   const { paths, browseDir, leafFilter, listing, isLoading, error, filtered } =
     browse;
@@ -100,16 +108,17 @@ export function PathBrowserView({
           placeholder={placeholder}
           className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
         />
-        <Button
-          variant="outline"
-          size="xs"
-          keys={hasHighlighted ? confirmKeys : KEYS.enter}
-          onMouseDown={keepFocusInInput}
-          onClick={primary.onClick}
-          disabled={primary.disabled}
-        >
-          {primary.label}
-        </Button>
+        {onPickFolder && (
+          <SimpleTooltip tip={`Choose in ${FILE_MANAGER_NAME}`}>
+            <IconButton
+              aria-label={`Choose in ${FILE_MANAGER_NAME}`}
+              onMouseDown={keepFocusInInput}
+              onClick={onPickFolder}
+            >
+              <FileManagerIcon />
+            </IconButton>
+          </SimpleTooltip>
+        )}
       </div>
       {hint && (
         <p className="border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
@@ -161,18 +170,24 @@ export function PathBrowserView({
             }
             className="min-h-0 flex-1 p-2"
           />
-
-          <FooterRow className="justify-between">
-            <div className="flex items-center gap-3">
-              <BrowseKeyHintsView
-                enterFolder={hasHighlighted}
-                goUp={canBrowseUp}
-              />
-            </div>
-            {footerEnd}
-          </FooterRow>
         </>
       )}
+
+      <FooterRow>
+        {browsable && (
+          <BrowseKeyHintsView enterFolder={hasHighlighted} goUp={canBrowseUp} />
+        )}
+        <Button
+          size="xs"
+          className="ml-auto"
+          keys={hasHighlighted ? confirmKeys : KEYS.enter}
+          onMouseDown={keepFocusInInput}
+          onClick={primary.onClick}
+          disabled={primary.disabled}
+        >
+          {primary.label}
+        </Button>
+      </FooterRow>
     </Command>
   );
 }

@@ -20,7 +20,7 @@ import { notifyError } from "@/lib/toast";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { ScanningPanelView } from "@shigomori/ui/views/addProject/ScanningPanelView.tsx";
 import { ResultsPanelView } from "@shigomori/ui/views/addProject/ResultsPanelView.tsx";
-import { useTerrierOptIn } from "./TerrierOptIn";
+import { useOffersTerrier } from "@/hooks/terrier/useOffersTerrier";
 import { useBrowseState } from "./useBrowseState";
 import { useBinding } from "@/hooks/ui/useKeymap";
 import { useOpenAddedProject } from "./useOpenAddedProject";
@@ -35,7 +35,6 @@ interface AddExistingFormProps {
   query: string;
   setQuery: (value: string) => void;
   addToTerrier: boolean;
-  setAddToTerrier: (value: boolean) => void;
   // Holds the dialog open while it adds.
   setWorking: (working: boolean) => void;
   onClose: () => void;
@@ -52,7 +51,6 @@ export function AddExistingForm({
   query,
   setQuery,
   addToTerrier,
-  setAddToTerrier,
   setWorking,
   onClose,
   escapeRef,
@@ -68,11 +66,7 @@ export function AddExistingForm({
   const home = runtime?.homedir ?? null;
   const registeredPaths = new Set(existingProjects.map((p) => p.path));
   const inputRef = useRef<HTMLInputElement>(null);
-  const { terrier, terrierOptIn } = useTerrierOptIn(
-    addToTerrier,
-    setAddToTerrier,
-    inputRef,
-  );
+  const terrier = useOffersTerrier() && addToTerrier;
 
   // Scan flow state.
   const [stage, setStage] = useState<AddExistingStage>("browse");
@@ -305,7 +299,6 @@ export function AddExistingForm({
         bulkAdding={bulkAdding}
         onKeyDown={onResultsKeyDown}
         confirmKeys={confirmKeys.label}
-        terrierOptIn={terrierOptIn}
       />
     );
   }
@@ -341,10 +334,9 @@ export function AddExistingForm({
       canBrowseUp={canBrowseUp}
       onAdd={(path) => void submit(path)}
       confirmKeys={confirmKeys.label}
-      terrierOptIn={terrierOptIn}
       // The native dialog is this machine's, so it can't pick a folder
       // on a peer's disk.
-      onPickFolder={scope.remote ? null : () => void pickViaDialog()}
+      onPickFolder={scope.remote ? undefined : () => void pickViaDialog()}
     />
   );
 }
