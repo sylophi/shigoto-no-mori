@@ -46,9 +46,12 @@ Astro preset and the install command, and holds the headers.
   - `theme.js` sets light or dark before first paint and runs the
     toggle, on the page and on the frames that follow it. It loads as
     a blocking script, under a hashed name.
+  - `platform.js` marks the visitor's platform before first paint,
+    Windows or else the Mac, and only that platform's download buttons
+    and notes show. It loads the way `theme.js` does.
   - `frames.ts` turns the live frames into the app near the screen.
-  - `download.ts` points the download buttons at the latest release's
-    dmg.
+  - `download.ts` points the download links at the latest release's
+    dmg or installer.
   - `wallpaper.ts` pauses the wallpaper of bands that are off screen.
 - `scripts/og.html` is the link preview card, and `scripts/og.mts`
   renders it (below).

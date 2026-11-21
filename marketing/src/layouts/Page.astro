@@ -8,20 +8,21 @@ import "../styles/global.css";
 import latin500 from "../fonts/zen-maru-gothic-latin-500-normal.woff2?url";
 import latin700 from "../fonts/zen-maru-gothic-latin-700-normal.woff2?url";
 // Copied as is, under a hashed name, so it caches like the rest.
+import platformScript from "../scripts/platform.js?url";
 import themeScript from "../scripts/theme.js?url";
 import Icon from "../components/Icon.astro";
 import { LATEST_RELEASE, RELEASES, REPO, WEB_APP } from "../site";
 
 const SITE_NAME = "Shigoto no Mori";
-const TITLE = "Shigoto no Mori: a git worktree manager for the Mac";
+const TITLE = "Shigoto no Mori: a git worktree manager for Mac and Windows";
 // Kept under about 160 characters, what search results show in full.
 const DESCRIPTION =
-  "A Mac app for managing git worktrees. Create one in two clicks, open it in the tools you already use, and see where each branch stands, on any of your Macs.";
+  "A Mac and Windows app for git worktrees. Create one in two clicks, open it in the tools you already use, and see where each branch stands, on any machine.";
 
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const ogImage = new URL("/img/og.jpg", Astro.site);
 const ogImageAlt =
-  "Shigoto no Mori's icon and name, and the line: A Mac app for managing git worktrees.";
+  "Shigoto no Mori's icon and name, and the line: A desktop app for managing git worktrees.";
 ---
 
 <!doctype html>
@@ -54,8 +55,9 @@ const ogImageAlt =
 
     <link rel="preload" href={latin500} as="font" type="font/woff2" crossorigin />
     <link rel="preload" href={latin700} as="font" type="font/woff2" crossorigin />
-    {/* Blocking on purpose: it sets the theme before first paint. */}
+    {/* Blocking on purpose: they set the theme and the platform before first paint. */}
     <script is:inline src={themeScript}></script>
+    <script is:inline src={platformScript}></script>
   </head>
   <body>
     <header class="nav">
@@ -98,10 +100,10 @@ const ogImageAlt =
     </footer>
 
     <script>
-      import { pointDownloadsAtLatestDmg } from "../scripts/download";
+      import { pointDownloadsAtLatest } from "../scripts/download";
       import { liveFramesNearScreen } from "../scripts/frames";
       import { pauseOffscreenWallpaper } from "../scripts/wallpaper";
-      pointDownloadsAtLatestDmg();
+      pointDownloadsAtLatest();
       pauseOffscreenWallpaper();
       liveFramesNearScreen();
     </script>
