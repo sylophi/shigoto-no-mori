@@ -39,6 +39,7 @@ export function ResultRowView({
       value={`result:${path}`}
       keywords={[relative]}
       onSelect={onToggle}
+      data-tick-drag
       className={ITEM_CLASS}
     >
       {/* The row is the control (cmdk's option), so the box only shows

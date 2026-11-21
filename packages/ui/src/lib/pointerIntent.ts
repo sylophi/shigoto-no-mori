@@ -39,7 +39,7 @@ interface PressEvent {
   altKey: boolean;
 }
 
-function plainMousePress(event: PressEvent) {
+export function plainMousePress(event: PressEvent) {
   return (
     event.pointerType === "mouse" &&
     event.button === 0 &&

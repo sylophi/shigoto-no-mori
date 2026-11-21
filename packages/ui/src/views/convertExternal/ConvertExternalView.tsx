@@ -6,6 +6,7 @@ import { PAGE_BODY } from "../shared/PageShellView.tsx";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { ConvertRowView } from "./ConvertRowView.tsx";
 import { EmptyPanel } from "../../primitives/empty-panel.tsx";
+import { startTickDrag } from "../../lib/tickDrag.ts";
 
 // A device's external worktrees, picked to move under the project's
 // managed location (ConvertExternalWorktrees.tsx runs the moves).
@@ -40,7 +41,7 @@ export function ConvertExternalView({
   const allSelected = selectableCount > 0 && selected.size === selectableCount;
 
   return (
-    <div className={PAGE_BODY}>
+    <div onPointerDown={startTickDrag} className={PAGE_BODY}>
       <div className="flex flex-col gap-6">
         <ErrorBanner>
           <p className="text-2xs font-semibold tracking-wide uppercase">

@@ -33,6 +33,7 @@ import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { noMatch, pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../lib/utils.ts";
 import { warmOnRest } from "../../lib/pointerIntent.ts";
+import { startTickDrag } from "../../lib/tickDrag.ts";
 import { getBrowseLeafSegment } from "@shigomori/contracts/projectPaths";
 import { changeKey, type ChangedFile } from "@shigomori/contracts/schemas";
 import {
@@ -264,7 +265,11 @@ export function DiffFileIndexView({
       >
         <ContextMenuTrigger
           render={
-            <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1" />
+            <div
+              ref={listRef}
+              onPointerDown={startTickDrag}
+              className="min-h-0 flex-1 overflow-y-auto p-1"
+            />
           }
         >
           {matches.length === 0 ? (
@@ -606,6 +611,7 @@ function IndexRow({
             <Checkbox
               nativeButton
               render={(props) => <button type="button" {...props} />}
+              data-tick-drag
               checked={ticked === "all"}
               indeterminate={ticked === "partial"}
               disabled={busy}

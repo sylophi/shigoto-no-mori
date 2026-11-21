@@ -8,6 +8,7 @@ import { IconButton } from "../../primitives/icon-button.tsx";
 import { MODAL_COMMAND_CLASS } from "../../primitives/cmdk-classes.ts";
 import { pluralize } from "@shigomori/contracts/words";
 import { FooterRow } from "../../primitives/footer-row.tsx";
+import { startTickDrag } from "../../lib/tickDrag.ts";
 
 interface ResultsPanelProps {
   scanRoot: string;
@@ -83,7 +84,10 @@ export function ResultsPanelView(props: ResultsPanelProps) {
           )}
         </div>
 
-        <Command.List className="overflow-y-auto p-2">
+        <Command.List
+          onPointerDown={startTickDrag}
+          className="overflow-y-auto p-2"
+        >
           {props.results.length === 0 ? (
             <div className="px-3 py-10 text-center text-sm text-muted-foreground">
               All git repos in this folder are already added.
