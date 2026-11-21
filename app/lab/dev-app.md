@@ -147,6 +147,8 @@ screen, which an agent's session has no permission to capture.
 | `SHIGOMORI_PROFILE`                | Dev profile name. The launchers set it, and it requires `SHIGOMORI_DATA_DIR`. |
 | `SHIGOMORI_DEBUG_PORT`             | Opens Chromium's remote-debugging port on that window. Dev builds only.       |
 | `SHIGOMORI_DEVTOOLS`               | `1` streams the main process's spans to the Effect devtools (VS Code) on their default port. Dev builds only. |
+| `SHIGOMORI_DIAL_KINDS`             | Candidate kinds this device dials, e.g. `tunnel`. Dev builds only. See Rules. |
+| `SHIGOMORI_DIRECT_FRONT_PORT`      | Port this device advertises for its listener (LAN candidates, the tunnel's ingress), for a proxy in front of it. Dev builds only. |
 | `SHIGOMORI_CODE_SIGN_IN`           | `1` signs the window in with a code approved on another device, for a window no one sits at (`devices.md`). |
 | `RENDERER_PORT`                    | Renderer port, from `.env.ports`. A real env var overrides it.                |
 | `WEB_PORT`                         | Web client port (`pnpm web:dev`). Same source and override rule.              |
@@ -265,10 +267,10 @@ on another device instead (`devices.md`).
 - **Both profiles use the owner's real dev account.** Each enrolls on
   the dev hub and provisions a tunnel. This is intended: the hub,
   Clerk and tunnel provisioning are exercised for real.
-- **The tunnel data path is the web client's on one machine.** The
-  LAN candidate always wins between two desktops, and a web client
-  (below) dials only tunnels. The dev hub needs the tunnel secrets
-  configured.
+- **The tunnel data path needs asking for on one machine.** The LAN
+  candidate always wins between two desktops. Launch one profile with
+  `SHIGOMORI_DIAL_KINDS=tunnel` and its link to the other rides that
+  device's tunnel, the way a web client's (below) does.
 
 
 

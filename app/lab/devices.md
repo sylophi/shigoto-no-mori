@@ -104,7 +104,9 @@ the bridge's answers, the other device's window, and the disk.
   tree under its launcher, in PowerShell:
   `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | ? CommandLine -match 'dev-device.mts <tag>-b( |$)' | % { taskkill /T /F /PID $_.ProcessId }`.
 - **The tunnel path.** On one machine the LAN wins between two
-  desktops. A web client dials only tunnels (`dev-app.md`, "Rules").
+  desktops. Launch a device with `SHIGOMORI_DIAL_KINDS=tunnel` in its
+  `start` to take the tunnel instead. A web client dials only tunnels
+  (`dev-app.md`, "Rules").
 - **A record of it.** Run `{ "video": "start" }` on each window's
   session before the flow starts, so the videos line up, and
   `{ "video": "stop" }` after (it answers with the file). `screen` shots also
