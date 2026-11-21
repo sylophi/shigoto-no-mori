@@ -3,23 +3,19 @@ import type { KeyboardEvent, ReactNode, RefObject } from "react";
 import { Command } from "cmdk";
 import { FolderInput, Loader2 } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
-import { KbdHint } from "../../primitives/kbd.tsx";
 import { PathSpan } from "../../primitives/path-span.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { FooterRow } from "../../primitives/footer-row.tsx";
 import { ProgressBar } from "../../primitives/progress-bar.tsx";
 
-// The clone's and the new repository's top row: what to make, and the
-// button that makes it, the way the folder browser's row reads. Inside
-// a cmdk Command (`combobox`), the input is the list's, and ↑↓ move
-// through it.
+// The clone's and the new repository's top row: what to make, which ↩
+// makes. Inside a cmdk Command (`combobox`), the input is the list's,
+// and ↑↓ move through it.
 export function ActionInputRowView({
   value,
   onChange,
   placeholder,
   inputRef,
-  icon,
-  label,
   canSubmit,
   onSubmit,
   combobox = false,
@@ -28,8 +24,6 @@ export function ActionInputRowView({
   onChange: (value: string) => void;
   placeholder: string;
   inputRef: RefObject<HTMLInputElement | null>;
-  icon: ReactNode;
-  label: string;
   canSubmit: boolean;
   onSubmit: () => void;
   combobox?: boolean;
@@ -40,7 +34,7 @@ export function ActionInputRowView({
     onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => {
       // Home and End move the caret, never a list's highlight.
       if (e.key === "Home" || e.key === "End") e.stopPropagation();
-      // ↩ is the button's, never a highlighted row's.
+      // ↩ submits, never a highlighted row's.
       if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
       e.preventDefault();
       if (canSubmit) onSubmit();
@@ -70,16 +64,6 @@ export function ActionInputRowView({
           onChange={(e) => onChange(e.target.value)}
         />
       )}
-      <Button
-        variant="outline"
-        size="xs"
-        keys={KEYS.enter}
-        onClick={onSubmit}
-        disabled={!canSubmit}
-      >
-        {icon}
-        {label}
-      </Button>
     </div>
   );
 }
@@ -116,19 +100,29 @@ export function DestinationRowView({
   );
 }
 
-// The clone's and the new repository's footer: the key that submits,
-// and the options that ride along (the terrier opt-in).
+// The clone's and the new repository's footer: the button that makes it.
 export function FormFooterView({
+  icon,
   label,
-  children,
+  canSubmit,
+  onSubmit,
 }: {
+  icon: ReactNode;
   label: string;
-  children?: ReactNode;
+  canSubmit: boolean;
+  onSubmit: () => void;
 }) {
   return (
-    <FooterRow className="justify-between">
-      <KbdHint keys={[KEYS.enter]} label={label} />
-      <div className="flex items-center gap-3">{children}</div>
+    <FooterRow className="justify-end">
+      <Button
+        size="xs"
+        keys={KEYS.enter}
+        onClick={onSubmit}
+        disabled={!canSubmit}
+      >
+        {icon}
+        {label}
+      </Button>
     </FooterRow>
   );
 }

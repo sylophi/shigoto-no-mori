@@ -1,4 +1,4 @@
-import type { KeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent } from "react";
 import { Command } from "cmdk";
 import { ArrowLeft, FolderSearch } from "lucide-react";
 import { PathSpan } from "../../primitives/path-span.tsx";
@@ -26,7 +26,6 @@ interface ResultsPanelProps {
   onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void;
   // The keys that add the repos picked (the keymap's).
   confirmKeys: string;
-  terrierOptIn: ReactNode;
 }
 
 export function ResultsPanelView(props: ResultsPanelProps) {
@@ -107,9 +106,7 @@ export function ResultsPanelView(props: ResultsPanelProps) {
         </Command.List>
 
         <FooterRow className="justify-end">
-          {props.terrierOptIn}
           <Button
-            variant="outline"
             size="xs"
             keys={props.confirmKeys}
             onClick={() => void props.onAdd()}

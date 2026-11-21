@@ -1,12 +1,7 @@
-import type { KeyboardEvent, ReactNode, Ref } from "react";
+import type { KeyboardEvent, Ref } from "react";
 import { FolderGit2, FolderSearch } from "lucide-react";
 import type { BrowseListing } from "../../lib/browseListing.ts";
 import { Button } from "../../primitives/button.tsx";
-import { ChipButton } from "../../primitives/chip-button.tsx";
-import {
-  FILE_MANAGER_NAME,
-  FileManagerIcon,
-} from "../../primitives/file-manager.tsx";
 import { PathBrowserView } from "../shared/PathBrowserView.tsx";
 
 // The add-existing tab's browse stage: the path as typed, the folders
@@ -28,7 +23,6 @@ export function AddExistingFormView({
   onPrimary,
   canBrowseUp,
   onAdd,
-  terrierOptIn,
   onPickFolder,
   confirmKeys,
 }: {
@@ -49,10 +43,8 @@ export function AddExistingFormView({
   onPrimary: () => void;
   canBrowseUp: boolean;
   onAdd: (path: string) => void;
-  // The terrier switch, for a project terrier should list too.
-  terrierOptIn: ReactNode;
-  // The native folder dialog, this machine's alone: null on a peer.
-  onPickFolder: (() => void) | null;
+  // The native folder dialog, this machine's alone: absent on a peer.
+  onPickFolder?: () => void;
   // The keys that add what is typed past a highlighted row (the
   // keymap's).
   confirmKeys: string;
@@ -86,6 +78,7 @@ export function AddExistingFormView({
         onClick: onPrimary,
       }}
       confirmKeys={confirmKeys}
+      onPickFolder={onPickFolder}
       renderIcon={(entry) =>
         entry.isGitRepo ? (
           <FolderGit2 className="size-4 text-foreground" />
@@ -112,19 +105,6 @@ export function AddExistingFormView({
             </Button>
           </div>
         ))
-      }
-      footerEnd={
-        <div className="flex items-center gap-3">
-          {terrierOptIn}
-          {/* The native dialog is this machine's, so it can't pick a
-              folder on a peer's disk. */}
-          {onPickFolder !== null && (
-            <ChipButton onClick={onPickFolder}>
-              <FileManagerIcon />
-              Add project from {FILE_MANAGER_NAME}
-            </ChipButton>
-          )}
-        </div>
       }
     />
   );

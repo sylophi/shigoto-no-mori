@@ -27,7 +27,6 @@ export function CloneForm({
   url,
   setUrl,
   addToTerrier,
-  setAddToTerrier,
   setWorking,
   onClose,
 }: {
@@ -35,7 +34,6 @@ export function CloneForm({
   url: string;
   setUrl: (value: string) => void;
   addToTerrier: boolean;
-  setAddToTerrier: (value: boolean) => void;
   setWorking: (working: boolean) => void;
   onClose: () => void;
 }) {
@@ -71,7 +69,6 @@ export function CloneForm({
     folder: name ?? "",
     pickerTitle: "Clone into",
     addToTerrier,
-    setAddToTerrier,
     onClose,
   });
   // The repository as repo identity spells it (host/owner/repo): the
@@ -137,7 +134,6 @@ export function CloneForm({
       onClone={() => void cloneAndOpen()}
       dest={checkout.dest}
       onChangeParent={checkout.openPicker}
-      terrierOptIn={checkout.terrierOptIn}
       picker={checkout.picker}
     />
   );

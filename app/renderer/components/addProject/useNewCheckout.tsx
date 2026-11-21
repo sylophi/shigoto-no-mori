@@ -9,24 +9,22 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { toast } from "@/lib/toast";
-import { useTerrierOptIn } from "./TerrierOptIn";
+import { useOffersTerrier } from "@/hooks/terrier/useOffersTerrier";
 import { useOpenAddedProject } from "./useOpenAddedProject";
 
 // What the clone and the new repository share: where the checkout lands
 // (the device's usual folder, or one picked), the input that submits
-// it, the terrier opt-in, and how the flow ends.
+// it, whether it goes into terrier too, and how the flow ends.
 export function useNewCheckout({
   folder,
   pickerTitle,
   addToTerrier,
-  setAddToTerrier,
   onClose,
 }: {
   // The new folder's name, empty while there is none yet.
   folder: string;
   pickerTitle: string;
   addToTerrier: boolean;
-  setAddToTerrier: (value: boolean) => void;
   onClose: () => void;
 }) {
   const scope = useHostScope();
@@ -45,11 +43,7 @@ export function useNewCheckout({
     setPickerOpen(false);
     inputRef.current?.focus();
   };
-  const { terrier, terrierOptIn } = useTerrierOptIn(
-    addToTerrier,
-    setAddToTerrier,
-    inputRef,
-  );
+  const terrier = useOffersTerrier() && addToTerrier;
   // Only a peer's name is worth saying. The hook's own fallback covers a
   // peer that leaves the registry midway, so the wording never slides
   // back to this device's.
@@ -100,7 +94,6 @@ export function useNewCheckout({
     dest,
     inputRef,
     terrier,
-    terrierOptIn,
     onDevice,
     finish,
     openPicker: () => setPickerOpen(true),

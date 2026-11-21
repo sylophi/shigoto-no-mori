@@ -31,7 +31,6 @@ export function CloneFormView({
   onClone,
   dest,
   onChangeParent,
-  terrierOptIn,
   picker,
 }: {
   url: string;
@@ -51,7 +50,6 @@ export function CloneFormView({
   // Where it clones to.
   dest: string;
   onChangeParent: () => void;
-  terrierOptIn: ReactNode;
   // The folder picker, while it is open.
   picker: ReactNode;
 }) {
@@ -77,8 +75,6 @@ export function CloneFormView({
           onChange={onUrl}
           placeholder="Git URL or GitHub owner/repo"
           inputRef={inputRef}
-          icon={<GitBranch className="size-3.5" />}
-          label="Clone"
           canSubmit={canClone}
           onSubmit={onClone}
           combobox
@@ -120,7 +116,12 @@ export function CloneFormView({
         )}
         <DestinationRowView dest={dest} onChangeParent={onChangeParent} />
       </div>
-      <FormFooterView label="Clone">{terrierOptIn}</FormFooterView>
+      <FormFooterView
+        icon={<GitBranch className="size-3.5" />}
+        label="Clone"
+        canSubmit={canClone}
+        onSubmit={onClone}
+      />
       {picker}
     </>
   );
