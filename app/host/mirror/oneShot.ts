@@ -27,6 +27,10 @@ import {
   MIRROR_STATUS_WORDS,
   mirrorProblemCount,
 } from "@shigomori/contracts/modules/mirror";
+import {
+  isSameOrInside,
+  trimTrailingSlashes,
+} from "@shigomori/contracts/projectPaths";
 import type { FilesBrought } from "@shigomori/contracts/schemas";
 import { listed, pluralize } from "@shigomori/contracts/words";
 import * as Clock from "effect/Clock";
@@ -143,12 +147,15 @@ export const transferFilesOnce = (
 // the whole worktree counts each one the two checkouts write
 // differently (line endings, Windows against the rest) as a conflict.
 // The paths past the engine's cap on patterns stay on the source, and
-// the outcome says so, so a teardown keeps it.
+// the outcome says so, so a teardown keeps it. So does a repository
+// nested in the paths it carries: the engine never copies a .git, so
+// its history would go with the source.
 export const carryIgnoredOnce = <R>(
   {
     ignoreMode,
     ignores,
     ignoredPaths,
+    ignoredRepos,
     ...input
   }: Omit<Parameters<typeof transferFilesOnce>[0], "ignores"> & {
     direction: "pull" | "push";
@@ -156,6 +163,8 @@ export const carryIgnoredOnce = <R>(
     ignores: readonly string[];
     // The source's topmost ignored paths (Git.listIgnoredPaths).
     ignoredPaths: Effect.Effect<readonly string[], unknown, R>;
+    // The repositories nested in them (Git.listIgnoredRepos).
+    ignoredRepos: Effect.Effect<readonly string[], unknown, R>;
   },
   onProgress: (bytes: number, totalBytes: number) => void,
 ) =>
@@ -183,12 +192,23 @@ export const carryIgnoredOnce = <R>(
       },
       onProgress,
     );
-    return left > 0 && files.crossed
-      ? failed(
-          `${pluralize(left, "ignored path")} didn't fit in one pass`,
-          files.conflicts,
-        )
-      : files;
+    if (!files.crossed) return files;
+    if (left > 0) {
+      return failed(
+        `${pluralize(left, "ignored path")} didn't fit in one pass`,
+        files.conflicts,
+      );
+    }
+    const repos = (yield* ignoredRepos)
+      .filter((repo) => paths.some((path) => isSameOrInside(repo, path)))
+      .map(trimTrailingSlashes);
+    if (repos.length > 0) {
+      return failed(
+        `the git history of ${listed(repos)} isn't copied`,
+        files.conflicts,
+      );
+    }
+    return files;
   }).pipe(Effect.catch((error) => Effect.succeed(failed(messageOf(error)))));
 
 // One full cycle with both sides scanned and nothing left staging is

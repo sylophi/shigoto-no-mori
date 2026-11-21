@@ -502,6 +502,14 @@ export const syncContract = defineContract(
     Schema.Array(Schema.String),
     gatedBy("browseFiles"),
   ),
+  // The repositories nested in those paths, whose history a move's
+  // files step leaves behind.
+  invoke(
+    "ignoredRepos",
+    SyncIgnoredPathsPayloadSchema,
+    Schema.Array(Schema.String),
+    gatedBy("browseFiles"),
+  ),
   // Discloses whether a path is there, as fs:listDirectory does.
   invoke(
     "cloneDestination",

@@ -265,6 +265,21 @@ export const makeBranches = ({
       return yield* listOthersIgnored(repo, "--exclude-standard");
     });
 
+    // Without `--directory` git walks the ignored folders too, and names
+    // a repository it finds in one by a trailing-slash entry, never
+    // looking inside it. It lists every ignored file on the way, which
+    // for a node_modules runs to megabytes.
+    const listIgnoredRepos = Effect.fn("Git.listIgnoredRepos")(function* (
+      repo: string,
+    ) {
+      const paths = yield* run(
+        repo,
+        ["ls-files", "-z", "--others", "--ignored", "--exclude-standard"],
+        { maxOutputBytes: 256 * 1024 * 1024 },
+      ).pipe(Effect.map(splitZ));
+      return paths.filter((entry) => entry.endsWith("/"));
+    });
+
     const listUntrackedMatching = Effect.fn("Git.listUntrackedMatching")(
       function* (repo: string, excludeFile: string) {
         return yield* listOthersIgnored(repo, `--exclude-from=${excludeFile}`);
@@ -323,6 +338,7 @@ export const makeBranches = ({
       renameBranch,
       deleteBranch,
       listIgnoredPaths,
+      listIgnoredRepos,
       listUntrackedMatching,
       listIgnoreRules,
       appendExcludes,

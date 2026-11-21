@@ -116,6 +116,7 @@ export const GRANTS = {
       "sync:cloneDestination",
       "sync:hasCommits",
       "sync:ignoredPaths",
+      "sync:ignoredRepos",
       "sync:openSource",
       "sync:worktreeFolder",
       "worktrees:readFile",

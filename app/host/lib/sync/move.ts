@@ -173,6 +173,10 @@ export const pullWorktree = (
                   projectId: sourceProjectId,
                   worktreeId: sourceWorktreeId,
                 }),
+                ignoredRepos: peerSyncFor(sourceDeviceId).ignoredRepos({
+                  projectId: sourceProjectId,
+                  worktreeId: sourceWorktreeId,
+                }),
                 direction: "pull",
               },
               (bytes, totalBytes) =>
@@ -442,6 +446,9 @@ const sendWorktreeEffect = (
           ignores: ignores ?? [],
           ignoredPaths: Effect.flatMap(Git.Git, (git) =>
             git.listIgnoredPaths(worktree.path),
+          ),
+          ignoredRepos: Effect.flatMap(Git.Git, (git) =>
+            git.listIgnoredRepos(worktree.path),
           ),
           direction: "push",
         },
