@@ -1,10 +1,12 @@
 // The folders a browse lists, for the fs handlers.
 import { access, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { byFamily } from "@shigomori/engine/platform";
-import { toAbsolute } from "@shared/paths";
+import { home, toAbsolute } from "@shared/paths";
 
 async function listDirectory(path: string) {
   const absolute = toAbsolute(path);
@@ -30,7 +32,7 @@ async function listDirectory(path: string) {
   return { path: absolute, entries: result };
 }
 
-async function listDrives() {
+async function presentDrives() {
   const roots = Array.from(
     { length: 26 },
     (_, i) => `${String.fromCharCode(65 + i)}:`,
@@ -43,11 +45,14 @@ async function listDrives() {
       ),
     ),
   );
+  return roots.filter((_, i) => present[i]);
+}
+
+async function listDrives() {
+  const drives = await presentDrives();
   return {
     path: "/",
-    entries: roots
-      .filter((_, i) => present[i])
-      .map((name) => ({ name, isGitRepo: false })),
+    entries: drives.map((name) => ({ name, isGitRepo: false })),
   };
 }
 
@@ -63,3 +68,37 @@ export const listFolder = (path: string) =>
       })(path),
     catch: callFailureOf,
   });
+
+// A line of `mount`'s: `<what> on <where> [type <fs> ](<options>)`, the
+// type in Linux's alone.
+const MOUNT_LINE = / on (.+?) (?:type \S+ )?\(([^()]*)\)$/;
+// Where a Mac and a Linux desktop mount the volumes a person plugs in.
+const VOLUME_ROOTS = ["/Volumes/", "/media/", "/run/media/"];
+
+// The mounts a file manager lists, less the ones the system hides from
+// it (a Mac's Recovery is `nobrowse`).
+const mountedVolumes = Effect.gen(function* () {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const output = yield* spawner.string(ChildProcess.make("mount"));
+  return output.split("\n").flatMap((line) => {
+    const [, path = "", options = ""] = MOUNT_LINE.exec(line) ?? [];
+    const shown =
+      VOLUME_ROOTS.some((root) => path.startsWith(root)) &&
+      !options.split(/,\s*/).includes("nobrowse");
+    return shown ? [{ name: basename(path), path }] : [];
+  });
+});
+
+// The volumes a browse offers to jump to, its failure as it crosses a
+// wire. Windows's are its drives but the home's, as a Mac's boot volume
+// isn't among its mounts under /Volumes.
+export const listVolumes = byFamily({
+  posix: mountedVolumes,
+  windows: Effect.promise(presentDrives).pipe(
+    Effect.map((drives) =>
+      drives
+        .filter((name) => !home().startsWith(name))
+        .map((name) => ({ name, path: `${name}/` })),
+    ),
+  ),
+}).pipe(Effect.mapError(callFailureOf));

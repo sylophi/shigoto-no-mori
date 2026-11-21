@@ -345,6 +345,8 @@ export function FolderPickerScene() {
               filtered: FOLDERS.map((name) => ({ name, isGitRepo: false })),
               browseTo: noop,
               browseUp: noop,
+              volumes: [],
+              jumpTo: noop,
               paths: devicePaths(null),
             }}
             onOpenFinder={noop}

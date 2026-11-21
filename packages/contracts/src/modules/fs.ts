@@ -1,6 +1,11 @@
 import * as Schema from "effect/Schema";
 import { defineContract, invoke, gatedBy } from "../contract.ts";
-import { DirectoryListingSchema, PathPayloadSchema } from "../schemas/index.ts";
+import {
+  DirectoryListingSchema,
+  PathPayloadSchema,
+  VoidSchema,
+  VolumeSchema,
+} from "../schemas/index.ts";
 
 // Every fs call is remote:true, gated:true.
 // They are reads, but the `gated` axis is enforced as "gated on the
@@ -15,6 +20,12 @@ export const fsContract = defineContract(
     "listDirectory",
     PathPayloadSchema,
     DirectoryListingSchema,
+    gatedBy("browseFiles"),
+  ),
+  invoke(
+    "listVolumes",
+    VoidSchema,
+    Schema.Array(VolumeSchema),
     gatedBy("browseFiles"),
   ),
   invoke(

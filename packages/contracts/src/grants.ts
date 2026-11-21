@@ -107,6 +107,7 @@ export const GRANTS = {
     calls: [
       "fs:isGitRepo",
       "fs:listDirectory",
+      "fs:listVolumes",
       "fs:scanForGitRepos",
       "mirror:gitState",
       "projects:add",

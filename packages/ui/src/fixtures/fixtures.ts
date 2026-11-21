@@ -537,9 +537,11 @@ const miniWorktrees: Record<string, FakeWorktree[]> = {
 // project's folder is a git repo here too, and each machine has a repo
 // or two it never registered, so a scan finds something. The MacBook
 // has no port-pool, which is what cloning one onto it is posed with.
+// The Studio Mac has an external drive plugged in.
 export type FakeDisk = {
   home: string;
   dirs: Record<string, { name: string; isGitRepo: boolean }[]>;
+  volumes?: { name: string; path: string }[];
 };
 
 const dir = (name: string) => ({ name, isGitRepo: false });
@@ -560,7 +562,10 @@ export const fakeDisks: Record<string, FakeDisk> = {
         repo("t3code"),
       ],
       "/Users/rin/dev/sandbox": [repo("advent-2025")],
+      "/Volumes/Archive": [dir("old-projects"), repo("thesis")],
+      "/Volumes/Archive/old-projects": [repo("pixel-garden")],
     },
+    volumes: [{ name: "Archive", path: "/Volumes/Archive" }],
   },
   [MACBOOK_ID]: {
     home: "/Users/rtakeda",
