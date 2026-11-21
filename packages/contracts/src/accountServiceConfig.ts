@@ -2,12 +2,14 @@
 // and to ship empty.
 
 export type AccountServiceConfig = {
+  // The Colibrii instance's hub address, and this app's id there.
   hubUrl: string;
+  app: string;
   // Of the Clerk application whose secret key the hub verifies tokens
   // with.
   publishableKey: string;
-  // The one origin the device link's Origin gate admits browser dials
-  // from. Not part of isConfigured.
+  // The one origin the device's listener admits browser dials from. Not
+  // part of isConfigured.
   webOrigin: string;
   // The Clerk OAuth application a machine with no browser signs in
   // through (`sm login`, Clerk's device grant). Not part of
@@ -19,6 +21,7 @@ export type AccountServiceConfig = {
 // side and silently drop out of a shipped build.
 export const ACCOUNT_ENV = {
   hubUrl: "SM_DEVICE_HUB_URL",
+  app: "SM_DEVICE_HUB_APP",
   publishableKey: "SM_ACCOUNT_CLERK_PUBLISHABLE_KEY",
   webOrigin: "SM_ACCOUNT_WEB_ORIGIN",
   oauthClientId: "SM_ACCOUNT_CLERK_OAUTH_CLIENT_ID",
@@ -30,6 +33,7 @@ export function resolveServiceConfig(
 ): AccountServiceConfig {
   return {
     hubUrl: (env[ACCOUNT_ENV.hubUrl] ?? "").trim(),
+    app: (env[ACCOUNT_ENV.app] ?? "").trim(),
     publishableKey: (env[ACCOUNT_ENV.publishableKey] ?? "").trim(),
     webOrigin: (env[ACCOUNT_ENV.webOrigin] ?? "").trim(),
     oauthClientId: (env[ACCOUNT_ENV.oauthClientId] ?? "").trim(),
@@ -37,7 +41,11 @@ export function resolveServiceConfig(
 }
 
 export function isConfigured(config: AccountServiceConfig): boolean {
-  return config.hubUrl.length > 0 && config.publishableKey.length > 0;
+  return (
+    config.hubUrl.length > 0 &&
+    config.app.length > 0 &&
+    config.publishableKey.length > 0
+  );
 }
 
 // Lowest to highest: dev .env.local, the bundle's baked values, the

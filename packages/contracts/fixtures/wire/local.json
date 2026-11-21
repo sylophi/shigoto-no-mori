@@ -17,8 +17,7 @@
       "deviceIcon": "pine",
       "detectedDeviceIcon": "bird",
       "sharedSignIn": false,
-      "codeSignIn": false,
-      "needsDeviceKey": false
+      "codeSignIn": false
     }
   },
   "account:finishCodeSignIn": {
@@ -26,8 +25,8 @@
       "userCode": "",
       "verificationUri": "\u0000",
       "deviceCode": "",
-      "interval": -4,
-      "expiresIn": -3
+      "intervalSeconds": -1.596737047569193e215,
+      "expiresAt": 2.485838653997082e-281
     },
     "success": "\n"
   },
@@ -66,8 +65,7 @@
       "deviceIcon": "tablet",
       "detectedDeviceIcon": "flower",
       "sharedSignIn": false,
-      "codeSignIn": false,
-      "needsDeviceKey": false
+      "codeSignIn": true
     }
   },
   "account:setDeviceName": {
@@ -83,8 +81,7 @@
       "deviceIcon": "gamepad",
       "detectedDeviceIcon": "pine",
       "sharedSignIn": false,
-      "codeSignIn": false,
-      "needsDeviceKey": false
+      "codeSignIn": true
     }
   },
   "account:signOut": {},
@@ -93,8 +90,8 @@
       "userCode": "\t",
       "verificationUri": "\ud800",
       "deviceCode": "\n",
-      "interval": -2,
-      "expiresIn": 2
+      "intervalSeconds": -2.0066620631759154e-79,
+      "expiresAt": 5.1127755812428193e306
     }
   },
   "account:status": {
@@ -106,8 +103,7 @@
       "deviceIcon": "flower",
       "detectedDeviceIcon": "coffee",
       "sharedSignIn": false,
-      "codeSignIn": false,
-      "needsDeviceKey": false
+      "codeSignIn": false
     }
   },
   "clientConfig:patch": {
@@ -203,7 +199,7 @@
   "hub:statusChanged": {
     "payload": {
       "socket": {
-        "phase": "idle"
+        "phase": "stopped"
       },
       "onlineDeviceIds": [""],
       "peerAppVersions": {},
@@ -212,17 +208,11 @@
         "\t": false
       },
       "peerSharesData": {
-        "\t": true
+        "j": true,
+        "": false
       },
-      "peerOutdated": {
-        "dev-1": {
-          "outdated": "peer",
-          "modules": ["terminals"]
-        }
-      },
-      "peerCoreOutdated": {
-        "dev-2": "peer"
-      }
+      "peerOutdated": {},
+      "peerCoreOutdated": {}
     }
   },
   "hub:watchPeer": {
@@ -321,18 +311,16 @@
   "releases:list": {
     "success": []
   },
-  "session:account": {
-    "payload": {
-      "hubUrl": "C'",
-      "accountId": "",
-      "credential": "",
-      "deviceKey": "",
-      "webOrigin": "\u0000",
-      "acceptsCommands": false
-    }
+  "session:acceptsCommands": {
+    "payload": null
   },
-  "session:accountDevices": {
-    "payload": []
+  "session:account": {
+    "success": {
+      "_tag": "Stopped",
+      "deviceId": ")0",
+      "accountId": "\ud800",
+      "reason": "credential-rejected"
+    }
   },
   "session:busy": {
     "success": {
@@ -344,6 +332,16 @@
       "queuedMoves": 1
     }
   },
+  "session:enroll": {
+    "payload": {
+      "loginToken": "\u0000",
+      "name": "\udc00",
+      "data": {
+        "platform": "u",
+        "icon": ":c"
+      }
+    }
+  },
   "session:guideLaunch": {
     "payload": {
       "session": "n80D$PJ9Ebstno7q",
@@ -351,12 +349,34 @@
       "terminal": "terminal"
     }
   },
+  "session:listDevices": {
+    "success": []
+  },
   "session:migrationRetry": {},
   "session:quit": {
     "payload": {
       "hurried": false
     }
   },
+  "session:removeDevice": {
+    "payload": "y"
+  },
+  "session:renameDevice": {
+    "payload": {
+      "deviceId": "*y",
+      "name": "\n"
+    }
+  },
+  "session:setDeviceData": {
+    "payload": {
+      "deviceId": "-1",
+      "data": {
+        "platform": "\t",
+        "icon": "_"
+      }
+    }
+  },
+  "session:signOut": {},
   "session:updaterState": {
     "payload": {
       "kind": "unsupported"
@@ -375,6 +395,18 @@
     "payload": {
       "path": "\ud800"
     }
+  },
+  "shellCalls:account": {
+    "payload": {
+      "_tag": "Enrolled",
+      "deviceId": "\udc00",
+      "accountId": "\u0000",
+      "connected": false,
+      "settled": false
+    }
+  },
+  "shellCalls:deviceStoreKey": {
+    "success": null
   },
   "shellCalls:failed": {
     "payload": {

@@ -61,10 +61,11 @@ import {
 } from "./handlers";
 import {
   deviceLinkLayer,
-  loopbackLayer,
-  remotePlanesLayer,
-  tunnelLayer,
+  followDeviceAccount,
   followDeviceSettings,
+  loopbackLayer,
+  peerDeviceLayer,
+  remotePlanesLayer,
 } from "./wires";
 import { onQuit, starts } from "@shared/lifetimes";
 import * as Migration from "@shigomori/engine/Migration";
@@ -91,11 +92,7 @@ const logged = <A, R>(
 // any tool), as a project-scoped ping on every wire.
 const gitWatcher = logged("the git watcher", GitWatcher.layer);
 
-// The hub socket and the direct plane, and the device link's listener,
-// which follows the same enrollment condition. Both connect on the
-// account's first report from the shell and reconcile on every one
-// after (handlers.ts applyAccount). The listener closes with its own
-// layer, below.
+// The peer plane over the device, below.
 const remotePlanes = logged("the device hub", remotePlanesLayer);
 
 // The mirror engine: the git follower and the threads, the daemon, and
@@ -274,6 +271,18 @@ export const layer = (options: {
   // what it runs on is still up.
   MoveQueue.layer.pipe(Layer.provideMerge(below(options)));
 
+// This device on Colibrii: its hub socket, its links and its tunnel,
+// which connected peers see go away cleanly, and what follows it.
+const device = followDeviceAccount.pipe(
+  Layer.provideMerge(followDeviceSettings),
+  Layer.provideMerge(peerDeviceLayer),
+  // What a peer's link serves.
+  Layer.provideMerge(deviceLinkLayer.pipe(Layer.provide(served))),
+  // The switch the listener's gate reads. Its changes go to this
+  // device's windows and, the push being remote, to every peer.
+  Layer.provideMerge(Sharing.layer),
+);
+
 const below = (options: Parameters<typeof layer>[0]) =>
   dataDirHolders.pipe(
     Layer.provideMerge(scriptGate),
@@ -304,15 +313,7 @@ const below = (options: Parameters<typeof layer>[0]) =>
     Layer.provideMerge(mirrorChangesLayer),
     Layer.provideMerge(mirrors),
     Layer.provideMerge(remotePlanes),
-    Layer.provideMerge(followDeviceSettings),
-    // The cloudflared child, fronting the device link's listener.
-    Layer.provideMerge(tunnelLayer),
-    // The listener peers dial, which connected peers see go away
-    // cleanly.
-    Layer.provideMerge(deviceLinkLayer.pipe(Layer.provide(served))),
-    // The switch the listener's gate reads. Its changes go to this
-    // device's windows and, the push being remote, to every peer.
-    Layer.provideMerge(Sharing.layer),
+    Layer.provideMerge(device),
     // Every store write, the terminal's or the app's own, as pushes, and
     // what the scripts and the projects' git watches follow of it.
     Layer.provideMerge(logged("the store's changes", StoreChanges.layer)),

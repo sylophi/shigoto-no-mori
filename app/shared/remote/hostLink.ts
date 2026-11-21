@@ -1,6 +1,5 @@
-// A link to this machine's host: the device link's dialer
-// (deviceLink.ts) on the loopback, with the loopback's token in place of
-// a ticket. The desktop window dials it with the address its shell
+// A link to this machine's host: the loopback's dialer (deviceLink.ts),
+// with the loopback's token. The desktop window dials it with the address its shell
 // answers (window:hostAddress), and the shell with the one its host
 // reported. A link that drops is dialed again, at the address answered
 // then, so a host that went away (and came back on another port) is a
@@ -19,7 +18,7 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { Link } from "@shared/ipc/transport";
 import { log } from "@shared/log";
-import { dialDevice, type OpenClientSocket } from "./deviceLink";
+import { dialHost, type OpenClientSocket } from "./deviceLink";
 import { pushFanOut } from "./rpcTransport";
 
 // How long one dial may take, and the waits between failed ones.
@@ -59,9 +58,9 @@ export const hostLink = Effect.fnUntraced(function* (options: {
     // the address answered now. Kept, it would close the link this dial
     // makes (a shell's, as its restarted host says it is up).
     yield* Queue.clear(reconnects);
-    const dialed = yield* dialDevice({
+    const dialed = yield* dialHost({
       url: `ws://127.0.0.1:${port}`,
-      ticket: token,
+      token,
       group: LoopbackGroup,
       appVersion: options.appVersion,
       localDeviceId: deviceId,

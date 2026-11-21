@@ -27,13 +27,16 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { chromium } from "playwright-core";
-import { createAccountService } from "../shared/account/service.ts";
+import * as Colibrii from "@colibrii/sdk";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 const appDir = join(import.meta.dirname, "..");
 const env = parseEnv(readFileSync(join(appDir, ".env.local"), "utf8"));
 const publishableKey = env["SM_ACCOUNT_CLERK_PUBLISHABLE_KEY"] ?? "";
 const clientId = env["SM_ACCOUNT_CLERK_OAUTH_CLIENT_ID"] ?? "";
 const hubUrl = env["SM_DEVICE_HUB_URL"] ?? "";
+const hubApp = env["SM_DEVICE_HUB_APP"] ?? "shigomori-dev";
 if (publishableKey === "" || clientId === "" || hubUrl === "") {
   throw new Error(
     ".env.local names no dev Clerk instance, OAuth client and hub to sign in with.",
@@ -152,8 +155,12 @@ async function accessToken(): Promise<string> {
 }
 
 async function approve(link: string): Promise<void> {
-  const ticket = await createAccountService({ baseUrl: hubUrl }).signInToken(
-    await accessToken(),
+  const ticket = await Effect.runPromise(
+    Colibrii.signInToken({
+      hub: hubUrl,
+      app: hubApp,
+      accessToken: await accessToken(),
+    }).pipe(Effect.provide(FetchHttpClient.layer)),
   );
   const browser = await chromium.launch({ channel: "chrome", headless: true });
   try {

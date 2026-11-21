@@ -8,7 +8,7 @@
 // hub store rather than the account:listDevices HTTP snapshot (which
 // only invalidates on account:changed), so a device coming online or
 // going away updates without a refetch.
-import { credentialRevoked } from "@shared/remote/supervisor";
+import { credentialRevoked } from "@shigomori/contracts/modules/hub";
 import { useIsMutating } from "@tanstack/react-query";
 import {
   isHubRefusal,

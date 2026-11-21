@@ -147,7 +147,7 @@ export class DevApp {
     );
     if (!this.options.needsTunnel) return;
     // A tunnel routes in seconds, a new hostname's too. The bound
-    // leaves room for the host's own restarts (host/direct/Tunnel.ts).
+    // leaves room for the tunnel's own restarts (Colibrii's).
     const started = Date.now();
     let told = started;
     await waitFor(

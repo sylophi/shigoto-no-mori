@@ -9,8 +9,7 @@ import { strict } from "../schemas/strict.ts";
 // headless host serves: an app with windows has the page. Its sign-in
 // is Clerk's device grant: the host asks Clerk for a code, the person
 // approves it on Clerk's page from another device, and the host, asking
-// Clerk until they have, enrolls this device with the hub under the
-// token it gets. Loopback only, and kept out of allContractModules, so
+// Clerk until they have, enrolls this device under the token it gets. Loopback only, and kept out of allContractModules, so
 // no window's api carries it.
 
 export const LoginCodeSchema = strict(
@@ -22,10 +21,10 @@ export const LoginCodeSchema = strict(
     verificationUriComplete: Schema.optional(Schema.String),
     // What the host asks Clerk with, handed back to finish.
     deviceCode: Schema.String,
-    // Seconds: how often Clerk may be asked, and how long the code
-    // lives.
-    interval: Schema.Int,
-    expiresIn: Schema.Int,
+    // How often Clerk may be asked.
+    intervalSeconds: Schema.Finite,
+    // Milliseconds since the epoch.
+    expiresAt: Schema.Finite,
   }),
 );
 export type LoginCode = typeof LoginCodeSchema.Type;
@@ -43,7 +42,7 @@ export type LoginStatus = typeof LoginStatusSchema.Type;
 
 export const loginContract = defineContract(
   "login",
-  { scope: "host", remote: false, version: 1 },
+  { scope: "host", remote: false, version: 2 },
   invoke("status", VoidSchema, LoginStatusSchema),
   // Refused while signed in.
   invoke("start", VoidSchema, LoginCodeSchema),

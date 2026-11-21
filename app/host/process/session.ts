@@ -6,16 +6,16 @@ import * as Effect from "effect/Effect";
 import { hostBusy } from "@host/lib/sync/MoveQueue";
 import * as Graph from "./graph";
 import * as BackgroundFetch from "@host/lib/BackgroundFetch";
-import * as Tunnel from "@host/direct/Tunnel";
+import * as PeerDevice from "@host/lib/PeerDevice";
 import * as Agents from "@shigomori/engine/Agents";
 import { dirname } from "@shigomori/engine/canonicalPath";
 import * as HostFacts from "@host/lib/HostFacts";
 import * as HostRpc from "@host/socket/hostRpc";
-import { applyAccount, noteAccountDevices } from "./handlers";
+import { deviceCalls } from "./device";
+import { noteAcceptsCommands } from "./handlers";
 import * as Shell from "@host/lib/Shell";
 import * as WtFolder from "@shigomori/engine/WtFolder";
 import { asCall, changing } from "@host/lib/Engine";
-import { probeRemoteConnections } from "./wires";
 
 // The root's own Promise work, for the session's calls.
 const onRoot = <A>(run: () => Promise<A>) =>
@@ -27,9 +27,16 @@ export const sessionHandlers = (options: {
   readonly quit: (hurried: boolean) => void;
 }) =>
   HostRpc.handlers(sessionContract, {
-    account: (facts) => onRoot(() => applyAccount(facts)),
-    accountDevices: (deviceIds) =>
-      Effect.sync(() => noteAccountDevices(deviceIds)),
+    acceptsCommands: (accountId) =>
+      onRoot(() => noteAcceptsCommands(accountId)),
+    account: () => onRoot(deviceCalls.account),
+    enroll: (input) => onRoot(() => deviceCalls.enroll(input)),
+    signOut: () => onRoot(deviceCalls.signOut),
+    listDevices: () => onRoot(deviceCalls.listDevices),
+    renameDevice: (input) => onRoot(() => deviceCalls.renameDevice(input)),
+    setDeviceData: (input) => onRoot(() => deviceCalls.setDeviceData(input)),
+    removeDevice: (deviceId) =>
+      onRoot(() => deviceCalls.removeDevice(deviceId)),
     // One sent before the graph is up lands once it is.
     windowFocused: (focused) =>
       Effect.sync(
@@ -40,15 +47,14 @@ export const sessionHandlers = (options: {
             ),
           ).catch(() => {}),
       ),
-    // A wake, or the network changing: the remote links probe now, and
-    // the tunnel checks it is still reachable.
+    // A wake, or the network changing.
     wake: () =>
-      Effect.sync(() => {
-        probeRemoteConnections();
-        void Graph.run(
-          Effect.flatMap(Tunnel.Tunnel, (tunnel) => tunnel.recheck),
-        ).catch(() => {});
-      }),
+      Effect.sync(
+        () =>
+          void Graph.run(
+            Effect.flatMap(PeerDevice.PeerDevice, (device) => device.wake),
+          ).catch(() => {}),
+      ),
     busy: () => hostBusy,
     updaterState: (state) =>
       Effect.flatMap(Shell.Shell, (shell) => shell.updater.noteState(state)),

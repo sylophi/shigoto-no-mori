@@ -1,35 +1,35 @@
-// The direct sandbox: two devices on a REAL direct link, beside the
-// stub device hub (hubStub.mts). The listener is a REAL direct ws
-// listener (host/socket/DeviceLink.ts) with its ticket store and command
-// switch, answering connectInfo through the hub as the host does. The
-// dialer drives the REAL shared composition (shared/hub/directPlane.ts).
-// What each proof adds is its own handlers and what it asserts.
-import { STALE_TICKET } from "@shared/remote/sealedSocket";
-import assert from "node:assert/strict";
-import { makeConnectInfo } from "@host/direct/connectInfo";
+// The direct sandbox: two devices joined by a pair of in-memory links
+// where Colibrii would carry them. The listener is the REAL link server
+// (host/socket/DeviceLink.ts) with its command switch and sharing, which
+// admits the dialer's hello and serves its link as the host does. The
+// dialer drives the REAL shared composition (shared/hub/directPlane.ts)
+// over a stand-in device whose roster names the listener and whose dial
+// hands the listener the other end. What each proof adds is its own
+// handlers and what it asserts.
+import { randomUUID } from "node:crypto";
+import * as Colibrii from "@colibrii/sdk";
 import * as DeviceLink from "@host/socket/DeviceLink";
+import type * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Scope from "effect/Scope";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Queue from "effect/Queue";
+import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
+import * as DeviceId from "@host/lib/config/DeviceId";
+import * as HostFacts from "@host/lib/HostFacts";
 import * as HostPushes from "@host/lib/HostPushes";
 import * as Views from "@host/lib/Views";
 import * as Sharing from "@host/lib/Sharing";
-import {
-  createConnectTicketStore,
-  type ConnectTicketStore,
-} from "@host/direct/tickets";
-import type { HubConnection } from "@shared/hub/connection";
-import {
-  type HubConnectionOpts,
-  make as makeHubConnection,
-} from "@host/hub/connection";
 import type { HubHandlers } from "@shared/hub/bridgeHandlers";
-import { make as makeDirectPlane } from "@shared/hub/directPlane";
+import {
+  make as makeDirectPlane,
+  type PeerDevice,
+} from "@shared/hub/directPlane";
 import type { ContractModule } from "@shigomori/contracts/contract";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import type { HubPeerPush } from "@shigomori/contracts/modules/hub";
@@ -39,17 +39,12 @@ import type { HostServices } from "@host/process/services";
 import { hostContext } from "./hostRuntime.mts";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type * as PeerReach from "@host/ipc/PeerReach";
-import { WebSocket as WsClient } from "ws";
-import { startStubHub, type StubHub, testDeviceKey } from "./hubStub.mts";
 import { type Track, waitFor } from "./checkKit.mts";
 
 // The two devices, named by their part in the link: the one that dials
-// and the one that listens. Each seals with its test key (hubStub.mts).
+// and the one that listens.
 export const DIALER = "dialer";
 export const LISTENER = "listener";
-
-// How long each leg of a dial may take.
-const DIAL_DEADLINE_MS = 3000;
 
 type ServedContracts<C extends readonly ContractModule[]> = {
   [I in keyof C]: readonly [
@@ -59,20 +54,65 @@ type ServedContracts<C extends readonly ContractModule[]> = {
 };
 
 type DirectListener = {
-  tickets: ConnectTicketStore;
+  // Its side of a link: the welcome to a hello, and the link served.
+  link: DeviceLink.DeviceLink["Service"];
+  // Runs the link's serving where the listener's services are.
+  fork: (effect: Effect.Effect<void>) => void;
   acceptsCommands(): boolean;
   setAccepts(next: boolean): void;
   sharesData(): boolean;
-  listenerPort(): number | null;
 };
 
-// A REAL direct listener on an ephemeral loopback port serving
-// `contracts`, with its ticket store and the two answers a peer reads:
-// command access (the host-wide "accepts commands from its account's
-// devices" answer the real binding reads from the account's facts) and
-// sharing (on, as a device starts). Flipping command access pushes it to
-// every connected peer, as the host does, so a peer's bridge follows it
-// live.
+// Two ends of one link, as Colibrii hands them to each side: what one
+// sends the other reads, and either closing closes both.
+const linkPair = (greeting: Uint8Array) =>
+  Effect.gen(function* () {
+    const connectionId = randomUUID();
+    const toDialer = yield* Queue.unbounded<Uint8Array, Cause.Done>();
+    const toListener = yield* Queue.unbounded<Uint8Array, Cause.Done>();
+    const closed = yield* Deferred.make<Colibrii.LinkClosed>();
+    const close = Effect.gen(function* () {
+      yield* Deferred.succeed(closed, {
+        code: 1000,
+        cause: "closed",
+      } satisfies Colibrii.LinkClosed);
+      yield* Queue.end(toDialer);
+      yield* Queue.end(toListener);
+    });
+    const end = (
+      deviceId: string,
+      role: Colibrii.Link["role"],
+      inbound: Queue.Queue<Uint8Array, Cause.Done>,
+      outbound: Queue.Queue<Uint8Array, Cause.Done>,
+    ): Colibrii.Link => ({
+      deviceId,
+      connectionId,
+      role,
+      arrival: "lan",
+      greeting,
+      send: (message) =>
+        Effect.flatMap(Deferred.isDone(closed), (done) =>
+          done
+            ? Effect.fail(new Colibrii.LinkClosedError())
+            : Effect.asVoid(Queue.offer(outbound, message)),
+        ),
+      messages: Stream.fromQueue(inbound).pipe(Stream.orDie),
+      close,
+      closed: Deferred.await(closed),
+    });
+    return {
+      dialer: end(LISTENER, "dialer", toDialer, toListener),
+      listener: end(DIALER, "listener", toListener, toDialer),
+      close,
+    };
+  });
+
+// The REAL link server serving `contracts`, with the two answers a peer
+// reads: command access (the host-wide "accepts commands from its
+// account's devices" answer the real binding reads from the account's
+// facts) and sharing (on, as a device starts). Flipping command access
+// pushes it to every connected peer, as the host does, so a peer's
+// bridge follows it live.
 async function startDirectListener<const C extends readonly ContractModule[]>(
   track: Track,
   contracts: ServedContracts<C>,
@@ -80,7 +120,6 @@ async function startDirectListener<const C extends readonly ContractModule[]>(
   // engine), over the proof file's host services.
   provide: Layer.Layer<never>,
 ): Promise<DirectListener> {
-  const tickets = createConnectTicketStore();
   let accepts = false;
   const sharing = Effect.runSync(SubscriptionRef.make(true));
   const served = Layer.mergeAll(
@@ -95,30 +134,7 @@ async function startDirectListener<const C extends readonly ContractModule[]>(
       // Its calls run on the services beneath it, there from the start.
       Layer.unwrap(
         Effect.map(Effect.context<HostServices>(), (services) =>
-          DeviceLink.layer({
-            auth: {
-              // The roster's keys are the test keys (hubStub.mts), and
-              // the listener seals with its own.
-              opens: {
-                check: (ticket, arrivedAs) => {
-                  const deviceId = tickets.check(ticket, arrivedAs);
-                  if (deviceId === null || deviceId === STALE_TICKET) {
-                    return deviceId;
-                  }
-                  return {
-                    deviceId,
-                    publicKey: testDeviceKey(deviceId).pair.publicKey,
-                  };
-                },
-                spend: (ticket, arrivedAs) =>
-                  tickets.consume(ticket, arrivedAs),
-                keepDevices: (deviceIds) => tickets.keepDevices(deviceIds),
-                keyOf: (deviceId) => testDeviceKey(deviceId).pair.publicKey,
-                localKey: () => testDeviceKey(LISTENER).pair,
-              },
-              isCommandGranted: () => accepts,
-            },
-          }).pipe(
+          DeviceLink.layer({ isCommandGranted: () => accepts }).pipe(
             Layer.provide(served),
             Layer.provide(
               Layer.succeed(HostRpc.HostGraph, Effect.succeed(services)),
@@ -131,6 +147,23 @@ async function startDirectListener<const C extends readonly ContractModule[]>(
         Layer.succeedContext(host),
         HostPushes.layer,
         Views.layer,
+        Layer.succeed(
+          DeviceId.DeviceId,
+          DeviceId.DeviceId.of({ id: LISTENER }),
+        ),
+        Layer.succeed(
+          HostFacts.HostFacts,
+          HostFacts.HostFacts.of({
+            packaged: false,
+            appPath: "",
+            resourcesPath: "",
+            appVersion: "2.0.0",
+            userDataPath: "",
+            logsPath: "",
+            rendererOrigin: "",
+            flavor: "dev",
+          }),
+        ),
         Layer.succeed(
           Sharing.Sharing,
           Sharing.Sharing.of({
@@ -149,24 +182,10 @@ async function startDirectListener<const C extends readonly ContractModule[]>(
     ),
   );
   track(() => runtime.dispose());
-  const onLink = <A,>(
-    f: (link: DeviceLink.DeviceLink["Service"]) => Effect.Effect<A>,
-  ) => runtime.runPromise(Effect.flatMap(DeviceLink.DeviceLink, f));
-  await onLink((link) =>
-    link.reconcile(
-      Effect.succeed({
-        port: 0,
-        bindAddress: "127.0.0.1",
-        deviceId: LISTENER,
-        appVersion: "2.0.0",
-        helloTimeoutMs: 1000,
-      }),
-    ),
-  );
-  const status = await onLink((link) => link.status);
-  assert.ok(status.port !== null, "the listener did not bind");
+  const link = await runtime.runPromise(Effect.service(DeviceLink.DeviceLink));
   return {
-    tickets,
+    link,
+    fork: (effect) => void runtime.runFork(effect),
     acceptsCommands: () => accepts,
     setAccepts: (next) => {
       accepts = next;
@@ -175,95 +194,72 @@ async function startDirectListener<const C extends readonly ContractModule[]>(
       );
     },
     sharesData: () => Effect.runSync(SubscriptionRef.get(sharing)),
-    listenerPort: () => (status.listening ? status.port : null),
   };
 }
 
-// Boots one device on the stub device hub and waits until it connects.
-// `opts.serveConnectInfo` is the one thing the hub wire can answer
-// (absent: a dial-only device that refuses every ask as serving no
-// listener). The teardown is registered before the wait, so a boot that
-// fails it still gets cleaned up and cannot leak the event loop.
-async function bootDevice(
-  stub: StubHub,
-  deviceId: string,
-  opts: HubConnectionOpts,
-  track: Track,
-): Promise<HubConnection> {
-  const scope = Scope.makeUnsafe();
-  const connection = Effect.runSync(
-    makeHubConnection(opts).pipe(Scope.provide(scope)),
-  );
-  track(() => Effect.runPromise(Scope.close(scope, Exit.void)));
-  await Effect.runPromise(
-    connection.refresh(
-      Effect.succeed({
-        hubUrl: stub.hubUrl,
-        accountId: "acct",
-        mintTicket: async (connectionId: string) =>
-          `t:${deviceId}:desktop:${connectionId}`,
-        deviceId,
-        deviceKey: testDeviceKey(deviceId).privateKey,
-      }),
-    ),
-  );
-  await waitFor(
-    () => connection.status().socket.phase === "connected",
-    `${deviceId} to connect`,
-  );
-  return connection;
-}
+// The dialer's device as the plane sees it: enrolled, the listener
+// online, and a dial that the listener admits and serves as Colibrii
+// would hand it the link.
+const dialerDevice = (listener: DirectListener): PeerDevice => ({
+  account: Stream.make({
+    _tag: "Enrolled",
+    deviceId: DIALER,
+    accountId: "acct",
+    connected: true,
+    settled: true,
+  } as const),
+  roster: Stream.make([
+    { deviceId: LISTENER, publicKey: new Uint8Array(), connections: "single" },
+  ]),
+  dial: (deviceId, appHello) =>
+    Effect.gen(function* () {
+      const welcome = yield* listener.link
+        .admit({
+          deviceId: DIALER,
+          connectionId: randomUUID(),
+          arrival: "lan",
+          appHello,
+        })
+        .pipe(
+          Effect.mapError(
+            (refusal) =>
+              new Colibrii.LinkRefusedError({
+                deviceId,
+                by: "app",
+                reason: refusal.reason,
+                ...(refusal.appRefusal === undefined
+                  ? {}
+                  : { appRefusal: refusal.appRefusal }),
+              }),
+          ),
+        );
+      const pair = yield* linkPair(welcome);
+      listener.fork(listener.link.serve(pair.listener));
+      yield* Effect.addFinalizer(() => pair.close);
+      return pair.dialer;
+    }),
+  wake: Effect.void,
+});
 
-// The dialer bridged to `listener` through a stub device hub of its
-// own: the listener's hub device answers connectInfo with the REAL
-// server (the ONLY thing the hub wire answers, wired as the host wires
-// it), and the dialer's REAL direct plane, exactly as the host
-// assembles it, asks it. The plane's presence path is wired to the
-// dialer's hub connection as production wires it (late-bound, plus one
-// catch-up call for the roster that connected before the plane
-// existed), so its keeper dials the listener on its own. The plane
-// stops with the test, closing its sessions.
-async function bridgeTo(
+// The dialer's REAL direct plane, exactly as the host assembles it,
+// over the stand-in device: its keeper dials the listener on its own.
+// The plane stops with the test, closing its sessions.
+function bridgeTo(
   track: Track,
   listener: DirectListener,
   onPeerPush: (push: HubPeerPush) => void,
-): Promise<HubHandlers> {
-  const stub = await startStubHub(track);
-  let onPlaneChange: (() => void) | null = null;
-  const serveConnectInfo = makeConnectInfo({
-    listenerPort: listener.listenerPort,
-    mintTickets: (peerDeviceId, kinds) =>
-      listener.tickets.mint(peerDeviceId, kinds),
-    // Deterministic candidates: the listener binds loopback, so real
-    // interface enumeration would offer unreachable LAN addresses.
-    candidateAddresses: () => ["127.0.0.1"],
-    tunnelUrl: () => null,
-    acceptsCommands: listener.acceptsCommands,
-    sharesData: listener.sharesData,
-  });
-  // The two devices are independent, so they boot concurrently.
-  const [, dialer] = await Promise.all([
-    bootDevice(stub, LISTENER, { serveConnectInfo }, track),
-    bootDevice(stub, DIALER, { onChange: () => onPlaneChange?.() }, track),
-  ]);
+): HubHandlers {
   const scope = Scope.makeUnsafe();
   const plane = Effect.runSync(
     makeDirectPlane({
-      connection: () => dialer,
+      device: dialerDevice(listener),
       localDeviceId: () => DIALER,
       localAppVersion: () => "1.0.0",
       broadcastStatus: () => {},
       broadcastPeerPush: onPeerPush,
-      // The production socket (the host injects ws), so the proof
-      // exercises the errno detail the seam exists for rather than the
-      // bare 1006 of Node's global.
-      openSocket: (url) => new WsClient(url),
-      deadlineMs: DIAL_DEADLINE_MS,
     }).pipe(Scope.provide(scope)),
   );
   track(() => Effect.runPromise(Scope.close(scope, Exit.void)));
-  onPlaneChange = () => plane.handleConnectionChange();
-  plane.handleConnectionChange();
   return plane.handlers;
 }
 
@@ -277,15 +273,15 @@ export type DirectWire = {
   toListener: PeerReachDeps;
 };
 
-// The whole direct wire the transfer checks share, exactly as
-// production composes it: a REAL direct listener serving the check's
-// contracts, the dialer's REAL direct plane supervised over the stub
-// device hub (bridgeTo), and a peer reach aimed at the listener. The
-// keeper establishes the session eagerly, before any invoke, which is
-// the supervised model the transfer checks ride. Everything registers
-// its teardown on the caller's tracker. `opts.contracts` lists the
-// [contract, handlers] pairs the listener serves, each as the host
-// serves it (host/socket/hostRpc.ts).
+// The whole direct wire the transfer checks share, as production
+// composes it on both sides of Colibrii: a REAL link server serving the
+// check's contracts, the dialer's REAL direct plane (bridgeTo), and a
+// peer reach aimed at the listener. The keeper establishes the session
+// eagerly, before any invoke, which is the supervised model the
+// transfer checks ride. Everything registers its teardown on the
+// caller's tracker. `opts.contracts` lists the [contract, handlers]
+// pairs the listener serves, each as the host serves it
+// (host/socket/hostRpc.ts).
 export async function bootDirectWire<const C extends readonly ContractModule[]>(
   track: Track,
   opts: { contracts: ServedContracts<C>; provide?: Layer.Layer<never> },
@@ -299,7 +295,7 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
   // hands them on (host/process/wires.ts), for the peer transport's
   // subscribe.
   const pushListeners = new Set<(push: HubPeerPush) => void>();
-  const bridge = await bridgeTo(track, listener, (push) => {
+  const bridge = bridgeTo(track, listener, (push) => {
     for (const hear of pushListeners) hear(push);
   });
   await waitFor(

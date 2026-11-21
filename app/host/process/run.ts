@@ -9,7 +9,6 @@ import { closeSync, openSync, renameSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { isTestFlavor } from "@shigomori/engine/flavor";
 import { childDefaults } from "@shigomori/engine/processes";
-import * as ProcessTable from "@shigomori/engine/ProcessTable";
 import type { HostFailureSchema } from "@shigomori/contracts/modules/shellCalls";
 import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
 import * as Effect from "effect/Effect";
@@ -36,8 +35,6 @@ import { initDataDir } from "@shared/paths";
 import * as Graph from "./graph";
 import type * as HostRpc from "@host/socket/hostRpc";
 import * as Loopback from "@host/socket/Loopback";
-import { reapOrphanedConnector } from "@host/direct/Tunnel";
-import { TUNNEL_PID_FILE } from "@shigomori/engine/tunnelPid";
 import { setHostFacts } from "./facts";
 import * as HostLayer from "./layer";
 import * as HostNodeServices from "./nodeServices";
@@ -142,21 +139,7 @@ export async function runHost<E>(root: {
   const { facts } = root;
   setHostFacts(facts);
   const flavor = facts.flavor;
-  // The connector a host that died unasked left running, killed first:
-  // a boot that stalls later must not leave it running too. Awaited
-  // before the graph, whose Tunnel writes the file again. The pid file is
-  // in the shell's own data so it outlives the host that wrote it.
   const nativefs = nativefsPath(facts);
-  const reaped = Effect.runPromise(
-    reapOrphanedConnector(join(facts.userDataPath, TUNNEL_PID_FILE)).pipe(
-      Effect.provide(
-        ProcessTable.layer(nativefs).pipe(
-          Layer.provide(childDefaults),
-          Layer.provideMerge(HostNodeServices.layer),
-        ),
-      ),
-    ),
-  );
   // The shell has opened the data folder already, and says so when it
   // can't: this only names it for the host.
   await initDataDir(flavor);
@@ -166,7 +149,6 @@ export async function runHost<E>(root: {
     sm: bundledBinaryPath(facts, CLI_DIST_DIR, cliBinaryName(flavor)),
   };
   const migration = await Effect.runPromise(Migration.make);
-  await reaped;
   // The root's door on top: open once every service is up (graph.ts).
   const graph = ManagedRuntime.make(
     Graph.layer.pipe(

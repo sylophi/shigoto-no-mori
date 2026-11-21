@@ -11,11 +11,6 @@
 // clients are cut off, so a view that did not catch up shows as stale.
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import {
-  PING_INTERVAL_MS,
-  PING_TIMEOUT_MS,
-  PROBE_TIMEOUT_MS,
-} from "../../shared/remote/link.ts";
 import { type Lab, type Tab } from "./lab.mts";
 import { pageApi, withPageApi } from "./pageApi.mts";
 import { repoDir, sleep, waitFor, within, type TraceLine } from "./util.mts";
@@ -629,12 +624,11 @@ const laptopSleep: Scenario = {
   },
 };
 
-// How long a page may go on reading a silent host as Connected: a probe
-// goes out a round after the host's last answer, and once it has been
-// out for the timeout, a fresh one unanswered gives the link up
-// (packages/engine/src/liveness.ts). Then the page has a moment.
-const SILENT_HOST_SHOWN_MS =
-  PING_INTERVAL_MS + PING_TIMEOUT_MS + PROBE_TIMEOUT_MS + 5_000;
+// How long a page may go on reading a silent host as Connected:
+// Colibrii's link pings every 15 s, and gives up once nothing came for
+// 40 s after a ping and a second one went 5 s unanswered. Then the page
+// has a moment.
+const SILENT_HOST_SHOWN_MS = 15_000 + 40_000 + 5_000 + 5_000;
 
 const hostSleep: Scenario = {
   name: "host-sleep",

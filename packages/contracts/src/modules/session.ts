@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 import { defineContract, invoke } from "../contract.ts";
-import { DeviceIdSchema } from "../hubProtocol.ts";
+import { DeviceIdSchema, DeviceInfoSchema } from "../hubProtocol.ts";
 import { GuideLaunchSchema } from "./guide.ts";
 import { UpdaterStateSchema } from "../schemas/runtime.ts";
 import { VoidSchema } from "../schemas/index.ts";
@@ -9,22 +9,42 @@ import { strict } from "../schemas/strict.ts";
 // Loopback only, and kept out of allContractModules, so no window's api
 // carries it.
 
-// The shell keeps the credential and device key in the keychain and
-// hands them over after every change: the host holds them in memory
-// only.
-const AccountFactsSchema = strict(
-  Schema.Struct({
-    hubUrl: Schema.String,
+// This device's place on the account, as the host's Colibrii device
+// reports it: signed out (removed: the account let it go), enrolled,
+// or stopped until a person acts.
+export const DeviceAccountSchema = Schema.Union([
+  Schema.TaggedStruct("SignedOut", { removed: Schema.Boolean }),
+  Schema.TaggedStruct("Enrolled", {
+    deviceId: Schema.String,
     accountId: Schema.String,
-    credential: Schema.String,
-    // Base64url: what the relay and link handshakes prove this device by.
-    deviceKey: Schema.String,
-    // The one extra origin the device link's listener admits.
-    webOrigin: Schema.String,
-    acceptsCommands: Schema.Boolean,
+    connected: Schema.Boolean,
+    // Until the hub socket has been up a while, a peer missing from the
+    // roster may be one still reconnecting.
+    settled: Schema.Boolean,
+  }),
+  Schema.TaggedStruct("Stopped", {
+    deviceId: Schema.String,
+    accountId: Schema.String,
+    reason: Schema.Literals([
+      "superseded",
+      "credential-rejected",
+      "update-required",
+    ]),
+  }),
+]);
+export type DeviceAccount = typeof DeviceAccountSchema.Type;
+
+// What sm keeps on a device's record beside its name.
+const DeviceDataSchema = strict(
+  Schema.Struct({
+    // os.platform(), or "web".
+    platform: Schema.String,
+    icon: Schema.String,
   }),
 );
-export type AccountFacts = typeof AccountFactsSchema.Type;
+export type DeviceData = typeof DeviceDataSchema.Type;
+
+const DeviceNameSchema = Schema.String.check(Schema.isBetweenLength(1, 256));
 
 // What a change a person started is (or an auto-pull's fast-forward),
 // for the words a quit asks with (app/shared/busy.ts).
@@ -73,11 +93,39 @@ export type BusyOperations = typeof BusyOperationsSchema.Type;
 export const sessionContract = defineContract(
   "session",
   { scope: "host", remote: false },
-  // Null when signed out or unconfigured. At start and after every change.
-  invoke("account", Schema.NullOr(AccountFactsSchema), VoidSchema),
-  invoke("accountDevices", Schema.Array(DeviceIdSchema), VoidSchema),
+  // The account the command switch the shell keeps is on for, null
+  // when off: at start and as it flips.
+  invoke("acceptsCommands", Schema.NullOr(Schema.String), VoidSchema),
+  // This device's place on the account now.
+  invoke("account", VoidSchema, DeviceAccountSchema),
+  // The device's account calls. Their changes come back as
+  // shellCalls:account.
+  invoke(
+    "enroll",
+    strict(
+      Schema.Struct({
+        loginToken: Schema.String,
+        name: DeviceNameSchema,
+        data: DeviceDataSchema,
+      }),
+    ),
+    VoidSchema,
+  ),
+  invoke("signOut", VoidSchema, VoidSchema),
+  invoke("listDevices", VoidSchema, Schema.Array(DeviceInfoSchema)),
+  invoke(
+    "renameDevice",
+    strict(Schema.Struct({ deviceId: DeviceIdSchema, name: DeviceNameSchema })),
+    VoidSchema,
+  ),
+  invoke(
+    "setDeviceData",
+    strict(Schema.Struct({ deviceId: DeviceIdSchema, data: DeviceDataSchema })),
+    VoidSchema,
+  ),
+  invoke("removeDevice", DeviceIdSchema, VoidSchema),
   invoke("windowFocused", Schema.Boolean, VoidSchema),
-  // Every remote socket is probed.
+  // The hub socket and the peer links check in at once.
   invoke("wake", VoidSchema, VoidSchema),
   invoke("busy", VoidSchema, BusyOperationsSchema),
   invoke("updaterState", UpdaterStateSchema, VoidSchema),

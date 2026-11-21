@@ -342,11 +342,7 @@ beforeAll(async () => {
   await gateway.runPromise(
     Effect.flatMap(HostAccount.HostAccount, (account) =>
       account.set({
-        hubUrl: "http://127.0.0.1:9",
         accountId: "account",
-        credential: "",
-        deviceKey: "",
-        webOrigin: "",
         acceptsCommands: true,
       }),
     ),

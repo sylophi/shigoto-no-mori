@@ -1,57 +1,41 @@
 // This machine's account, which the headless host keeps itself, having
-// no shell around it to keep it: the credential and device key in
-// userData's account.json, as plaintext in a file only its owner can
-// read (main/electron/account.ts says why), handed to the host as the
-// Electron shell hands them (applyAccount). Its changes are the
-// desktop's (shared/account/handlers.ts), and signing in is the
-// terminal's (`sm login`, the login contract): Clerk's device grant
-// (shared/account/deviceGrant.ts), whose access token enrolls this
-// device once and is dropped.
+// no shell around it: its Colibrii device is the host's, in this process
+// (host/process/device.ts), and its profile is userData's account.json.
+// Its calls are the desktop's (shared/account/handlers.ts), and signing
+// in is the terminal's (`sm login`, the login contract): Clerk's device
+// grant, whose access token enrolls this device once and is dropped.
 import { join } from "node:path";
-import {
-  callFailureOf,
-  errorMessageOf,
-  isHubRefusal,
-} from "@shigomori/contracts/errors";
+import * as Colibrii from "@colibrii/sdk";
+import { callFailureOf } from "@shigomori/contracts/errors";
 import type { AccountStatus } from "@shigomori/contracts/modules/account";
-import { hubContract } from "@shigomori/contracts/modules/hub";
 import {
   loginContract,
   type LoginStatus,
 } from "@shigomori/contracts/modules/login";
+import type { DeviceAccount } from "@shigomori/contracts/modules/session";
 import { current as currentPlatform } from "@shigomori/engine/platform";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Semaphore from "effect/Semaphore";
-import * as Stream from "effect/Stream";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import {
   listed,
   matchDevices,
   nameOf,
   type Named,
 } from "@host/lib/control/plan";
-import * as HostPushes from "@host/lib/HostPushes";
-import { applyAccount, noteAccountDevices } from "@host/process/handlers";
+import { deviceCalls } from "@host/process/device";
+import { noteAcceptsCommands } from "@host/process/handlers";
 import * as HostRpc from "@host/socket/hostRpc";
-import { createAccountStore } from "@shared/account/credentialFile";
 import { defaultDesktopDeviceName } from "@shared/account/defaultDeviceName";
-import { retryParkedRevoke } from "@shared/account/enroll";
 import {
-  awaitDeviceGrant,
-  startDeviceGrant,
-} from "@shared/account/deviceGrant";
-import { makeAccountHandlers } from "@shared/account/handlers";
-import {
-  accountFactsOf,
-  nukeSignOut,
-  serviceConfigOf,
-} from "@shared/account/hostShell";
-import { createAccountService } from "@shared/account/service";
+  accountIdOf,
+  type DevicePort,
+  makeAccountHandlers,
+} from "@shared/account/handlers";
+import { nukeSignOut, serviceConfigOf } from "@shared/account/hostShell";
+import { profileFile } from "@shared/account/profileFile";
 import type { HostFacts } from "@shared/hostFacts";
-import { credentialRevoked } from "@shared/remote/supervisor";
-import { log } from "@shared/log";
 
-const call = <A>(run: (signal: AbortSignal) => Promise<A>) =>
+const call = <A>(run: () => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: callFailureOf });
 
 // How often a host with no window reads the account's devices, which a
@@ -68,6 +52,17 @@ const loginStatus = ({
 
 export type HeadlessAccount = ReturnType<typeof headlessAccount>;
 
+// The device's calls, in this process.
+const device: DevicePort = {
+  account: deviceCalls.account,
+  enroll: deviceCalls.enroll,
+  signOut: deviceCalls.signOut,
+  list: deviceCalls.listDevices,
+  rename: (deviceId, name) => deviceCalls.renameDevice({ deviceId, name }),
+  setData: (deviceId, data) => deviceCalls.setDeviceData({ deviceId, data }),
+  remove: deviceCalls.removeDevice,
+};
+
 // Made before the host starts, since the loopback takes its contracts
 // as it starts. The device id comes once the host is up (boot), and a
 // call before then waits for it.
@@ -77,57 +72,20 @@ export function headlessAccount(facts: HostFacts) {
   const deviceIdOf = new Promise<string>((resolve) => {
     deviceIdIs = resolve;
   });
-  const service = createAccountService({ baseUrl: config.hubUrl });
-  const store = createAccountStore({
-    filePath: join(facts.userDataPath, "account.json"),
-    cipher: {
-      available: false,
-      encrypt: (plaintext) => plaintext,
-      decrypt: (payload) => payload,
-    },
-  });
-  const transitions = Semaphore.makeUnsafe(1);
-  const tellHost = () => applyAccount(accountFactsOf(config, store.read()));
-
-  // The command switch, kept on the account's record.
-  const setAcceptsCommands = async (enabled: boolean) => {
-    const record = store.read();
-    if (record === null) {
-      throw new Error("cannot change command access while signed out");
-    }
-    store.write({ ...record, acceptsCommands: enabled });
-    await tellHost();
-  };
+  const profile = profileFile(join(facts.userDataPath, "account.json"));
 
   const account = makeAccountHandlers({
     config: () => config,
-    store: () => store,
-    service: () => service,
+    device,
+    profile: () => profile,
     deviceId: () => deviceIdOf,
     defaultName: defaultDesktopDeviceName,
     detectedIcon: async () => "server",
     platform: currentPlatform(),
     sharedSignIn: () => false,
     codeSignIn: false,
-    changed: tellHost,
-    devicesListed: (devices) =>
-      noteAccountDevices(devices.map((device) => device.deviceId)),
-    acceptsCommands: () => store.read()?.acceptsCommands === true,
-    setAcceptsCommands,
-    // Commands are refused from the first moment, ahead of the revoke's
-    // round trip.
-    beforeSignOut: (record) =>
-      record.acceptsCommands === true ? setAcceptsCommands(false) : undefined,
-    transitions,
-    // The revoke is best effort: offline, it is parked for the next
-    // start (boot), and this device signs out here anyway. A refusal is
-    // a device the hub has let go already.
-    onRevokeFailure: (error) => {
-      if (isHubRefusal(error)) return;
-      log.warn(
-        `[account] the hub didn't take this device's revoke, so it's kept for later: ${errorMessageOf(error)}`,
-      );
-    },
+    renamed: () => {},
+    acceptsCommandsChanged: (accountId) => noteAcceptsCommands(accountId),
   });
 
   // Signed out or offline, there is nothing to read until the next.
@@ -137,39 +95,60 @@ export function headlessAccount(facts: HostFacts) {
       .catch(() => {});
 
   // What the device calls take, said for the terminal.
-  const signedIn = () => {
-    if (store.read() === null) {
+  const signedIn = async () => {
+    if (accountIdOf(await device.account()) === null) {
       throw new Error("This machine isn't signed in. `login` signs it in.");
     }
+  };
+
+  const codeOptions = () => {
+    if (config.oauthClientId === "") {
+      throw new Error("This build has no OAuth client to sign in with.");
+    }
+    return {
+      publishableKey: config.publishableKey,
+      clientId: config.oauthClientId,
+    };
   };
 
   const login = HostRpc.handlers(loginContract, {
     status: () =>
       call(async () => loginStatus(await account.status(undefined, null))),
     start: () =>
-      call(async (signal) => {
-        const record = store.read();
-        if (record !== null) {
+      call(async () => {
+        const status = await account.status(undefined, null);
+        if (status.signedIn) {
           throw new Error(
-            `This machine is signed in already, as ${record.deviceName}. Sign out first.`,
+            `This machine is signed in already, as ${status.deviceName}. Sign out first.`,
           );
         }
-        return startDeviceGrant(config, signal);
+        const { verificationUriComplete, ...code } = await Effect.runPromise(
+          Colibrii.startCodeSignIn(codeOptions()).pipe(
+            Effect.provide(FetchHttpClient.layer),
+          ),
+        );
+        return {
+          ...code,
+          ...(verificationUriComplete === undefined
+            ? {}
+            : { verificationUriComplete }),
+        };
       }),
     // Enrolls under the access token once the person approved.
     finish: (code) =>
-      call(async (signal) =>
-        loginStatus(
-          await account.enroll(
-            await awaitDeviceGrant(config, code, signal),
-            null,
-          ),
-        ),
-      ),
+      call(async () => {
+        const accessToken = await Effect.runPromise(
+          Colibrii.finishCodeSignIn(codeOptions(), {
+            ...code,
+            verificationUriComplete: code.verificationUriComplete,
+          }).pipe(Effect.provide(FetchHttpClient.layer)),
+        );
+        return loginStatus(await account.enroll(accessToken, null));
+      }),
     signOut: () => call(async () => account.signOut(undefined, null)),
     rename: (name) =>
       call(async () => {
-        signedIn();
+        await signedIn();
         return loginStatus(
           await account.setDeviceName(
             { deviceId: await deviceIdOf, name },
@@ -179,7 +158,7 @@ export function headlessAccount(facts: HostFacts) {
       }),
     setIcon: (icon) =>
       call(async () => {
-        signedIn();
+        await signedIn();
         return loginStatus(
           await account.setDeviceIcon(
             { deviceId: await deviceIdOf, icon },
@@ -189,14 +168,14 @@ export function headlessAccount(facts: HostFacts) {
       }),
     removeDevice: (query) =>
       call(async () => {
-        signedIn();
+        await signedIn();
         const self = await deviceIdOf;
         const peers = (await account.listDevices(undefined, null)).filter(
-          (device) => device.deviceId !== self,
+          (peer) => peer.deviceId !== self,
         );
-        const matched = matchDevices(peers, query).map((device) => ({
-          deviceId: device.deviceId,
-          name: nameOf(device),
+        const matched = matchDevices(peers, query).map((peer) => ({
+          deviceId: peer.deviceId,
+          name: nameOf(peer),
         }));
         if (matched.length === 0) {
           throw new Error(
@@ -208,70 +187,39 @@ export function headlessAccount(facts: HostFacts) {
             `"${query}" picks ${listed(matched)}. Give more of the name or its id.`,
           );
         }
-        const [device] = matched as [Named];
-        await account.revokeDevice(device.deviceId, null);
+        const [removed] = matched as [Named];
+        await account.revokeDevice(removed.deviceId, null);
         // Its mirrors and forwards here end with the listing.
         await listDevices();
-        return device.name;
+        return removed.name;
       }),
   });
+
+  // The account the device is on, as the host reports it: the switch
+  // for it goes back to the host's gates.
+  let reported: string | null | undefined;
+  const changed = async (state: DeviceAccount) => {
+    const accountId = accountIdOf(state);
+    if (accountId === reported) return;
+    reported = accountId;
+    await noteAcceptsCommands(
+      accountId !== null && profile.read().acceptsCommandsFor === accountId
+        ? accountId
+        : null,
+    );
+  };
 
   return {
     // The login contract, which the loopback serves.
     login,
-    setAcceptsCommands,
-    // Removed from the account, it signs out, as a window does
-    // (ClerkAccountSync), so `sm login` can sign it in afresh. Heard from
-    // as the host comes up, before boot dials the hub, since a revoked
-    // device is blocked at its first ticket and the block isn't said
-    // again.
-    signsOutRevoked: Layer.effectDiscard(
-      Effect.gen(function* () {
-        const statuses = yield* HostPushes.payloads(
-          hubContract,
-          "statusChanged",
-        );
-        yield* statuses.pipe(
-          Stream.runForEach(({ socket }) =>
-            Effect.sync(() => {
-              if (!credentialRevoked(socket) || store.read() === null) return;
-              void Promise.resolve(account.signOut(undefined, null)).catch(
-                () => {},
-              );
-            }),
-          ),
-          Effect.forkScoped,
-        );
-      }),
-    ),
-    // The account as this start finds it, and a revoke a sign-out
-    // couldn't deliver, delivered now.
-    boot: async (deviceId: string) => {
+    setAcceptsCommands: (enabled: boolean) =>
+      account.setAcceptsCommands(enabled, null),
+    changed,
+    boot: (deviceId: string) => {
       deviceIdIs(deviceId);
-      await tellHost();
-      const parked = await retryParkedRevoke({
-        config,
-        service,
-        store,
-        deviceId,
-      });
-      if (parked.kind === "failed") {
-        log.warn(
-          `[account] a revoke kept from a sign-out still didn't land: ${errorMessageOf(parked.error)}`,
-        );
-      }
       void listDevices();
       setInterval(() => void listDevices(), LIST_DEVICES_EVERY_MS).unref();
     },
-    signOutForNuke: async () => {
-      const deviceId = await deviceIdOf;
-      return Effect.runPromise(
-        transitions.withPermit(
-          Effect.promise(() =>
-            nukeSignOut({ config, service, store, deviceId }),
-          ),
-        ),
-      );
-    },
+    signOutForNuke: async () => nukeSignOut(device, await deviceIdOf),
   };
 }

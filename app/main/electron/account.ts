@@ -1,11 +1,13 @@
-// The desktop's account: the hub credential's store (safeStorage's
-// cipher over userData), the service's config, this device's default
-// name and icon, the command switch, and what follows a change. Sign-in
-// itself is the renderer's (Clerk's components over the @clerk/electron
-// bridge). This only exchanges its session token for the hub device
-// credential. The calls are the web's too (shared/account/handlers.ts),
-// served by ipc/modules/account.ts.
-import { existsSync } from "node:fs";
+// The desktop's account: its Colibrii device lives in the host
+// (host/lib/PeerDevice.ts), whose session calls this reaches it by. Kept
+// here: the profile (shared/account/profile.ts) in userData, the key the
+// host's store is sealed with under safeStorage, the service's config,
+// this device's default name and icon, and what follows a change.
+// Sign-in itself is the renderer's (Clerk's components over the
+// @clerk/electron bridge). The calls are the web's too
+// (shared/account/handlers.ts), served by ipc/handlers.ts.
+import { randomBytes } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { app, safeStorage } from "electron";
 import { CLONED_LOGIN_MARKER } from "@shared/packaging/appName.mts";
@@ -15,34 +17,30 @@ import {
   departed,
   withoutPeerState,
 } from "@shigomori/contracts/schemas/config";
+import type { DeviceAccount } from "@shigomori/contracts/modules/session";
 import * as Effect from "effect/Effect";
 import * as PubSub from "effect/PubSub";
-import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { host, hostDeviceId } from "../hostProcess";
 import { broadcastAll } from "../ipc/register";
 import { devProfileSuffix } from "./devProfile";
 import { updateClientConfig } from "./clientConfig";
-import type { AccountFacts } from "@shigomori/contracts/modules/session";
-import {
-  createAccountStore,
-  type AccountStore,
-  type StoreCipher,
-} from "@shared/account/credentialFile";
 import {
   defaultDesktopDeviceName,
   type DefaultDeviceName,
 } from "@shared/account/defaultDeviceName";
 import { detectDesktopDeviceShape } from "../core/account/defaultDeviceIcon";
-import { retryParkedRevoke } from "@shared/account/enroll";
-import type { AccountShell } from "@shared/account/handlers";
 import {
-  accountFactsOf,
-  nukeSignOut,
-  serviceConfigOf,
-} from "@shared/account/hostShell";
+  accountIdOf,
+  type AccountShell,
+  type DevicePort,
+  makeAccountHandlers,
+  switchFor,
+} from "@shared/account/handlers";
+import { nukeSignOut, serviceConfigOf } from "@shared/account/hostShell";
+import type { ProfileStore } from "@shared/account/profile";
+import { profileFile } from "@shared/account/profileFile";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import { createAccountService } from "@shared/account/service";
 import {
   isConfigured,
   type AccountServiceConfig,
@@ -51,68 +49,52 @@ import { envSetting } from "@shared/config";
 import { log, warnOnFailure } from "@shared/log";
 import { current as currentPlatform } from "@shigomori/engine/platform";
 
-// Built lazily on first handler use, never at import time. This module is
-// imported before app "ready" (registerShellHandlers runs before
-// main/index.ts's ready handler), and safeStorage.isEncryptionAvailable,
-// app.getPath and the dev userData suffix are only reliable once the app
-// is ready, which is guaranteed by the time any renderer call lands. A
-// main-process caller can come earlier, so store() refuses before ready:
-// a store built then would keep a cipher that reads every credential as
-// signed out and writes plaintext for the rest of the run.
-let cachedStore: AccountStore | null = null;
+// Built lazily, never at import time: app.getPath and the dev userData
+// suffix are only reliable once the app is ready, which is guaranteed by
+// the time any call lands.
+let cachedProfile: ProfileStore | null = null;
 let cachedConfig: AccountServiceConfig | null = null;
-let revokeWarned = false;
 
-// The safeStorage-backed cipher. `available` is the OS keychain's
-// verdict: when true the credential is encrypted at rest, when false the
-// store keeps plaintext (enc:false) so sign-in still works on a machine
-// without a keychain. The plaintext fallback is logged once. Linux
-// keeps plaintext by design, in the file only its owner can read, as
-// ssh keys and gh's tokens are on a server: with no keyring there,
-// safeStorage encrypts with a key Chromium hardcodes.
-function buildCipher(): StoreCipher {
-  const keychain = byPlatform({ darwin: true, linux: false, win32: true });
-  const available = keychain && safeStorage.isEncryptionAvailable();
-  if (keychain && !available) {
-    log.warn(
-      "[account] OS encryption unavailable, storing the hub credential " +
-        "as plaintext in userData.",
-    );
-  }
-  return {
-    available,
-    encrypt: (plaintext) =>
-      safeStorage.encryptString(plaintext).toString("base64"),
-    decrypt: (payload) =>
-      safeStorage.decryptString(Buffer.from(payload, "base64")),
-  };
-}
-
-function store(): AccountStore {
-  if (!app.isReady()) {
-    throw new Error("[account] the credential store was opened before ready");
-  }
-  return (cachedStore ??= createAccountStore({
-    filePath: join(app.getPath("userData"), "account.json"),
-    cipher: buildCipher(),
-  }));
-}
-
-// The switch as the host is told it (the account's facts), which the
-// device link's CommandGate holds a peer's gated calls to, and the
-// verdict every connectInfo answer reports. Every peer that reaches
-// the device link is a device of this account (the connect ticket
-// bound it to one), so the answer is the account-wide switch, not a
-// per-peer lookup. Signed out, there is no record and nothing is
-// accepted.
-function acceptsPeerCommands(): boolean {
-  return store().read()?.acceptsCommands === true;
+function profile(): ProfileStore {
+  return (cachedProfile ??= profileFile(
+    join(app.getPath("userData"), "account.json"),
+  ));
 }
 
 // The resolved service config (hostShell.ts), resolved once and cached:
 // account:status runs on every poll.
 function serviceConfig(): AccountServiceConfig {
   return (cachedConfig ??= serviceConfigOf(app.isPackaged));
+}
+
+// The key the host's Colibrii store is sealed with, kept sealed by the
+// OS keychain beside it. Linux keeps none by design: with no keyring
+// there, safeStorage encrypts with a key Chromium hardcodes, so the
+// store is a file only its owner can read, as ssh keys and gh's tokens
+// are on a server. A key that no longer opens is replaced, and the
+// device enrolls again.
+const STORE_KEY_FILE = "device-store-key";
+let storeKeyWarned = false;
+export function deviceStoreKey(): string | null {
+  const keychain = byPlatform({ darwin: true, linux: false, win32: true });
+  if (!keychain) return null;
+  if (!safeStorage.isEncryptionAvailable()) {
+    if (!storeKeyWarned) {
+      storeKeyWarned = true;
+      log.warn(
+        "[account] OS encryption unavailable, keeping this device's enrollment as plaintext in userData.",
+      );
+    }
+    return null;
+  }
+  const path = join(app.getPath("userData"), STORE_KEY_FILE);
+  try {
+    return safeStorage.decryptString(readFileSync(path));
+  } catch {
+    const key = randomBytes(32).toString("base64");
+    writeFileSync(path, safeStorage.encryptString(key), { mode: 0o600 });
+    return key;
+  }
 }
 
 // The default name a not-yet-renamed device enrolls under. The macOS
@@ -162,11 +144,15 @@ export function accountServiceConfigured(): boolean {
   return isConfigured(serviceConfig());
 }
 
-// Whether this device holds an account credential, for the same
-// callers: signed out, there is no account to stay available to
-// either, so liveness treats it like an unconfigured build.
+// The device's account as the host last reported it, null before its
+// first report.
+let reported: DeviceAccount | null = null;
+
+// Whether this device is on an account, for the same callers: signed
+// out, there is no account to stay available to either, so liveness
+// treats it like an unconfigured build.
 export function accountSignedIn(): boolean {
-  return accountServiceConfigured() && store().signedIn();
+  return reported !== null && accountIdOf(reported) !== null;
 }
 
 // The renderer's half of the Clerk mount decision: the resolved
@@ -176,44 +162,28 @@ export function clerkPublishableKey(): string {
   return serviceConfig().publishableKey;
 }
 
-// The account as the host is to know it, reported after every change.
-export function accountFactsForHost(): AccountFacts | null {
-  return accountFactsOf(serviceConfig(), store().read());
+// The account the command switch is on for, as the host is told it at
+// its start: the host holds it against the account it is on.
+export function commandSwitchForHost(): string | null {
+  return profile().read().acceptsCommandsFor ?? null;
 }
 
-// Delivers a revoke a sign-out could not (enroll.ts retryParkedRevoke),
-// at boot: a device that signed out offline is still on the hub's
-// registry until this lands.
-export async function retryParkedSignOut(): Promise<void> {
-  const config = serviceConfig();
-  if (!isConfigured(config)) return;
-  await retryParkedRevoke({
-    config,
-    service: createAccountService({ baseUrl: config.hubUrl }),
-    store: store(),
-    deviceId: await hostDeviceId(),
-  });
-}
+// The device's calls, on the host.
+const device: DevicePort = {
+  account: () => Effect.runPromise(host().account()),
+  enroll: (input) => Effect.runPromise(host().enroll(input)),
+  signOut: () => Effect.runPromise(host().signOut()),
+  list: () => Effect.runPromise(host().listDevices()),
+  rename: (deviceId, name) =>
+    Effect.runPromise(host().renameDevice({ deviceId, name })),
+  setData: (deviceId, data) =>
+    Effect.runPromise(host().setDeviceData({ deviceId, data })),
+  remove: (deviceId) => Effect.runPromise(host().removeDevice(deviceId)),
+};
 
-// The account's changes, one at a time (AccountShell.transitions): the
-// calls' and a nuke's sign-out alike.
-const transitions = Semaphore.makeUnsafe(1);
-
-// A nuke's sign-out (hostShell.ts), in the account's turn.
-export const signOutForNuke = (): Promise<string | null> =>
-  Effect.runPromise(
-    transitions.withPermit(
-      Effect.promise(async () => {
-        const config = serviceConfig();
-        return nukeSignOut({
-          config,
-          service: createAccountService({ baseUrl: config.hubUrl }),
-          store: store(),
-          deviceId: await hostDeviceId(),
-        });
-      }),
-    ),
-  );
+// A nuke's sign-out (hostShell.ts).
+export const signOutForNuke = async (): Promise<string | null> =>
+  nukeSignOut(device, await hostDeviceId());
 
 // Each change of the account's id (a sign-in, a sign-out, a switch),
 // which the login item follows (liveness.ts).
@@ -221,55 +191,37 @@ const idChanges = Effect.runSync(PubSub.unbounded<void>());
 export const accountIdChanges: Stream.Stream<void> =
   Stream.fromPubSub(idChanges);
 
-// What follows a change to the account, under the ids before and after
-// it.
-async function accountChanged({
-  before,
-  after,
-}: {
-  readonly before: string | null;
-  readonly after: string | null;
-}): Promise<void> {
-  // Before the windows are told, since they re-read their config off
-  // the push.
+// The device's account as the host reports it, at its start and on
+// every change. A change of account drops the client config's peer
+// state on a departure, before the windows re-read their config off the
+// push.
+export async function accountReported(state: DeviceAccount): Promise<void> {
+  const known = reported;
+  reported = state;
+  const after = accountIdOf(state);
+  const before = known === null ? after : accountIdOf(known);
+  if (known !== null && before === after) return;
   if (departed({ before, after })) {
     await warnOnFailure(
       "[account] dropping the peer-keyed client config failed",
       () => updateClientConfig(withoutPeerState),
     );
   }
-  // The host tears down what was the account's and follows it with the
-  // hub socket, while the windows re-read the status.
-  const applied = Effect.runPromise(host().account(accountFactsForHost()));
   broadcastAll(accountContract, "changed", { accountId: after });
   // An account switch that stays signed in changes the switch's answer
   // too, which `changed` does not refresh.
-  broadcastAll(accountContract, "commandAccessChanged", acceptsPeerCommands());
-  const told = warnOnFailure(
-    "[account] the host's account change failed",
-    () => applied,
+  broadcastAll(
+    accountContract,
+    "commandAccessChanged",
+    switchFor(profile().read(), state) !== null,
   );
-  // A departure answers once the host has let the account go, and any
-  // other change once the windows are told, since a host that isn't up
-  // hears the account as it starts.
-  if (departed({ before, after })) await told;
-  else void told;
   if (before !== after) PubSub.publishUnsafe(idChanges, undefined);
 }
 
-// The switch flipping goes out on its own push, so the toggle does not
-// thrash the account's status and device queries. The host hears it in
-// the facts and tells the peers.
-function commandAccessChanged(): void {
-  broadcastAll(accountContract, "commandAccessChanged", acceptsPeerCommands());
-  Effect.runFork(Effect.ignore(host().account(accountFactsForHost())));
-}
-
-// The desktop's half of the account calls (shared/account/handlers.ts).
-export const desktopAccount: AccountShell = {
+const desktopAccount: AccountShell = {
   config: serviceConfig,
-  store,
-  service: (config) => createAccountService({ baseUrl: config.hubUrl }),
+  device,
+  profile,
   deviceId: () => hostDeviceId(),
   defaultName: defaultDeviceName,
   detectedIcon: detectedDeviceIcon,
@@ -279,46 +231,17 @@ export const desktopAccount: AccountShell = {
   sharedSignIn: () =>
     existsSync(join(app.getPath("userData"), CLONED_LOGIN_MARKER)),
   codeSignIn: envSetting("SHIGOMORI_CODE_SIGN_IN") === "1",
-  changed: accountChanged,
-  transitions,
-  // The registry as the hub last listed it, which the host's mirrors and
-  // forwards follow.
-  devicesListed: (devices) =>
-    void Effect.runFork(
-      Effect.ignore(
-        host().accountDevices(devices.map((device) => device.deviceId)),
-      ),
-    ),
-  acceptsCommands: acceptsPeerCommands,
-  setAcceptsCommands: (enabled) => {
-    const record = store().read();
-    // The switch lives on the account's record, and with no record
-    // there is nothing to keep it on.
-    if (record === null) {
-      throw new Error("cannot change command access while signed out");
-    }
-    store().write({ ...record, acceptsCommands: enabled });
-    commandAccessChanged();
-  },
-  // Off from the first moment of the sign-out, ahead of the revoke's
-  // round trip: a peer's gated call landing during the revoke must not
-  // find it on. The sign-out's clear drops the record with it, so
-  // signing back into the same account starts with the switch off.
-  beforeSignOut: (record) => {
-    if (record.acceptsCommands === true) {
-      store().write({ ...record, acceptsCommands: false });
-      commandAccessChanged();
-    }
-  },
-  // The failure is swallowed (local sign-out must always land) and
-  // logged at most once per session.
-  onRevokeFailure: (error) => {
-    if (revokeWarned) return;
-    revokeWarned = true;
-    log.warn(
-      "[account] best-effort device revoke on sign-out failed, " +
-        "clearing the local credential anyway.",
-      error,
-    );
+  renamed: () =>
+    broadcastAll(accountContract, "changed", {
+      accountId: reported === null ? null : accountIdOf(reported),
+    }),
+  // The host hears it for its peers' gates, and the windows for the
+  // toggle.
+  acceptsCommandsChanged: async (accountId) => {
+    broadcastAll(accountContract, "commandAccessChanged", accountId !== null);
+    await Effect.runPromise(host().acceptsCommands(accountId));
   },
 };
+
+// The desktop's account calls (shared/account/handlers.ts).
+export const accountHandlers = makeAccountHandlers(desktopAccount);

@@ -15,6 +15,7 @@ env:
   # Baked into each build, since a packaged app sees only build-time env.
   # Repository Actions variables, not secrets.
   SM_DEVICE_HUB_URL: ${{ vars.SM_DEVICE_HUB_URL }}
+  SM_DEVICE_HUB_APP: ${{ vars.SM_DEVICE_HUB_APP }}
   SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
   SM_ACCOUNT_WEB_ORIGIN: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
   SM_ACCOUNT_CLERK_OAUTH_CLIENT_ID: ${{ vars.SM_ACCOUNT_CLERK_OAUTH_CLIENT_ID }}

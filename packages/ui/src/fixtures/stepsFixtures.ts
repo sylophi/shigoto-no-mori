@@ -6,7 +6,6 @@ import type {
   MigrationProgress,
   WorktreeMoveStep,
 } from "@shigomori/contracts/schemas/migration";
-import type { SignInStep } from "../views/steps/migrationEnded.ts";
 
 const MOVE: WorktreeMoveStep = {
   state: "waiting",
@@ -35,7 +34,6 @@ export const MIGRATION_POSES = {
       import: { state: "running" },
       worktrees: MOVE,
     },
-    signIn: { state: "waiting", asks: false },
   },
   importStuck: {
     migration: {
@@ -47,7 +45,6 @@ export const MIGRATION_POSES = {
       },
       worktrees: MOVE,
     },
-    signIn: { state: "waiting", asks: false },
   },
   moving: {
     migration: {
@@ -61,7 +58,6 @@ export const MIGRATION_POSES = {
         stuck: [],
       },
     },
-    signIn: { state: "waiting", asks: false },
   },
   stuck: {
     migration: {
@@ -75,19 +71,10 @@ export const MIGRATION_POSES = {
         stuck: [LOCKED, BUSY],
       },
     },
-    signIn: { state: "done", asks: false },
-  },
-  signIn: {
-    migration: { planned: true, import: { state: "done" }, worktrees: MOVED },
-    signIn: { state: "waiting", asks: true },
   },
   done: {
     migration: { planned: true, import: { state: "done" }, worktrees: MOVED },
-    signIn: { state: "done", asks: false },
   },
-} satisfies Record<
-  string,
-  { migration: MigrationProgress; signIn: SignInStep | null }
->;
+} satisfies Record<string, { migration: MigrationProgress }>;
 
 export type MigrationPose = keyof typeof MIGRATION_POSES;

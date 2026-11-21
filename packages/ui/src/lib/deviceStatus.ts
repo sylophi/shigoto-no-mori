@@ -46,14 +46,11 @@ function presentationOf(status: RemoteDeviceStatus): {
       return UPDATE_NEEDED;
     // Rostered, no direct session yet: the keeper dials on presence and
     // redials forever, so it reads as the dial it is. A peer whose
-    // tunnel is starting can sit here until it routes. Amber, like
-    // reconnecting: both are a dial still in flight.
+    // tunnel is starting can sit here until it routes. Amber, like this
+    // device's own socket on its way back: both are a dial in flight.
     case "online":
     case "connecting":
-    case "idle":
       return { tone: "amber", label: "Connecting" };
-    case "backoff":
-      return { tone: "amber", label: "Reconnecting" };
     case "blocked":
       return { tone: "rose", label: "Blocked" };
     case "stopped":

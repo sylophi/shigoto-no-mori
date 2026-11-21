@@ -6,7 +6,7 @@
 // restarted runs another incarnation of the shell, so the screen starts
 // over then too.
 import { isUnknownTerminalError } from "@shigomori/contracts/errors";
-import { backoffDelayMs } from "@shared/remote/supervisor";
+import { backoffDelayMs } from "@shared/remote/ladder";
 import type { TerminalScreen } from "@shigomori/ui/views/terminal/TerminalView.tsx";
 import { terminalsContract } from "@shigomori/contracts/modules/terminals";
 import type { HostApi } from "@/hooks/remote/useHostScope";

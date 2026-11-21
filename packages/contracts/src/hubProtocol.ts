@@ -18,7 +18,7 @@ import { PortNumberSchema } from "./schemas/ports.ts";
 
 // A control-frame budget, in bytes of serialized JSON. The worst-case
 // presence roster must fit.
-export const MAX_HUB_MESSAGE_BYTES = 64 * 1024;
+const MAX_HUB_MESSAGE_BYTES = 64 * 1024;
 
 // A UTF-16 unit is one to three UTF-8 bytes, so only the band between
 // needs a real count.
@@ -105,7 +105,6 @@ export const DevicePatchRequestSchema = Schema.Struct({
       "nothing to change",
   ),
 );
-export type DevicePatch = typeof DevicePatchRequestSchema.Type;
 
 // An icon this build's catalog lacks reads as its platform's.
 const DeviceInfoWireSchema = Schema.Struct({
@@ -142,7 +141,6 @@ export const EnrollResponseSchema = Schema.Struct({
   credential: Schema.String,
   device: DeviceInfoSchema,
 });
-export type EnrollResponse = typeof EnrollResponseSchema.Type;
 
 export const DeviceListResponseSchema = Schema.Struct({
   devices: Schema.Array(DeviceInfoSchema),
@@ -151,7 +149,6 @@ export const DeviceListResponseSchema = Schema.Struct({
 export const TicketResponseSchema = Schema.Struct({
   ticket: Schema.String,
 });
-export type TicketResponse = typeof TicketResponseSchema.Type;
 
 export const TunnelProvisionRequestSchema = Schema.Struct({
   port: PortNumberSchema,
@@ -165,7 +162,6 @@ export const TunnelProvisionResponseSchema = Schema.Struct({
   // A new DNS record has yet to reach the edge.
   dnsCreated: Schema.Boolean,
 });
-export type TunnelProvisionResponse = typeof TunnelProvisionResponseSchema.Type;
 
 // ---- Hub socket envelopes ----
 
@@ -211,7 +207,7 @@ const NackEnvelopeSchema = Schema.Struct({
   reason: Schema.Literal("offline"),
 });
 
-export const ServerEnvelopeSchema = Schema.Union([
+const ServerEnvelopeSchema = Schema.Union([
   HubDeliverEnvelopeSchema,
   PresenceEnvelopeSchema,
   NackEnvelopeSchema,
@@ -237,52 +233,3 @@ export function decodeEnvelope<S extends Schema.Decoder<unknown>>(
   }
   return Option.getOrNull(Schema.decodeUnknownOption(schema)(raw));
 }
-
-// ---- The connectInfo ask and answer ----
-
-// `sealed` is a Noise IK handshake message (unpadded base64url): the ask
-// the first, sealed to the addressee's key, the answer the second.
-export type RelayFrame = {
-  readonly kind: "ask" | "answer";
-  readonly id: number;
-  readonly sealed: string;
-};
-
-const RELAY_FRAME = /^(ask|answer):(\d{1,16}):([A-Za-z0-9_-]+)$/;
-
-export function encodeRelayFrame(frame: RelayFrame): string {
-  return `${frame.kind}:${frame.id}:${frame.sealed}`;
-}
-
-export function decodeRelayFrame(text: string): RelayFrame | null {
-  const match = RELAY_FRAME.exec(text);
-  if (match === null) return null;
-  return {
-    kind: match[1] === "ask" ? "ask" : "answer",
-    id: Number(match[2]),
-    sealed: match[3] ?? "",
-  };
-}
-
-// What the sealed messages carry. An IK first message can be replayed,
-// so the answering device turns away one it has read before.
-const AskNameSchema = Schema.String.check(Schema.isMaxLength(64));
-
-export const AskPayloadSchema = Schema.Struct({
-  ask: AskNameSchema,
-  input: Schema.optional(Schema.Unknown),
-});
-export type AskPayload = typeof AskPayloadSchema.Type;
-
-export const AnswerPayloadSchema = Schema.Union([
-  Schema.Struct({
-    ok: Schema.Literal(true),
-    result: Schema.optional(Schema.Unknown),
-  }),
-  Schema.Struct({
-    ok: Schema.Literal(false),
-    message: Schema.String,
-    code: Schema.optional(Schema.String.check(Schema.isMaxLength(64))),
-  }),
-]);
-export type AnswerPayload = typeof AnswerPayloadSchema.Type;

@@ -1,24 +1,27 @@
 // The browser binding's composition root: the web client is a device
-// with no host of its own, so it reaches every
-// host as a peer, over the device link through the hub (the direct
-// plane below), and serves only itself, in the page: the client modules
-// (clientConfig, account, hub, shell, releases) and its copy of the
-// shared settings, on the tab's local registrar (localRegistrar.ts). It
-// builds the SAME page api the desktop does: the scalar facts
-// (deviceId, appVersion, isDev, isElectron) plus the clients over that
-// registrar, on the tab's client runtime (renderer/lib/runtime), so
-// renderer components mount unmodified.
+// with no host of its own, so it reaches every host as a peer, over
+// links its Colibrii device dials (the direct plane below), and serves
+// only itself, in the page: the client modules (clientConfig, account,
+// hub, shell, releases) and its copy of the shared settings, on the
+// tab's local registrar (localRegistrar.ts). It builds the SAME page api
+// the desktop does: the scalar facts (deviceId, appVersion, isDev,
+// isElectron) plus the clients over that registrar, on the tab's client
+// runtime (renderer/lib/runtime), so renderer components mount
+// unmodified.
 //
 // Every platform fact arrives through WebBridgeDeps rather than a
 // browser global read at module scope.
-import { hubConnectInputs } from "@shared/account/hubConnect";
-import { createAccountService } from "@shared/account/service";
-import { makeAccountHandlers } from "@shared/account/handlers";
+import * as Colibrii from "@colibrii/sdk";
+import * as ColibriiBrowser from "@colibrii/sdk/browser";
+import { accountIdOf, makeAccountHandlers } from "@shared/account/handlers";
+import { deviceInfoOf } from "@shared/account/deviceInfo";
+import { profileStore } from "@shared/account/profile";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
-import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { ClientLinks } from "@/lib/runtime/ClientLinks";
 import { startClientNow } from "@/lib/runtime/client";
@@ -37,7 +40,7 @@ import { shellContract } from "@shigomori/contracts/modules/shell";
 import type { Handlers } from "@shigomori/contracts/types";
 import { servedHub } from "@shared/hub/bridgeHandlers";
 import * as DirectPlane from "@shared/hub/directPlane";
-import type { HubConnection } from "@shared/hub/connection";
+import { inertDevice } from "@shared/hub/inertDevice";
 import { fetchReleases } from "@shared/releases";
 import {
   type SharedSettingsDoc,
@@ -49,11 +52,6 @@ import {
   EMPTY_SHARED_SETTINGS,
 } from "@shigomori/contracts/sharedSettings";
 import { WEB_PLATFORM } from "@shigomori/contracts/platform";
-import type { AccountStatus } from "@shigomori/contracts/modules/account";
-import { retryParkedRevoke } from "@shared/account/enroll";
-import * as WebHub from "../hub/connection";
-import { log } from "@shared/log";
-import { createHubTrace } from "../hub/trace";
 import {
   isConfigured,
   resolveServiceConfig,
@@ -65,13 +63,18 @@ import {
 } from "../account/deviceId";
 import { defaultWebDeviceName, type BrowserHints } from "../account/deviceName";
 import { defaultWebDeviceShape } from "../account/deviceIcon";
-import { createWebAccountStore } from "../account/store";
-import { readJsonKey, writeKey, type KeyValueStorage } from "../lib/kvStorage";
+import {
+  readKey,
+  readJsonKey,
+  writeKey,
+  type KeyValueStorage,
+} from "../lib/kvStorage";
 import { createLocalRegistrar } from "./localRegistrar";
 
 export type WebBridgeDeps = {
   // Persistent per-browser storage (window.localStorage in the real
-  // client): the device id, the credential envelope and clientConfig.
+  // client): the device id, the profile and clientConfig. The device's
+  // enrollment is Colibrii's, in window.localStorage itself.
   localStorage: KeyValueStorage;
   // The profile's device id, as establishWebDeviceId settled it.
   deviceId: string;
@@ -91,175 +94,121 @@ export type WebBridgeDeps = {
 export type WebBridge = {
   // The page's api (renderer/lib/runtime/pageApi.tsx).
   api: RendererApi;
-  // Cross-tab correction: another tab changed the persisted account
-  // (a storage event): re-read and fan out exactly like a local
-  // transition. The storage event itself only fires in OTHER tabs, so
-  // the tab's own push and this never double-fire.
-  notifyAccountChanged(): void;
-  // The same for the client config, and the shared settings' copy,
-  // another tab wrote.
+  // Another tab changed the device's name or icon, the client config,
+  // or the shared settings' copy (a storage event, which fires only in
+  // the OTHER tabs): fan it out like this tab's own change.
+  notifyProfileChanged(): void;
   notifyClientConfigChanged(): void;
   notifySharedSettingsChanged(): void;
-  // Reconciles the hub socket with the current account state.
-  refreshHub(): Promise<void>;
-  // The liveness probe for the hub socket and every direct session,
-  // fired by the install when the page comes back to the foreground
-  // or the browser reports the network gone or back: a socket that
-  // died while the tab was hidden or offline is found and redialed in
-  // seconds instead of the sidebar reading "Connected" off a corpse
-  // until the next heartbeat tick.
-  probe(): void;
-  // Tears the hub socket down (tab teardown, tests), along with the
-  // direct plane it fronts and the tab's client runtime.
+  // Ends the device (tab teardown, tests), along with the direct plane
+  // and the tab's client runtime.
   stop(): Promise<void>;
 };
 
 export const CLIENT_CONFIG_KEY = "sm.web.clientConfig";
-// How long a tab waits for another tab's enroll.
-const ENROLL_WAIT_MS = 30_000;
-// The profile's tabs' account changes, one tab at a time: its device
-// id, its enrollment and its sign-out.
-const ACCOUNT_LOCK = "sm.web.accountChange";
-
-// `run` under the account lock, which every tab of the profile shares
-// (navigator.locks), or `timedOut` once ENROLL_WAIT_MS passes waiting
-// for it. A page without navigator.locks (an insecure context) runs it
-// at once.
-function underAccountLock<A>(
-  run: () => A | Promise<A>,
-  timedOut: () => A | Promise<A>,
-): Promise<A> {
-  const locks = globalThis.navigator?.locks;
-  if (locks === undefined) return Promise.resolve().then(run);
-  return locks
-    .request(ACCOUNT_LOCK, { signal: AbortSignal.timeout(ENROLL_WAIT_MS) }, run)
-    .catch((error: unknown) => {
-      if (error instanceof DOMException && error.name === "TimeoutError") {
-        return timedOut();
-      }
-      throw error;
-    });
-}
+export const PROFILE_KEY = "sm.web.account";
+// Colibrii's store of the device's enrollment, which every tab of the
+// profile shares and follows.
+const DEVICE_STORE_KEY = "sm.web.device";
+// How long a fresh tab waits for another to mint the profile's id.
+const MINT_WAIT_MS = 30_000;
+const MINT_LOCK = "sm.web.accountChange";
 
 export const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
 
+const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect);
+
 // The profile's device id. One already stored is read as it is (a tab
-// boots at once). A missing or mangled one is minted under the account
-// lock, so two fresh tabs can't mint two and enroll under one. A tab
-// that waits past ENROLL_WAIT_MS behind another's enrollment reads the
-// id that tab minted before it enrolled, as a sign-out goes ahead.
+// boots at once). A missing or mangled one is minted under a lock every
+// tab of the profile shares (navigator.locks), so two fresh tabs can't
+// mint two. A page without navigator.locks (an insecure context) mints
+// at once, as does one that waited past MINT_WAIT_MS.
 export async function establishWebDeviceId(
   storage: KeyValueStorage,
 ): Promise<string> {
   const stored = readWebDeviceId(storage);
   if (stored !== null) return stored;
   const mint = () => getWebDeviceId(storage);
-  return await underAccountLock(mint, mint);
+  const locks = globalThis.navigator?.locks;
+  if (locks === undefined) return mint();
+  return locks
+    .request(MINT_LOCK, { signal: AbortSignal.timeout(MINT_WAIT_MS) }, mint)
+    .catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === "TimeoutError") {
+        return mint();
+      }
+      throw error;
+    });
 }
 
-export function createWebBridge(deps: WebBridgeDeps): WebBridge {
+export async function createWebBridge(deps: WebBridgeDeps): Promise<WebBridge> {
   const config = resolveServiceConfig(deps.env);
-  const store = createWebAccountStore(deps.localStorage);
   const { deviceId } = deps;
-  const service = createAccountService({ baseUrl: config.hubUrl });
   const tab = createLocalRegistrar({ validateOutputs: deps.isDev });
-  // A sign-out whose revoke never reached the hub is delivered at the
-  // next boot (enroll.ts retryParkedRevoke), the desktop's rule too.
-  // Its clear can fail in a storage that refuses writes, the revoke
-  // itself delivered.
-  void retryParkedRevoke({ config, service, store, deviceId }).catch(
-    (error: unknown) => log.warn("[account] parked revoke:", error),
-  );
 
-  // ---- hub socket lifecycle ----
+  // ---- the device ----
+
+  // One device per browser profile, a hub connection per tab. It and the
+  // plane live until the bridge stops.
+  const deviceScope = Scope.makeUnsafe();
+  const device: Colibrii.Device = isConfigured(config)
+    ? await Effect.runPromise(
+        Colibrii.make({
+          hub: config.hubUrl,
+          app: config.app,
+          connections: "multi",
+          deviceId,
+        }).pipe(
+          Effect.provide(
+            Layer.merge(
+              ColibriiBrowser.layer,
+              ColibriiBrowser.layerLocalStorageStore(DEVICE_STORE_KEY),
+            ),
+          ),
+          Scope.provide(deviceScope),
+          Effect.catchCause((cause) =>
+            Effect.as(
+              Effect.logError("[peers] the device could not start", cause),
+              inertDevice(cause),
+            ),
+          ),
+        ),
+      )
+    : inertDevice(new Error("This build has no account service."));
 
   // The direct plane's shared composition (shared/hub/directPlane.ts),
-  // the same assembly the host's (host/process/wires.ts). The browser
-  // differences are exactly the declared deps: identity facts from
-  // this bridge, fan-out on the tab's registrar, dialableKinds
-  // ["tunnel"] (an https page cannot dial ws:// interface candidates,
-  // mixed content, so peers are asked for wss tunnel candidates only
-  // and mint no lan ticket for this caller), no connectInfo server
-  // (web/hub/connection.ts), and no host half (no direct listener, no cloudflared, so the
-  // status snapshot carries no tunnel state).
-  const traceHub = createHubTrace();
-  // Both live until the bridge stops.
-  const hubScope = Scope.makeUnsafe();
-  const { directPlane, connection } = Effect.runSync(
-    Effect.gen(function* () {
-      const plane: DirectPlane.DirectPlane = yield* DirectPlane.make({
-        connection: () => hub,
-        localDeviceId: () => deviceId,
-        localAppVersion: () => deps.appVersion,
-        broadcastStatus: (status) => {
-          traceHub(status);
-          tab.push(hubContract, "statusChanged", status);
-        },
-        broadcastPeerPush: (push) => tab.push(hubContract, "peerPush", push),
-        // A browser page dials only the wss tunnel, since mixed content
-        // forbids ws:// under https.
-        dialableKinds: ["tunnel"],
-        // One device per browser profile, a link per tab: a host keeps a set
-        // of links per web device, and the hub relays to each.
-        deviceKind: "web",
-      });
-      const hub: HubConnection = yield* WebHub.make({
-        onChange: () => plane.handleConnectionChange(),
-      });
-      return { directPlane: plane, connection: hub };
-    }).pipe(Scope.provide(hubScope)),
+  // the same assembly the host's (host/process/wires.ts), with no
+  // tunnel: a page runs none.
+  const directPlane = Effect.runSync(
+    DirectPlane.make({
+      device,
+      localDeviceId: () => deviceId,
+      localAppVersion: () => deps.appVersion,
+      broadcastStatus: (status) =>
+        tab.push(hubContract, "statusChanged", status),
+      broadcastPeerPush: (push) => tab.push(hubContract, "peerPush", push),
+    }).pipe(Scope.provide(deviceScope)),
   );
   const hubHandlers = directPlane.handlers;
-
-  // As the host's (host/process/wires.ts): reconcile the socket with the
-  // account state, resolving inside the serialized
-  // lifecycle, and degrade any failure to a log line. An unconfigured
-  // build stops the socket instead of dialing nowhere (the account
-  // status says so to the UI), and a device hub refusing the ticket
-  // mint blocks the supervisor like it would the desktop's (a
-  // deterministic refusal must not loop), which the device pages show
-  // as the socket's blocked phase.
-  function refreshHub(): Promise<void> {
-    return Effect.runPromise(
-      connection
-        .refresh(
-          Effect.sync(() =>
-            hubConnectInputs(() => {
-              const record = isConfigured(config) ? store.read() : null;
-              return record === null
-                ? null
-                : { ...record, hubUrl: config.hubUrl, service };
-            }, deviceId),
-          ),
-        )
-        .pipe(
-          Effect.ignoreCause({
-            log: "Warn",
-            message: "[hub] connection refresh failed",
-          }),
-        ),
-    );
-  }
 
   // ---- account module ----
 
   // Read off the same user agent as the name, once: it cannot change
   // while the page lives.
   const detectedIcon = defaultWebDeviceShape(deps.userAgent);
+  const profile = profileStore({
+    readRaw: () => readKey(deps.localStorage, PROFILE_KEY),
+    writeRaw: (text) => writeKey(deps.localStorage, PROFILE_KEY, text),
+  });
 
-  // Any account transition re-reconciles the hub socket and fans the
-  // change out so every account query re-reads. The account last seen
-  // is kept here, since another tab's change arrives with no call of
-  // this tab's (notifyAccountChanged).
-  let knownAccountId: string | null = store.read()?.accountId ?? null;
-  async function accountChanged(): Promise<void> {
+  // The account the device is on, as the tab last heard: every tab of
+  // the profile hears a change, its own or another's, from the device.
+  let knownAccountId: string | null = null;
+  const accountChanged = (state: Colibrii.AccountState) => {
     const before = knownAccountId;
-    const after = store.read()?.accountId ?? null;
+    const after = accountIdOf(state);
     knownAccountId = after;
-    // The old account's sessions close first: a peer's push landing
-    // between the clear and their close would refill the copy, as the
-    // host orders it too (host/process/handlers.ts).
-    await refreshHub();
+    if (before === after) return;
     if (departed({ before, after })) {
       // The shared settings' copy and the client config's peer-keyed
       // picks (withoutPeerState): in localStorage they would outlive
@@ -268,74 +217,45 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       writeClientConfig(withoutPeerState(readClientConfig()));
     }
     tab.push(accountContract, "changed", { accountId: after });
-  }
+  };
+  const announceProfile = () =>
+    tab.push(accountContract, "changed", { accountId: knownAccountId });
 
   const accountHandlers = makeAccountHandlers({
     config: () => config,
-    store: () => store,
-    service: () => service,
+    device: {
+      account: () =>
+        run(Stream.runHead(device.account).pipe(Effect.map(Option.getOrThrow))),
+      // The tab enrolls under the profile's id as storage holds it, so an
+      // enrollment never lands beside an id other than its own.
+      enroll: (input) => {
+        keepWebDeviceId(deps.localStorage, deviceId);
+        return run(device.enroll(input));
+      },
+      signOut: () => run(device.signOut),
+      list: () =>
+        run(
+          Effect.map(device.devices.list, (records) =>
+            records.map(deviceInfoOf),
+          ),
+        ),
+      rename: (id, name) => run(device.devices.rename(id, name)),
+      setData: (id, data) => run(device.devices.setData(id, data)),
+      remove: (id) => run(device.devices.remove(id)),
+    },
+    profile: () => profile,
     deviceId: async () => deviceId,
     defaultName: async () => ({
       name: defaultWebDeviceName(deps.userAgent, deps.browserHints),
       provisional: false,
     }),
     detectedIcon: async () => detectedIcon,
-    // A legal opaque label beside the desktop's os.platform() values in
-    // EnrollRequestSchema's 1..64 bound.
     platform: WEB_PLATFORM,
     sharedSignIn: () => false,
     codeSignIn: false,
-    changed: accountChanged,
-    transitions: Semaphore.makeUnsafe(1),
-    devicesListed: () => {},
-    // A web client is a refuse-all host (web/hub/connection.ts): it
-    // serves no peer calls, so switching command access on would
-    // promise something the transport can never honor.
-    acceptsCommands: () => false,
-    setAcceptsCommands: () => {
-      throw new Error("a web client cannot change command access");
-    },
+    renamed: announceProfile,
+    acceptsCommandsChanged: () => {},
   });
-
-  // The profile's tabs share its storage, and the hub keeps the last
-  // enroll's credential alone: two tabs enrolling at once (a sign-in
-  // reaches every tab of the profile) could store the one the other
-  // rotated away. One tab enrolls at a time, and one whose wait saw
-  // another tab store a credential answers with that. A second call in
-  // this tab rides the one under way, as the handlers' own join does.
-  // The tab enrolls under the profile's id as storage holds it, so a
-  // credential never lands beside an id other than its own.
-  let enrolling: Promise<AccountStatus> | undefined;
-  const enrollOneTab: typeof accountHandlers.enroll = (token, ctx) => {
-    if (enrolling !== undefined) return enrolling;
-    const before = store.read()?.credential;
-    const enrollHere = async () => {
-      keepWebDeviceId(deps.localStorage, deviceId);
-      return store.read()?.credential === before
-        ? accountHandlers.enroll(token, ctx)
-        : accountHandlers.status(undefined, ctx);
-    };
-    // A tab whose enroll hangs (no timeout of its own) holds the others
-    // for a while, not for good: theirs then fail, and retry.
-    const run = underAccountLock(enrollHere, () => {
-      throw new Error(
-        "Another tab of this browser is still enrolling it. Try again once it's done.",
-      );
-    }).finally(() => {
-      enrolling = undefined;
-    });
-    enrolling = run;
-    return run;
-  };
-
-  // A sign-out takes its turn behind another tab's enrollment too, as
-  // this tab's does behind its own (AccountShell.transitions), or the
-  // enrollment's late write signs the profile back in. A local sign-out
-  // must land, so one that waited out ENROLL_WAIT_MS goes ahead.
-  const signOutOneTab: typeof accountHandlers.signOut = (input, ctx) => {
-    const signOut = () => accountHandlers.signOut(input, ctx);
-    return underAccountLock(signOut, signOut);
-  };
 
   // ---- clientConfig module ----
 
@@ -449,8 +369,12 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
   tab.served.serve(accountContract, {
     ...accountHandlers,
-    enroll: enrollOneTab,
-    signOut: signOutOneTab,
+    // A web client serves no peer calls, so switching command access on
+    // would promise something it can never honor.
+    acceptsCommands: () => false,
+    setAcceptsCommands: () => {
+      throw new Error("a web client cannot change command access");
+    },
   });
   tab.served.serve(clientConfigContract, clientConfigHandlers);
   tab.served.view(clientConfigContract, {
@@ -490,23 +414,24 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     ...client.api,
   };
 
+  // Followed once the copies it clears are made.
+  Effect.runSync(
+    device.account.pipe(
+      Stream.runForEach((state) => Effect.sync(() => accountChanged(state))),
+      Effect.forkIn(deviceScope),
+    ),
+  );
+
   return {
     api,
 
-    notifyAccountChanged: () => void accountChanged(),
+    notifyProfileChanged: announceProfile,
     notifyClientConfigChanged: clientConfigChanged,
     notifySharedSettingsChanged: () =>
       announceSharedSettings(sharedSettingsCopy.read()),
 
-    refreshHub,
-
-    probe: () => {
-      connection.probe();
-      directPlane.probe();
-    },
-
     stop: async () => {
-      await Effect.runPromise(Scope.close(hubScope, Exit.void));
+      await Effect.runPromise(Scope.close(deviceScope, Exit.void));
       await client.dispose();
     },
   };

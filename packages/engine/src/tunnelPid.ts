@@ -1,11 +1,9 @@
 // cloudflared.pid in the app's data folder: the pid of the app's tunnel
-// connector. The next host reaps a leftover one (host/direct/Tunnel.ts)
-// and `sm doctor` reports it, both through these.
+// connector, which Colibrii's tunnel writes. The next host's tunnel
+// reaps a leftover one, and `sm doctor` reports it through these.
 import { atoi } from "./doctorParse.ts";
 
 export const TUNNEL_PID_FILE = "cloudflared.pid";
-
-export const tunnelPidText = (pid: number) => `${pid}\n`;
 
 export const readTunnelPid = (raw: string): number | undefined =>
   atoi(raw.trim());

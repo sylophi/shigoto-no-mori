@@ -145,11 +145,7 @@ async function harness(answer: (request: Request) => Answer) {
   await runtime.runPromise(
     Effect.flatMap(HostAccount.HostAccount, (account) =>
       account.set({
-        hubUrl: "http://127.0.0.1:1",
         accountId: "account",
-        credential: "credential",
-        deviceKey: "key",
-        webOrigin: "",
         acceptsCommands: false,
       }),
     ),

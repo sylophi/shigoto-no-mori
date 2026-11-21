@@ -30,7 +30,9 @@ import {
   type CDPSession,
   type Page,
 } from "playwright-core";
-import { createAccountService } from "../../shared/account/service.ts";
+import * as Colibrii from "@colibrii/sdk";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { signalIfAlive } from "../../../test/testProcesses.mts";
 import { DevApp } from "./devApp.mts";
 import { withPageApi } from "./pageApi.mts";
@@ -614,10 +616,14 @@ export class Lab {
         `${this.hostApp.profile} holds no Clerk session to sign the browser in with`,
       );
     }
-    const hubUrl = envFile(".env.local").SM_DEVICE_HUB_URL ?? "";
-    const ticket = await createAccountService({
-      baseUrl: hubUrl,
-    }).signInToken(sessionToken);
+    const env = envFile(".env.local");
+    const ticket = await Effect.runPromise(
+      Colibrii.signInToken({
+        hub: env.SM_DEVICE_HUB_URL ?? "",
+        app: env.SM_DEVICE_HUB_APP ?? "shigomori-dev",
+        accessToken: sessionToken,
+      }).pipe(Effect.provide(FetchHttpClient.layer)),
+    );
     await tab.page.evaluate(async (redeem) => {
       const clerk = window.Clerk;
       if (clerk === undefined) throw new Error("no Clerk on the page");

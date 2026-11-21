@@ -1,14 +1,11 @@
-// Direct sessions are desired state, with the live roster as input: the
-// keeper dials every rostered peer as presence names it and redials on
-// the shared ladder (shared/remote/supervisor.ts) when a dial fails or
-// a session dies, so a peer whose listener blipped comes back without a
-// click.
+// Peer sessions are desired state, with the live roster as input: the
+// keeper dials every rostered peer and redials on the shared ladder
+// (shared/remote/ladder.ts) when a dial fails or a session dies, so a
+// peer whose listener blipped comes back without a click.
 //
-// A refused ticket and the host's lockout ride the same ladder: the
-// lockout expires on its own, and a connection the lockout refuses
-// doesn't extend it. A peer with no listener (a web client) parks until
-// it re-enters the roster (its app restarted, or our own hub link came
-// back), or every desktop would redial every open tab forever.
+// A peer that never listens (a web client) parks until it re-enters the
+// roster (its app restarted, or our own hub socket came back), or every
+// desktop would redial every open tab forever.
 //
 // The keeper is the only caller of the bridge's dialPeer, so its state
 // and the session cache can't drift. Pure shared code (no node
@@ -26,14 +23,10 @@ import {
   restartSchedule,
   type Wake,
   wakeable,
-} from "@shared/remote/supervisor";
-import { NoDialableCandidateError } from "./directDial";
-import { RemoteConnectError } from "@shared/remote/deviceLink";
-import {
-  errorMessageOf,
-  isProtocolVersionMismatchError,
-  type OutdatedSide,
-} from "@shigomori/contracts/errors";
+} from "@shared/remote/ladder";
+import { coreOutdatedOf } from "@shared/remote/greeting";
+import { DialError, LinkRefusedError } from "@colibrii/sdk";
+import { errorMessageOf, type OutdatedSide } from "@shigomori/contracts/errors";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import { log } from "@shared/log";
@@ -49,16 +42,15 @@ type DirectKeeperDeps = {
 
 // The end on the older core, when the peer refused this device's hello
 // for running another one.
-const coreOutdatedOf = (error: unknown): OutdatedSide | null =>
-  error instanceof RemoteConnectError &&
-  isProtocolVersionMismatchError(error.refusal)
-    ? error.refusal.hostVersion < error.refusal.clientVersion
-      ? "peer"
-      : "this"
+const coreVerdictOf = (error: unknown): OutdatedSide | null =>
+  error instanceof LinkRefusedError &&
+  error.by === "app" &&
+  error.appRefusal !== undefined
+    ? coreOutdatedOf(error.appRefusal)
     : null;
 
 export type DirectKeeper = {
-  // The desired set: the live roster, or [] while our own hub link is
+  // The desired set: the live roster, empty while our own hub socket is
   // down.
   reconcile(online: readonly string[]): void;
   // An established session died on its own (the transport's
@@ -141,18 +133,18 @@ export const make = (
           // this is the only log of a failed dial.
           if (message !== state.lastFailure) {
             log.warn(
-              `[direct] dial to ${deviceId} failed (attempt ${state.failures}): ${message}`,
+              `[peers] dial to ${deviceId} failed (attempt ${state.failures}): ${message}`,
             );
           }
           state.lastFailure = message;
           // Kept through a dial that failed some other way, which says
           // nothing of the peer's build: a session landing clears it.
-          const verdict = coreOutdatedOf(error);
+          const verdict = coreVerdictOf(error);
           if (verdict !== null) noteCore(state, verdict);
-          // A peer with no listener (a web client) has nothing to dial
+          // A peer that never listens (a web client) has nothing to dial
           // while it is one, so the loop parks until its roster re-entry
           // (see the header).
-          if (error instanceof NoDialableCandidateError) {
+          if (error instanceof DialError && error.reason === "no-listener") {
             return yield* Effect.never;
           }
           return 0;
@@ -160,7 +152,7 @@ export const make = (
         const upSince = elapsedMillisUnsafe(clock);
         if (state.failures > 0) {
           log.info(
-            `[direct] session to ${deviceId} established after ${state.failures} failed attempts`,
+            `[peers] session to ${deviceId} established after ${state.failures} failed attempts`,
           );
         }
         state.lastFailure = null;
@@ -202,7 +194,7 @@ export const make = (
         const live = new Set(online);
         for (const [deviceId, state] of states) {
           if (!live.has(deviceId)) {
-            // Its sessions are the presence sweep's (directPresence.ts).
+            // Its links are Colibrii's to close.
             forget(state);
             states.delete(deviceId);
           }

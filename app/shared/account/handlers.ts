@@ -1,8 +1,9 @@
 // The account calls the shells serve (accountContract): the desktop's
 // (main/electron/account.ts), the web bridge's (web/ipc/register.ts)
-// and the headless host's (headless/account.ts) give only what differs,
-// their store, the device's id and defaults, their platform, and what
-// follows a change.
+// and the headless host's (headless/account.ts) give only what differs:
+// where their device is, their profile's store, the device's defaults,
+// their platform, and what follows a change.
+import * as Colibrii from "@colibrii/sdk";
 import type { AccountServiceConfig } from "@shigomori/contracts/accountServiceConfig";
 import { isConfigured } from "@shigomori/contracts/accountServiceConfig";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
@@ -11,27 +12,40 @@ import type {
   AccountStatus,
   accountContract,
 } from "@shigomori/contracts/modules/account";
+import type { LoginCode } from "@shigomori/contracts/modules/login";
+import type {
+  DeviceAccount,
+  DeviceData,
+} from "@shigomori/contracts/modules/session";
 import type { Handlers } from "@shigomori/contracts/types";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type * as Semaphore from "effect/Semaphore";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Predicate from "effect/Predicate";
 import { joinInFlight } from "@shared/inFlight";
-import type { AccountStore, StoredAccount } from "./credentialStore";
-import {
-  type DeviceFields,
-  effectiveDeviceIcon,
-  enrollDevice,
-  signOutDevice,
-  syncHubDevice,
-  updateDevice,
-} from "./enroll";
-import { awaitDeviceGrant, startDeviceGrant } from "./deviceGrant";
-import type { AccountService } from "./service";
+import type { Profile, ProfileStore } from "./profile";
+
+// The device's account calls, wherever the device runs: the host's
+// (over the session calls, or in the headless shell's own process), or
+// the web client's tab.
+export type DevicePort = {
+  readonly account: () => Promise<DeviceAccount>;
+  readonly enroll: (input: {
+    readonly loginToken: string;
+    readonly name: string;
+    readonly data: DeviceData;
+  }) => Promise<void>;
+  readonly signOut: () => Promise<void>;
+  readonly list: () => Promise<readonly DeviceInfo[]>;
+  readonly rename: (deviceId: string, name: string) => Promise<void>;
+  readonly setData: (deviceId: string, data: DeviceData) => Promise<void>;
+  readonly remove: (deviceId: string) => Promise<void>;
+};
 
 export type AccountShell = {
   readonly config: () => AccountServiceConfig;
-  readonly store: () => AccountStore;
-  readonly service: (config: AccountServiceConfig) => AccountService;
+  readonly device: DevicePort;
+  readonly profile: () => ProfileStore;
   readonly deviceId: () => Promise<string>;
   // The name a device that never enrolled goes by. A provisional one
   // (the system didn't say in time) is asked for again before an enroll
@@ -41,35 +55,34 @@ export type AccountShell = {
     readonly provisional: boolean;
   }>;
   readonly detectedIcon: () => Promise<DeviceIcon>;
-  // The opaque label the hub stores beside the device.
+  // What sm keeps on the device's record beside its icon.
   readonly platform: string;
   // Whether this device signed in by copying another's sign-in.
   readonly sharedSignIn: () => boolean;
   // Whether a window signs in with a code (account:startCodeSignIn).
   readonly codeSignIn: boolean;
-  // The account changed, under the ids before and after it (a rename
-  // keeps the id). Awaited before the call answers. A shell that hears
-  // changes from elsewhere too (the web's other tabs) keeps its own.
-  readonly changed: (change: {
-    readonly before: string | null;
-    readonly after: string | null;
-  }) => Promise<void> | void;
-  // The registry as the hub last listed it.
-  readonly devicesListed: (devices: DeviceInfo[]) => void;
-  // Whether peers' commands are taken here, and its switch.
-  readonly acceptsCommands: () => boolean;
-  readonly setAcceptsCommands: (enabled: boolean) => Promise<void> | void;
-  // Ahead of a sign-out's revoke (the switch, off at once, before the
-  // sign-out waits its turn).
-  readonly beforeSignOut?: (record: StoredAccount) => Promise<void> | void;
-  // The account's changes, one at a time and each whole, its
-  // publication included: a sign-out that comes while an enrollment
-  // waits on the hub follows it and removes what it stored, where the
-  // two ran side by side and the enrollment's late write signed the
-  // device back in. The shell's own, so its other sign-outs (a nuke's)
-  // take their turn too.
-  readonly transitions: Semaphore.Semaphore;
-  readonly onRevokeFailure?: (error: unknown) => void;
+  // This device's name or icon changed here, its account the same.
+  readonly renamed: () => Promise<void> | void;
+  // The account the command switch is on for (null: off), at every
+  // flip.
+  readonly acceptsCommandsChanged: (
+    accountId: string | null,
+  ) => Promise<void> | void;
+};
+
+// The account an account state is of, null signed out.
+export const accountIdOf = (state: DeviceAccount): string | null =>
+  Predicate.isTagged(state, "SignedOut") ? null : state.accountId;
+
+// The switch for the account signed in now.
+export const switchFor = (
+  profile: Profile,
+  state: DeviceAccount,
+): string | null => {
+  const accountId = accountIdOf(state);
+  return accountId !== null && profile.acceptsCommandsFor === accountId
+    ? accountId
+    : null;
 };
 
 // The session token an enroll was asked with, which the run reads.
@@ -80,123 +93,103 @@ class EnrollToken extends Context.Service<EnrollToken, string>()(
 export function makeAccountHandlers(
   shell: AccountShell,
 ): Handlers<typeof accountContract> {
-  const accountIdOf = () => shell.store().read()?.accountId ?? null;
-  // The hub's last answer, kept for the shell's life with the account
-  // it was for (lastListedDevices).
+  // The listing last answered, kept for the shell's life with the
+  // account it was for (lastListedDevices).
   let lastListed: {
     readonly accountId: string;
-    readonly devices: DeviceInfo[];
+    readonly devices: readonly DeviceInfo[];
   } | null = null;
 
+  const iconOf = async (profile: Profile) =>
+    profile.deviceIcon ?? (await shell.detectedIcon());
+  const nameOf = async (profile: Profile) =>
+    profile.deviceName ?? (await shell.defaultName()).name;
+
   const status = async (): Promise<AccountStatus> => {
-    const store = shell.store();
-    const record = store.read();
-    const detectedIcon = await shell.detectedIcon();
+    const state = await shell.device.account();
+    const profile = shell.profile().read();
     return {
       configured: isConfigured(shell.config()),
-      signedIn: record !== null,
-      accountId: record?.accountId ?? "",
-      // Signed out, the name the device last enrolled under, which is
-      // what the next enrollment uses (enroll.ts).
-      deviceName:
-        record?.deviceName ??
-        store.rememberedDeviceName() ??
-        (await shell.defaultName()).name,
-      // The icon by the same rule (a pick outlives a sign-out too).
-      deviceIcon: effectiveDeviceIcon(record, store, detectedIcon),
-      detectedDeviceIcon: detectedIcon,
+      signedIn: accountIdOf(state) !== null,
+      accountId: accountIdOf(state) ?? "",
+      deviceName: await nameOf(profile),
+      deviceIcon: await iconOf(profile),
+      detectedDeviceIcon: await shell.detectedIcon(),
       sharedSignIn: shell.sharedSignIn(),
       codeSignIn: shell.codeSignIn,
-      needsDeviceKey: store.readWithoutKey() !== null,
     };
   };
 
-  // A change to the account, in its turn (shell.transitions).
-  const inTurn = <A>(change: () => Promise<A>): Promise<A> =>
-    Effect.runPromise(shell.transitions.withPermit(Effect.promise(change)));
-
-  // Runs a change to the account in its turn and tells the shell, under
-  // the account it was before.
-  const changing = <A>(change: () => Promise<A>): Promise<A> =>
-    inTurn(async () => {
-      const before = accountIdOf();
-      const result = await change();
-      await shell.changed({ before, after: accountIdOf() });
-      return result;
-    });
-
-  // The calls a signed-in device makes on its account's behalf.
-  const signedIn = () => {
-    const config = shell.config();
-    const record = shell.store().read();
-    return record === null || !isConfigured(config)
-      ? null
-      : { service: shell.service(config), record };
-  };
-
-  // A device's name or icon change, made on the hub (updateDevice).
-  const update = async (
-    deviceId: string,
-    patch: DeviceFields,
-  ): Promise<AccountStatus> => {
-    const account = signedIn();
-    if (account === null) {
+  const signedInAs = async () => {
+    const accountId = accountIdOf(await shell.device.account());
+    if (accountId === null) {
       throw new Error("cannot change a device while signed out");
     }
-    const device = {
-      service: account.service,
-      store: shell.store(),
-      deviceId: await shell.deviceId(),
-      detectedIcon: await shell.detectedIcon(),
-    };
-    await changing(() => updateDevice(device, account.record, deviceId, patch));
-    return status();
+    return accountId;
   };
+
+  // A change to this device's name or icon, kept here too, so the next
+  // enrollment wears it.
+  const keep = async (change: {
+    readonly deviceName?: string;
+    readonly deviceIcon?: DeviceIcon | undefined;
+  }) => {
+    const { deviceIcon, ...rest } = { ...shell.profile().read(), ...change };
+    shell
+      .profile()
+      .write(deviceIcon === undefined ? rest : { ...rest, deviceIcon });
+    await shell.renamed();
+  };
+
+  // The icon kept as a pick, or none when it is what the device detects.
+  const pickOf = async (icon: DeviceIcon) =>
+    icon === (await shell.detectedIcon()) ? undefined : icon;
 
   const enroll = async (token: string): Promise<AccountStatus> => {
-    const config = shell.config();
-    let fallback = await shell.defaultName();
-    if (fallback.provisional) fallback = await shell.defaultName();
-    const device = {
-      config,
-      service: shell.service(config),
-      store: shell.store(),
-      // The hub device identity is tied to the data dir's store: a fresh
-      // store enrolls as a new hub device.
-      deviceId: await shell.deviceId(),
-      fallbackDeviceName: fallback.name,
-      platform: shell.platform,
-      detectedIcon: await shell.detectedIcon(),
-    };
-    await changing(() => enrollDevice(device, token));
+    const profile = shell.profile().read();
+    let name = profile.deviceName;
+    if (name === undefined) {
+      let fallback = await shell.defaultName();
+      if (fallback.provisional) fallback = await shell.defaultName();
+      name = fallback.name;
+    }
+    await shell.device.enroll({
+      loginToken: token,
+      name,
+      data: { platform: shell.platform, icon: await iconOf(profile) },
+    });
+    if (profile.deviceName === undefined) {
+      shell.profile().write({ ...shell.profile().read(), deviceName: name });
+    }
     return status();
   };
 
+  // Commands are refused from the first moment, ahead of the sign-out.
   const signOut = async (): Promise<void> => {
-    const record = shell.store().read();
-    if (record !== null) await shell.beforeSignOut?.(record);
-    const config = shell.config();
-    const device = {
-      config,
-      service: shell.service(config),
-      store: shell.store(),
-      deviceId: await shell.deviceId(),
-      ...(shell.onRevokeFailure === undefined
-        ? {}
-        : { onRevokeFailure: shell.onRevokeFailure }),
-    };
-    await changing(() => signOutDevice(device));
+    const store = shell.profile();
+    const { acceptsCommandsFor: _, ...rest } = store.read();
+    store.write(rest);
+    await shell.acceptsCommandsChanged(null);
+    await shell.device.signOut();
   };
 
-  // A concurrent enroll (a re-fired renderer effect, two windows) must
-  // not enroll twice and rotate the credential mid-write, and concurrent
-  // sign-outs must not race two revokes, where the second would 401
-  // against the credential the first already deleted. A caller arriving
-  // while one runs rides it (an enroll's own token unused).
+  // A concurrent enroll (a re-fired renderer effect, two windows) rides
+  // the one under way, its own token unused.
   const enrollOnce = joinInFlight(
     Effect.flatMap(EnrollToken, (token) => Effect.promise(() => enroll(token))),
   );
   const signOutOnce = joinInFlight(Effect.promise(signOut));
+
+  const codeOptions = () => {
+    const config = shell.config();
+    if (config.oauthClientId === "") {
+      throw new Error("This build has no OAuth client to sign in with a code.");
+    }
+    return {
+      publishableKey: config.publishableKey,
+      clientId: config.oauthClientId,
+    };
+  };
 
   return {
     status,
@@ -204,62 +197,106 @@ export function makeAccountHandlers(
       Effect.runPromise(Effect.provideService(enrollOnce, EnrollToken, token)),
     signOut: () => Effect.runPromise(signOutOnce),
 
-    startCodeSignIn: () => startDeviceGrant(shell.config()),
-    finishCodeSignIn: async (code) => {
+    startCodeSignIn: async (): Promise<LoginCode> => {
+      const code = await Effect.runPromise(
+        Colibrii.startCodeSignIn(codeOptions()).pipe(
+          Effect.provide(FetchHttpClient.layer),
+        ),
+      );
+      const { verificationUriComplete, ...rest } = code;
+      return {
+        ...rest,
+        ...(verificationUriComplete === undefined
+          ? {}
+          : { verificationUriComplete }),
+      };
+    },
+    finishCodeSignIn: (code) => {
       const config = shell.config();
-      const token = await awaitDeviceGrant(config, code);
-      return shell.service(config).signInToken(token);
+      return Effect.runPromise(
+        Colibrii.finishCodeSignIn(codeOptions(), {
+          ...code,
+          verificationUriComplete: code.verificationUriComplete,
+        }).pipe(
+          Effect.flatMap((accessToken) =>
+            Colibrii.signInToken({
+              hub: config.hubUrl,
+              app: config.app,
+              accessToken,
+            }),
+          ),
+          Effect.provide(FetchHttpClient.layer),
+        ),
+      );
     },
 
-    revokeDevice: async (deviceId) => {
-      const account = signedIn();
-      if (account === null) {
-        throw new Error("cannot revoke a device while signed out");
-      }
-      // Not swallowed the way sign-out's best-effort revoke is: a failed
-      // call leaves the device enrolled, which the caller must say.
-      await account.service.revoke(account.record.credential, deviceId);
-      const self = deviceId === (await shell.deviceId());
-      // A self-revoke killed this device's own credential: dropped now
-      // rather than at the hub's next refusal.
-      await changing(async () => {
-        if (self) shell.store().clear();
-      });
-    },
+    // Removing this device reads as removed, which signs it out.
+    revokeDevice: (deviceId) => shell.device.remove(deviceId),
 
     listDevices: async () => {
-      const account = signedIn();
-      if (account === null) return [];
-      const devices = await account.service.listDevices(
-        account.record.credential,
-      );
-      const device = {
-        service: account.service,
-        store: shell.store(),
-        deviceId: await shell.deviceId(),
-        detectedIcon: await shell.detectedIcon(),
-      };
-      // A peer's rename of this device, taken from the listing.
-      await inTurn(async () => {
-        if (syncHubDevice(device, account.record, devices)) {
-          const accountId = account.record.accountId;
-          await shell.changed({ before: accountId, after: accountId });
-        }
-      });
-      shell.devicesListed(devices);
-      lastListed = { accountId: account.record.accountId, devices };
-      return devices;
+      const state = await shell.device.account();
+      const accountId = accountIdOf(state);
+      if (accountId === null) return [];
+      const devices = await shell.device.list();
+      lastListed = { accountId, devices };
+      // A peer's change to this device's name or icon, taken from the
+      // listing.
+      const self = await shell.deviceId();
+      const listed = devices.find((device) => device.deviceId === self);
+      const profile = shell.profile().read();
+      if (
+        listed !== undefined &&
+        (listed.name !== (await nameOf(profile)) ||
+          listed.icon !== (await iconOf(profile)))
+      ) {
+        await keep({
+          deviceName: listed.name,
+          deviceIcon: await pickOf(listed.icon),
+        });
+      }
+      return [...devices];
     },
 
-    lastListedDevices: async () =>
-      lastListed !== null && lastListed.accountId === accountIdOf()
-        ? lastListed.devices
-        : [],
+    lastListedDevices: async () => {
+      const accountId = accountIdOf(await shell.device.account());
+      return lastListed !== null && lastListed.accountId === accountId
+        ? [...lastListed.devices]
+        : [];
+    },
 
-    setDeviceName: ({ deviceId, name }) => update(deviceId, { name }),
-    setDeviceIcon: ({ deviceId, icon }) => update(deviceId, { icon }),
+    setDeviceName: async ({ deviceId, name }) => {
+      await signedInAs();
+      await shell.device.rename(deviceId, name);
+      if (deviceId === (await shell.deviceId())) {
+        await keep({ deviceName: name });
+      }
+      return status();
+    },
 
-    acceptsCommands: () => shell.acceptsCommands(),
-    setAcceptsCommands: (enabled) => shell.setAcceptsCommands(enabled),
+    // The whole of sm's data goes with it: the platform beside it is
+    // the device's own, or the one its listing said.
+    setDeviceIcon: async ({ deviceId, icon }) => {
+      await signedInAs();
+      const self = deviceId === (await shell.deviceId());
+      const platform = self
+        ? shell.platform
+        : (lastListed?.devices.find((device) => device.deviceId === deviceId)
+            ?.platform ?? "");
+      await shell.device.setData(deviceId, { platform, icon });
+      if (self) await keep({ deviceIcon: await pickOf(icon) });
+      return status();
+    },
+
+    acceptsCommands: async () =>
+      switchFor(shell.profile().read(), await shell.device.account()) !== null,
+    setAcceptsCommands: async (enabled) => {
+      const accountId = await signedInAs().catch(() => {
+        throw new Error("cannot change command access while signed out");
+      });
+      const store = shell.profile();
+      const { acceptsCommandsFor: _, ...rest } = store.read();
+      store.write(enabled ? { ...rest, acceptsCommandsFor: accountId } : rest);
+      await shell.acceptsCommandsChanged(enabled ? accountId : null);
+    },
   };
 }

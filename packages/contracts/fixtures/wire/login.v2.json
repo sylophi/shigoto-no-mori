@@ -4,8 +4,8 @@
       "userCode": "\u0000",
       "verificationUri": "Y,",
       "deviceCode": "sq",
-      "interval": -1,
-      "expiresIn": 4
+      "intervalSeconds": -1.7397975609051202e-130,
+      "expiresAt": 8.933918611120727e83
     },
     "success": {
       "signedIn": false,
@@ -39,8 +39,8 @@
       "userCode": "Y,",
       "verificationUri": "\ud800",
       "deviceCode": "\udc00",
-      "interval": 1,
-      "expiresIn": 2
+      "intervalSeconds": 2.3906731078917264e-171,
+      "expiresAt": -1.7976931348623153e308
     }
   },
   "login:status": {

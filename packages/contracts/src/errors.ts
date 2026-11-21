@@ -315,8 +315,6 @@ export const isHubRefusal = Schema.is(
   ]),
 );
 
-export const isHubDeviceRevoked = Schema.is(HubDeviceRevokedError);
-
 // The device hub could not be reached at all: offline, a DNS or TLS
 // failure, or a browser hiding a failed response behind CORS.
 // `detail` is the transport's own words, for the logs.

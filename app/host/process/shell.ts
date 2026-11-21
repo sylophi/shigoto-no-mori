@@ -50,6 +50,10 @@ export const layer = (calls: EffectClient<typeof shellCallsContract>) =>
         stopUpdaterBridge: Effect.ignore(calls.stopUpdaterBridge()),
         migration: (progress) => ask(calls.migration(progress)),
         guide: (payload) => ask(calls.guide(payload)),
+        account: (account) => tell(calls.account(account)),
+        deviceStoreKey: calls
+          .deviceStoreKey()
+          .pipe(Effect.orElseSucceed(() => null)),
         setAcceptsCommands: (enabled) => ask(calls.setAcceptsCommands(enabled)),
         keepReachable: ask(calls.keepReachable()),
         setKeepReachable: (on) => ask(calls.setKeepReachable(on)),

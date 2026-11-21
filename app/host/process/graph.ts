@@ -13,7 +13,7 @@ import * as Exit from "effect/Exit";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import type * as Tunnel from "@host/direct/Tunnel";
+import type * as PeerDevice from "@host/lib/PeerDevice";
 import type * as HostAccount from "@host/lib/HostAccount";
 import type * as MirrorDaemon from "@host/mirror/MirrorDaemon";
 import type * as Loopback from "@host/socket/Loopback";
@@ -26,7 +26,7 @@ export type GraphServices =
   | HostAccount.HostAccount
   | DeviceLink.DeviceLink
   | Loopback.Loopback
-  | Tunnel.Tunnel
+  | PeerDevice.PeerDevice
   | MirrorDaemon.MirrorDaemon;
 
 class GraphDownError extends Schema.TaggedError<GraphDownError>()(

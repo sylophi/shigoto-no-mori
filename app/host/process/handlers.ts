@@ -3,8 +3,9 @@
 // and direct plane's lifecycle). This file is what rides them: each
 // host-side module's handlers from host/ipc/modules as one layer
 // (hostHandlers), and the host's peer reach over the same peer sessions
-// the windows use. The account's changes arrive from the shell
-// (applyAccount).
+// the windows use. The account's changes arrive from the device and the
+// shell's switch (noteDeviceAccount, noteAcceptsCommands).
+import { accountIdOf } from "@shared/account/handlers";
 import { join } from "node:path";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { branchesContract } from "@shigomori/contracts/modules/branches";
@@ -97,15 +98,11 @@ import * as PeerReach from "@host/ipc/PeerReach";
 import * as HostRpc from "@host/socket/hostRpc";
 import * as MirrorDaemon from "@host/mirror/MirrorDaemon";
 import { dataDir } from "@shared/paths";
-import type { AccountFacts } from "@shigomori/contracts/modules/session";
-import { HostAccount } from "@host/lib/HostAccount";
-import { acceptsPeerCommands, listAccountDevices } from "./account";
-import {
-  clearDirectTickets,
-  refreshHubConnection,
-  hubHandlers,
-  peerAdmissions,
-} from "./wires";
+import type { AccountState } from "@colibrii/sdk";
+import { type AccountFacts, HostAccount } from "@host/lib/HostAccount";
+import { acceptsPeerCommands } from "./account";
+import { deviceCalls } from "./device";
+import { hubHandlers, peerAdmissions } from "./wires";
 import { log, warnOnFailure } from "@shared/log";
 import * as Graph from "./graph";
 
@@ -120,10 +117,9 @@ const channelsFor = (deviceId: string) => () =>
 // Every peer reach of the host (host/ipc/PeerReach.ts), the
 // pull/transplant orchestrations' and the port-forward engine's among
 // them, routed through the SAME invokePeer path (and so the same
-// cached direct peer session) the renderer's remote-device api uses.
-// Opening a second session directly would supersede-kill the one every
-// remote-forest query is riding, since the host keeps one authed
-// socket per device.
+// cached peer session) the renderer's remote-device api uses. A second
+// link of its own would replace the one every remote-forest query is
+// riding, since a peer keeps one link per device.
 const peerReachLayer = Layer.effect(
   PeerReach.PeerReach,
   Effect.gen(function* () {
@@ -245,20 +241,18 @@ function teardownStep(what: string, run: () => unknown): Promise<void> {
   return warnOnFailure(`[account] ${what} failed`, run);
 }
 
-// The account's facts as the shell reports them: at start and after
-// every sign-in, sign-out, rename, credential rotation or switch flip.
-// The first is the baseline, before which the sessions the daemon
-// brought back are not asked about (the mirror engine ends them for a
-// device signed out at start). A later report tells a rename or a
-// switch flip (same account, nothing to tear down) from a departure.
-// A departure (a sign-out, since the hub refuses a switch without one)
+// The account's facts as they move: the first report is the baseline,
+// before which the sessions the daemon brought back are not asked about
+// (the mirror engine ends them for a device signed out at start). A
+// later report tells a switch flip (same account, nothing to tear down)
+// from a departure. A departure (a sign-out, a removal, another account)
 // tears down what was the account's, in the order the pieces need: the
-// mirror sweep before the hub refresh (its terminates ride the sessions
-// the refresh closes), the shared settings after it (a peer's push
-// landing between the clear and the sessions closing would refill the
-// copy). Every step is fenced so one failing cannot leave the remote
-// plane up.
-export async function applyAccount(next: AccountFacts | null): Promise<void> {
+// mirror sweep first (its terminates ride the sessions still up), the
+// shared settings after the peers' links are gone (a peer's push
+// landing between the clear and the links closing would refill the
+// copy). Every step is fenced so one failing cannot leave the rest
+// undone.
+async function applyAccount(next: AccountFacts | null): Promise<void> {
   const previous = await Graph.run(
     Effect.flatMap(HostAccount, (account) => account.set(next)),
   );
@@ -267,7 +261,6 @@ export async function applyAccount(next: AccountFacts | null): Promise<void> {
     (next === null || next.accountId !== previous.facts.accountId);
   const first = !previous.reported;
   if (leaving) {
-    clearDirectTickets();
     await stopPortForwardsTo(() => false);
     await teardownStep("the mirror sweep", () =>
       Graph.run(Effect.flatMap(MirrorEngine, (engine) => engine.leaveAccount)),
@@ -275,9 +268,7 @@ export async function applyAccount(next: AccountFacts | null): Promise<void> {
   }
   // The switch as it now stands, to every connected peer (the push is
   // annotated remote), whose bridge records it for its UI and CLI. The
-  // windows hear it from the shell, whose account page flipped it. An
-  // account switch also restarts the listener, so peers learn it from
-  // their next dial either way.
+  // windows hear it from the shell, whose account page flipped it.
   if (!first && previous.facts?.acceptsCommands !== next?.acceptsCommands) {
     await Graph.run(
       HostPushes.push(
@@ -287,12 +278,6 @@ export async function applyAccount(next: AccountFacts | null): Promise<void> {
       ),
     );
   }
-  // Every report, as the socket's own inputs decide whether anything
-  // changed: a device enrolled again under the same account (Retry
-  // enrollment) has a new credential and key, and a blocked socket
-  // restarts only here. Also reconciles the listener from its tail,
-  // which follows the same enrollment condition.
-  await refreshHubConnection();
   if (leaving) {
     await teardownStep("dropping the shared settings", () =>
       Graph.run(SharedSettingsStore.clear),
@@ -300,12 +285,41 @@ export async function applyAccount(next: AccountFacts | null): Promise<void> {
   }
 }
 
-// The account's devices as the shell last reported them.
+// The account the device last reported (undefined before its first),
+// and the one the shell's command switch is on for.
+let reportedAccount: string | null | undefined;
+let switchFor: string | null = null;
+
+const applyNow = (): Promise<void> =>
+  reportedAccount === undefined
+    ? Promise.resolve()
+    : applyAccount(
+        reportedAccount === null
+          ? null
+          : {
+              accountId: reportedAccount,
+              acceptsCommands: switchFor === reportedAccount,
+            },
+      );
+
+export function noteDeviceAccount(state: AccountState): Promise<void> {
+  const next = accountIdOf(state);
+  if (next === reportedAccount) return Promise.resolve();
+  reportedAccount = next;
+  return applyNow();
+}
+
+export function noteAcceptsCommands(accountId: string | null): Promise<void> {
+  if (accountId === switchFor) return Promise.resolve();
+  switchFor = accountId;
+  return applyNow();
+}
+
+// The account's devices as they were last listed.
 let lastMembership = new Set<string>();
 
-// The account's registry as the hub last listed it, which the shell
-// reports on every read. It is the one place this device learns a peer
-// was removed from the account (the hub pushes no such thing, and an
+// The account's devices as they were last listed (device.ts), the one
+// place this device learns a peer was removed from the account (an
 // absent peer looks like an offline one on the roster). A mirror or a
 // forward with a device no longer on the account ends here, the other
 // half of the departure rule above.
@@ -342,7 +356,7 @@ export const rootServices = Layer.mergeAll(
     AccountPeers.of({
       listDevices: withinAccountRead(
         Effect.tryPromise({
-          try: (signal) => listAccountDevices(signal),
+          try: () => deviceCalls.listDevices(),
           catch: listDevicesFailure,
         }),
       ),

@@ -1,27 +1,16 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useAccountStatus } from "@/hooks/account/useAccount";
 import { useMigration } from "@/hooks/useMigration";
 import { migrationOwed } from "@shigomori/contracts/schemas/migration";
 import { MigrationView } from "@shigomori/ui/views/steps/MigrationView.tsx";
 import { migrationEnded } from "@shigomori/ui/views/steps/migrationEnded.ts";
-import {
-  SignInStep,
-  type SignInStepState,
-} from "@/components/steps/SignInStep";
 import { useApi } from "@/lib/runtime/pageApi";
 import { notifyError } from "@/lib/toast";
 
 // The v3 migration as this machine's shell serves it, in place of the app
-// (the /migration route), with this device's enrollment for its key
-// (useEnrollment) as its sign-in: by itself while the session lives, a
-// button once it has lapsed. With every step done it opens the app, and
+// (the /migration route). With every step done it opens the app, and
 // with nothing to migrate at once.
 export function MigrationPage() {
-  return <SignInStep render={(step) => <MigrationSteps step={step} />} />;
-}
-
-function MigrationSteps({ step }: { step: SignInStepState }) {
   const api = useApi();
   const migration = useMigration();
   const navigate = useNavigate();
@@ -40,12 +29,8 @@ function MigrationSteps({ step }: { step: SignInStepState }) {
       )
       .finally(() => setRetrying(false));
   };
-  // Not before the account says whether the device key is due.
-  const { data: account } = useAccountStatus();
   const { open } =
-    migration == null || account === undefined
-      ? { open: false }
-      : migrationEnded(migration, step.signIn);
+    migration == null ? { open: false } : migrationEnded(migration);
   // On to the app, for every window: the shell keeps the page until one
   // goes on past it.
   const goOn = () => {
@@ -72,8 +57,6 @@ function MigrationSteps({ step }: { step: SignInStepState }) {
   return (
     <MigrationView
       migration={migration}
-      signIn={step.signIn}
-      onSignIn={step.run}
       onContinue={goOn}
       onRetry={retry}
       retrying={retrying}

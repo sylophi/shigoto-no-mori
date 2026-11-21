@@ -977,11 +977,7 @@ const setControl = (acceptsCommands: boolean | null) =>
         acceptsCommands === null
           ? null
           : {
-              hubUrl: "http://127.0.0.1:9",
               accountId: "account",
-              credential: "",
-              deviceKey: "",
-              webOrigin: "",
               acceptsCommands,
             },
       ),

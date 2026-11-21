@@ -6,8 +6,8 @@ import { VoidSchema } from "../schemas/index.ts";
 import { DeviceIconSchema } from "../deviceIcon.ts";
 import { LoginCodeSchema } from "./login.ts";
 
-// Client-scoped on purpose: enrollment writes an OS-keychain credential
-// on the machine showing the window, so it must never reach a peer.
+// Client-scoped on purpose: the account belongs to the machine showing
+// the window, so it must never reach a peer.
 
 // accountId is empty when signed out. configured: the service env vars
 // are set.
@@ -25,31 +25,27 @@ const AccountStatusSchema = Schema.Struct({
   // Signs in with a code approved on another device
   // (SHIGOMORI_CODE_SIGN_IN), for a window no one sits at.
   codeSignIn: Schema.Boolean,
-  // Enrolled before device keys: reads as signed out until it enrolls
-  // again.
-  needsDeviceKey: Schema.Boolean,
 });
 export type AccountStatus = typeof AccountStatusSchema.Type;
 
 export const accountContract = defineContract(
   "account",
   { scope: "client", version: CORE_VERSION },
-  // Every call is a file read and a keychain decrypt: ask on account
-  // events, not on a poll.
+  // Ask on account events, not on a poll.
   invoke("status", VoidSchema, AccountStatusSchema),
   // Takes a fresh Clerk session token.
   invoke("enroll", Schema.NonEmptyString, AccountStatusSchema),
   // The sign-in with a code (status.codeSignIn): Clerk's device grant,
-  // approved from another device and traded with the hub for a Clerk
+  // approved from another device and traded with Colibrii for a Clerk
   // sign-in token, which the window redeems for its session.
   invoke("startCodeSignIn", VoidSchema, LoginCodeSchema),
   // Answers once the person approved. Refused when they denied it or
   // the code expired.
   invoke("finishCodeSignIn", LoginCodeSchema, Schema.String),
-  // The revoke is best-effort, so sign-out succeeds offline.
+  // Succeeds offline: the removal from the account is delivered later.
   invoke("signOut", VoidSchema, VoidSchema),
-  // Not best-effort, unlike signOut: nothing local stands in for "still
-  // enrolled". Revoking this device clears its own credential too.
+  // Not deferred, unlike signOut's: nothing local stands in for "still
+  // enrolled". Removing this device signs it out too.
   invoke("revokeDevice", DeviceIdSchema, VoidSchema),
   // Empty when signed out or unconfigured.
   invoke("listDevices", VoidSchema, Schema.Array(DeviceInfoSchema)),
@@ -62,7 +58,7 @@ export const accountContract = defineContract(
     "setDeviceName",
     Schema.Struct({
       deviceId: DeviceIdSchema,
-      // EnrollRequestSchema's bound, so a stored name never fails enroll.
+      // Colibrii's bound, so a stored name never fails an enrollment.
       name: Schema.String.check(Schema.isBetweenLength(1, 256)),
     }),
     AccountStatusSchema,
@@ -76,7 +72,7 @@ export const accountContract = defineContract(
   // Whether this host serves its peers' gated calls, decided and
   // enforced on the machine being driven.
   invoke("acceptsCommands", VoidSchema, Schema.Boolean),
-  // Throws if signed out: the switch is kept on the account's record.
+  // Throws if signed out: the switch belongs to the account.
   invoke("setAcceptsCommands", Schema.Boolean, VoidSchema),
   // Carries the account now signed in, so a listener can tell a rename
   // from a sign-out or a switch without a status read.

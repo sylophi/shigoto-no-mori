@@ -2,9 +2,8 @@
 // it: nobody is at it to show anything to, so what a shell would show
 // is logged. A restart is a quit, which the service manager that keeps
 // the host running (the systemd unit) starts again, which keeps it
-// reachable too. The updater runs here (updater.ts), the account's
-// command switch is account.ts's, and there is no window for a guide
-// to drive.
+// reachable too. The updater runs here (updater.ts), the account is
+// account.ts's, and there is no window for a guide to drive.
 import { callFailureOf } from "@shigomori/contracts/errors";
 import type { UpdaterState } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
@@ -25,7 +24,7 @@ const call = <A>(run: () => Promise<A>) =>
 
 export const layer = (
   facts: HostFacts,
-  account: Pick<HeadlessAccount, "setAcceptsCommands">,
+  account: Pick<HeadlessAccount, "setAcceptsCommands" | "changed">,
 ) =>
   Layer.unwrap(
     Effect.map(PubSub.unbounded<UpdaterState>(), (states) => {
@@ -61,8 +60,12 @@ export const layer = (
           stopUpdaterBridge: Effect.promise(updater.releaseBridge),
           migration: () => Effect.void,
           guide: () => refused("This machine has no window to guide."),
+          account: (state) => Effect.promise(() => account.changed(state)),
+          // Plain, in a file only its owner reads: a server has no
+          // keychain to keep a key in.
+          deviceStoreKey: Effect.succeed(null),
           setAcceptsCommands: (enabled) =>
-            call(() => account.setAcceptsCommands(enabled)),
+            call(async () => account.setAcceptsCommands(enabled)),
           keepReachable: Effect.succeed(null),
           setKeepReachable: () =>
             refused(

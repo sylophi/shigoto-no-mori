@@ -33,7 +33,7 @@ import {
   useAccountStatus,
   useEnroll,
 } from "@/hooks/account/useAccount";
-import { credentialRevoked } from "@shared/remote/supervisor";
+import { credentialRevoked } from "@shigomori/contracts/modules/hub";
 import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
 import { useHubBlock } from "@/hooks/remote/useHubStatus";
 import { toast } from "@/lib/toast";

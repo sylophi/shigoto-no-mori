@@ -51,8 +51,6 @@ function StuckImport({
     <AppShellView phone={false} hasLocalHost sidebar={null}>
       <MigrationView
         migration={migration}
-        signIn={null}
-        onSignIn={() => {}}
         onContinue={() => {}}
         onRetry={() => {
           setRetrying(true);
