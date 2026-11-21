@@ -134,17 +134,25 @@ export function headlessAccount(facts: HostFacts) {
             : { verificationUriComplete }),
         };
       }),
-    // Enrolls under the access token once the person approved.
+    // Enrolls under the access token once the person approved. A
+    // terminal that goes away while it waits stops the wait with it.
     finish: (code) =>
-      call(async () => {
-        const accessToken = await Effect.runPromise(
-          Colibrii.finishCodeSignIn(codeOptions(), {
+      Effect.try({ try: codeOptions, catch: callFailureOf }).pipe(
+        Effect.flatMap((options) =>
+          Colibrii.finishCodeSignIn(options, {
             ...code,
             verificationUriComplete: code.verificationUriComplete,
-          }).pipe(Effect.provide(FetchHttpClient.layer)),
-        );
-        return loginStatus(await account.enroll(accessToken, null));
-      }),
+          }).pipe(
+            Effect.provide(FetchHttpClient.layer),
+            Effect.mapError(callFailureOf),
+          ),
+        ),
+        Effect.flatMap((accessToken) =>
+          call(async () =>
+            loginStatus(await account.enroll(accessToken, null)),
+          ),
+        ),
+      ),
     signOut: () => call(async () => account.signOut(undefined, null)),
     rename: (name) =>
       call(async () => {
