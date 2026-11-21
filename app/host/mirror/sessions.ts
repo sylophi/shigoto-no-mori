@@ -67,6 +67,7 @@ import {
 } from "./registry";
 import { MirrorEngine, MirrorError } from "./MirrorEngine";
 import { MirrorLedger } from "./MirrorLedger";
+import type { CopyExpects } from "./ledger/ends";
 import { ownMirrorHereBlocker } from "./MirrorGateway";
 
 const decodePullProgress = Schema.decodeUnknownOption(SyncPullProgressSchema);
@@ -331,7 +332,8 @@ export const stopMirror = (session: string, force: boolean) =>
     // last verdict (a commit on the copy a moment ago is exactly what
     // must not be lost), and the files settled, since git says nothing
     // about an edit the engine has not carried yet or holds still as a
-    // conflict.
+    // conflict. A commit made on the copy after the look keeps it (the
+    // delete's `expectHead`).
     if (!force) {
       const git = yield* daemon.refreshGit(session);
       const live = (yield* findSession(daemon, session)) ?? raw;
@@ -352,7 +354,12 @@ export const stopMirror = (session: string, force: boolean) =>
         ...annotateMirrorSession(raw, daemon.gitStatus(session)),
         stopping: true,
       },
-      stopAndRemoveCopy(daemon, ledger, raw),
+      stopAndRemoveCopy(
+        daemon,
+        ledger,
+        raw,
+        force ? { mirrorCopy: true } : { expectHead: daemon.copyHead(session) },
+      ),
     );
     return { removedCopy: true };
   });
@@ -365,8 +372,9 @@ const stopAndRemoveCopy = Effect.fnUntraced(function* (
   daemon: Daemon,
   ledger: MirrorLedger["Service"],
   raw: MirrorSessionRaw,
+  expects: CopyExpects,
 ) {
-  const stayed = yield* ledger.endThenDeleteCopy(daemon, raw);
+  const stayed = yield* ledger.endThenDeleteCopy(daemon, raw, expects);
   daemon.noteEvent(
     raw.localWorktreeId,
     "stopped",

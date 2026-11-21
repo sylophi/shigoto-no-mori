@@ -13,9 +13,10 @@
 // the copy reads as stayed. The delete is forced, since the copy holds
 // the original's uncommitted state by design. The original's delete
 // expects what the copy's device read of it when the two were found in
-// step, so a copy changed since stays.
+// step, so a copy changed since stays, and a stop's expects what
+// CopyExpects holds.
 import * as Effect from "effect/Effect";
-import type { MovedSource } from "@shigomori/contracts/schemas";
+import type { DeleteWorktreePayloadSchema } from "@shigomori/contracts/schemas";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import { PeerReach, peerWorktree, peerWorktreesFor } from "@host/ipc/PeerReach";
 import { log } from "@shared/log";
@@ -24,6 +25,12 @@ import { isTransferSession, type MirrorSessionRaw } from "../registry";
 import type { Marks } from "./marks";
 
 type Daemon = MirrorEngine["Service"];
+
+// What the copy's delete is held to, each as its device takes it.
+export type CopyExpects = Pick<
+  typeof DeleteWorktreePayloadSchema.Type,
+  "expect" | "expectHead" | "mirrorCopy"
+>;
 
 export type Copy = Pick<
   MirrorSessionRaw,
@@ -60,7 +67,11 @@ export const makeEnds = ({ marks }: { readonly marks: Marks }) =>
     // a call that failed while the copy is still listed), or undefined
     // once it is gone.
     const endThenDeleteCopy = Effect.fn("MirrorLedger.endThenDeleteCopy")(
-      function* (daemon: Daemon, raw: MirrorSessionRaw, expect?: MovedSource) {
+      function* (
+        daemon: Daemon,
+        raw: MirrorSessionRaw,
+        expects: CopyExpects = {},
+      ) {
         yield* daemon.terminate(raw.session);
         return yield* peerWorktreesFor(raw.deviceId)
           .delete({
@@ -68,7 +79,7 @@ export const makeEnds = ({ marks }: { readonly marks: Marks }) =>
             worktreeId: raw.worktreeId,
             force: true,
             oneSide: true,
-            ...(expect === undefined ? {} : { expect }),
+            ...expects,
           })
           .pipe(
             Effect.map((removed) =>

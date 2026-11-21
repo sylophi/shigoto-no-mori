@@ -23,7 +23,7 @@ import type * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import type * as Views from "@host/lib/Views";
 import type { MirrorEngine, MirrorError } from "./MirrorEngine";
 import type { MirrorSessionRaw } from "./registry";
-import { type Copy, makeEnds } from "./ledger/ends";
+import { type Copy, type CopyExpects, makeEnds } from "./ledger/ends";
 import { makeChanges, makeListing } from "./ledger/listing";
 import { makeMarks } from "./ledger/marks";
 import { makeMoves } from "./ledger/moves";
@@ -121,6 +121,7 @@ export class MirrorLedger extends Context.Service<
     readonly endThenDeleteCopy: (
       daemon: Daemon,
       raw: MirrorSessionRaw,
+      expects?: CopyExpects,
     ) => Effect.Effect<string | undefined, MirrorError>;
     readonly endMirrorKeepingCopy: (
       daemon: Daemon,

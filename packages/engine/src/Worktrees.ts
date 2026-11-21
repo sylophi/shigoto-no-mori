@@ -3,7 +3,7 @@
 // status card, finding the worktree a command means, and the marks and
 // descriptions the app and agents set. The rows and documents keep the
 // shapes `sm worktrees ... --json` prints, field for field.
-import type { MovedSource } from "@shigomori/contracts/schemas";
+import type { ExpectedHead, MovedSource } from "@shigomori/contracts/schemas";
 import {
   UnknownProjectError,
   UnknownWorktreeError,
@@ -310,6 +310,8 @@ export class Worktrees extends Context.Service<
         // worktree must still hold after its cleanup, right before the
         // delete (refuseChangedSince).
         readonly expect?: MovedSource;
+        // A mirror's stop: where HEAD must still be then (refuseHeadMoved).
+        readonly expectHead?: ExpectedHead;
       },
       reporter: Reporter,
     ) => Effect.Effect<
@@ -328,6 +330,16 @@ export class Worktrees extends Context.Service<
     readonly refuseChangedSince: (
       located: Located,
       expect: MovedSource,
+    ) => Effect.Effect<void, WorktreeRefused | Git.GitError>;
+    // The branch HEAD is on and its tip. None for a detached HEAD.
+    readonly head: (
+      located: Located,
+    ) => Effect.Effect<ExpectedHead | undefined, Git.GitError>;
+    // Refused ("changed-since-stop") unless HEAD is still on `expect`'s
+    // branch, at its tip. The uncommitted work isn't looked at.
+    readonly refuseHeadMoved: (
+      located: Located,
+      expect: ExpectedHead,
     ) => Effect.Effect<void, WorktreeRefused | Git.GitError>;
     // Whether removing the worktree deletes its branch: never an external
     // or a detached one's, one kept, or the project's primary branch, else

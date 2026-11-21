@@ -12,11 +12,13 @@ import {
   type CleanupError,
   CleanupErrorSchema,
   type DeleteStackResult,
+  type ExpectedHead,
   type MovedSource,
 } from "@shigomori/contracts/schemas";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
 import * as Landing from "@shigomori/engine/Landing";
 import * as EngineWorktrees from "@shigomori/engine/Worktrees";
@@ -27,7 +29,12 @@ import * as Scripts from "../Scripts";
 import { MirrorsOnDelete } from "@shigomori/engine/MirrorsOnDelete";
 import { MirrorLedger } from "@host/mirror/MirrorLedger";
 import { mirrorsOnDelete } from "@host/mirror/onDelete";
-import { bookingScripts, ScriptsRunningError } from "./documents";
+import { isMirrorCopy } from "@host/mirror/gitState";
+import {
+  bookingScripts,
+  NotMirrorCopyError,
+  ScriptsRunningError,
+} from "./documents";
 
 const decodeCleanupError = Schema.decodeUnknownSync(CleanupErrorSchema);
 
@@ -58,6 +65,7 @@ const removeWorktree = (
     readonly skipCleanup?: boolean | undefined;
     readonly cleanupWithin?: number | undefined;
     readonly expect?: MovedSource | undefined;
+    readonly expectHead?: ExpectedHead | undefined;
   },
   reporter: EngineWorktrees.Reporter,
 ) =>
@@ -79,6 +87,7 @@ const removeWorktree = (
                 ? {}
                 : { cleanupWithin: input.cleanupWithin }),
               ...(input.expect === undefined ? {} : { expect: input.expect }),
+              expectHead: input.expectHead,
             },
             reporter,
           )
@@ -158,6 +167,7 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
   Effect.gen(function* () {
     const scripts = yield* Scripts.Scripts;
     const ledger = yield* MirrorLedger;
+    const fs = yield* FileSystem.FileSystem;
 
     const stopMirrors = (worktreeIds: readonly string[]) =>
       Effect.forEach(worktreeIds, ledger.stopMirrorsForWorktree, {
@@ -172,6 +182,8 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
         // would stop it.
         readonly refuseRunningScripts?: boolean | undefined;
         readonly expect?: MovedSource | undefined;
+        readonly expectHead?: ExpectedHead | undefined;
+        readonly mirrorCopy?: boolean | undefined;
         readonly oneSide?: boolean | undefined;
       },
       notifyScript: Scripts.NotifyScriptEvent,
@@ -184,17 +196,34 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
       );
       // Asked first, so a worktree that changed keeps its scripts and its
       // cleanup unrun. The engine asks again right before the delete.
-      if (input.expect !== undefined) {
-        const expect = input.expect;
+      const { expect, expectHead } = input;
+      if (input.mirrorCopy === true) {
+        const { worktree } = yield* asCall(
+          findProjectAndWorktree(input.projectId, worktreeId),
+        );
+        const landed = isMirrorCopy(worktree.path).pipe(
+          Effect.provideService(FileSystem.FileSystem, fs),
+        );
+        if (!(yield* landed)) {
+          return yield* new NotMirrorCopyError({ path: worktree.path });
+        }
+      }
+      if (expect !== undefined || expectHead !== undefined) {
         yield* asCall(
           changing(
-            Effect.flatMap(
-              findProjectAndWorktree(input.projectId, worktreeId),
-              (located) =>
-                Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
-                  worktrees.refuseChangedSince(located, expect),
-                ),
-            ),
+            Effect.gen(function* () {
+              const located = yield* findProjectAndWorktree(
+                input.projectId,
+                worktreeId,
+              );
+              const worktrees = yield* EngineWorktrees.Worktrees;
+              if (expect !== undefined) {
+                yield* worktrees.refuseChangedSince(located, expect);
+              }
+              if (expectHead !== undefined) {
+                yield* worktrees.refuseHeadMoved(located, expectHead);
+              }
+            }),
             { projectId: input.projectId, worktreeId },
           ),
         );
@@ -225,7 +254,8 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
                 worktreeId,
                 force: input.force,
                 skipCleanup: input.skipCleanup,
-                expect: input.expect,
+                expect,
+                expectHead,
               },
               reporter,
             ).pipe(oneSide ? thisSideOnly : (deleting) => deleting),

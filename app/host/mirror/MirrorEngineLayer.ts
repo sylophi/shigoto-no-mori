@@ -380,6 +380,7 @@ const make = Effect.gen(function* () {
     refreshGit: Effect.fn("MirrorEngine.refreshGit")((session: string) =>
       follower.reconcileNow(session),
     ),
+    copyHead: (session) => follower.copyHead(session),
     history: (localWorktreeId) => history.eventsFor(localWorktreeId),
     noteEvent: (localWorktreeId, kind, detail) =>
       history.note(localWorktreeId, kind, detail),
@@ -500,6 +501,7 @@ const unavailable = (cause: Cause.Cause<unknown>) => {
     resume: () => Effect.fail(refused),
     gitStatus: () => undefined,
     refreshGit: () => Effect.undefined,
+    copyHead: () => undefined,
     history: () => [],
     noteEvent: () => {},
     forgetHistory: () => {},
