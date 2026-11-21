@@ -1048,6 +1048,72 @@ it("a move's files step that carries a repository nested in an ignored folder do
   );
 });
 
+it("a move's files step that finds an ignored file already on the copy with other content doesn't count as crossed, since the source holds the only copy of its own, while one the same on both sides is no conflict", async () => {
+  // The listener is the source, with the user's real .env. The dialer
+  // is the copy, whose setup script wrote a template .env and the same
+  // node_modules the source has. The copy keeps its .env, so the
+  // outcome keeps the source.
+  listener.setAccepts(true);
+  standInMirror(inertImpl());
+  writeFileSync(
+    join(listenerWorktree, ".gitignore"),
+    ".env\nnode_modules/\n*.log\n",
+  );
+  writeFileSync(join(listenerWorktree, ".env"), "TOKEN=real\n");
+  writeFileSync(join(dialerRoot, ".env"), "TOKEN=\n");
+  for (const root of [listenerWorktree, dialerRoot]) {
+    mkdirSync(join(root, "node_modules", "pkg"), { recursive: true });
+    writeFileSync(join(root, "node_modules", "pkg", "index.js"), "built\n");
+  }
+  writeFileSync(join(listenerWorktree, "build.log"), "log\n");
+  try {
+    const files = await runHost(
+      carryIgnoredOnce(
+        {
+          localRoot: dialerRoot,
+          localWorktreeId: dialerWorktreeId,
+          sourceDeviceId: LISTENER,
+          sourceProjectId: listenerProjectId,
+          sourceWorktreeId: listenerWorktreeId,
+          remoteRoot: listenerWorktree,
+          name: "feature",
+          ignoreMode: "everything",
+          ignores: [],
+          ignoredPaths: PeerReach.peerSyncFor(LISTENER).allIgnoredPaths({
+            projectId: listenerProjectId,
+            worktreeId: listenerWorktreeId,
+          }),
+          ignoredRepos: PeerReach.peerSyncFor(LISTENER).ignoredRepos({
+            projectId: listenerProjectId,
+            worktreeId: listenerWorktreeId,
+          }),
+          direction: "pull",
+        },
+        () => {},
+      ),
+    );
+    assert.deepEqual(files, {
+      crossed: false,
+      conflicts: 1,
+      error: ".env was already on the copy with other content",
+    });
+    assert.equal(read(join(dialerRoot, ".env")), "TOKEN=\n");
+    assert.equal(read(join(listenerWorktree, ".env")), "TOKEN=real\n");
+    assert.equal(read(join(dialerRoot, "build.log")), "log\n");
+  } finally {
+    for (const root of [listenerWorktree, dialerRoot]) {
+      rmSync(join(root, "node_modules"), { recursive: true, force: true });
+      rmSync(join(root, ".env"), { force: true });
+      rmSync(join(root, "build.log"), { force: true });
+      rmSync(join(root, ".gitignore"), { force: true });
+    }
+  }
+  await waitFor(
+    () => daemon.sessions().length === 0,
+    "the files step's session to be gone",
+  );
+});
+
 // A mirror from the dialer to the listener whose `side` reports a problem
 // with `path`, a file only on the copy: the stop is refused and the copy
 // keeps it. The session ends before `release`, so the file stays put.

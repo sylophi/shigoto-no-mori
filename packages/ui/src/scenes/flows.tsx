@@ -502,7 +502,7 @@ export function FlowStepsScene() {
               worktree: landed,
               captured: true,
               dirtyApplied: true,
-              files: { crossed: true, conflicts: 2 },
+              files: { crossed: true, conflicts: 0 },
             }}
             path={
               <span className="truncate font-mono text-xs text-muted-foreground">
