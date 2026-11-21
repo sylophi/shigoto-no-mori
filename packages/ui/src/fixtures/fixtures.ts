@@ -562,6 +562,7 @@ export const fakeDisks: Record<string, FakeDisk> = {
         repo("t3code"),
       ],
       "/Users/rin/dev/sandbox": [repo("advent-2025")],
+      "/Volumes": [dir("Archive")],
       "/Volumes/Archive": [dir("old-projects"), repo("thesis")],
       "/Volumes/Archive/old-projects": [repo("pixel-garden")],
     },

@@ -1,11 +1,11 @@
 // The folders a browse lists, for the fs handlers.
-import { access, readdir } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { byFamily } from "@shigomori/engine/platform";
+import { byFamily, byPlatform } from "@shigomori/engine/platform";
 import { home, toAbsolute } from "@shared/paths";
 
 async function listDirectory(path: string) {
@@ -69,32 +69,49 @@ export const listFolder = (path: string) =>
     catch: callFailureOf,
   });
 
-// A line of `mount`'s: `<what> on <where> [type <fs> ](<options>)`, the
-// type in Linux's alone.
-const MOUNT_LINE = / on (.+?) (?:type \S+ )?\(([^()]*)\)$/;
-// Where a Mac and a Linux desktop mount the volumes a person plugs in.
-const VOLUME_ROOTS = ["/Volumes/", "/media/", "/run/media/"];
+// A line of a Mac's `mount`: `<what> on <where> (<options>)`.
+const MOUNT_LINE = / on (.+) \(([^()]*)\)$/;
 
-// The mounts a file manager lists, less the ones the system hides from
-// it (a Mac's Recovery is `nobrowse`).
-const mountedVolumes = Effect.gen(function* () {
+// The volumes under /Volumes that Finder lists: not the ones it hides,
+// like Recovery (`nobrowse`).
+const macVolumes = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const output = yield* spawner.string(ChildProcess.make("mount"));
   return output.split("\n").flatMap((line) => {
     const [, path = "", options = ""] = MOUNT_LINE.exec(line) ?? [];
     const shown =
-      VOLUME_ROOTS.some((root) => path.startsWith(root)) &&
+      path.startsWith("/Volumes/") &&
       !options.split(/,\s*/).includes("nobrowse");
     return shown ? [{ name: basename(path), path }] : [];
   });
 });
 
+// Where a Linux desktop mounts what a person plugs in. A mount point in
+// /proc/self/mounts writes a space (or a tab, a newline, a backslash)
+// as an octal escape.
+const linuxVolumes = Effect.tryPromise(() =>
+  readFile("/proc/self/mounts", "utf8"),
+).pipe(
+  Effect.map((table) =>
+    table.split("\n").flatMap((line) => {
+      const path = (line.split(" ")[1] ?? "").replace(
+        /\\([0-7]{3})/g,
+        (_, code: string) => String.fromCharCode(Number.parseInt(code, 8)),
+      );
+      return path.startsWith("/media/") || path.startsWith("/run/media/")
+        ? [{ name: basename(path), path }]
+        : [];
+    }),
+  ),
+);
+
 // The volumes a browse offers to jump to, its failure as it crosses a
 // wire. Windows's are its drives but the home's, as a Mac's boot volume
 // isn't among its mounts under /Volumes.
-export const listVolumes = byFamily({
-  posix: mountedVolumes,
-  windows: Effect.promise(presentDrives).pipe(
+export const listVolumes = byPlatform({
+  darwin: macVolumes,
+  linux: linuxVolumes,
+  win32: Effect.promise(presentDrives).pipe(
     Effect.map((drives) =>
       drives
         .filter((name) => !home().startsWith(name))

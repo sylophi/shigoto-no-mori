@@ -3,8 +3,9 @@ import type { DevicePaths } from "./devicePaths.ts";
 
 // A typed path read as a folder browse, as the folder picker and the
 // add-project views draw it: the directory part listed, the last
-// segment filtering that listing by prefix, and the two moves (into an
-// entry, up to the parent), and a jump to a volume. The app's useBrowseListing builds it.
+// segment filtering that listing by prefix, and the moves (into an
+// entry, up to the parent, to a volume). The app's useBrowseListing
+// builds it.
 export type BrowseListing = {
   // How the device's paths show and type.
   readonly paths: DevicePaths;
