@@ -90,14 +90,20 @@ export const layer = (config: AccountServiceConfig) =>
       const link = yield* DeviceLink.DeviceLink;
       const engineConfig = yield* EngineConfig.Config;
       const deviceId = yield* DeviceId.current;
-      const key = yield* (yield* Shell.Shell).deviceStoreKey;
+      const shell = yield* Shell.Shell;
       const fs = yield* FileSystem.FileSystem;
       const storePath = (yield* Path.Path).join(facts.userDataPath, STORE_FILE);
+      // The key asked for at each make: one that can't be had leaves
+      // that device unmade, never on a plain store.
       const services = Layer.mergeAll(
         ColibriiNode.layer,
-        key === null
-          ? ColibriiNode.layerFileStore(storePath)
-          : ColibriiNode.layerEncryptedFileStore(storePath, cipherOf(key)),
+        Layer.unwrap(
+          Effect.map(shell.deviceStoreKey, (key) =>
+            key === null
+              ? ColibriiNode.layerFileStore(storePath)
+              : ColibriiNode.layerEncryptedFileStore(storePath, cipherOf(key)),
+          ),
+        ),
       );
       const bundled = bundledBinaryPath(
         facts,

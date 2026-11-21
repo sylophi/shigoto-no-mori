@@ -74,8 +74,9 @@ export class Shell extends Context.Service<
     // change.
     readonly account: (state: DeviceAccount) => Effect.Effect<void>;
     // The key the Colibrii store is sealed with (PeerDevice.ts), null
-    // where the shell has no keychain to keep one in.
-    readonly deviceStoreKey: Effect.Effect<string | null>;
+    // where the shell has no keychain to keep one in. A failure is a
+    // keychain that could not be had, never a reason to store plain.
+    readonly deviceStoreKey: Effect.Effect<string | null, CallFailure>;
     // This device's command switch, which the shell keeps for the
     // account. Refused signed out.
     readonly setAcceptsCommands: (

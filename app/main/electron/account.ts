@@ -46,7 +46,7 @@ import {
   type AccountServiceConfig,
 } from "@shigomori/contracts/accountServiceConfig";
 import { envSetting } from "@shared/config";
-import { log, warnOnFailure } from "@shared/log";
+import { warnOnFailure } from "@shared/log";
 import { current as currentPlatform } from "@shigomori/engine/platform";
 
 // Built lazily, never at import time: app.getPath and the dev userData
@@ -71,21 +71,15 @@ function serviceConfig(): AccountServiceConfig {
 // OS keychain beside it. Linux keeps none by design: with no keyring
 // there, safeStorage encrypts with a key Chromium hardcodes, so the
 // store is a file only its owner can read, as ssh keys and gh's tokens
-// are on a server. A key that no longer opens is replaced, and the
-// device enrolls again.
+// are on a server. Elsewhere a keychain that can't be used fails the
+// call, and the device stays stopped. A key that no longer opens is
+// replaced, and the device enrolls again.
 const STORE_KEY_FILE = "device-store-key";
-let storeKeyWarned = false;
 export function deviceStoreKey(): string | null {
   const keychain = byPlatform({ darwin: true, linux: false, win32: true });
   if (!keychain) return null;
   if (!safeStorage.isEncryptionAvailable()) {
-    if (!storeKeyWarned) {
-      storeKeyWarned = true;
-      log.warn(
-        "[account] OS encryption unavailable, keeping this device's enrollment as plaintext in userData.",
-      );
-    }
-    return null;
+    throw new Error("The system keychain isn't available.");
   }
   const path = join(app.getPath("userData"), STORE_KEY_FILE);
   try {
