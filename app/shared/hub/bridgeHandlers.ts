@@ -161,8 +161,9 @@ export type HubHandlers = {
   // time, moved since by the peer's own pushes (setPeerFact).
   directPeers(): DirectPeerFacts;
   // A peer's account:commandAccessChanged or sharing:changed push:
-  // recorded on its established session, with a fresh status fanned out
-  // when it moved. A push for a peer with no established session is
+  // recorded on its session, with a fresh status fanned out when it
+  // moved on an established one. One that lands while the session sets
+  // up wins over its welcome. A push for a peer with no session is
   // dropped, since its next dial's answer carries it.
   setPeerFact(deviceId: string, fact: PeerFact, value: boolean): void;
   // The peer's direct session's byte channels (shared/remote/
@@ -199,14 +200,15 @@ function hubHandlers(
   // replaced mid-dial). A non-null version is also the established
   // marker directPeers reads, so a still-dialing entry is never
   // reported as a live session. acceptsCommands and sharesData
-  // ride the same entry for the same reason, set with the version.
+  // ride the same entry, null until the welcome or a push says: a push
+  // that lands while the link sets up is newer than its welcome.
   type PeerEntry = {
     connection: Deferred.Deferred<PeerConnection, unknown>;
     fiber: Fiber.Fiber<void> | null;
     version: string | null;
     outdated: OutdatedModules | undefined;
-    acceptsCommands: boolean;
-    sharesData: boolean;
+    acceptsCommands: boolean | null;
+    sharesData: boolean | null;
   };
   const peers = new Map<string, PeerEntry>();
 
@@ -247,8 +249,8 @@ function hubHandlers(
       fiber: null,
       version: null,
       outdated: undefined,
-      acceptsCommands: false,
-      sharesData: false,
+      acceptsCommands: null,
+      sharesData: null,
     };
     peers.set(deviceId, entry);
     entry.fiber = run(
@@ -256,8 +258,8 @@ function hubHandlers(
         const connection = yield* deps.connectDirect(deviceId);
         entry.version = connection.remoteAppVersion;
         entry.outdated = connection.outdated;
-        entry.acceptsCommands = connection.acceptsCommands;
-        entry.sharesData = connection.sharesData;
+        entry.acceptsCommands ??= connection.acceptsCommands;
+        entry.sharesData ??= connection.sharesData;
         yield* Deferred.succeed(entry.connection, connection);
         if (peers.get(deviceId) === entry) deps.onDirectChange();
         yield* connection.dropped;
@@ -360,8 +362,8 @@ function hubHandlers(
         if (entry.outdated !== undefined) {
           peerOutdated[deviceId] = entry.outdated;
         }
-        peerAcceptsCommands[deviceId] = entry.acceptsCommands;
-        peerSharesData[deviceId] = entry.sharesData;
+        peerAcceptsCommands[deviceId] = entry.acceptsCommands ?? false;
+        peerSharesData[deviceId] = entry.sharesData ?? false;
       }
       return {
         peerAppVersions,
@@ -373,10 +375,9 @@ function hubHandlers(
 
     setPeerFact: (deviceId, fact, value) => {
       const entry = peers.get(deviceId);
-      if (entry === undefined || entry.version === null) return;
-      if (entry[fact] === value) return;
+      if (entry === undefined || entry[fact] === value) return;
       entry[fact] = value;
-      deps.onDirectChange();
+      if (entry.version !== null) deps.onDirectChange();
     },
 
     closeDirectPeers: () => {

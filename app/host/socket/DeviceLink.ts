@@ -96,11 +96,10 @@ const COMMAND_ACCESS_CHANGED = channelOf(
   callOf(accountContract, "commandAccessChanged"),
 );
 
+const SHARING_CHANGED = channelOf(callOf(sharingContract, "changed"));
+
 // The host's word on its switches, which a peer hears either way.
-const SWITCHES = new Set([
-  channelOf(callOf(sharingContract, "changed")),
-  COMMAND_ACCESS_CHANGED,
-]);
+const SWITCHES = new Set([SHARING_CHANGED, COMMAND_ACCESS_CHANGED]);
 
 // Lets a refusal's answer flush before the socket is cut.
 const REJECT_TERMINATE_DELAY_MS = 250;
@@ -332,6 +331,33 @@ export const makeServer = (options: {
         ? (pushes: Stream.Stream<unknown>) => pushes
         : Stream.filterEffect(() => sharing.current);
 
+    // A switch's value now, which a peer hears first as it subscribes:
+    // one that flipped after the welcome reaches it no other way.
+    const switchNow: Record<string, Effect.Effect<boolean>> = local
+      ? {}
+      : {
+          [COMMAND_ACCESS_CHANGED]: Effect.sync(options.isCommandGranted),
+          [SHARING_CHANGED]: sharingNow,
+        };
+
+    // The host's pushes on `channel`, a switch's from its value now.
+    const hostStream = (channel: string) => {
+      const now = switchNow[channel];
+      return now === undefined
+        ? hostPushes.stream(channel)
+        : Stream.unwrap(
+            Effect.map(hostPushes.subscribe, (pushes) =>
+              Stream.concat(
+                Stream.fromEffect(now),
+                pushes.pipe(
+                  Stream.filter((pushed) => pushed.channel === channel),
+                  Stream.map((pushed) => pushed.payload),
+                ),
+              ),
+            ),
+          );
+    };
+
     // A push: the host's own when it is one every peer may hear
     // (annotated `remote`), and the ones for this peer alone.
     const push =
@@ -341,7 +367,7 @@ export const makeServer = (options: {
           Effect.map(connectionOf(client.id), (connection) =>
             Stream.merge(
               toEveryPeer
-                ? hostPushes.stream(channel).pipe(heard(channel))
+                ? hostStream(channel).pipe(heard(channel))
                 : Stream.empty,
               Stream.fromPubSub(connection.pushes).pipe(
                 Stream.filter((entry) => entry.channel === channel),
