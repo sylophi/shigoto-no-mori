@@ -10,10 +10,9 @@
 // exiting 0. Each scenario changes the host's worktrees while the
 // clients are cut off, so a view that did not catch up shows as stale.
 import { execFileSync } from "node:child_process";
-import { join } from "node:path";
 import { type Lab, type Tab } from "./lab.mts";
 import { pageApi, withPageApi } from "./pageApi.mts";
-import { repoDir, sleep, waitFor, within, type TraceLine } from "./util.mts";
+import { sleep, waitFor, within, type TraceLine } from "./util.mts";
 
 export type Scenario = {
   readonly name: string;
@@ -282,7 +281,7 @@ export function silentFailures(lines: TraceLine[]): string[] {
       (line) =>
         line.level === "warning" ||
         line.level === "error" ||
-        /^\[(hub|direct|link)\]/.test(line.text),
+        /^\[(hub|peers|link)\]/.test(line.text),
     );
     if (failed.length > 0 && !explained) {
       found.push(
@@ -519,24 +518,30 @@ const networkBlip: Scenario = {
 
 const hubRedeploy: Scenario = {
   name: "hub-redeploy",
-  does: "The dev hub is deployed again from this checkout's hub/ (wrangler deploy --env dev), which restarts its Durable Objects and drops every socket.",
+  does: "The Colibrii instance is deployed again (its service's deploy script, from COLIBRII_SERVICE_DIR), which restarts its Durable Objects and drops every hub socket.",
   boundMs: 60_000,
-  // The dev hub is shared: every dev build talks to it.
+  // The instance is shared: every dev build talks to it.
   onlyNamed: true,
   async run(lab) {
+    const service = process.env["COLIBRII_SERVICE_DIR"];
+    if (service === undefined) {
+      throw new Error(
+        "COLIBRII_SERVICE_DIR names no Colibrii service to deploy",
+      );
+    }
     changeHost(lab);
     const started = Date.now();
-    lab.note("deploying the dev hub");
+    lab.note("deploying the Colibrii instance");
     // Deploying the same code again is a version the objects survive,
     // so the deploy carries a variable of its own, which nothing reads,
     // to make it a version that restarts them.
     execFileSync(
       "pnpm",
       ["run", "deploy", "--var", `REDEPLOYED_AT:${new Date().toISOString()}`],
-      { cwd: join(repoDir, "hub"), stdio: "ignore" },
+      { cwd: service, stdio: "ignore" },
     );
     const deployed = Date.now();
-    lab.note("the dev hub is deployed");
+    lab.note("the Colibrii instance is deployed");
     // A socket of an object that hibernated rides through a deploy, so
     // when none drops, the flows are cut, and every client dials the
     // new version, which is what a deploy has to survive.
@@ -549,7 +554,7 @@ const hubRedeploy: Scenario = {
         ].some(
           (line) =>
             line.source !== "harness" &&
-            /\[hub\] socket (backoff|connecting)/.test(line.text),
+            /\[hub\] socket connecting/.test(line.text),
         ),
       20_000,
     ).then(
@@ -901,31 +906,3 @@ export const ALL_SCENARIOS: readonly Scenario[] = [
   clockSkew,
   signOutWithSibling,
 ];
-
-const git = (...args: string[]) =>
-  execFileSync("git", args, {
-    cwd: repoDir,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
-// Why this checkout's hub is not main's as GitHub has it now, or null
-// when it is: fetched first, since a stale origin/main would pass old
-// hub code as current, and a file git doesn't track counts.
-export function hubDiffersFromMain(): string | null {
-  const paths = ["--", "hub", "packages/contracts"];
-  try {
-    git("fetch", "-q", "origin", "main");
-  } catch {
-    return "main could not be fetched";
-  }
-  try {
-    git("diff", "--quiet", "origin/main", ...paths);
-  } catch {
-    return "this checkout's hub differs from main";
-  }
-  if (git("ls-files", "--others", "--exclude-standard", ...paths) !== "") {
-    return "this checkout's hub has files git doesn't track";
-  }
-  return null;
-}

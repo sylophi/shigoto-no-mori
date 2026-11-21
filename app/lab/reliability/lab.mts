@@ -3,7 +3,8 @@
 // throws (networkSwitch.mts):
 //
 // - web: the web client's dev server and a Chrome profile of its own
-//   holding its tabs, reaching B through the dev hub over B's tunnel.
+//   holding its tabs, reaching B over B's tunnel, which the Colibrii
+//   instance introduces.
 // - desktop: a second dev app (A), two windows, reaching B over the
 //   LAN, its hub behind a front.
 // - tunnel: a third (C), one window, dialing B's tunnel only
@@ -30,10 +31,8 @@ import {
   type CDPSession,
   type Page,
 } from "playwright-core";
-import * as Colibrii from "@colibrii/sdk";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { signalIfAlive } from "../../../test/testProcesses.mts";
+import { devSignInToken } from "../devSignIn.mts";
 import { DevApp } from "./devApp.mts";
 import { withPageApi } from "./pageApi.mts";
 import {
@@ -592,9 +591,9 @@ export class Lab {
     this.tabs.splice(this.tabs.indexOf(tab), 1);
   }
 
-  // Signs the browser profile in when it holds no Clerk session: the
-  // hub mints a sign-in token for B's session (B signs in by cloning the
-  // plain dev app's), and the tab redeems it for a session of its own.
+  // Signs the browser profile in when it holds no Clerk session, to the
+  // dev account B is on: a one-time sign-in token (../devSignIn.mts),
+  // which the tab redeems for a session of its own.
   async ensureSignedIn(tab: Tab): Promise<void> {
     const signedIn = () =>
       tab.page.evaluate(() => {
@@ -607,23 +606,8 @@ export class Lab {
       120_000,
     );
     if (await signedIn()) return;
-    this.note(`signing the browser profile in as ${this.hostApp.profile}`);
-    const sessionToken = await this.hostApp
-      .windows()[0]
-      ?.evaluate(() => window.Clerk?.session?.getToken({ skipCache: true }));
-    if (sessionToken === undefined || sessionToken === null) {
-      throw new Error(
-        `${this.hostApp.profile} holds no Clerk session to sign the browser in with`,
-      );
-    }
-    const env = envFile(".env.local");
-    const ticket = await Effect.runPromise(
-      Colibrii.signInToken({
-        hub: env.SM_DEVICE_HUB_URL ?? "",
-        app: env.SM_DEVICE_HUB_APP ?? "shigomori-dev",
-        accessToken: sessionToken,
-      }).pipe(Effect.provide(FetchHttpClient.layer)),
-    );
+    this.note("signing the browser profile in to the dev account");
+    const ticket = await devSignInToken();
     await tab.page.evaluate(async (redeem) => {
       const clerk = window.Clerk;
       if (clerk === undefined) throw new Error("no Clerk on the page");

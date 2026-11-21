@@ -9,8 +9,8 @@
 //
 // - startNetworkSwitch: the browser's CONNECT proxy, for everything
 //   Chrome reaches but this machine's own servers.
-// - startHubFront: a desktop app's hub, the dev hub behind a local http
-//   address the app is given as SM_DEVICE_HUB_URL.
+// - startHubFront: a desktop app's hub, the Colibrii instance behind a
+//   local http address the app is given as SM_DEVICE_HUB_URL.
 // - startListenerFront: the peer's direct listener, at the port it
 //   advertises (SHIGOMORI_DIRECT_FRONT_PORT) for its LAN candidates and
 //   its tunnel's ingress, so every client's device link to it rides
@@ -150,10 +150,10 @@ export async function startNetworkSwitch(): Promise<PortSwitch> {
   return { ...switchControls(server, flows), port };
 }
 
-// The dev hub at http://127.0.0.1:<port>: requests are forwarded over
-// https with the hub's own Host, and a websocket upgrade becomes a TLS
-// connection to the hub carrying the same bytes, so the hub sees what
-// the app would have sent it.
+// The Colibrii instance at http://127.0.0.1:<port>: requests are
+// forwarded over https with the hub's own Host, and a websocket upgrade
+// becomes a TLS connection to the hub carrying the same bytes, so the
+// hub sees what the app would have sent it.
 export async function startHubFront(
   hubUrl: string,
 ): Promise<PortSwitch & { url: string }> {
