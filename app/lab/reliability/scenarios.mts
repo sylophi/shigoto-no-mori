@@ -249,7 +249,11 @@ export async function recovered(
       }
       if (reason === null) {
         pending.delete(client);
-        slowest = Math.max(slowest, Date.now() - since);
+        const took = Date.now() - since;
+        slowest = Math.max(slowest, took);
+        lab.note(
+          `${client === "term" ? "term" : client.name} recovered in ${took / 1000} s`,
+        );
       } else {
         pending.set(client, reason);
       }
