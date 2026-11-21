@@ -132,7 +132,9 @@ export function MirrorManageDialog({
 // copy not in step) stands in for the session's verdict until the
 // session moves on from where it was refused. A mirror the copy's
 // device turns away reads as paused here too, as it does above, rather
-// than as the session's lost link.
+// than as the session's lost link. Only a discard that was showing when
+// the confirm came up, or that the runner refused with, is sent as one:
+// a verdict that turns under the click goes to the runner's own look.
 function useStopConfirm(
   controls: ReturnType<typeof useMirrorControls>,
   session: MirrorSession,
@@ -141,6 +143,7 @@ function useStopConfirm(
   onStopped: (removedCopy: boolean) => void,
 ): StopConfirm {
   const [confirming, setConfirming] = useState(false);
+  const [warned, setWarned] = useState(false);
   const [refusal, setRefusal] = useState<{
     reason: string;
     at: string;
@@ -159,16 +162,25 @@ function useStopConfirm(
     blocker,
     note,
     pending: controls.stop.isPending || session.stopping === true,
-    ask: () => setConfirming(true),
+    ask: () => {
+      setWarned(blocker !== undefined);
+      setConfirming(true);
+    },
     cancel: () => setConfirming(false),
     confirm: () =>
       controls.stop.mutate(
-        { session, force: blocker !== undefined, copyName: names.copy },
+        {
+          session,
+          force: warned && blocker !== undefined,
+          copyName: names.copy,
+        },
         {
           onSuccess: (result) => onStopped(result?.removedCopy !== false),
           onError: (error) => {
             const reason = mirrorStopRefusalReason(error);
-            if (reason !== undefined) setRefusal({ reason, at: moment });
+            if (reason === undefined) return;
+            setRefusal({ reason, at: moment });
+            setWarned(true);
           },
         },
       ),
