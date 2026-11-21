@@ -224,7 +224,7 @@ const desktopAccount: AccountShell = {
   sharedSignIn: () =>
     existsSync(join(app.getPath("userData"), CLONED_LOGIN_MARKER)),
   codeSignIn: envSetting("SHIGOMORI_CODE_SIGN_IN") === "1",
-  renamed: () =>
+  changed: () =>
     broadcastAll(accountContract, "changed", {
       accountId: reported === null ? null : accountIdOf(reported),
     }),

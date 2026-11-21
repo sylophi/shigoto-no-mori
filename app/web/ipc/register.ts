@@ -248,7 +248,7 @@ export async function createWebBridge(deps: WebBridgeDeps): Promise<WebBridge> {
     platform: WEB_PLATFORM,
     sharedSignIn: () => false,
     codeSignIn: false,
-    renamed: announceProfile,
+    changed: announceProfile,
     acceptsCommandsChanged: () => {},
   });
 

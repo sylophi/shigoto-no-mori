@@ -11,7 +11,7 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as PeerDevice from "@host/lib/PeerDevice";
 import * as Graph from "./graph";
-import { noteAccountDevices } from "./handlers";
+import { noteAccountDevices, noteDeviceRemoved } from "./handlers";
 
 const onDevice = <A, E>(call: (device: Device) => Effect.Effect<A, E>) =>
   Graph.run(Effect.flatMap(PeerDevice.PeerDevice, call));
@@ -48,6 +48,8 @@ export const deviceCalls = {
     readonly data: DeviceData;
   }): Promise<void> =>
     onDevice((device) => device.devices.setData(deviceId, data)),
-  removeDevice: (deviceId: string): Promise<void> =>
-    onDevice((device) => device.devices.remove(deviceId)),
+  removeDevice: async (deviceId: string): Promise<void> => {
+    await onDevice((device) => device.devices.remove(deviceId));
+    noteDeviceRemoved(deviceId);
+  },
 };

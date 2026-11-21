@@ -62,8 +62,9 @@ export type AccountShell = {
   readonly sharedSignIn: () => boolean;
   // Whether a window signs in with a code (account:startCodeSignIn).
   readonly codeSignIn: boolean;
-  // This device's name or icon changed here, its account the same.
-  readonly renamed: () => Promise<void> | void;
+  // This device's name or icon, or the account's devices, changed here,
+  // its account the same.
+  readonly changed: () => Promise<void> | void;
   // The account the command switch is on for (null: off), at every
   // flip.
   readonly acceptsCommandsChanged: (
@@ -139,7 +140,7 @@ export function makeAccountHandlers(
     shell
       .profile()
       .write(deviceIcon === undefined ? rest : { ...rest, deviceIcon });
-    await shell.renamed();
+    await shell.changed();
   };
 
   // The icon kept as a pick, or none when it is what the device detects.
@@ -231,8 +232,12 @@ export function makeAccountHandlers(
       );
     },
 
-    // Removing this device reads as removed, which signs it out.
-    revokeDevice: (deviceId) => shell.device.remove(deviceId),
+    // Removing this device reads as removed, which signs it out. One
+    // that is offline changes no roster, so the windows hear it here.
+    revokeDevice: async (deviceId) => {
+      await shell.device.remove(deviceId);
+      await shell.changed();
+    },
 
     listDevices: async () => {
       const state = await shell.device.account();

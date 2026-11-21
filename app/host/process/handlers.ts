@@ -318,6 +318,21 @@ export function noteAcceptsCommands(accountId: string | null): Promise<void> {
 // The account's devices as they were last listed.
 let lastMembership = new Set<string>();
 
+// Ends the mirrors and forwards with devices no longer on the account.
+const endWithDeparted = (stillOn: (deviceId: string) => boolean): void => {
+  void Graph.run(
+    Effect.flatMap(MirrorLedger, (ledger) =>
+      ledger.endMirrorsWithPeers(
+        stillOn,
+        "The other device left the account. The copy stays as a worktree.",
+      ),
+    ),
+  ).catch(() => {});
+  // A forward is standing intent across a peer being asleep, so it
+  // follows the account's membership, never the roster.
+  void stopPortForwardsTo(stillOn);
+};
+
 // The account's devices as they were last listed (device.ts), the one
 // place this device learns a peer was removed from the account (an
 // absent peer looks like an offline one on the roster). A mirror or a
@@ -332,18 +347,14 @@ export function noteAccountDevices(deviceIds: ReadonlyArray<string>): void {
     [...onAccount].every((id) => lastMembership.has(id));
   if (same) return;
   lastMembership = onAccount;
-  const stillOn = (deviceId: string) => onAccount.has(deviceId);
-  void Graph.run(
-    Effect.flatMap(MirrorLedger, (ledger) =>
-      ledger.endMirrorsWithPeers(
-        stillOn,
-        "The other device left the account. The copy stays as a worktree.",
-      ),
-    ),
-  ).catch(() => {});
-  // A forward is standing intent across a peer being asleep, so it
-  // follows the account's membership, never the roster.
-  void stopPortForwardsTo(stillOn);
+  endWithDeparted((deviceId) => onAccount.has(deviceId));
+}
+
+// A device this one removed from the account, which an offline one
+// leaves no other trace of until the next listing.
+export function noteDeviceRemoved(removed: string): void {
+  lastMembership.delete(removed);
+  endWithDeparted((deviceId) => deviceId !== removed);
 }
 
 // The services the root provides the graph from its own wiring: the

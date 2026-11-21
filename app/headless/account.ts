@@ -84,7 +84,7 @@ export function headlessAccount(facts: HostFacts) {
     platform: currentPlatform(),
     sharedSignIn: () => false,
     codeSignIn: false,
-    renamed: () => {},
+    changed: () => {},
     acceptsCommandsChanged: (accountId) => noteAcceptsCommands(accountId),
   });
 
@@ -197,8 +197,6 @@ export function headlessAccount(facts: HostFacts) {
         }
         const [removed] = matched as [Named];
         await account.revokeDevice(removed.deviceId, null);
-        // Its mirrors and forwards here end with the listing.
-        await listDevices();
         return removed.name;
       }),
   });
