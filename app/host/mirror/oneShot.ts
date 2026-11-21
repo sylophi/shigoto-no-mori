@@ -169,7 +169,10 @@ export const carryIgnoredOnce = <R>(
     ignoredPaths,
     ignoredRepos,
     ...input
-  }: Omit<Parameters<typeof transferFilesOnce>[0], "ignores"> & {
+  }: Omit<
+    Parameters<typeof transferFilesOnce>[0],
+    "ignores" | "conflictsStay"
+  > & {
     direction: "pull" | "push";
     ignoreMode: MirrorIgnoreMode;
     ignores: readonly string[];
@@ -221,15 +224,20 @@ export const carryIgnoredOnce = <R>(
             )
             .map(trimTrailingSlashes);
     if (repos.length > 0) {
-      const named = repos.slice(0, 3);
-      const more = repos.length - named.length;
       return failed(
-        `the git history of ${listed(more > 0 ? [...named, `${more} more`] : named)} isn't copied`,
+        `the git history of ${someOf(repos, repos.length)} isn't copied`,
         files.conflicts,
       );
     }
     return files;
   }).pipe(Effect.catch((error) => Effect.succeed(failed(messageOf(error)))));
+
+// The first three of `paths`, and how many more of `total` there are.
+const someOf = (paths: readonly string[], total: number) => {
+  const shown = paths.slice(0, 3);
+  const more = total - shown.length;
+  return listed(more > 0 ? [...shown, `${more} more`] : shown);
+};
 
 // One full cycle with both sides scanned and nothing left staging is
 // the files across. Staging figures feed the progress bar.
@@ -258,12 +266,11 @@ function outcome(
   }
   const count = mirrorProblemCount(raw.local, raw.remote);
   if (count > 0) {
-    const paths = [...raw.local.problems, ...raw.remote.problems]
-      .slice(0, 3)
-      .map((problem) => problem.path);
-    const more = count - paths.length;
+    const paths = [...raw.local.problems, ...raw.remote.problems].map(
+      (problem) => problem.path,
+    );
     return failed(
-      `${pluralize(count, "file")} couldn't be copied (${listed(more > 0 ? [...paths, `${more} more`] : paths)})`,
+      `${pluralize(count, "file")} couldn't be copied (${someOf(paths, count)})`,
       raw.conflicts.length,
     );
   }
@@ -271,10 +278,9 @@ function outcome(
   if (!conflictsStay || conflicts === 0) {
     return { crossed: true, conflicts: raw.conflicts.length };
   }
-  const roots = raw.conflicts.slice(0, 3).map((conflict) => conflict.root);
-  const more = conflicts - roots.length;
+  const roots = raw.conflicts.map((conflict) => conflict.root);
   return failed(
-    `${listed(more > 0 ? [...roots, `${more} more`] : roots)} ${conflicts === 1 ? "was" : "were"} already on the copy with other content`,
+    `${someOf(roots, conflicts)} ${conflicts === 1 ? "was" : "were"} already on the copy with other content`,
     raw.conflicts.length,
   );
 }

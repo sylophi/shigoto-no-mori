@@ -115,7 +115,8 @@ export const CloneFromDevicePayloadSchema = Schema.Struct({
 });
 
 // Ignored files brought from another device's checkout. conflicts:
-// paths both sides held differently, which keep this side's version.
+// paths both sides held differently, which keep this side's version (a
+// move counts them as not crossed).
 export const FilesBroughtSchema = strict(
   Schema.Struct({
     crossed: Schema.Boolean,
