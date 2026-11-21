@@ -354,9 +354,9 @@ export const readGitState = Effect.fnUntraced(function* (
 
 // The branches the mirror made on the copy's device (the one the copy
 // starts on, one a followed switch creates), a line each in a file of
-// the copy's own git dir, which goes with the worktree. The file is
-// there from the landing on, so it also tells a mirror's copy from a
-// worktree made at its folder later. A copy that follows a switch drops
+// the copy's own git dir, which goes with the worktree. Only a landing
+// makes the file, so it also tells a mirror's copy from a worktree made
+// at its folder later. A copy that follows a switch drops
 // the branch it leaves if it is listed: it would otherwise stay behind
 // at an old commit, its name held against the next worktree sent here.
 // A branch that was here before the mirror isn't listed, and stays.
@@ -532,7 +532,11 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
           expected: existingTip ?? Git.ABSENT_REF,
         });
       }
-      if (input.copy === true && existingTip === null) {
+      if (
+        input.copy === true &&
+        existingTip === null &&
+        (yield* isMirrorCopy(worktree.path))
+      ) {
         yield* markMirrorMade(worktree.path, target);
       }
       yield* git.run(worktree.path, ["symbolic-ref", "HEAD", targetRef]);

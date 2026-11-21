@@ -97,6 +97,7 @@ import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { type GitFollower, makeGitFollower } from "@host/mirror/gitFollow";
 import {
   applyGitState,
+  isMirrorCopy,
   markMirrorMade,
   readGitState,
 } from "@host/mirror/gitState";
@@ -714,8 +715,6 @@ it("git: a copy that follows a switch drops the branch it leaves if the mirror m
   const repo = await fixture.initRepo("leftover-branches");
   await fixture.commitFile(repo, "a.txt", "a\n", "a");
   await git(repo, ["branch", "before"]);
-  await git(repo, ["checkout", "-q", "-b", "started"]);
-  await runHost(markMirrorMade(repo, "started"));
   const branches = async () =>
     (await gitOut(repo, "branch", "--format=%(refname:short)"))
       .split("\n")
@@ -738,6 +737,10 @@ it("git: a copy that follows a switch drops the branch it leaves if the mirror m
       { applied: true },
     );
   };
+  // Only a landing marks a worktree as a mirror's copy.
+  await follow("started", true);
+  assert.equal(await runHost(isMirrorCopy(repo)), false);
+  await runHost(markMirrorMade(repo, "started"));
   // Onto one it makes, then one that was there, then one more.
   await follow("next", true);
   assert.deepEqual(await branches(), ["before", "next"]);

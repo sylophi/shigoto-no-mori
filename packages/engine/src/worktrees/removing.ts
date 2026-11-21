@@ -511,10 +511,22 @@ export const makeRemoving = ({
             yield* pruneEmptyParents(worktree.path, project.path);
           }
           if (deletingBranch) {
-            // The branch may be shared, or the primary's: a failure is fine.
-            yield* git
-              .run(project.path, ["branch", "-D", "--", worktree.branch])
-              .pipe(Effect.ignore);
+            // The branch may be shared, or the primary's: a failure is
+            // fine. One committed to while its checkout went stays.
+            const held = options.expectHead?.tip ?? options.expect?.branchTip;
+            yield* Effect.gen(function* () {
+              const tip = yield* git.refTip(
+                project.path,
+                `refs/heads/${worktree.branch}`,
+              );
+              if (held !== undefined && Option.getOrNull(tip) !== held) return;
+              yield* git.run(project.path, [
+                "branch",
+                "-D",
+                "--",
+                worktree.branch,
+              ]);
+            }).pipe(Effect.ignore);
           }
           return outcome;
         }),

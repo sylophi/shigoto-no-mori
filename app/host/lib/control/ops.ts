@@ -698,20 +698,28 @@ export const mirrorStop = (({ force, ...target }, ctx) =>
     // way, so this device's own forced delete finishes what the
     // runner's stop would have, unless the copy moved on since the stop
     // was asked: unforced, the peer found the two in step after that,
-    // and a commit made since is what kept the copy.
+    // and a commit made since is what kept the copy. Forced, it takes
+    // only a worktree a mirror landed, as the runner's would.
     if (
       copyStayed !== undefined &&
       (before === undefined || unmoved(yield* head))
     ) {
-      const removed = yield* (yield* Worktrees.Worktrees).remove(
-        {
-          projectId: target.projectId,
-          worktreeId: target.worktreeId,
-          force: true,
-          expectHead: before,
-        },
-        scriptEventNotifier(ctx),
-      );
+      const removed = yield* (yield* Worktrees.Worktrees)
+        .remove(
+          {
+            projectId: target.projectId,
+            worktreeId: target.worktreeId,
+            force: true,
+            expectHead: before,
+            mirrorCopy: force,
+          },
+          scriptEventNotifier(ctx),
+        )
+        .pipe(
+          Effect.catchTag("NotMirrorCopyError", () =>
+            Effect.succeed({ ok: false }),
+          ),
+        );
       if (removed.ok) copyStayed = undefined;
     }
     return yield* answer((names) => peerMirrorView(afar, names), copyStayed);
