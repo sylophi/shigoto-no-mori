@@ -25,6 +25,7 @@ import {
   CLOUDFLARED_BINARY_NAME,
   CLOUDFLARED_DIST_DIR,
 } from "@shared/packaging/cloudflaredDist.mts";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -78,6 +79,28 @@ const cipherOf = (key: string): ColibriiNode.Cipher => {
   };
 };
 
+// Dev builds only, for the reliability lab (app/lab/reliability):
+// SHIGOMORI_DIAL_KINDS, a comma list such as `tunnel`, narrows the kinds
+// of a peer's candidates this device dials, so two devices on one
+// machine meet over a tunnel as devices on two networks do.
+// SHIGOMORI_DIRECT_FRONT_PORT is a port in front of the listener that
+// peers are to reach it at, where the lab cuts their links.
+const devReach = Config.all({
+  dialKinds: Config.option(Config.String("SHIGOMORI_DIAL_KINDS")),
+  frontPort: Config.option(Config.Port("SHIGOMORI_DIRECT_FRONT_PORT")),
+});
+
+const dialingOnly = (kinds: ReadonlyArray<string>) =>
+  Layer.effect(
+    Colibrii.WebSockets,
+    Effect.map(Colibrii.WebSockets, (sockets) => ({
+      ...sockets,
+      dialableKinds: sockets.dialableKinds.filter((kind) =>
+        kinds.includes(kind),
+      ),
+    })),
+  );
+
 type Settings = {
   readonly listen: boolean;
   readonly cloudflared: string | undefined;
@@ -94,10 +117,21 @@ export const layer = (config: AccountServiceConfig) =>
       const shell = yield* Shell.Shell;
       const fs = yield* FileSystem.FileSystem;
       const storePath = (yield* Path.Path).join(facts.userDataPath, STORE_FILE);
+      const dev = facts.packaged ? null : yield* Effect.orDie(devReach);
+      const dialKinds = Option.getOrUndefined(dev?.dialKinds ?? Option.none());
+      const frontPort = Option.getOrUndefined(dev?.frontPort ?? Option.none());
+      const dialing =
+        dialKinds === undefined
+          ? Layer.empty
+          : dialingOnly(dialKinds.split(",").map((kind) => kind.trim())).pipe(
+              Layer.provide(ColibriiNode.layer),
+            );
       // The key asked for at each make: one that can't be had leaves
       // that device unmade, never on a plain store.
       const services = Layer.mergeAll(
         ColibriiNode.layer,
+        // After the node's own, whose websockets it narrows.
+        dialing,
         Layer.unwrap(
           Effect.map(shell.deviceStoreKey, (key) =>
             key === null
@@ -137,6 +171,9 @@ export const layer = (config: AccountServiceConfig) =>
                   origins: config.webOrigin === "" ? [] : [config.webOrigin],
                   admit: link.admit,
                   onLink: link.serve,
+                  ...(frontPort === undefined
+                    ? {}
+                    : { advertisedPort: frontPort }),
                 },
               }
             : {}),
