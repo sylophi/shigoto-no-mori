@@ -6,7 +6,8 @@
 // page.
 import { REPO_SLUG } from "../site";
 
-const EXTENSION = { mac: ".dmg", windows: ".exe" };
+// Each platform's file, by the name release.yml gives it.
+const ASSET = { mac: "-macOS-arm64-", windows: "-Windows-x64-Setup-" };
 
 interface Release {
   assets?: { name: string; browser_download_url: string }[];
@@ -20,9 +21,9 @@ export function pointDownloadsAtLatest(): void {
         "[data-download]",
       )) {
         const platform = (link.dataset.download ||
-          document.documentElement.dataset.platform) as keyof typeof EXTENSION;
+          document.documentElement.dataset.platform) as keyof typeof ASSET;
         const asset = release.assets?.find(({ name }) =>
-          name.endsWith(EXTENSION[platform]),
+          name.includes(ASSET[platform]),
         );
         if (asset) link.href = asset.browser_download_url;
       }
