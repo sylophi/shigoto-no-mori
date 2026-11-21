@@ -195,15 +195,7 @@ export function TransplantFinishView({
                   )}
                   {result.files !== undefined &&
                     (result.files.crossed ? (
-                      result.files.conflicts > 0 ? (
-                        <Chip className="text-amber-700 dark:text-amber-300">
-                          ignored files {here},{" "}
-                          {pluralize(result.files.conflicts, "path")} kept{" "}
-                          {landing.onPeer ? "that" : "this"} side's version
-                        </Chip>
-                      ) : (
-                        <Chip>ignored files {here}</Chip>
-                      )
+                      <Chip>ignored files {here}</Chip>
                     ) : (
                       <Chip className="text-amber-700 dark:text-amber-300">
                         ignored files stayed on {sourceDeviceLabel}

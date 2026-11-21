@@ -72,6 +72,7 @@ function failed(error: string, conflicts = 0): FilesBrought {
 export const transferFilesOnce = (
   {
     direction = "pull",
+    conflictsStay = false,
     ...input
   }: {
     localRoot: string;
@@ -89,6 +90,10 @@ export const transferFilesOnce = (
     // A replica pushes and makes the peer's side an exact copy (a
     // mirror start's first pass, host/ipc/modules/mirror.ts).
     direction?: Direction;
+    // A path both sides held with different content keeps this side's
+    // version. Set, that file didn't cross: a move's source holds the
+    // only copy of its own.
+    conflictsStay?: boolean;
   },
   onProgress: (bytes: number, totalBytes: number) => void,
 ): Effect.Effect<FilesBrought, never, MirrorEngine | MirrorLedger> =>
@@ -121,7 +126,14 @@ export const transferFilesOnce = (
                 direction,
               }),
             ),
-            (session) => waitSettled(daemon, session, direction, onProgress),
+            (session) =>
+              waitSettled(
+                daemon,
+                session,
+                direction,
+                conflictsStay,
+                onProgress,
+              ),
             (session) =>
               daemon
                 .terminate(session)
@@ -157,7 +169,10 @@ export const carryIgnoredOnce = <R>(
     ignoredPaths,
     ignoredRepos,
     ...input
-  }: Omit<Parameters<typeof transferFilesOnce>[0], "ignores"> & {
+  }: Omit<
+    Parameters<typeof transferFilesOnce>[0],
+    "ignores" | "conflictsStay"
+  > & {
     direction: "pull" | "push";
     ignoreMode: MirrorIgnoreMode;
     ignores: readonly string[];
@@ -187,6 +202,7 @@ export const carryIgnoredOnce = <R>(
       {
         ...input,
         ignores: ignoreMode === "bring" ? carry : [...carry, ...ignores],
+        conflictsStay: true,
       },
       onProgress,
     );
@@ -208,15 +224,19 @@ export const carryIgnoredOnce = <R>(
             )
             .map(trimTrailingSlashes);
     if (repos.length > 0) {
-      const named = repos.slice(0, 3);
-      const more = repos.length - named.length;
       return failed(
-        `the git history of ${listed(more > 0 ? [...named, `${more} more`] : named)} isn't copied`,
+        `the git history of ${someOf(repos, repos.length)} isn't copied`,
         files.conflicts,
       );
     }
     return files;
   }).pipe(Effect.catch((error) => Effect.succeed(failed(messageOf(error)))));
+
+const someOf = (paths: readonly string[], total: number) => {
+  const shown = paths.slice(0, 3);
+  const more = total - shown.length;
+  return listed(more > 0 ? [...shown, `${more} more`] : shown);
+};
 
 // One full cycle with both sides scanned and nothing left staging is
 // the files across. Staging figures feed the progress bar.
@@ -232,20 +252,35 @@ function settled(raw: MirrorSessionRaw): boolean {
 }
 
 // A file one side couldn't write or read never crossed, so a move's
-// source still holds the only one. A replica is a mirror's first pass,
+// source still holds the only one. Neither did one the two sides held
+// differently, when conflicts stay. A replica is a mirror's first pass,
 // and the mirror goes on to show its problems.
-function outcome(raw: MirrorSessionRaw, direction: Direction): FilesBrought {
-  const count = mirrorProblemCount(raw.local, raw.remote);
-  if (direction === "replica" || count === 0) {
+function outcome(
+  raw: MirrorSessionRaw,
+  direction: Direction,
+  conflictsStay: boolean,
+): FilesBrought {
+  if (direction === "replica") {
     return { crossed: true, conflicts: raw.conflicts.length };
   }
-  const paths = [...raw.local.problems, ...raw.remote.problems]
-    .slice(0, 3)
-    .map((problem) => problem.path);
-  const more = count - paths.length;
+  const count = mirrorProblemCount(raw.local, raw.remote);
+  if (count > 0) {
+    const paths = [...raw.local.problems, ...raw.remote.problems].map(
+      (problem) => problem.path,
+    );
+    return failed(
+      `${pluralize(count, "file")} couldn't be copied (${someOf(paths, count)})`,
+      raw.conflicts.length,
+    );
+  }
+  const conflicts = raw.conflicts.length + raw.excludedConflicts;
+  if (!conflictsStay || conflicts === 0) {
+    return { crossed: true, conflicts: raw.conflicts.length };
+  }
+  const roots = raw.conflicts.map((conflict) => conflict.root);
   return failed(
-    `${pluralize(count, "file")} couldn't be copied (${listed(more > 0 ? [...paths, `${more} more`] : paths)})`,
-    raw.conflicts.length,
+    `${someOf(roots, conflicts)} ${conflicts === 1 ? "was" : "were"} already on the copy with other content`,
+    conflicts,
   );
 }
 
@@ -253,6 +288,7 @@ const waitSettled = (
   daemon: MirrorEngine["Service"],
   session: string,
   direction: Direction,
+  conflictsStay: boolean,
   onProgress: (bytes: number, totalBytes: number) => void,
 ) =>
   Effect.gen(function* () {
@@ -310,13 +346,15 @@ const waitSettled = (
             raw.lastError ?? "the other device could not be reached",
           );
         }
-        if (settled(raw)) return outcome(raw, direction);
+        if (settled(raw)) return outcome(raw, direction, conflictsStay);
       }
       // A poll, by design.
       yield* Effect.sleep(POLL_MS);
     }
     // What the session says now decides, not the ceiling alone.
     const last = yield* findSession(daemon, session);
-    if (last !== undefined && settled(last)) return outcome(last, direction);
+    if (last !== undefined && settled(last)) {
+      return outcome(last, direction, conflictsStay);
+    }
     return failed("the transfer did not settle in time");
   });
