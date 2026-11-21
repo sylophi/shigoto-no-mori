@@ -159,6 +159,13 @@
     "editor": true
   },
   { "id": "unity", "label": "Unity", "cli": "unity" },
+  {
+    "id": "godot",
+    "label": "Godot",
+    "bundleNames": ["Godot.app", "Godot_mono.app"],
+    "programs": ["godot"],
+    "openArgs": ["--editor", "--path", "{path}"]
+  },
   { "id": "cmux", "label": "cmux", "bundleNames": ["cmux.app"], "cli": "cmux" },
   { "id": "ghostty", "label": "Ghostty", "bundleNames": ["Ghostty.app"] },
   { "id": "iterm", "label": "iTerm", "bundleNames": ["iTerm.app"] },
