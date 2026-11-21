@@ -178,8 +178,9 @@ const device: DevicePort = {
 // A nuke's sign-out (hostShell.ts).
 export const signOutForNuke = (): Promise<string | null> => nukeSignOut(device);
 
-// Each change of the account's id (a sign-in, a sign-out, a switch),
-// which the login item follows (liveness.ts).
+// The host's first report, and each change of the account's id after
+// (a sign-in, a sign-out, a switch), which the login item follows
+// (liveness.ts).
 const idChanges = Effect.runSync(PubSub.unbounded<void>());
 export const accountIdChanges: Stream.Stream<void> =
   Stream.fromPubSub(idChanges);
@@ -208,7 +209,7 @@ export async function accountReported(state: DeviceAccount): Promise<void> {
     "commandAccessChanged",
     switchFor(profile().read(), state) !== null,
   );
-  if (before !== after) PubSub.publishUnsafe(idChanges, undefined);
+  PubSub.publishUnsafe(idChanges, undefined);
 }
 
 const desktopAccount: AccountShell = {
