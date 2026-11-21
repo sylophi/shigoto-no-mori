@@ -33,6 +33,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as DeviceId from "@host/lib/config/DeviceId";
@@ -162,6 +163,9 @@ export const layer = (config: AccountServiceConfig) =>
 
       const current = yield* SubscriptionRef.make<Colibrii.Device | null>(null);
       let made: { settings: Settings; scope: Scope.Closeable } | null = null;
+      // A remake and an account change one at a time: a call on the old
+      // device would otherwise write the store around the new one's read.
+      const lock = yield* Semaphore.make(1);
       const remake = (settings: Settings) =>
         Effect.gen(function* () {
           if (
@@ -181,7 +185,7 @@ export const layer = (config: AccountServiceConfig) =>
             current,
             yield* makeDevice(settings, scope),
           );
-        });
+        }).pipe(lock.withPermits(1));
       yield* Effect.addFinalizer(() =>
         made === null ? Effect.void : Scope.close(made.scope, Exit.void),
       );
@@ -223,18 +227,28 @@ export const layer = (config: AccountServiceConfig) =>
         ) =>
         (...args: A) =>
           Effect.flatMap(now, (device) => call(device)(...args));
+      const locked =
+        <A extends ReadonlyArray<unknown>, B, E, R>(
+          call: (
+            device: Colibrii.Device,
+          ) => (...args: A) => Effect.Effect<B, E, R>,
+        ) =>
+        (...args: A) =>
+          lock.withPermits(1)(on(call)(...args));
 
       return PeerDevice.of({
         account: latest((device) => device.account),
         roster: latest((device) => device.roster),
         tunnel: latest((device) => device.tunnel),
-        enroll: on((device) => device.enroll),
-        signOut: Effect.flatMap(now, (device) => device.signOut),
+        enroll: locked((device) => device.enroll),
+        signOut: lock.withPermits(1)(
+          Effect.flatMap(now, (device) => device.signOut),
+        ),
         devices: {
           list: Effect.flatMap(now, (device) => device.devices.list),
           rename: on((device) => device.devices.rename),
           setData: on((device) => device.devices.setData),
-          remove: on((device) => device.devices.remove),
+          remove: locked((device) => device.devices.remove),
         },
         dial: on((device) => device.dial),
         wake: Effect.flatMap(now, (device) => device.wake),
