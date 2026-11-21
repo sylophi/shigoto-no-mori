@@ -232,7 +232,6 @@ export const carryIgnoredOnce = <R>(
     return files;
   }).pipe(Effect.catch((error) => Effect.succeed(failed(messageOf(error)))));
 
-// The first three of `paths`, and how many more of `total` there are.
 const someOf = (paths: readonly string[], total: number) => {
   const shown = paths.slice(0, 3);
   const more = total - shown.length;
@@ -281,7 +280,7 @@ function outcome(
   const roots = raw.conflicts.map((conflict) => conflict.root);
   return failed(
     `${someOf(roots, conflicts)} ${conflicts === 1 ? "was" : "were"} already on the copy with other content`,
-    raw.conflicts.length,
+    conflicts,
   );
 }
 
