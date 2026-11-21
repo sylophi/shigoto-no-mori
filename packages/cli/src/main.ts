@@ -1,5 +1,6 @@
 // The terminal `sm`: the engine's services under a command line, built
 // with `bun build --compile`, its flavor from the build (build.ts).
+import * as BunCrypto from "@effect/platform-bun/BunCrypto";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { canonicalPlatform } from "@shigomori/engine/canonicalPlatform";
@@ -174,7 +175,13 @@ const sm = Command.make("sm").pipe(
   ]),
 );
 
-const platform = canonicalPlatform(BunServices.layer);
+const platform = canonicalPlatform(
+  Layer.mergeAll(
+    BunServices.layer,
+    BunCrypto.layerSecureRandom,
+    BunCrypto.layerDigest,
+  ),
+);
 
 const program = commandLine(sm, canonical(rest, worktreesCommand)).pipe(
   Effect.flatMap(Command.runWith(sm, { version, renderErrors: false })),

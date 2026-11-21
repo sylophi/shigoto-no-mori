@@ -170,6 +170,7 @@ const jsonFileStore = Effect.fnUntraced(function* (file: string) {
       return true;
     }),
     size: Effect.sync(() => entries.size),
+    keys: Effect.sync(() => [...entries.keys()]),
   });
 });
 

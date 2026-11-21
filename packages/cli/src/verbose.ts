@@ -17,7 +17,7 @@ const trace = (command: ChildProcess.Command) => {
       ? command.args.slice(4)
       : [command.command, ...command.args];
   // Windows finds a bare name on PATH as its .exe (processes.ts).
-  const name = basename(program ?? "", ".exe");
+  const name = basename(String(program), ".exe");
   if (name !== "git" && name !== "gh") return Effect.void;
   const args = rest.join(" ");
   const cwd = command.options.cwd ?? process.cwd();

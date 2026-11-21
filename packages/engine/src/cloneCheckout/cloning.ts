@@ -1,7 +1,7 @@
 // The clone itself: the source's files cloned into the worktree,
 // checked, and its index written.
 import * as Clock from "effect/Clock";
-import * as Crypto from "effect/Crypto";
+import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -51,7 +51,7 @@ export const makeCloning = ({
     const nativeFs = yield* NativeFs.NativeFs;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const crypto = yield* Crypto.Crypto;
+    const digest = yield* Digest.Digest;
     const paths = yield* Paths.Paths;
 
     // RemoveAll for what a clone can leave: a flag pinning a file, a
@@ -491,7 +491,7 @@ export const makeCloning = ({
       stats: ReadonlyMap<string, IndexStat>,
     ) {
       const body = indexBody(targets, stats);
-      const sum = yield* crypto.digest("SHA-1", body);
+      const sum = yield* digest.digest(Digest.sha1, body);
       const file = new Uint8Array(body.length + sum.length);
       file.set(body);
       file.set(sum, body.length);

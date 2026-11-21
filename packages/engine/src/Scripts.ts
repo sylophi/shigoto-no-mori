@@ -1,4 +1,5 @@
 import type { PackageScriptSortMode } from "@shigomori/contracts/schemas/scripts";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -314,16 +315,16 @@ const make = Effect.gen(function* () {
     Effect.all([
       sql`DELETE FROM script_lists
           WHERE project_id = ${projectId} AND list = ${listName}`,
-      names.length === 0
-        ? Effect.void
-        : sql`INSERT INTO script_lists ${sql.insert(
-            names.map((name, position) => ({
+      Arr.isReadonlyArrayNonEmpty(names)
+        ? sql`INSERT INTO script_lists ${sql.insert(
+            Arr.map(names, (name, position) => ({
               project_id: projectId,
               list: listName,
               position,
               name,
             })),
-          )}`,
+          )}`
+        : Effect.void,
     ]);
 
   // The parsers by file, package.json's first. Only package.json's can

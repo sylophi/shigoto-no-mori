@@ -220,6 +220,14 @@ const owesImport = (dataDir: string) =>
     return imported === undefined;
   });
 
+// A store that failed to open: an import that refused a file comes back
+// out as its own error, and anything else as a store that can't open.
+const openFailure = (path: string) => (cause: unknown) =>
+  cause instanceof Migrator.MigrationError &&
+  cause.cause instanceof StoreImportError
+    ? cause.cause
+    : new StoreOpenError({ path, cause });
+
 // The data dir's database, migrated to this build's schema before
 // anything reads it. Every engine service reaches the store through the
 // SqlClient this provides. An import of a 2.x data dir is reported to
@@ -322,20 +330,7 @@ export const layer = (
         yield* importing("done");
         return client;
       }).pipe(
-        Effect.mapError((cause) => new StoreOpenError({ path: store, cause })),
-        // The migrator turns a migration's failure into a defect. An import
-        // that refused a file comes back out as its own error, and any other
-        // failed migration as a store that can't open.
-        Effect.catchDefect(
-          (defect): Effect.Effect<never, StoreOpenError | StoreImportError> =>
-            !(defect instanceof Migrator.MigrationError)
-              ? Effect.die(defect)
-              : defect.cause instanceof StoreImportError
-                ? Effect.fail(defect.cause)
-                : Effect.fail(
-                    new StoreOpenError({ path: store, cause: defect }),
-                  ),
-        ),
+        Effect.mapError(openFailure(store)),
         Effect.tapError((error) => stuck(error.message)),
       );
       return Context.make(SqlClient.SqlClient, sql);
@@ -364,15 +359,7 @@ export const fromFiles = (
         loader: Migrator.fromRecord(history(platform, lenient)),
       }).pipe(
         Effect.provideService(SqlClient.SqlClient, client),
-        Effect.mapError(
-          (cause) => new StoreOpenError({ path: ":memory:", cause }),
-        ),
-        Effect.catchDefect((defect) =>
-          defect instanceof Migrator.MigrationError &&
-          defect.cause instanceof StoreImportError
-            ? Effect.fail(defect.cause)
-            : Effect.die(defect),
-        ),
+        Effect.mapError(openFailure(":memory:")),
       );
       const made = yield* client<{ name: string }>`SELECT name
         FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`;

@@ -318,8 +318,6 @@ export const blobBytes = (content: Uint8Array): Uint8Array =>
 const hexBytes = (hex: string): Uint8Array | undefined =>
   /^(?:[0-9a-f]{2})+$/.test(hex) ? Buffer.from(hex, "hex") : undefined;
 
-export const toHex = (bytes: Uint8Array) => Buffer.from(bytes).toString("hex");
-
 // A version 2 index without extensions (git adds what it wants on its
 // next write), each path with its stat (zeroes for none, which git reads
 // as changed until checkout-index fills them in), its trailing checksum

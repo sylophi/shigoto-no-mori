@@ -216,7 +216,7 @@ export const makeListing = Effect.gen(function* () {
           const at = path.join(common, file);
           return Effect.all([fs.stat(at), fs.readFileString(at)]).pipe(
             Effect.map(([info, text]) => [
-              Option.getOrNull(info.ino),
+              Option.getOrNull(Option.map(info.ino, String)),
               Option.getOrNull(
                 Option.map(info.mtime, (date) => date.getTime()),
               ),

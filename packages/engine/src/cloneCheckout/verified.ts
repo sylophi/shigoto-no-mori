@@ -41,7 +41,7 @@ export const makeVerified = Effect.gen(function* () {
           }
           for (const chunk of Arr.chunksOf([...added], RECORDS_PER_STATEMENT)) {
             yield* sql`INSERT INTO clone_verified ${sql.insert(
-              chunk.map(([file, record]) => ({
+              Arr.map(chunk, ([file, record]) => ({
                 source_id: sourceId,
                 path: file,
                 record,

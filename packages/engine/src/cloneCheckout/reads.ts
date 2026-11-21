@@ -1,20 +1,20 @@
 // What a clone checkout reads: config, attributes' conversions,
 // lstats, the umask, a file's blob id.
-import * as Crypto from "effect/Crypto";
+import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as NativeFs from "../NativeFs.ts";
 import * as Git from "../Git.ts";
-import { blobBytes, CONVERSION_ATTRS, toHex } from "../gitIndex.ts";
+import { blobBytes, CONVERSION_ATTRS } from "../gitIndex.ts";
 
 export const makeReads = Effect.gen(function* () {
   const git = yield* Git.Git;
   const nativeFs = yield* NativeFs.NativeFs;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const crypto = yield* Crypto.Crypto;
+  const digest = yield* Digest.Digest;
 
   // The process's umask, read the only way that doesn't set it: a file
   // made with every permission keeps those the umask leaves.
@@ -102,7 +102,7 @@ export const makeReads = Effect.gen(function* () {
       mode === 0o120000
         ? new TextEncoder().encode(yield* fs.readLink(file))
         : yield* fs.readFile(file);
-    return toHex(yield* crypto.digest("SHA-1", blobBytes(content)));
+    return yield* digest.digestHex(Digest.sha1, blobBytes(content));
   });
 
   return {

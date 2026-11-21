@@ -13,7 +13,7 @@
   "private": true,
   "packageManager": "pnpm@12.4.1",
   "engines": {
-    "node": ">=22.18"
+    "node": ">=22.19"
   },
   "scripts": {
     "start": "node scripts/dev-cli.mts && node scripts/fetch-cloudflared.mts --best-effort && node scripts/ensure-ports.mts && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/dev-electron.mts",

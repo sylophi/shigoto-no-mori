@@ -8,6 +8,7 @@ import {
   type SharedSettingsDoc,
   SharedSettingsDocSchema,
 } from "@shigomori/contracts/schemas/sharedSettings";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -85,9 +86,9 @@ const make = Effect.gen(function* () {
         if (dropped.length > 0) {
           yield* sql`DELETE FROM shared_settings WHERE ${sql.in("key", dropped)}`;
         }
-        if (written.length > 0) {
+        if (Arr.isReadonlyArrayNonEmpty(written)) {
           yield* sql`INSERT INTO shared_settings ${sql.insert(
-            written.map(([key, entry]) => ({
+            Arr.map(written, ([key, entry]) => ({
               key,
               entry: JSON.stringify(entry),
             })),

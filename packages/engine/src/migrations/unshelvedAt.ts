@@ -1,3 +1,4 @@
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { watchTable } from "./changes.ts";
@@ -18,7 +19,7 @@ export const unshelvedAt = Effect.gen(function* () {
   const rows = Object.entries(yield* registryHint("unshelvedAt", {})).map(
     ([worktree_id, at]) => ({ worktree_id, at }),
   );
-  if (rows.length > 0) {
+  if (Arr.isArrayNonEmpty(rows)) {
     yield* sql`INSERT INTO unshelved_at ${sql.insert(rows)}`;
   }
   yield* watchTable("unshelved_at");
