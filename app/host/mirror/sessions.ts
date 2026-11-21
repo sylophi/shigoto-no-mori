@@ -42,7 +42,6 @@ import {
   syncContract,
 } from "@shigomori/contracts/modules/sync";
 import { isWindowsPath } from "@shigomori/contracts/projectPaths";
-import type { ExpectedHead } from "@shigomori/contracts/schemas";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { PeerReach, peerMirrorFor } from "@host/ipc/PeerReach";
 import * as DeviceId from "@host/lib/config/DeviceId";
@@ -68,6 +67,7 @@ import {
 } from "./registry";
 import { MirrorEngine, MirrorError } from "./MirrorEngine";
 import { MirrorLedger } from "./MirrorLedger";
+import type { CopyExpects } from "./ledger/ends";
 import { ownMirrorHereBlocker } from "./MirrorGateway";
 
 const decodePullProgress = Schema.decodeUnknownOption(SyncPullProgressSchema);
@@ -334,9 +334,8 @@ export const stopMirror = (session: string, force: boolean) =>
     // about an edit the engine has not carried yet or holds still as a
     // conflict. The copy's delete expects the branch and the tip the
     // look agreed on, so a commit made on it after the look keeps it. A
-    // forced stop expects the branch alone, as the two last agreed on
-    // it: the copy holds it wherever its folder went, and no worktree
-    // made at its old folder can.
+    // forced stop expects only a worktree a mirror landed, wherever its
+    // HEAD is: the copy, and never one made at its old folder.
     if (!force) {
       const git = yield* daemon.refreshGit(session);
       const live = (yield* findSession(daemon, session)) ?? raw;
@@ -362,7 +361,11 @@ export const stopMirror = (session: string, force: boolean) =>
         daemon,
         ledger,
         raw,
-        force && agreed !== undefined ? { branch: agreed.branch } : agreed,
+        force
+          ? { mirrorCopy: true }
+          : agreed === undefined
+            ? {}
+            : { expectHead: agreed },
       ),
     );
     return { removedCopy: true };
@@ -376,9 +379,9 @@ const stopAndRemoveCopy = Effect.fnUntraced(function* (
   daemon: Daemon,
   ledger: MirrorLedger["Service"],
   raw: MirrorSessionRaw,
-  expectHead: ExpectedHead | undefined,
+  expects: CopyExpects,
 ) {
-  const stayed = yield* ledger.endThenDeleteCopy(daemon, raw, { expectHead });
+  const stayed = yield* ledger.endThenDeleteCopy(daemon, raw, expects);
   daemon.noteEvent(
     raw.localWorktreeId,
     "stopped",

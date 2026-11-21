@@ -132,9 +132,10 @@ export function MirrorManageDialog({
 // copy not in step) stands in for the session's verdict until the
 // session moves on from where it was refused. A mirror the copy's
 // device turns away reads as paused here too, as it does above, rather
-// than as the session's lost link. Only a discard that was showing when
-// the confirm came up, or that the runner refused with, is sent as one:
-// a verdict that turns under the click goes to the runner's own look.
+// than as the session's lost link. A discard is sent as one only if one
+// was showing when the confirm came up, or the runner refused with
+// one: a confirm that came up plain goes to the runner's own look,
+// whatever the verdict turned to under the click.
 function useStopConfirm(
   controls: ReturnType<typeof useMirrorControls>,
   session: MirrorSession,

@@ -539,7 +539,7 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
       case "changed-since-move":
         return `${this.subject} changed after it was moved to another device (its branch moved, or its uncommitted work isn't what moved), so it was kept.`;
       case "changed-since-stop":
-        return `${this.subject} changed after the mirror's stop checked it (its branch or its commit moved), so it was kept.`;
+        return `${this.subject} changed after the mirror's stop found it in step (its branch or its commit moved), so it was kept.`;
       case "uncommitted-at-remove":
         return `Worktree ${this.subject} has uncommitted changes.`;
       case "mirror-not-stopped": {

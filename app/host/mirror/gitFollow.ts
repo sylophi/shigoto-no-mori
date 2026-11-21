@@ -807,7 +807,7 @@ function makeFollower(
     // Where the copy was when the two last agreed, in its own names,
     // which a stop's delete expects of it. None before any agreement,
     // or for a detached HEAD.
-    copyHead(session: string): Required<ExpectedHead> | undefined {
+    copyHead(session: string): ExpectedHead | undefined {
       const record = records.get(session);
       if (record === undefined || record.agreed === null) return undefined;
       const head = namesOf(record.session).toPeer(record.agreed.head);

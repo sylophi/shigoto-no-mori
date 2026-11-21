@@ -14,10 +14,11 @@
 // the original's uncommitted state by design. The original's delete
 // expects what the copy's device read of it when the two were found in
 // step, so a copy changed since stays. A stop expects the branch and
-// the tip the two agreed on, so a copy committed to since stays, and so
-// does a worktree made at the folder the copy was renamed out of.
+// the tip the two agreed on, so a copy committed to since stays, and a
+// forced one a worktree a mirror landed, so one made at the folder the
+// copy was renamed out of stays.
 import * as Effect from "effect/Effect";
-import type { ExpectedHead, MovedSource } from "@shigomori/contracts/schemas";
+import type { DeleteWorktreePayloadSchema } from "@shigomori/contracts/schemas";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import { PeerReach, peerWorktree, peerWorktreesFor } from "@host/ipc/PeerReach";
 import { log } from "@shared/log";
@@ -26,6 +27,12 @@ import { isTransferSession, type MirrorSessionRaw } from "../registry";
 import type { Marks } from "./marks";
 
 type Daemon = MirrorEngine["Service"];
+
+// What the copy's delete is held to, each as its device takes it.
+export type CopyExpects = Pick<
+  typeof DeleteWorktreePayloadSchema.Type,
+  "expect" | "expectHead" | "mirrorCopy"
+>;
 
 export type Copy = Pick<
   MirrorSessionRaw,
@@ -65,10 +72,7 @@ export const makeEnds = ({ marks }: { readonly marks: Marks }) =>
       function* (
         daemon: Daemon,
         raw: MirrorSessionRaw,
-        expects: {
-          readonly expect?: MovedSource | undefined;
-          readonly expectHead?: ExpectedHead | undefined;
-        } = {},
+        expects: CopyExpects = {},
       ) {
         yield* daemon.terminate(raw.session);
         return yield* peerWorktreesFor(raw.deviceId)

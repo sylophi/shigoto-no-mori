@@ -370,10 +370,7 @@ export const makeRemoving = ({
       expect: ExpectedHead,
     ) {
       const now = yield* head(located);
-      if (
-        now?.branch !== expect.branch ||
-        (expect.tip !== undefined && now.tip !== expect.tip)
-      ) {
+      if (now?.branch !== expect.branch || now.tip !== expect.tip) {
         return yield* new WorktreeRefused({
           reason: "changed-since-stop",
           subject: located.worktree.path,

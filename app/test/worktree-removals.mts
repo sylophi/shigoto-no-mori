@@ -38,8 +38,9 @@
 //     read of it, HEAD on its branch, checked before its scripts stop
 //     or its cleanup runs,
 //   - a stop's delete of the copy expects the branch and the tip the
-//     two agreed on, a forced one the branch alone, and a copy goes
-//     only if HEAD is still there, whatever is uncommitted,
+//     two agreed on, and a copy goes only if HEAD is still there,
+//     whatever is uncommitted, while a forced one expects a worktree a
+//     mirror landed, and no other goes,
 //   - a copy's delete of both sides arriving as the peer's push takes
 //     the original only with control from other devices on,
 //   - a copy's delete takes both sides only of a mirror its peer runs
@@ -57,6 +58,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import { callFailureOf, RemoteCallError } from "@shigomori/contracts/errors";
 import type { ChannelEndpoint, ChannelHandle } from "@shigomori/contracts/link";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { afterAll, beforeAll, it } from "vitest";
 import { hubContract } from "@shigomori/contracts/modules/hub";
@@ -64,7 +66,11 @@ import {
   MIRROR_LABEL_MODE,
   type MirrorSessionRaw,
 } from "@shigomori/contracts/modules/mirror";
-import type { Project, Worktree } from "@shigomori/contracts/schemas";
+import {
+  DeleteWorktreePayloadSchema,
+  type Project,
+  type Worktree,
+} from "@shigomori/contracts/schemas";
 import { controlHandlers } from "../host/ipc/modules/control.ts";
 import { MirrorError } from "../host/mirror/MirrorEngine.ts";
 import { worktreesHandlers } from "../host/ipc/modules/worktrees.ts";
@@ -78,6 +84,7 @@ import { MirrorLedger } from "../host/mirror/MirrorLedger.ts";
 import * as PeerRemovals from "../host/mirror/peerRemovals.ts";
 import { annotateMirrorSession } from "../host/mirror/plan.ts";
 import { stopMirror } from "../host/mirror/sessions.ts";
+import { markMirrorMade } from "../host/mirror/gitState.ts";
 import { MIRROR_LABEL_LOCAL_PROJECT } from "../host/mirror/registry.ts";
 import type { HandlerContext } from "../shared/ipc/transport.ts";
 import { initDataDirAt } from "../shared/paths.ts";
@@ -463,6 +470,8 @@ const holding = (worktree: Worktree) => ({
 // folder was still there, `deletes` what each delete of the copy
 // expected, and `noted` what fox's thread was told. With `agreed`, git
 // reads as in step, the copy there.
+const decodeDelete = Schema.decodeUnknownSync(DeleteWorktreePayloadSchema);
+
 const mirroredFox = async (
   name: string,
   deleteCopy: () => Promise<unknown>,
@@ -552,11 +561,17 @@ const mirroredFox = async (
             : Effect.tryPromise({
                 try: () => {
                   calls.push(`delete copy, fox ${at()}`);
-                  const asked = input as {
-                    expect?: unknown;
-                    expectHead?: unknown;
-                  };
-                  deletes.push(asked.expectHead ?? asked.expect);
+                  // As its device reads it off the wire.
+                  const { expect, expectHead, mirrorCopy } =
+                    decodeDelete(input);
+                  deletes.push(
+                    expectHead === undefined && mirrorCopy === undefined
+                      ? expect
+                      : {
+                          ...(expectHead === undefined ? {} : { expectHead }),
+                          ...(mirrorCopy === undefined ? {} : { mirrorCopy }),
+                        },
+                  );
                   return deleteCopy();
                 },
                 catch: callFailureOf,
@@ -886,10 +901,11 @@ it("an original taken by its copy's delete goes only if it still holds what its 
 });
 
 // A stop looks at the pair once, and its copy can be committed to until
-// its delete runs, or be a worktree made at the folder the copy was
-// renamed out of: the delete expects the branch and the tip the two
-// agreed on, and a forced one, of a pair not in step, the branch.
-it("a stop's delete of the copy expects where the two agreed it was, and a forced one its branch", async () => {
+// its delete runs: the delete expects the branch and the tip the two
+// agreed on. A forced one, of a pair not in step, expects only a
+// worktree a mirror landed, which one made at the folder the copy was
+// renamed out of never was.
+it("a stop's delete of the copy expects where the two agreed it was, and a forced one a worktree a mirror landed", async () => {
   const agreed = { branch: "fox", tip: PEER_TIP };
   for (const force of [false, true]) {
     const { calls, deletes, stop } = await mirroredFox(
@@ -899,17 +915,22 @@ it("a stop's delete of the copy expects where the two agreed it was, and a force
     );
     assert.deepEqual(await stop(force), { removedCopy: true });
     assert.deepEqual(calls, ["terminate", "delete copy, fox there"]);
-    assert.deepEqual(deletes, [force ? { branch: "fox" } : agreed]);
+    assert.deepEqual(deletes, [
+      force ? { mirrorCopy: true } : { expectHead: agreed },
+    ]);
   }
 });
 
 // The copy's end of that: its uncommitted work is the original's too,
 // so only where HEAD is is held to what the stop expects.
-it("a copy taken by its mirror's stop goes only if it is still on the branch and the tip the stop expects", async () => {
+it("a copy taken by its mirror's stop goes only from the branch and the tip the stop expects, and by a forced one only if a mirror landed it", async () => {
   const { project } = await repoAt("copy-taken");
   const fox = await create(project, { worktreeName: "fox" });
-  const { branch, branchTip: tip } = holding(fox);
-  const take = (expectHead: { branch: string; tip?: string }) =>
+  const expectHead = { branch: fox.branch, tip: holding(fox).branchTip };
+  const take = (expects: {
+    expectHead?: { branch: string; tip: string };
+    mirrorCopy?: boolean;
+  }) =>
     runHost(
       Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
         worktrees.remove(
@@ -918,7 +939,7 @@ it("a copy taken by its mirror's stop goes only if it is still on the branch and
             worktreeId: fox.id,
             force: true,
             oneSide: true,
-            expectHead,
+            ...expects,
           },
           () => {},
         ),
@@ -928,12 +949,37 @@ it("a copy taken by its mirror's stop goes only if it is still on the branch and
       () => "refused",
     );
   writeFileSync(join(fox.path, "edit.txt"), "uncommitted\n");
-  assert.equal(await take({ branch: "another" }), "refused");
+  assert.equal(await take({ mirrorCopy: true }), "refused");
   git(fox.path, "commit", "-q", "--allow-empty", "-m", "since");
-  assert.equal(await take({ branch, tip }), "refused");
+  assert.equal(await take({ expectHead }), "refused");
   assert.ok(existsSync(join(fox.path, "edit.txt")));
-  assert.equal(await take({ branch }), "removed");
+  await runHost(markMirrorMade(fox.path, fox.branch));
+  assert.equal(await take({ mirrorCopy: true }), "removed");
   assert.ok(!existsSync(fox.path));
+
+  const owl = await create(project, { worktreeName: "owl" });
+  writeFileSync(join(owl.path, "edit.txt"), "uncommitted\n");
+  assert.equal(
+    await runHost(
+      Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
+        worktrees.remove(
+          {
+            projectId: project.id,
+            worktreeId: owl.id,
+            force: true,
+            oneSide: true,
+            expectHead: {
+              branch: owl.branch,
+              tip: holding(owl).branchTip,
+            },
+          },
+          () => {},
+        ),
+      ),
+    ).then(({ ok }) => ok),
+    true,
+  );
+  assert.ok(!existsSync(owl.path));
 });
 
 const MIRROR_ENDED =

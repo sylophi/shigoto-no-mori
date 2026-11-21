@@ -55,6 +55,18 @@ export class ScriptsRunningError extends Schema.TaggedError<ScriptsRunningError>
   }
 }
 
+// A mirror's forced stop refused: no mirror landed the worktree its
+// delete found, which is one made at the folder the copy was renamed
+// out of. Said as the reason a kept copy gives.
+export class NotMirrorCopyError extends Schema.TaggedError<NotMirrorCopyError>()(
+  "NotMirrorCopyError",
+  { path: Schema.String },
+) {
+  override get message(): string {
+    return `${this.path} isn't marked as a mirror's copy, so it was kept (the copy may have been renamed)`;
+  }
+}
+
 const decodeScriptEvent = Schema.decodeUnknownSync(ScriptEventSchema);
 
 // A "script" event of an engine run, as the script event it carries (the

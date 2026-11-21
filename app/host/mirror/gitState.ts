@@ -354,11 +354,12 @@ export const readGitState = Effect.fnUntraced(function* (
 
 // The branches the mirror made on the copy's device (the one the copy
 // starts on, one a followed switch creates), a line each in a file of
-// the copy's own git dir, which goes with the worktree. A copy that
-// follows a switch drops the one it leaves if it is listed: it would
-// otherwise stay behind at an old commit, its name held against the
-// next worktree sent here. A branch that was here before the mirror
-// isn't listed, and stays.
+// the copy's own git dir, which goes with the worktree. The file is
+// there from the landing on, so it also tells a mirror's copy from a
+// worktree made at its folder later. A copy that follows a switch drops
+// the branch it leaves if it is listed: it would otherwise stay behind
+// at an old commit, its name held against the next worktree sent here.
+// A branch that was here before the mirror isn't listed, and stays.
 const madeBranches = Effect.fnUntraced(function* (worktreePath: string) {
   const fs = yield* FileSystem.FileSystem;
   const file = yield* (yield* Git.Git).gitPath(
@@ -367,7 +368,7 @@ const madeBranches = Effect.fnUntraced(function* (worktreePath: string) {
   );
   const listed = yield* fs.readFileString(file).pipe(
     Effect.map((text) => text.split("\n").filter((line) => line !== "")),
-    Effect.orElseSucceed((): string[] => []),
+    Effect.option,
   );
   return {
     listed,
@@ -376,25 +377,38 @@ const madeBranches = Effect.fnUntraced(function* (worktreePath: string) {
   };
 });
 
-export const markMirrorMade = (worktreePath: string, branch: string) =>
-  Effect.gen(function* () {
-    const made = yield* madeBranches(worktreePath);
-    if (!made.listed.includes(branch)) {
-      yield* made.write([...made.listed, branch]);
-    }
-  }).pipe(Effect.ignore);
+// A git dir that can't be read is no proof of one.
+export const isMirrorCopy = (worktreePath: string) =>
+  madeBranches(worktreePath).pipe(
+    Effect.map(({ listed }) => Option.isSome(listed)),
+    Effect.orElseSucceed(() => false),
+  );
 
-const dropMirrorMade = (
-  projectPath: string,
-  worktreePath: string,
-  branch: string,
-) =>
-  Effect.gen(function* () {
+export const markMirrorMade = Effect.fnUntraced(
+  function* (worktreePath: string, branch: string) {
     const made = yield* madeBranches(worktreePath);
-    if (!made.listed.includes(branch)) return;
-    yield* (yield* Git.Git).run(projectPath, ["branch", "-D", "--", branch]);
-    yield* made.write(made.listed.filter((listed) => listed !== branch));
-  }).pipe(Effect.ignore);
+    const listed = Option.getOrElse(made.listed, (): string[] => []);
+    if (!listed.includes(branch)) yield* made.write([...listed, branch]);
+  },
+  (marking) => Effect.ignore(marking),
+);
+
+// Only while the branch is still at `tip`, where the two agreed it was.
+const dropMirrorMade = Effect.fnUntraced(
+  function* (
+    projectPath: string,
+    worktreePath: string,
+    branch: string,
+    tip: string,
+  ) {
+    const made = yield* madeBranches(worktreePath);
+    const listed = Option.getOrElse(made.listed, (): string[] => []);
+    if (!listed.includes(branch)) return;
+    yield* (yield* Git.Git).deleteRef(projectPath, `refs/heads/${branch}`, tip);
+    yield* made.write(listed.filter((name) => name !== branch));
+  },
+  (dropping) => Effect.ignore(dropping),
+);
 
 export type ApplyGitStateInput = {
   // The state the caller last observed here. Anything else means the
@@ -534,14 +548,19 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
       state.tip,
     ]);
   }
-  // The branch HEAD left is at the tip the two agreed on (`expect`),
-  // which the original holds.
+  // The branch HEAD left was read at the tip the two agreed on
+  // (`expect`), which the original holds.
   if (
     input.copy === true &&
     current.head.kind === "branch" &&
     !sameHead(current.head, state.head)
   ) {
-    yield* dropMirrorMade(project.path, worktree.path, current.head.branch);
+    yield* dropMirrorMade(
+      project.path,
+      worktree.path,
+      current.head.branch,
+      current.tip,
+    );
   }
 
   // The staged view: the index becomes the incoming tree, then a

@@ -18,6 +18,7 @@ import {
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
 import * as Landing from "@shigomori/engine/Landing";
 import * as EngineWorktrees from "@shigomori/engine/Worktrees";
@@ -28,7 +29,12 @@ import * as Scripts from "../Scripts";
 import { MirrorsOnDelete } from "@shigomori/engine/MirrorsOnDelete";
 import { MirrorLedger } from "@host/mirror/MirrorLedger";
 import { mirrorsOnDelete } from "@host/mirror/onDelete";
-import { bookingScripts, ScriptsRunningError } from "./documents";
+import { isMirrorCopy } from "@host/mirror/gitState";
+import {
+  bookingScripts,
+  NotMirrorCopyError,
+  ScriptsRunningError,
+} from "./documents";
 
 const decodeCleanupError = Schema.decodeUnknownSync(CleanupErrorSchema);
 
@@ -163,6 +169,7 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
   Effect.gen(function* () {
     const scripts = yield* Scripts.Scripts;
     const ledger = yield* MirrorLedger;
+    const fs = yield* FileSystem.FileSystem;
 
     const stopMirrors = (worktreeIds: readonly string[]) =>
       Effect.forEach(worktreeIds, ledger.stopMirrorsForWorktree, {
@@ -178,6 +185,7 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
         readonly refuseRunningScripts?: boolean | undefined;
         readonly expect?: MovedSource | undefined;
         readonly expectHead?: ExpectedHead | undefined;
+        readonly mirrorCopy?: boolean | undefined;
         readonly oneSide?: boolean | undefined;
       },
       notifyScript: Scripts.NotifyScriptEvent,
@@ -191,6 +199,17 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
       // Asked first, so a worktree that changed keeps its scripts and its
       // cleanup unrun. The engine asks again right before the delete.
       const { expect, expectHead } = input;
+      if (input.mirrorCopy === true) {
+        const { worktree } = yield* asCall(
+          findProjectAndWorktree(input.projectId, worktreeId),
+        );
+        const landed = isMirrorCopy(worktree.path).pipe(
+          Effect.provideService(FileSystem.FileSystem, fs),
+        );
+        if (!(yield* landed)) {
+          return yield* new NotMirrorCopyError({ path: worktree.path });
+        }
+      }
       if (expect !== undefined || expectHead !== undefined) {
         yield* asCall(
           changing(

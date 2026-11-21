@@ -41,6 +41,7 @@ import {
 import type {
   MirroredCopyError,
   RunningWorkError,
+  NotMirrorCopyError,
   ScriptsRunningError,
 } from "./worktrees/documents";
 import {
@@ -149,7 +150,8 @@ export class Worktrees extends Context.Service<
     // With `expect`, a transplant's teardown or a mirror's other side:
     // refused unless the worktree still holds it, checked before its
     // scripts stop and again right before the delete. With `expectHead`,
-    // a mirror's stop: the same of where HEAD is. With `oneSide`, a
+    // a mirror's stop: the same of where HEAD is. With `mirrorCopy`, a
+    // forced one: refused unless a mirror landed it. With `oneSide`, a
     // delete the other side of its mirror asked for, which doesn't take
     // that side too.
     readonly remove: (
@@ -157,12 +159,13 @@ export class Worktrees extends Context.Service<
         readonly refuseRunningScripts?: boolean | undefined;
         readonly expect?: MovedSource | undefined;
         readonly expectHead?: ExpectedHead | undefined;
+        readonly mirrorCopy?: boolean | undefined;
         readonly oneSide?: boolean | undefined;
       },
       notifyScript: Scripts.NotifyScriptEvent,
     ) => Effect.Effect<
       DeleteWorktreeResult,
-      ChangeError | ScriptsRunningError,
+      ChangeError | ScriptsRunningError | NotMirrorCopyError,
       Engine.Services
     >;
     // The worktrees of the landed layers of the stack the worktree is

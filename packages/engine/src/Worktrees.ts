@@ -334,10 +334,9 @@ export class Worktrees extends Context.Service<
     // The branch HEAD is on and its tip. None for a detached HEAD.
     readonly head: (
       located: Located,
-    ) => Effect.Effect<Required<ExpectedHead> | undefined, Git.GitError>;
+    ) => Effect.Effect<ExpectedHead | undefined, Git.GitError>;
     // Refused ("changed-since-stop") unless HEAD is still on `expect`'s
-    // branch, and the branch at its tip when it names one. The
-    // uncommitted work isn't looked at.
+    // branch, at its tip. The uncommitted work isn't looked at.
     readonly refuseHeadMoved: (
       located: Located,
       expect: ExpectedHead,
