@@ -13,7 +13,7 @@
 import * as Clock from "effect/Clock";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -233,7 +233,7 @@ export class Agents extends Context.Service<
 const make = (binary: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const crypto = yield* Crypto.Crypto;
+    const secureRandom = yield* SecureRandom.SecureRandom;
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
     const { home, binaryName, dataDir } = paths;
@@ -401,7 +401,7 @@ const make = (binary: string) =>
           path.dirname(file),
           // Unique to this write: the app and a terminal `sm` can both
           // write in one millisecond, and a shared temp would interleave.
-          `.${path.basename(file)}.tmp-${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+          `.${path.basename(file)}.tmp-${yield* secureRandom.uuidV4()}`,
         );
         yield* fs.writeFileString(temp, text, { mode }).pipe(
           // The mode given is masked by the umask on creation.

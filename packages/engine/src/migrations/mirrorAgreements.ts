@@ -1,4 +1,5 @@
 import { GitStateCoreSchema } from "@shigomori/contracts/modules/mirror";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -38,7 +39,7 @@ export const mirrorAgreements = Effect.gen(function* () {
     entries.map(([, state]) => state),
     GitStateCoreSchema,
   );
-  if (rows.length > 0) {
+  if (Arr.isArrayNonEmpty(rows)) {
     yield* sql`INSERT INTO mirror_agreements ${sql.insert(rows)}`;
   }
 });

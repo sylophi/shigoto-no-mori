@@ -11,10 +11,12 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import type * as CommandLine from "effect/process/CommandLine";
 import * as Stream from "effect/Stream";
 import { startOnWindows } from "./batchFiles.ts";
 import { findOn } from "./executables.ts";
@@ -25,16 +27,16 @@ import * as Shells from "./Shells.ts";
 import { CD_FILE_ENV } from "./shellHook.ts";
 
 // How long a child has after its SIGTERM before it is SIGKILLed. Given
-// none, the platform's spawner waits a second and then on the exit for
-// good, so a child that ignores SIGTERM (a user's hook, a stuck helper)
-// held its caller's interrupt or timeout forever.
+// none, the platform's spawner waits on the exit for good, so a child
+// that ignores SIGTERM (a user's hook, a stuck helper) held its caller's
+// interrupt or timeout forever.
 export const KILL_GRACE = "3 seconds";
 
 // A child's environment: `env` less the shell hook's directive file,
 // which is the terminal `sm`'s alone (an editor or a hook writing it
 // would move the user's shell).
-export const childEnv = (
-  env: Readonly<Record<string, string | undefined>> | undefined,
+export const childEnv = <V>(
+  env: Readonly<Record<string, V | undefined>> | undefined,
 ) => ({ ...env, [CD_FILE_ENV]: undefined });
 
 // What every child gets that its command doesn't say otherwise:
@@ -49,6 +51,9 @@ const withDefaults = (command: ChildProcess.Command): ChildProcess.Command =>
           command.options.env === undefined || command.options.extendEnv,
       })
     : command;
+
+const wordText = (word: CommandLine.Word) =>
+  Redacted.isRedacted(word) ? Redacted.value(word) : word;
 
 // Windows starts a batch file only through cmd (startable), and Node
 // finds a bare name only as an .exe or a .com, past a batch file
@@ -67,18 +72,25 @@ const windowsSpawner = Effect.fnUntraced(function* (
       if (!ChildProcess.isStandardCommand(command)) {
         return yield* inner.spawn(command);
       }
-      const searched =
-        command.options.env?.["PATH"] ?? process.env["PATH"] ?? "";
+      const searched = wordText(
+        command.options.env?.["PATH"] ?? process.env["PATH"] ?? "",
+      );
       const started = yield* startOnWindows(
         (name) => found.get([searched, name]),
         command.command,
-        command.args,
+        command.args.map(wordText),
       );
+      // Only a batch file's line is written out, so anything else keeps
+      // its words as given, a Redacted one hidden in what fails.
       return yield* inner.spawn(
-        ChildProcess.make(started.command, started.args, {
-          ...command.options,
-          shell: started.shell,
-        }),
+        ChildProcess.make(
+          started.command,
+          started.shell ? started.args : command.args,
+          {
+            ...command.options,
+            shell: started.shell,
+          },
+        ),
       );
     });
 });
@@ -263,16 +275,9 @@ export const readToExit = <A, E, R>(
       handle.exitCode,
       Effect.andThen(Fiber.join(reading), Effect.never),
     );
-    // Nothing left to end is no failure. Windows keeps no group to end
-    // once the command is gone, whose pid may be another process's by
-    // then, which the spawner's taskkill would end with its tree.
-    const endGroup = handle
-      .kill({ forceKillAfter: KILL_GRACE })
-      .pipe(Effect.ignore);
-    yield* byFamily({
-      posix: endGroup,
-      windows: Effect.void,
-    });
+    // Nothing left to end is no failure. On Windows nothing ever is: the
+    // spawner ends a tree only while its leader runs.
+    yield* handle.kill({ forceKillAfter: KILL_GRACE }).pipe(Effect.ignore);
     return { read: yield* Fiber.join(reading), code: Number(code) };
   });
 

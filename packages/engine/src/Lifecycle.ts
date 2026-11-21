@@ -12,7 +12,7 @@ import {
   type ScriptEvent,
 } from "@shigomori/contracts/schemas/scripts";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -92,7 +92,7 @@ export class Lifecycle extends Context.Service<
 
 const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const crypto = yield* Crypto.Crypto;
+  const secureRandom = yield* SecureRandom.SecureRandom;
   const fs = yield* FileSystem.FileSystem;
   const paths = yield* Paths.Paths;
   const shells = yield* Shells.Shells;
@@ -122,7 +122,7 @@ const make = Effect.gen(function* () {
 
   const run = Effect.fn("Lifecycle.run")(function* (input: RunInput) {
     const { context, slot, report } = input;
-    const runId = yield* crypto.randomUUIDv4.pipe(Effect.orDie);
+    const runId = yield* secureRandom.uuidV4();
     const script = (event: ScriptEvent) =>
       report({ event: "script", ...event } as LifecycleEvent);
     const started = (pid?: number) =>

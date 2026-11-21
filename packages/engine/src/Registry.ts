@@ -1,9 +1,10 @@
 import type { ProjectRow } from "@shigomori/contracts/schemas/project";
 import { UnknownProjectError } from "@shigomori/contracts/errors";
 import { isMintedDeviceId } from "@shigomori/contracts/hubProtocol";
+import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -210,8 +211,8 @@ const make = Effect.gen(function* () {
   const usage = yield* Usage.Usage;
   const config = yield* Config.Config;
   const worktreeData = yield* WorktreeData.WorktreeData;
-  const crypto = yield* Crypto.Crypto;
-  const randomId = Effect.orDie(crypto.randomUUIDv4);
+  const secureRandom = yield* SecureRandom.SecureRandom;
+  const randomId = secureRandom.uuidV4();
 
   const projects = sql<RegisteredProject>`
     SELECT id, name, path FROM projects ORDER BY position`.pipe(
@@ -334,9 +335,11 @@ const make = Effect.gen(function* () {
           stored,
         );
         yield* sql`DELETE FROM project_order`;
-        yield* sql`INSERT INTO project_order ${sql.insert(
-          paths.map((path, position) => ({ path, position })),
-        )}`;
+        if (Arr.isReadonlyArrayNonEmpty(paths)) {
+          yield* sql`INSERT INTO project_order ${sql.insert(
+            Arr.map(paths, (path, position) => ({ path, position })),
+          )}`;
+        }
       }),
     );
     return true;
@@ -487,7 +490,7 @@ const make = Effect.gen(function* () {
           message: session.message ?? null,
         })),
       );
-      if (stored.length > 0) {
+      if (Arr.isArrayNonEmpty(stored)) {
         yield* sql`INSERT INTO agent_sessions ${sql.insert(stored)}`;
       }
     });

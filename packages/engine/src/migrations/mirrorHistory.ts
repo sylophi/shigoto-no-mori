@@ -1,4 +1,5 @@
 import { MirrorEventSchema } from "@shigomori/contracts/modules/mirror";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -39,7 +40,7 @@ export const mirrorHistory = Effect.gen(function* () {
     threads.map(([, thread]) => thread),
     ThreadSchema,
   );
-  if (rows.length > 0) {
+  if (Arr.isArrayNonEmpty(rows)) {
     yield* sql`INSERT INTO mirror_history ${sql.insert(rows)}`;
   }
 });

@@ -2,6 +2,7 @@ import {
   type MirrorEvent,
   MirrorEventSchema,
 } from "@shigomori/contracts/modules/mirror";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -59,7 +60,7 @@ const make = Effect.gen(function* () {
     yield* sql.withTransaction(
       Effect.gen(function* () {
         yield* sql`DELETE FROM mirror_history`;
-        if (rows.length > 0) {
+        if (Arr.isArrayNonEmpty(rows)) {
           yield* sql`INSERT INTO mirror_history ${sql.insert(rows)}`;
         }
       }),

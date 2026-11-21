@@ -14,7 +14,7 @@ guidance for that version before writing Effect code: `AGENTS.md` in
 the installed package (`node_modules/effect` in any package of the
 workspace, such as `app/node_modules/effect/AGENTS.md`), the `ai-docs/`
 examples beside it that it links, and for Schema, `SCHEMA.md` at the pinned tag
-(`https://github.com/Effect-TS/effect/blob/effect@4.0.2/packages/effect/SCHEMA.md`,
+(`https://github.com/Effect-TS/effect/blob/effect@4.1.4/packages/effect/SCHEMA.md`,
 a long guide to read in chunks, whose tag moves with the catalog). This
 file adds what the repo decides beyond it, and says why wherever it
 departs from it. The source of that version, in the same folder, is
