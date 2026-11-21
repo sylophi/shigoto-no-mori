@@ -238,7 +238,7 @@ const dialerDevice = (listener: DirectListener): PeerDevice => ({
       yield* Effect.addFinalizer(() => pair.close);
       return pair.dialer;
     }),
-  wake: Effect.void,
+  wakes: Stream.never,
 });
 
 // The dialer's REAL direct plane, exactly as the host assembles it,

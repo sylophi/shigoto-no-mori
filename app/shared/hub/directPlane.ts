@@ -55,7 +55,7 @@ class UnreadableWelcomeError extends Data.TaggedError(
 
 // What of the Colibrii device the plane uses, which the checks stand in
 // for.
-export type PeerDevice = Pick<Device, "account" | "roster" | "dial" | "wake">;
+export type PeerDevice = Pick<Device, "account" | "roster" | "dial" | "wakes">;
 
 export type DirectPlaneDeps = {
   readonly device: PeerDevice;
@@ -226,6 +226,10 @@ export const make = (
       online = next;
       keeper.reconcile(online);
     });
+    yield* deps.device.wakes.pipe(
+      Stream.runForEach(() => Effect.sync(() => keeper.dialNow())),
+      Effect.forkScoped,
+    );
     if (deps.tunnel !== undefined) {
       yield* follow(deps.tunnel, (state) => {
         tunnel = state.status;
