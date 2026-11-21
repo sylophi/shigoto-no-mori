@@ -10,8 +10,7 @@ import {
   resolveServiceConfig,
   type AccountServiceConfig,
 } from "@shigomori/contracts/accountServiceConfig";
-import { errorMessageOf } from "@shigomori/contracts/errors";
-import { accountIdOf, type DevicePort } from "./handlers";
+import type { DevicePort } from "./handlers";
 
 // Three layers, lowest to highest precedence: the optional .env.local
 // file (dev convenience), the account service values baked into the
@@ -50,20 +49,12 @@ export function serviceConfigOf(packaged: boolean): AccountServiceConfig {
   );
 }
 
-// A nuke's sign-out: this device removed from the account, which says
-// whether that landed, and signed out here either way. Answers why it
-// didn't land, since the nuke takes with it what would deliver it
-// later. Null when it landed, or there was nothing to remove.
-export async function nukeSignOut(
-  device: DevicePort,
-  deviceId: string,
-): Promise<string | null> {
-  if (accountIdOf(await device.account()) === null) return null;
-  try {
-    await device.remove(deviceId);
-    return null;
-  } catch (error) {
-    await device.signOut();
-    return errorMessageOf(error);
-  }
+// A nuke's sign-out, which also delivers a removal an earlier sign-out
+// owes. Answers why the service may still list this device, since the
+// nuke takes with it what would tell the service later. Null when it
+// let the device go.
+export async function nukeSignOut(device: DevicePort): Promise<string | null> {
+  return (await device.signOut())
+    ? null
+    : "The account service couldn't be told this device signed out.";
 }

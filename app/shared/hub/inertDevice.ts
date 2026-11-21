@@ -12,7 +12,7 @@ export const inertDevice = (why: unknown): Device => {
     roster: Stream.make([]),
     tunnel: Stream.make({ status: "off" } as const),
     enroll: () => refused,
-    signOut: Effect.void,
+    signOut: Effect.succeed(true),
     devices: {
       list: refused,
       rename: () => refused,

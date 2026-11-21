@@ -26,7 +26,7 @@ export const deviceCalls = {
     readonly name: string;
     readonly data: DeviceData;
   }): Promise<void> => onDevice((device) => device.enroll(input)),
-  signOut: (): Promise<void> => onDevice((device) => device.signOut),
+  signOut: (): Promise<boolean> => onDevice((device) => device.signOut),
   listDevices: async (): Promise<DeviceInfo[]> => {
     const records = await onDevice((device) => device.devices.list);
     const devices = records.map(deviceInfoOf);

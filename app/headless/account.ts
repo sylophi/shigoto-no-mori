@@ -220,6 +220,6 @@ export function headlessAccount(facts: HostFacts) {
       void listDevices();
       setInterval(() => void listDevices(), LIST_DEVICES_EVERY_MS).unref();
     },
-    signOutForNuke: async () => nukeSignOut(device, await deviceIdOf),
+    signOutForNuke: () => nukeSignOut(device),
   };
 }

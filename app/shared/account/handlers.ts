@@ -35,7 +35,8 @@ export type DevicePort = {
     readonly name: string;
     readonly data: DeviceData;
   }) => Promise<void>;
-  readonly signOut: () => Promise<void>;
+  // Whether the service has let the device go, so nothing is owed.
+  readonly signOut: () => Promise<boolean>;
   readonly list: () => Promise<readonly DeviceInfo[]>;
   readonly rename: (deviceId: string, name: string) => Promise<void>;
   readonly setData: (deviceId: string, data: DeviceData) => Promise<void>;

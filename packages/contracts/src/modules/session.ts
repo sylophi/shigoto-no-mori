@@ -111,7 +111,8 @@ export const sessionContract = defineContract(
     ),
     VoidSchema,
   ),
-  invoke("signOut", VoidSchema, VoidSchema),
+  // Whether the service has let this device go, so nothing is owed.
+  invoke("signOut", VoidSchema, Schema.Boolean),
   invoke("listDevices", VoidSchema, Schema.Array(DeviceInfoSchema)),
   invoke(
     "renameDevice",

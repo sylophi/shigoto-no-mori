@@ -376,7 +376,9 @@
       }
     }
   },
-  "session:signOut": {},
+  "session:signOut": {
+    "success": true
+  },
   "session:updaterState": {
     "payload": {
       "kind": "unsupported"

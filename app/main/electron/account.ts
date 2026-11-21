@@ -182,8 +182,7 @@ const device: DevicePort = {
 };
 
 // A nuke's sign-out (hostShell.ts).
-export const signOutForNuke = async (): Promise<string | null> =>
-  nukeSignOut(device, await hostDeviceId());
+export const signOutForNuke = (): Promise<string | null> => nukeSignOut(device);
 
 // Each change of the account's id (a sign-in, a sign-out, a switch),
 // which the login item follows (liveness.ts).
