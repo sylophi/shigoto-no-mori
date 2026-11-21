@@ -183,7 +183,7 @@ export const applyServedGitState = ({
     const result = yield* applyGitState(
       project,
       { id: worktree.id, path: worktree.path },
-      { expect, state, sweep },
+      { expect, state, sweep, copy: true },
     );
     // A peer's follower landed its side here (a push into a copy): the
     // pages showing the project refetch, as for the follower's own pulls.

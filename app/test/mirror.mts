@@ -27,7 +27,9 @@
 //     on the copy is never followed,
 //   - its apply (host/mirror/gitState.ts) to a checkout moved since its
 //     read, onto another branch at the same tip or detached there, is
-//     refused, the checkout left where it was.
+//     refused, the checkout left where it was,
+//   - a copy that follows a switch drops the branch it leaves if the
+//     mirror made it there, and keeps one that was there before.
 // Then:
 //   - terminating a session leaves both copies as they are,
 //   - a one-shot pull never writes the dialer's files onto the listener,
@@ -93,7 +95,11 @@ import { MirrorLedger } from "@host/mirror/MirrorLedger";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { type GitFollower, makeGitFollower } from "@host/mirror/gitFollow";
-import { applyGitState, readGitState } from "@host/mirror/gitState";
+import {
+  applyGitState,
+  markMirrorMade,
+  readGitState,
+} from "@host/mirror/gitState";
 import {
   type MirrorSessionRaw,
   ORIGINAL_GONE_DETAIL,
@@ -703,6 +709,46 @@ for (const [name, moved, move] of [
     assert.equal(await gitOut(repo, "rev-parse", "--abbrev-ref", "HEAD"), head);
   });
 }
+
+it("git: a copy that follows a switch drops the branch it leaves if the mirror made it, and keeps one that was there before", async () => {
+  const repo = await fixture.initRepo("leftover-branches");
+  await fixture.commitFile(repo, "a.txt", "a\n", "a");
+  await git(repo, ["branch", "before"]);
+  await git(repo, ["checkout", "-q", "-b", "started"]);
+  await runHost(markMirrorMade(repo, "started"));
+  const branches = async () =>
+    (await gitOut(repo, "branch", "--format=%(refname:short)"))
+      .split("\n")
+      .filter((branch) => branch !== "main")
+      .sort();
+  const follow = async (branch: string, copy: boolean) => {
+    const current = await runHost(readGitState(repo, repo, "wt"));
+    assert.deepEqual(
+      await runHost(
+        applyGitState(
+          { path: repo } as Project,
+          { id: "wt", path: repo },
+          {
+            expect: current,
+            state: { ...current, head: { kind: "branch", branch } },
+            copy,
+          },
+        ),
+      ),
+      { applied: true },
+    );
+  };
+  // Onto one it makes, then one that was there, then one more.
+  await follow("next", true);
+  assert.deepEqual(await branches(), ["before", "next"]);
+  await follow("before", true);
+  assert.deepEqual(await branches(), ["before"]);
+  await follow("last", true);
+  assert.deepEqual(await branches(), ["before", "last"]);
+  // The original's side keeps every branch it leaves.
+  await follow("before", false);
+  assert.deepEqual(await branches(), ["before", "last"]);
+});
 
 it("terminate leaves both copies intact", async () => {
   onSnapshot = null;

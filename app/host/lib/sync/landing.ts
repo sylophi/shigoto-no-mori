@@ -49,6 +49,7 @@ import {
   copyCheckoutConfig,
   refuseUnmakeableSymlinks,
 } from "@host/mirror/checkout";
+import { markMirrorMade } from "@host/mirror/gitState";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import type { HostServices } from "@host/process/services";
 
@@ -331,6 +332,9 @@ export const landWorktree = (
         progress,
         move,
       );
+      if (landing.checkout !== undefined) {
+        yield* markMirrorMade(worktree.path, landBranch);
+      }
       return {
         keep,
         worktree,

@@ -352,6 +352,50 @@ export const readGitState = Effect.fnUntraced(function* (
   return { ...core, indexCommit: commit } satisfies GitState;
 });
 
+// The branches the mirror made on the copy's device (the one the copy
+// starts on, one a followed switch creates), a line each in a file of
+// the copy's own git dir, which goes with the worktree. A copy that
+// follows a switch drops the one it leaves if it is listed: it would
+// otherwise stay behind at an old commit, its name held against the
+// next worktree sent here. A branch that was here before the mirror
+// isn't listed, and stays.
+const madeBranches = Effect.fnUntraced(function* (worktreePath: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const file = yield* (yield* Git.Git).gitPath(
+    worktreePath,
+    "shigomori-mirror-branches",
+  );
+  const listed = yield* fs.readFileString(file).pipe(
+    Effect.map((text) => text.split("\n").filter((line) => line !== "")),
+    Effect.orElseSucceed((): string[] => []),
+  );
+  return {
+    listed,
+    write: (branches: readonly string[]) =>
+      fs.writeFileString(file, branches.map((line) => `${line}\n`).join("")),
+  };
+});
+
+export const markMirrorMade = (worktreePath: string, branch: string) =>
+  Effect.gen(function* () {
+    const made = yield* madeBranches(worktreePath);
+    if (!made.listed.includes(branch)) {
+      yield* made.write([...made.listed, branch]);
+    }
+  }).pipe(Effect.ignore);
+
+const dropMirrorMade = (
+  projectPath: string,
+  worktreePath: string,
+  branch: string,
+) =>
+  Effect.gen(function* () {
+    const made = yield* madeBranches(worktreePath);
+    if (!made.listed.includes(branch)) return;
+    yield* (yield* Git.Git).run(projectPath, ["branch", "-D", "--", branch]);
+    yield* made.write(made.listed.filter((listed) => listed !== branch));
+  }).pipe(Effect.ignore);
+
 export type ApplyGitStateInput = {
   // The state the caller last observed here. Anything else means the
   // worktree moved under the caller, and the apply refuses so the
@@ -361,6 +405,8 @@ export type ApplyGitStateInput = {
   // App-owned refs to drop once the state landed (a landed incoming
   // branch, a consumed index carrier). Best effort.
   sweep?: readonly string[];
+  // The worktree is a mirror's copy (madeBranches).
+  copy?: boolean;
 };
 
 // Moves this worktree's git state to `state`. Returns a refusal rather
@@ -474,6 +520,9 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
           expected: existingTip ?? Git.ABSENT_REF,
         });
       }
+      if (input.copy === true && existingTip === null) {
+        yield* markMirrorMade(worktree.path, target);
+      }
       yield* git.run(worktree.path, ["symbolic-ref", "HEAD", targetRef]);
     }
   } else if (current.head.kind !== "detached" || current.tip !== state.tip) {
@@ -484,6 +533,15 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
       "HEAD",
       state.tip,
     ]);
+  }
+  // The branch HEAD left is at the tip the two agreed on (`expect`),
+  // which the original holds.
+  if (
+    input.copy === true &&
+    current.head.kind === "branch" &&
+    !sameHead(current.head, state.head)
+  ) {
+    yield* dropMirrorMade(project.path, worktree.path, current.head.branch);
   }
 
   // The staged view: the index becomes the incoming tree, then a
