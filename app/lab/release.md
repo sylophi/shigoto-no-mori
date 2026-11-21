@@ -45,6 +45,7 @@ export APPLE_SIGNING_IDENTITY="<the Developer ID Application identity>"
 
    ```sh
    SM_DEVICE_HUB_URL="$(gh variable get SM_DEVICE_HUB_URL)" \
+   SM_DEVICE_HUB_APP="$(gh variable get SM_DEVICE_HUB_APP)" \
    SM_ACCOUNT_CLERK_PUBLISHABLE_KEY="$(gh variable get SM_ACCOUNT_CLERK_PUBLISHABLE_KEY)" \
    SM_ACCOUNT_WEB_ORIGIN="$(gh variable get SM_ACCOUNT_WEB_ORIGIN)" \
    pnpm package

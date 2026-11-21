@@ -144,14 +144,13 @@ screen, which an agent's session has no permission to capture.
 | `SHIGOMORI_DATA_DIR`               | Data dir for this session. See above.                                         |
 | `SHIGOMORI_PROFILE`                | Dev profile name. The launchers set it, and it requires `SHIGOMORI_DATA_DIR`. |
 | `SHIGOMORI_DEBUG_PORT`             | Opens Chromium's remote-debugging port on that window. Dev builds only.       |
-| `SHIGOMORI_DIAL_KINDS`             | Candidate kinds this device dials, e.g. `tunnel`. Dev builds only. See Rules. |
-| `SHIGOMORI_DIRECT_FRONT_PORT`      | Port this device advertises for its direct listener (LAN candidates, the tunnel's ingress), for a proxy in front of it. Dev builds only. |
 | `SHIGOMORI_DEVTOOLS`               | `1` streams the main process's spans to the Effect devtools (VS Code) on their default port. Dev builds only. |
 | `SHIGOMORI_CODE_SIGN_IN`           | `1` signs the window in with a code approved on another device, for a window no one sits at (`devices.md`). |
 | `RENDERER_PORT`                    | Renderer port, from `.env.ports`. A real env var overrides it.                |
 | `WEB_PORT`                         | Web client port (`pnpm web:dev`). Same source and override rule.              |
 | `FAKE_HOST_PORT`, `FAKE_HOST_WEB_PORT` | Fake host ports (`pnpm fake-host`, `pnpm fake-host:web`). Same source and override rule. |
-| `SM_DEVICE_HUB_URL`                | Device hub URL. Normally from `.env.local`, but a real env var overrides it.  |
+| `SM_DEVICE_HUB_URL`                | The Colibrii instance's hub address. Normally from `.env.local`, but a real env var overrides it. |
+| `SM_DEVICE_HUB_APP`                | The app's id on that instance (`shigomori-dev` in dev). Same override rule.   |
 | `SM_ACCOUNT_CLERK_PUBLISHABLE_KEY` | Clerk key. Same override rule.                                                |
 | `SM_ACCOUNT_WEB_ORIGIN`            | Web client origin the desktop admits. Same override rule.                     |
 | `SHIGOMORI_UPDATE_FEED_URL`        | App only. Stand-in for the update server, the fallback for the release list. |
@@ -256,24 +255,18 @@ on another device instead (`devices.md`).
 - **`--fresh` is local only.** A device the profile enrolled stays on
   the hub, with its tunnel, until revoked. Leftovers show on the
   account page of any device on the account and can be revoked there.
-  See `devices.md`, "Cleaning up". A sign-out that could not reach
-  the hub (offline, hub down) parks its revoke in the signed-out
-  envelope and delivers it on the next launch or the next sign-in, so
-  a leftover from an offline sign-out clears itself once the profile
-  runs online again.
+  See `devices.md`, "Cleaning up". A sign-out made offline (or with
+  the hub down) leaves its device on the account too.
 - **A device revoked while it was off** learns it on its next launch:
-  the hub answers its dead credential with a typed "device revoked"
-  (a tombstone, `hub/migrations/0002_revoked_credentials.sql`), and
-  the app signs out exactly as if it had been online for the revoke.
+  the hub answers its credential as removed, and the app signs out
+  exactly as if it had been online for the revoke.
 - **Both profiles use the owner's real dev account.** Each enrolls on
   the dev hub and provisions a tunnel. This is intended: the hub,
   Clerk and tunnel provisioning are exercised for real.
-- **The tunnel data path needs asking for on one machine.** The LAN
-  candidate always wins locally. Launch one profile with
-  `SHIGOMORI_DIAL_KINDS=tunnel` and its session to the other rides that
-  device's tunnel, the way a web client's does. The dev hub needs the
-  tunnel secrets configured. The web
-  client (below) is the other way.
+- **The tunnel data path is the web client's on one machine.** The
+  LAN candidate always wins between two desktops, and a web client
+  (below) dials only tunnels. The dev hub needs the tunnel secrets
+  configured.
 
 
 
@@ -310,10 +303,10 @@ removed one the next time they read the registry. A relaunch after
   worktrees, run and watch its scripts, change its settings) works
   from a browser tab the same way, and anything local by nature
   (launch tools, this device's settings, port forwarding) is absent.
-- **Local hub** (`pnpm -C ../hub dev`). Set `SM_DEVICE_HUB_URL` to
-  `http://localhost:8787` to run against a Worker on this machine
-  instead of `hub-dev`. Needs `CLERK_SECRET_KEY` in the repo root's
-  `hub/.dev.vars`, see `hub/README.md`, "Develop".
+- **Local Colibrii service** (Colibrii's `service/README.md` says how
+  to run one). Set `SM_DEVICE_HUB_URL` to its address
+  (`http://localhost:8787`) and `SM_DEVICE_HUB_APP` to the app it
+  keeps for sm, to run against it instead of the dev instance.
 - **Packaged build, as a test flavor** (`SM_FLAVOR=<word> pnpm
   package`, `lab` by convention). A word that is no build's makes a
   test flavor: every name follows from it (`Shigoto no Mori (lab)`,
