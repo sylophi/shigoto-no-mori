@@ -1,11 +1,12 @@
 import { KEYS } from "../../lib/keys.ts";
 import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { Command } from "cmdk";
-import { Folder } from "lucide-react";
+import { Folder, HardDrive, House } from "lucide-react";
 import { isAnchoredPath } from "@shigomori/contracts/projectPaths";
 import type { BrowseListing } from "../../lib/browseListing.ts";
 import { cn } from "../../lib/utils.ts";
 import { Button } from "../../primitives/button.tsx";
+import { ChipButton } from "../../primitives/chip-button.tsx";
 import {
   keepFocusInInput,
   MODAL_COMMAND_CLASS,
@@ -118,6 +119,27 @@ export function PathBrowserView({
 
       {browsable && (
         <>
+          {browse.volumes.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 border-b border-border px-3 py-2">
+              <ChipButton
+                onMouseDown={keepFocusInInput}
+                onClick={() => browse.jumpTo("~/")}
+              >
+                <House className="size-3.5" />
+                Home
+              </ChipButton>
+              {browse.volumes.map((volume) => (
+                <ChipButton
+                  key={volume.path}
+                  onMouseDown={keepFocusInInput}
+                  onClick={() => browse.jumpTo(volume.path)}
+                >
+                  <HardDrive className="size-3.5" />
+                  {volume.name}
+                </ChipButton>
+              ))}
+            </div>
+          )}
           <BrowseListView
             entries={filtered}
             pathOf={(entry) => `${browseDir}${entry.name}`}

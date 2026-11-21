@@ -739,6 +739,7 @@ function hostHandlersFor(
       }
       return { path: resolved, entries };
     },
+    "fs:listVolumes": () => disk.volumes ?? [],
     "fs:isGitRepo": ({ path }) => isRepoOnDisk(disk, resolveOnDisk(disk, path)),
     "fs:scanForGitRepos": async ({ path }) => {
       await sleep(900);

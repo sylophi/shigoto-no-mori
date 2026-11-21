@@ -93,5 +93,18 @@
       },
       null
     ]
+  },
+  "VolumeSchema": {
+    "accepts": [
+      { "name": "Archive", "path": "/Volumes/Archive" },
+      { "name": "D:", "path": "D:/" }
+    ],
+    "normalizes": [
+      {
+        "input": { "name": "USB", "path": "/media/alex/USB", "type": "vfat" },
+        "output": { "name": "USB", "path": "/media/alex/USB" }
+      }
+    ],
+    "rejects": [{ "name": "Archive" }, { "path": "/Volumes/Archive" }]
   }
 }

@@ -5,11 +5,13 @@ import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Git from "@shigomori/engine/Git";
 import * as Projects from "@shigomori/engine/Projects";
 import type * as Engine from "@host/lib/Engine";
-import { listFolder } from "@host/lib/folders";
+import { listFolder, listVolumes } from "@host/lib/folders";
 import { toAbsolute } from "@shared/paths";
 
 export const fsHandlers = {
   listDirectory: ({ path }) => listFolder(path),
+
+  listVolumes: () => listVolumes,
 
   // `git rev-parse --git-dir` validates a real working repo: catches
   // missing/corrupted .git, bare repos, and linked worktrees alike.

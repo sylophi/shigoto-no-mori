@@ -222,6 +222,8 @@ export function AddProjectScene() {
                 filtered: FOLDERS,
                 browseTo: noop,
                 browseUp: noop,
+                volumes: [],
+                jumpTo: noop,
                 paths: devicePaths(null),
               }}
               registeredNames={new Set(["shigoto-no-mori"])}

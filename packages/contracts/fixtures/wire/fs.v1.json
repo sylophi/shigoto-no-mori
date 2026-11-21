@@ -23,6 +23,14 @@
       ]
     }
   },
+  "fs:listVolumes": {
+    "success": [
+      {
+        "name": "\n",
+        "path": "!"
+      }
+    ]
+  },
   "fs:scanForGitRepos": {
     "payload": {
       "path": "😀"

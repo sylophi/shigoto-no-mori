@@ -28,3 +28,12 @@ export const DirectoryListingSchema = Schema.Struct({
 });
 
 export type DirectoryListing = typeof DirectoryListingSchema.Type;
+
+// A mounted volume a browse can jump to: an external drive, a share, a
+// disk image, or on Windows a drive.
+export const VolumeSchema = Schema.Struct({
+  name: Schema.String,
+  path: Schema.String,
+});
+
+export type Volume = typeof VolumeSchema.Type;

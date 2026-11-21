@@ -243,6 +243,7 @@ function buildQueryKeys(deviceId: string) {
       host("githubCli", "pullRequests", projectId, "candidates"),
 
     fsListDirectory: (path: string) => host("fs", "listDirectory", path),
+    fsListVolumes: () => host("fs", "listVolumes"),
     // What is at the folder a move would clone into (sync:cloneDestination).
     cloneDestination: (
       parentDir: string,
