@@ -52,6 +52,13 @@
       "patterns": ["", "\n"]
     }
   },
+  "sync:ignoredRepos": {
+    "payload": {
+      "projectId": "(",
+      "worktreeId": "327a495393de"
+    },
+    "success": ["\n", "DX"]
+  },
   "sync:openSource": {
     "payload": {
       "projectId": " ",

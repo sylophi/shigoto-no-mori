@@ -445,6 +445,10 @@ export class Git extends Context.Service<
     readonly listIgnoredPaths: (
       repo: string,
     ) => Effect.Effect<string[], GitError>;
+    // The repositories nested in the ignored paths, each a "dir/" entry.
+    readonly listIgnoredRepos: (
+      repo: string,
+    ) => Effect.Effect<string[], GitError>;
     // Untracked paths matched by the gitignore-syntax patterns in
     // `excludeFile` alone, the standard excludes left out.
     readonly listUntrackedMatching: (

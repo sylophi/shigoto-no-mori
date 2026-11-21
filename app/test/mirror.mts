@@ -927,6 +927,10 @@ it("a move's files step carries only the source's ignored files: a tracked file 
             projectId: listenerProjectId,
             worktreeId: listenerWorktreeId,
           }),
+          ignoredRepos: PeerReach.peerSyncFor(LISTENER).ignoredRepos({
+            projectId: listenerProjectId,
+            worktreeId: listenerWorktreeId,
+          }),
           direction: "pull",
         },
         () => {},
@@ -955,6 +959,88 @@ it("a move's files step carries only the source's ignored files: a tracked file 
     }
     rmSync(join(listenerWorktree, "readme.txt"));
     await git(listenerWorktree, ["checkout", "--", "readme.txt"]);
+  }
+  await waitFor(
+    () => daemon.sessions().length === 0,
+    "the files step's session to be gone",
+  );
+});
+
+it("a move's files step that carries a repository nested in an ignored folder doesn't count as crossed, since its history stays behind, and one the rule leaves out is no matter", async () => {
+  // The listener is the source. Its ignored vendor/ holds tool/, a
+  // repository with a commit of its own. Its files cross without its
+  // .git, so a teardown of the source would take the history: the
+  // outcome keeps it. Left out by the rule, it stays on the source as
+  // the rule says, and the rest crosses as usual.
+  listener.setAccepts(true);
+  standInMirror(inertImpl());
+  const tool = join(listenerWorktree, "vendor", "tool");
+  writeFileSync(join(listenerWorktree, ".gitignore"), "vendor/\n*.log\n");
+  mkdirSync(tool, { recursive: true });
+  writeFileSync(join(tool, "lib.txt"), "tool\n");
+  writeFileSync(join(listenerWorktree, "build.log"), "log\n");
+  await git(tool, ["init", "-q"]);
+  await git(tool, ["add", "lib.txt"]);
+  await git(tool, [
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@t",
+    "commit",
+    "-qm",
+    "only here",
+  ]);
+  const carry = (ignoreMode: "everything" | "custom", ignores: string[]) =>
+    runHost(
+      carryIgnoredOnce(
+        {
+          localRoot: dialerRoot,
+          localWorktreeId: dialerWorktreeId,
+          sourceDeviceId: LISTENER,
+          sourceProjectId: listenerProjectId,
+          sourceWorktreeId: listenerWorktreeId,
+          remoteRoot: listenerWorktree,
+          name: "feature",
+          ignoreMode,
+          ignores,
+          ignoredPaths: PeerReach.peerSyncFor(LISTENER).allIgnoredPaths({
+            projectId: listenerProjectId,
+            worktreeId: listenerWorktreeId,
+          }),
+          ignoredRepos: PeerReach.peerSyncFor(LISTENER).ignoredRepos({
+            projectId: listenerProjectId,
+            worktreeId: listenerWorktreeId,
+          }),
+          direction: "pull",
+        },
+        () => {},
+      ),
+    );
+  try {
+    assert.deepEqual(await carry("everything", []), {
+      crossed: false,
+      conflicts: 0,
+      error: "the git history of vendor/tool isn't copied",
+    });
+    assert.equal(read(join(dialerRoot, "vendor", "tool", "lib.txt")), "tool\n");
+    assert.equal(existsSync(join(dialerRoot, "vendor", "tool", ".git")), false);
+    rmSync(join(dialerRoot, "vendor"), { recursive: true, force: true });
+    rmSync(join(dialerRoot, "build.log"), { force: true });
+
+    writeFileSync(join(listenerWorktree, "vendor", "other.txt"), "other\n");
+    assert.deepEqual(await carry("custom", ["/vendor/tool"]), {
+      crossed: true,
+      conflicts: 0,
+    });
+    assert.equal(read(join(dialerRoot, "build.log")), "log\n");
+    assert.equal(read(join(dialerRoot, "vendor", "other.txt")), "other\n");
+    assert.equal(existsSync(join(dialerRoot, "vendor", "tool")), false);
+  } finally {
+    for (const root of [listenerWorktree, dialerRoot]) {
+      rmSync(join(root, "vendor"), { recursive: true, force: true });
+      rmSync(join(root, "build.log"), { force: true });
+      rmSync(join(root, ".gitignore"), { force: true });
+    }
   }
   await waitFor(
     () => daemon.sessions().length === 0,

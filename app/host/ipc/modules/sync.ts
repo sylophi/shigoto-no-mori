@@ -79,6 +79,12 @@ export const syncHandlers = {
       ([path, git]) => git.listIgnoredPaths(path),
     ),
 
+  ignoredRepos: (input) =>
+    Effect.flatMap(
+      Effect.all([findWorktreePath(input), Git.Git]),
+      ([path, git]) => git.listIgnoredRepos(path),
+    ),
+
   // Where a move to this device would clone the repo, asked by its
   // dialog before it starts.
   cloneDestination: ({ cloneInto, identity }) =>

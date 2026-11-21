@@ -27,6 +27,10 @@ import {
   MIRROR_STATUS_WORDS,
   mirrorProblemCount,
 } from "@shigomori/contracts/modules/mirror";
+import {
+  isSameOrInside,
+  trimTrailingSlashes,
+} from "@shigomori/contracts/projectPaths";
 import type { FilesBrought } from "@shigomori/contracts/schemas";
 import { listed, pluralize } from "@shigomori/contracts/words";
 import * as Clock from "effect/Clock";
@@ -143,12 +147,15 @@ export const transferFilesOnce = (
 // the whole worktree counts each one the two checkouts write
 // differently (line endings, Windows against the rest) as a conflict.
 // The paths past the engine's cap on patterns stay on the source, and
-// the outcome says so, so a teardown keeps it.
+// the outcome says so, so a teardown keeps it. So does a repository
+// nested in the paths it carries: the engine never copies a .git, so
+// its history would go with the source.
 export const carryIgnoredOnce = <R>(
   {
     ignoreMode,
     ignores,
     ignoredPaths,
+    ignoredRepos,
     ...input
   }: Omit<Parameters<typeof transferFilesOnce>[0], "ignores"> & {
     direction: "pull" | "push";
@@ -156,6 +163,8 @@ export const carryIgnoredOnce = <R>(
     ignores: readonly string[];
     // The source's topmost ignored paths (Git.listIgnoredPaths).
     ignoredPaths: Effect.Effect<readonly string[], unknown, R>;
+    // The repositories nested in them (Git.listIgnoredRepos).
+    ignoredRepos: Effect.Effect<readonly string[], unknown, R>;
   },
   onProgress: (bytes: number, totalBytes: number) => void,
 ) =>
@@ -163,15 +172,13 @@ export const carryIgnoredOnce = <R>(
     // Any other rule's ignores are the paths it leaves out, kept last
     // too for one inside a folder git lists whole.
     const leftOut = ignores.map(unanchorIgnoredPath);
+    const isLeftOut = (path: string) =>
+      ignoreMode !== "bring" &&
+      leftOut.some((left) => isSameOrInside(path, left));
     const paths =
       ignoreMode === "bring"
         ? broughtPaths(ignores)
-        : (yield* ignoredPaths).filter((path) => {
-            const bare = path.replace(/\/+$/, "");
-            return !leftOut.some(
-              (left) => bare === left || bare.startsWith(`${left}/`),
-            );
-          });
+        : (yield* ignoredPaths).filter((path) => !isLeftOut(path));
     const carry = onlyIgnores(paths);
     const left = paths.filter(
       (path) => !carry.includes(`!${anchorIgnoredPath(path)}/**`),
@@ -183,12 +190,32 @@ export const carryIgnoredOnce = <R>(
       },
       onProgress,
     );
-    return left > 0 && files.crossed
-      ? failed(
-          `${pluralize(left, "ignored path")} didn't fit in one pass`,
-          files.conflicts,
-        )
-      : files;
+    if (!files.crossed) return files;
+    if (left > 0) {
+      return failed(
+        `${pluralize(left, "ignored path")} didn't fit in one pass`,
+        files.conflicts,
+      );
+    }
+    const repos =
+      paths.length === 0
+        ? []
+        : (yield* ignoredRepos)
+            .filter(
+              (repo) =>
+                paths.some((path) => isSameOrInside(repo, path)) &&
+                !isLeftOut(repo),
+            )
+            .map(trimTrailingSlashes);
+    if (repos.length > 0) {
+      const named = repos.slice(0, 3);
+      const more = repos.length - named.length;
+      return failed(
+        `the git history of ${listed(more > 0 ? [...named, `${more} more`] : named)} isn't copied`,
+        files.conflicts,
+      );
+    }
+    return files;
   }).pipe(Effect.catch((error) => Effect.succeed(failed(messageOf(error)))));
 
 // One full cycle with both sides scanned and nothing left staging is
