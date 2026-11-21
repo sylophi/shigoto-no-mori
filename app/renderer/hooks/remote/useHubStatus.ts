@@ -9,6 +9,12 @@ export function useHubStatus(): HubStatus | null {
   return useAtomValue(hubStatusAtom);
 }
 
+// Whether the first snapshot landed, so a reader can tell "not blocked"
+// from "not known yet".
+export function useHubStatusKnown(): boolean {
+  return useAtomValue(hubStatusAtom, (status) => status !== null);
+}
+
 // For readers that only care about THIS device's tunnel endpoint (the
 // marker and the note on the this-device row): a selector, so roster
 // and socket transitions leave those components alone. Undefined until
