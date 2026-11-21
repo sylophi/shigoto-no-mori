@@ -311,6 +311,16 @@ const MovedSourceSchema = Schema.Struct({
 });
 export type MovedSource = typeof MovedSourceSchema.Type;
 
+// What a mirror's stop expects its copy to still be before its scripts
+// stop and again right before its files go: HEAD on its branch, at the
+// tip the two were found in step at. A forced stop names the branch
+// alone, which tells the copy from a worktree made at its old folder.
+const ExpectedHeadSchema = Schema.Struct({
+  branch: GitRefNameSchema,
+  tip: Schema.optional(CommitHashSchema),
+});
+export type ExpectedHead = typeof ExpectedHeadSchema.Type;
+
 // Announced to every window and peer: the list only drops the row once
 // the delete resolves, so a worktree on its way out would otherwise read
 // as ordinary to anyone who didn't start it.
@@ -322,6 +332,9 @@ export const WorktreeRemovalSchema = Schema.Struct({
   // this, its own reading of it then. Not a move's teardown, a removal
   // that must happen (a nuke), nor one the other device asked for.
   expect: Schema.optional(MovedSourceSchema),
+  // A mirror's stop: refused unless the worktree is still there, at the
+  // same two points.
+  expectHead: Schema.optional(ExpectedHeadSchema),
 });
 export type WorktreeRemoval = typeof WorktreeRemovalSchema.Type;
 

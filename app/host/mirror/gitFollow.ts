@@ -36,6 +36,7 @@ import {
   isModuleOutdatedError,
   isPeerRefusal,
 } from "@shigomori/contracts/errors";
+import type { ExpectedHead } from "@shigomori/contracts/schemas";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import * as Effect from "effect/Effect";
 import * as Cause from "effect/Cause";
@@ -123,6 +124,9 @@ const COPY_GONE_EVERY_MS = 60_000;
 // stalled peer can hold a round for as long as its transport's timeout,
 // and the caller is a user waiting on a stop.
 const RECONCILE_NOW_LIMIT_MS = 10_000;
+
+const namesOf = (session: FollowableSession) =>
+  onMirrorBranch(session) ? MIRROR_NAMES : SAME_NAMES;
 
 export type GitFollower = ReturnType<typeof makeFollower>;
 
@@ -267,7 +271,7 @@ const reconcileOf = (
     }
     const project = found.success;
     const localWorktree = { id: localWorktreeId, path: session.localRoot };
-    const names = onMirrorBranch(session) ? MIRROR_NAMES : SAME_NAMES;
+    const names = namesOf(session);
     yield* Effect.gen(function* () {
       // Independent reads, so the local git work hides under the peer
       // round trip. The apply's compare-and-set covers either side
@@ -799,6 +803,17 @@ function makeFollower(
     },
     statusOf(session: string): MirrorGitStatus | undefined {
       return records.get(session)?.status;
+    },
+    // Where the copy was when the two last agreed, in its own names,
+    // which a stop's delete expects of it. None before any agreement,
+    // or for a detached HEAD.
+    copyHead(session: string): Required<ExpectedHead> | undefined {
+      const record = records.get(session);
+      if (record === undefined || record.agreed === null) return undefined;
+      const head = namesOf(record.session).toPeer(record.agreed.head);
+      return head?.kind === "branch"
+        ? { branch: head.branch, tip: record.agreed.tip }
+        : undefined;
     },
   };
 }

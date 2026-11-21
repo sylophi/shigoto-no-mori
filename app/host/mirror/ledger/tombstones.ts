@@ -273,7 +273,7 @@ export const makeTombstones = ({
             if (expect === undefined) {
               return ends.endOnce(raw.session, daemon.terminate(raw.session));
             }
-            return ends.endThenDeleteCopy(daemon, raw, expect).pipe(
+            return ends.endThenDeleteCopy(daemon, raw, { expect }).pipe(
               Effect.flatMap((stayed) =>
                 stayed === undefined
                   ? Effect.void

@@ -19,7 +19,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { movedSourceChange } from "@shigomori/contracts/movedSource";
-import type { MovedSource } from "@shigomori/contracts/schemas";
+import type { ExpectedHead, MovedSource } from "@shigomori/contracts/schemas";
 import { isRealBranch } from "@shigomori/contracts/schemas/project";
 import * as Config from "../Config.ts";
 import * as Dirty from "../Dirty.ts";
@@ -348,6 +348,39 @@ export const makeRemoving = ({
       },
     );
 
+    const head = Effect.fn("Worktrees.head")(function* ({
+      project,
+      worktree,
+    }: Located) {
+      const ref = yield* git
+        .run(worktree.path, ["symbolic-ref", "--quiet", "HEAD"])
+        .pipe(
+          Effect.map((out) => out.trim()),
+          Effect.orElseSucceed(() => null),
+        );
+      if (ref !== `refs/heads/${worktree.branch}`) return undefined;
+      const tip = yield* git.refTip(project.path, ref);
+      return Option.isSome(tip)
+        ? { branch: worktree.branch, tip: tip.value }
+        : undefined;
+    });
+
+    const refuseHeadMoved = Effect.fn("Worktrees.refuseHeadMoved")(function* (
+      located: Located,
+      expect: ExpectedHead,
+    ) {
+      const now = yield* head(located);
+      if (
+        now?.branch !== expect.branch ||
+        (expect.tip !== undefined && now.tip !== expect.tip)
+      ) {
+        return yield* new WorktreeRefused({
+          reason: "changed-since-stop",
+          subject: located.worktree.path,
+        });
+      }
+    });
+
     const remove = Effect.fn("Worktrees.remove")(function* (
       located: Located,
       options: {
@@ -361,6 +394,7 @@ export const makeRemoving = ({
         // A transplant's teardown or a mirror's other side: what the
         // worktree must still hold at the delete.
         readonly expect?: MovedSource;
+        readonly expectHead?: ExpectedHead;
       },
       reporter: Reporter,
     ) {
@@ -457,6 +491,9 @@ export const makeRemoving = ({
       if (options.expect !== undefined) {
         yield* refuseChangedSince(located, options.expect);
       }
+      if (options.expectHead !== undefined) {
+        yield* refuseHeadMoved(located, options.expectHead);
+      }
       // Unforced, git checks the tree again at the delete, which covers
       // what a cleanup script wrote since `removable`'s check. Once git's
       // side is done (an orphaned checkout's too), the rest goes before
@@ -530,6 +567,8 @@ export const makeRemoving = ({
       checkRemovable,
       deletesBranch,
       refuseChangedSince,
+      head,
+      refuseHeadMoved,
       remove,
     };
   });

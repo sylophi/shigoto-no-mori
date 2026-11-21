@@ -12,6 +12,7 @@ import {
   type CleanupError,
   CleanupErrorSchema,
   type DeleteStackResult,
+  type ExpectedHead,
   type MovedSource,
 } from "@shigomori/contracts/schemas";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
@@ -58,6 +59,7 @@ const removeWorktree = (
     readonly skipCleanup?: boolean | undefined;
     readonly cleanupWithin?: number | undefined;
     readonly expect?: MovedSource | undefined;
+    readonly expectHead?: ExpectedHead | undefined;
   },
   reporter: EngineWorktrees.Reporter,
 ) =>
@@ -79,6 +81,9 @@ const removeWorktree = (
                 ? {}
                 : { cleanupWithin: input.cleanupWithin }),
               ...(input.expect === undefined ? {} : { expect: input.expect }),
+              ...(input.expectHead === undefined
+                ? {}
+                : { expectHead: input.expectHead }),
             },
             reporter,
           )
@@ -172,6 +177,7 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
         // would stop it.
         readonly refuseRunningScripts?: boolean | undefined;
         readonly expect?: MovedSource | undefined;
+        readonly expectHead?: ExpectedHead | undefined;
         readonly oneSide?: boolean | undefined;
       },
       notifyScript: Scripts.NotifyScriptEvent,
@@ -184,17 +190,23 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
       );
       // Asked first, so a worktree that changed keeps its scripts and its
       // cleanup unrun. The engine asks again right before the delete.
-      if (input.expect !== undefined) {
-        const expect = input.expect;
+      const { expect, expectHead } = input;
+      if (expect !== undefined || expectHead !== undefined) {
         yield* asCall(
           changing(
-            Effect.flatMap(
-              findProjectAndWorktree(input.projectId, worktreeId),
-              (located) =>
-                Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
-                  worktrees.refuseChangedSince(located, expect),
-                ),
-            ),
+            Effect.gen(function* () {
+              const located = yield* findProjectAndWorktree(
+                input.projectId,
+                worktreeId,
+              );
+              const worktrees = yield* EngineWorktrees.Worktrees;
+              if (expect !== undefined) {
+                yield* worktrees.refuseChangedSince(located, expect);
+              }
+              if (expectHead !== undefined) {
+                yield* worktrees.refuseHeadMoved(located, expectHead);
+              }
+            }),
             { projectId: input.projectId, worktreeId },
           ),
         );
@@ -226,6 +238,7 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
                 force: input.force,
                 skipCleanup: input.skipCleanup,
                 expect: input.expect,
+                expectHead: input.expectHead,
               },
               reporter,
             ).pipe(oneSide ? thisSideOnly : (deleting) => deleting),

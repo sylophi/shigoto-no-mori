@@ -13,9 +13,11 @@
 // the copy reads as stayed. The delete is forced, since the copy holds
 // the original's uncommitted state by design. The original's delete
 // expects what the copy's device read of it when the two were found in
-// step, so a copy changed since stays.
+// step, so a copy changed since stays. A stop expects the branch and
+// the tip the two agreed on, so a copy committed to since stays, and so
+// does a worktree made at the folder the copy was renamed out of.
 import * as Effect from "effect/Effect";
-import type { MovedSource } from "@shigomori/contracts/schemas";
+import type { ExpectedHead, MovedSource } from "@shigomori/contracts/schemas";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import { PeerReach, peerWorktree, peerWorktreesFor } from "@host/ipc/PeerReach";
 import { log } from "@shared/log";
@@ -60,7 +62,14 @@ export const makeEnds = ({ marks }: { readonly marks: Marks }) =>
     // a call that failed while the copy is still listed), or undefined
     // once it is gone.
     const endThenDeleteCopy = Effect.fn("MirrorLedger.endThenDeleteCopy")(
-      function* (daemon: Daemon, raw: MirrorSessionRaw, expect?: MovedSource) {
+      function* (
+        daemon: Daemon,
+        raw: MirrorSessionRaw,
+        expects: {
+          readonly expect?: MovedSource | undefined;
+          readonly expectHead?: ExpectedHead | undefined;
+        } = {},
+      ) {
         yield* daemon.terminate(raw.session);
         return yield* peerWorktreesFor(raw.deviceId)
           .delete({
@@ -68,7 +77,7 @@ export const makeEnds = ({ marks }: { readonly marks: Marks }) =>
             worktreeId: raw.worktreeId,
             force: true,
             oneSide: true,
-            ...(expect === undefined ? {} : { expect }),
+            ...expects,
           })
           .pipe(
             Effect.map((removed) =>

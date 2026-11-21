@@ -37,6 +37,9 @@
 //   - an original taken so goes only if it still holds what its device
 //     read of it, HEAD on its branch, checked before its scripts stop
 //     or its cleanup runs,
+//   - a stop's delete of the copy expects the branch and the tip the
+//     two agreed on, a forced one the branch alone, and a copy goes
+//     only if HEAD is still there, whatever is uncommitted,
 //   - a copy's delete of both sides arriving as the peer's push takes
 //     the original only with control from other devices on,
 //   - a copy's delete takes both sides only of a mirror its peer runs
@@ -74,6 +77,7 @@ import * as HostWorktrees from "../host/lib/Worktrees.ts";
 import { MirrorLedger } from "../host/mirror/MirrorLedger.ts";
 import * as PeerRemovals from "../host/mirror/peerRemovals.ts";
 import { annotateMirrorSession } from "../host/mirror/plan.ts";
+import { stopMirror } from "../host/mirror/sessions.ts";
 import { MIRROR_LABEL_LOCAL_PROJECT } from "../host/mirror/registry.ts";
 import type { HandlerContext } from "../shared/ipc/transport.ts";
 import { initDataDirAt } from "../shared/paths.ts";
@@ -457,7 +461,8 @@ const holding = (worktree: Worktree) => ({
 // yet", which a delete's look doesn't go by.
 // `calls` says, in order, what the mirror was asked and whether fox's
 // folder was still there, `deletes` what each delete of the copy
-// expected, and `noted` what fox's thread was told.
+// expected, and `noted` what fox's thread was told. With `agreed`, git
+// reads as in step, the copy there.
 const mirroredFox = async (
   name: string,
   deleteCopy: () => Promise<unknown>,
@@ -465,10 +470,12 @@ const mirroredFox = async (
     pauseFails = false,
     session = {},
     copy,
+    agreed,
   }: {
     readonly pauseFails?: boolean;
     readonly session?: Partial<MirrorSessionRaw>;
     readonly copy?: Held;
+    readonly agreed?: { readonly branch: string; readonly tip: string };
   } = {},
 ) => {
   const { project } = await repoAt(name);
@@ -505,6 +512,11 @@ const mirroredFox = async (
     inertMirrorImpl({
       status: Effect.succeed("running"),
       sessions: Effect.sync(() => [...live.values()]),
+      refreshGit: () =>
+        Effect.succeed(
+          agreed === undefined ? undefined : { status: "synced", detail: "" },
+        ),
+      copyHead: () => agreed,
       noteEvent: (worktreeId, _, detail) => {
         if (worktreeId === fox.id) noted.push(detail);
       },
@@ -540,7 +552,11 @@ const mirroredFox = async (
             : Effect.tryPromise({
                 try: () => {
                   calls.push(`delete copy, fox ${at()}`);
-                  deletes.push((input as { expect?: unknown }).expect);
+                  const asked = input as {
+                    expect?: unknown;
+                    expectHead?: unknown;
+                  };
+                  deletes.push(asked.expectHead ?? asked.expect);
                   return deleteCopy();
                 },
                 catch: callFailureOf,
@@ -559,7 +575,8 @@ const mirroredFox = async (
       (result) => (result.ok ? "removed" : "kept"),
       () => "refused",
     );
-  return { project, fox, calls, deletes, noted, remove };
+  const stop = (force: boolean) => runHost(stopMirror(name, force));
+  return { project, fox, calls, deletes, noted, remove, stop };
 };
 
 it("deleting a mirrored worktree pauses its mirror first, then deletes the copy expecting what its device read of it", async () => {
@@ -865,6 +882,57 @@ it("an original taken by its copy's delete goes only if it still holds what its 
   untouched();
   git(fox.path, "checkout", "-q", fox.branch);
   assert.equal(await take(), "removed");
+  assert.ok(!existsSync(fox.path));
+});
+
+// A stop looks at the pair once, and its copy can be committed to until
+// its delete runs, or be a worktree made at the folder the copy was
+// renamed out of: the delete expects the branch and the tip the two
+// agreed on, and a forced one, of a pair not in step, the branch.
+it("a stop's delete of the copy expects where the two agreed it was, and a forced one its branch", async () => {
+  const agreed = { branch: "fox", tip: PEER_TIP };
+  for (const force of [false, true]) {
+    const { calls, deletes, stop } = await mirroredFox(
+      `stopped-${force}`,
+      async () => ({ ok: true }),
+      { agreed },
+    );
+    assert.deepEqual(await stop(force), { removedCopy: true });
+    assert.deepEqual(calls, ["terminate", "delete copy, fox there"]);
+    assert.deepEqual(deletes, [force ? { branch: "fox" } : agreed]);
+  }
+});
+
+// The copy's end of that: its uncommitted work is the original's too,
+// so only where HEAD is is held to what the stop expects.
+it("a copy taken by its mirror's stop goes only if it is still on the branch and the tip the stop expects", async () => {
+  const { project } = await repoAt("copy-taken");
+  const fox = await create(project, { worktreeName: "fox" });
+  const { branch, branchTip: tip } = holding(fox);
+  const take = (expectHead: { branch: string; tip?: string }) =>
+    runHost(
+      Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
+        worktrees.remove(
+          {
+            projectId: project.id,
+            worktreeId: fox.id,
+            force: true,
+            oneSide: true,
+            expectHead,
+          },
+          () => {},
+        ),
+      ),
+    ).then(
+      () => "removed",
+      () => "refused",
+    );
+  writeFileSync(join(fox.path, "edit.txt"), "uncommitted\n");
+  assert.equal(await take({ branch: "another" }), "refused");
+  git(fox.path, "commit", "-q", "--allow-empty", "-m", "since");
+  assert.equal(await take({ branch, tip }), "refused");
+  assert.ok(existsSync(join(fox.path, "edit.txt")));
+  assert.equal(await take({ branch }), "removed");
   assert.ok(!existsSync(fox.path));
 });
 

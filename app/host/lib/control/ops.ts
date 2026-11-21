@@ -69,6 +69,7 @@ import {
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { scriptEventNotifier } from "@host/ipc/scriptRun";
 import * as Worktrees from "@host/lib/Worktrees";
+import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import {
   BLOCK_REASON,
   blockWords,
@@ -678,6 +679,14 @@ export const mirrorStop = (({ force, ...target }, ctx) =>
         new ControlError("no-mirror", "That worktree isn't mirrored."),
       );
     }
+    const head = Effect.flatMap(
+      findProjectAndWorktree(target.projectId, target.worktreeId),
+      (located) =>
+        Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
+          worktrees.head(located),
+        ),
+    ).pipe(Effect.mapError(hostCallFailure));
+    const before = force === true ? undefined : yield* head;
     let copyStayed = yield* stopMirror(
       afar.api.stop({ session: afar.session.session, force }),
     );
@@ -685,13 +694,19 @@ export const mirrorStop = (({ force, ...target }, ctx) =>
     // removes it through this device's switches, which may have gone
     // off since (the mirror paused by them). The session is gone either
     // way, so this device's own forced delete finishes what the
-    // runner's stop would have.
-    if (copyStayed !== undefined) {
+    // runner's stop would have, unless the copy moved on since the stop
+    // was asked: unforced, the peer found the two in step after that,
+    // and a commit made since is what kept the copy.
+    if (
+      copyStayed !== undefined &&
+      (before === undefined || (yield* head)?.tip === before.tip)
+    ) {
       const removed = yield* (yield* Worktrees.Worktrees).remove(
         {
           projectId: target.projectId,
           worktreeId: target.worktreeId,
           force: true,
+          expectHead: before,
         },
         scriptEventNotifier(ctx),
       );

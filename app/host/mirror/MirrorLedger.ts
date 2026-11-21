@@ -17,7 +17,7 @@ import type {
   MirrorSession,
   MirrorStarting,
 } from "@shigomori/contracts/modules/mirror";
-import type { MovedSource } from "@shigomori/contracts/schemas";
+import type { ExpectedHead, MovedSource } from "@shigomori/contracts/schemas";
 import type { Stopped } from "@shigomori/engine/MirrorsOnDelete";
 import type * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import type * as Views from "@host/lib/Views";
@@ -121,6 +121,7 @@ export class MirrorLedger extends Context.Service<
     readonly endThenDeleteCopy: (
       daemon: Daemon,
       raw: MirrorSessionRaw,
+      expects?: { readonly expectHead?: ExpectedHead | undefined },
     ) => Effect.Effect<string | undefined, MirrorError>;
     readonly endMirrorKeepingCopy: (
       daemon: Daemon,

@@ -8,6 +8,7 @@ import type {
   MirrorGitStatus,
   MirrorSessionRaw,
 } from "@shigomori/contracts/modules/mirror";
+import type { ExpectedHead } from "@shigomori/contracts/schemas";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -73,6 +74,8 @@ export class MirrorEngine extends Context.Service<
     readonly refreshGit: (
       session: string,
     ) => Effect.Effect<MirrorGitStatus | "timed-out" | undefined>;
+    // Where a session's copy was when the two last agreed (gitFollow.ts).
+    readonly copyHead: (session: string) => Required<ExpectedHead> | undefined;
     // The mirror's thread of events, by local worktree (host/mirror/
     // history.ts), and the way a control op adds to it.
     readonly history: (localWorktreeId: string) => readonly MirrorEvent[];
