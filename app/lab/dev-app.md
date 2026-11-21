@@ -52,13 +52,15 @@ A device is made of two folders:
   adopts a pre-2.0 `~/shigomori` that still holds state in place until
   `~/.sm` holds state. Settings > Data location offers to rename it,
   and `sm doctor` warns.
-- **userData.** The app instance: `account.json` (hub credential and
-  the accept-commands switch), `clientConfig.json` (theme,
-  keep reachable, keybindings), `clerk-tokens.json` (Clerk session),
-  `windows.json` (the windows to reopen), `direct-port` (the
-  listener's port, kept across restarts), `cloudflared.pid`. Sign-in state lives here, not in the data dir. It
-  also holds the single-instance lock, so only one app can run per
-  userData.
+- **userData.** The app instance: `colibrii.json` (the device's
+  enrollment on the account service and its listener's port, sealed
+  with `device-store-key`, the key the OS keychain keeps; plain on
+  Linux), `account.json` (the device's name, its icon pick and the
+  accept-commands switch), `clientConfig.json` (theme, keep reachable,
+  keybindings), `clerk-tokens.json` (Clerk session), `windows.json`
+  (the windows to reopen), `cloudflared.pid`. Sign-in state lives
+  here, not in the data dir. It also holds the single-instance lock,
+  so only one app can run per userData.
 
 The logs folder holds `main.log`, the main process's log, and
 `trace.log`, one JSON line for every span that ended (its name, ids,
