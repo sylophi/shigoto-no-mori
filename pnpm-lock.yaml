@@ -1253,7 +1253,7 @@ packages:
     resolution: {integrity: sha512-z6e5XDw6EF06RqkeyEa+qD0dZ2ZbLci99vx3zwDY//XO8X7166tqKJrR2XlQnzVmtcUuJtCd5fCvr9Cu6zzX7w==}
 
   '@colibrii/sdk@file:vendor/colibrii-sdk-0.1.0.tgz':
-    resolution: {integrity: sha512-VEniUiHRv+E9CIr5mYBEhEsZGl6/Hv6nNTLLUBhR9owMU0Xy+fO+lqw6ZDyagTQ61zwMxjNTqiYs7pfPTG62jQ==, tarball: file:vendor/colibrii-sdk-0.1.0.tgz}
+    resolution: {integrity: sha512-EV/3rRPLQFo17TO7Siw3e3Q30Lvf/BmQXzHdVHt2WN/EmVrfUCJJv4sxRRhmwbhDG1772CGnmjxOGxTVT2eJOw==, tarball: file:vendor/colibrii-sdk-0.1.0.tgz}
     version: 0.1.0
     peerDependencies:
       effect: 4.0.2

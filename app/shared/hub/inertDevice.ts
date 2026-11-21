@@ -21,5 +21,6 @@ export const inertDevice = (why: unknown): Device => {
     },
     dial: () => refused,
     wake: Effect.void,
+    wakes: Stream.never,
   };
 };

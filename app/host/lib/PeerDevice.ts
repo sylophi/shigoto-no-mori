@@ -289,6 +289,7 @@ export const layer = (config: AccountServiceConfig) =>
         },
         dial: on((device) => device.dial),
         wake: Effect.flatMap(now, (device) => device.wake),
+        wakes: latest((device) => device.wakes),
       });
     }),
   );
