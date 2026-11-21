@@ -65,7 +65,12 @@ async function stateOf(lab: Lab, tab: Tab): Promise<PageState> {
               ),
             new Promise<null>((done) => setTimeout(() => done(null), 3000)),
           ]).catch(() => null);
-          const rows = [...document.querySelectorAll("aside button")].filter(
+          // A project's header wears its devices' badges too.
+          const rows = [
+            ...document.querySelectorAll(
+              'aside button:not([data-slot="sidebar-project-pick"])',
+            ),
+          ].filter(
             (button) =>
               button.querySelector(`[aria-label="On ${CSS.escape(label)}"]`) !==
                 null && button.querySelector("span") !== null,
@@ -123,8 +128,10 @@ export async function showProject(lab: Lab, tab: Tab): Promise<void> {
   // A desktop window lists its own device's project of the same name
   // too: the host's is the one marked as on the host.
   const project = tab.page
-    .locator("aside")
-    .getByRole("button", { name: lab.host.projectName, exact: true });
+    .locator('aside [data-slot="sidebar-project-pick"]')
+    .filter({
+      has: tab.page.getByText(lab.host.projectName, { exact: true }),
+    });
   const count = await project.count();
   for (let i = 0; i < count; i++) {
     const each = project.nth(i);
