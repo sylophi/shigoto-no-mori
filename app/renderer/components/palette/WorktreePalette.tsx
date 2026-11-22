@@ -25,12 +25,12 @@ import { isEditableTarget, isOverlayOpen } from "@/lib/dom";
 import { useHasLocalHost } from "@/lib/localHost";
 import { readWorktreeVisits, recordWorktreeVisit } from "@/lib/recentWorktrees";
 import { scoreFields } from "@shigomori/ui/lib/fuzzyMatch.ts";
+import { newBranchName } from "@shigomori/contracts/git/branches";
 import {
   buildPaletteEntries,
   createTargets,
   initialPaletteKey,
   isProjectSource,
-  newBranchName,
   leadingCount,
   pageFields,
   projectNames,

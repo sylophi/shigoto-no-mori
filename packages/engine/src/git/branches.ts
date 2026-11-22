@@ -184,6 +184,13 @@ export const makeBranches = ({
       ]);
     });
 
+    const checkoutNewBranch = Effect.fn("Git.checkoutNewBranch")(function* (
+      worktree: string,
+      name: string,
+    ) {
+      yield* run(worktree, ["checkout", "--no-track", "-b", name]);
+    });
+
     const createBranch = Effect.fn("Git.createBranch")(function* (input: {
       readonly repo: string;
       readonly name: string;
@@ -333,6 +340,7 @@ export const makeBranches = ({
       resolvePrimaryRef,
       resolveDefaultBranch,
       checkoutBranch,
+      checkoutNewBranch,
       createBranch,
       renameCurrentBranch,
       renameBranch,

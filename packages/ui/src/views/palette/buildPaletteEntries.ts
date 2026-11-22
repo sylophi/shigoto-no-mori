@@ -15,7 +15,6 @@ import {
   worktreeShelfOf,
 } from "../../lib/forest.ts";
 import { rankByScore, scoreFields } from "../../lib/fuzzyMatch.ts";
-import { sanitizeBranchName } from "@shigomori/contracts/git/branches";
 import { isAnchoredPath } from "@shigomori/contracts/projectPaths";
 import { isHiddenByPrefix } from "@shigomori/contracts/sharedSettings";
 import {
@@ -302,22 +301,6 @@ export function rankPalettePages(
 ): readonly PalettePage[] {
   if (!query) return [];
   return rankByScore(query, pages, pageFields);
-}
-
-// A query as the branch a new worktree would take: the branch inputs'
-// own filter (sanitizeBranchName) over it, a run of whitespace as one
-// dash, then the ref rules that filter leaves to git: no "..", no
-// empty component, none starting with a dot or ending in a dot or
-// ".lock", and no leading dash. Null when nothing usable is left.
-export function newBranchName(query: string): string | null {
-  const name = sanitizeBranchName(query.trim().replace(/\s+/g, "-"))
-    .replace(/\.{2,}/g, ".")
-    .split("/")
-    .map((part) => part.replace(/^\.+/, "").replace(/(\.lock|\.)+$/, ""))
-    .filter(Boolean)
-    .join("/")
-    .replace(/^[-/]+/, "");
-  return name || null;
 }
 
 // A query that is a path on disk or a repo URL: something pasted,

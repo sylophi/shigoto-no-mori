@@ -77,6 +77,12 @@
         "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
         "worktreeId": "e0f76c6cc80a",
         "branch": "fix-stale-locks"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "branch": "feature/new-thing",
+        "create": true
       }
     ],
     "normalizes": [
@@ -85,7 +91,7 @@
           "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
           "worktreeId": "e0f76c6cc80a",
           "branch": "main",
-          "create": false
+          "force": false
         },
         "output": {
           "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
@@ -108,6 +114,12 @@
       {
         "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
         "worktreeId": "e0f76c6cc80a"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "branch": "main",
+        "create": "yes"
       }
     ]
   },

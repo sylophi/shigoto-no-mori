@@ -20,6 +20,7 @@ interface CheckoutBranchInput {
   projectId: string;
   worktreeId: string;
   branch: string;
+  create?: boolean;
 }
 
 export function useCheckoutBranch() {

@@ -99,6 +99,7 @@ function branchTitle(worktree: Worktree, subtitle: boolean) {
             <BranchSwitcherView
               branch={worktree.branch}
               entries={[{ name: "main", kind: "local" }]}
+              taken={new Set(["main", worktree.branch])}
               fetching={false}
               onPick={noop}
               anchorRef={{ current: null }}

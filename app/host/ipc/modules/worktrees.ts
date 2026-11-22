@@ -330,7 +330,9 @@ export const worktreesHandlers = {
   checkoutBranch: (input) =>
     mutateAndDescribe(input, (wt) =>
       Effect.flatMap(Git.Git, (git) =>
-        git.checkoutBranch(wt.path, input.branch),
+        input.create
+          ? git.checkoutNewBranch(wt.path, input.branch)
+          : git.checkoutBranch(wt.path, input.branch),
       ),
     ),
 
