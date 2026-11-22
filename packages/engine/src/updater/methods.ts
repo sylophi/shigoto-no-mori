@@ -53,7 +53,7 @@ export const makeMethods = ({
 
     const { writeShared, appRunning, runningApp } = files;
     const { updates, queryFeed } = feeds;
-    const { installed: installedOf, relaunch } = installation;
+    const { installed: installedOf, relaunch, startsAppOnSwap } = installation;
     const { stageUpdate } = staging;
     const { installStaged } = swap;
     const { waitForRestart, appendInstallLog, noteInstallFailure } = restart;
@@ -208,6 +208,11 @@ export const makeMethods = ({
           ),
         ),
       );
+      if (startsAppOnSwap) {
+        return yield* appendInstallLog(
+          `finish-install: handed ${installed.version} to the installer, which starts the app once it has swapped`,
+        );
+      }
       const relaunched = yield* relaunch(bundle, carried);
       if (!relaunched.ok) {
         const error = new RelaunchFailed({

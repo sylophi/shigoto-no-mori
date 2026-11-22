@@ -2,11 +2,12 @@
 // which every update replaces in place. What Windows keeps a path to
 // (the scheme, the login item, the firewall's answer) names this exe.
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { app, shell } from "electron";
 import { removeCliLaunchers } from "@shared/cliLaunchers";
 import { rendererSchemeName } from "@shared/packaging/rendererScheme.mts";
+import { windowsUpdateExe } from "@shigomori/engine/windowsInstall";
 import { flavor, names } from "../flavor";
 import { appPlace } from "./appPlace";
 
@@ -49,27 +50,30 @@ function removeNotificationShortcut(): void {
 
 // A Squirrel.Windows install moved to Velopack by Squirrel's own update
 // starts this first Velopack version from Squirrel's app-<version>
-// folder, and only then copies Velopack's Update.exe (this version's
-// Squirrel.exe) over its own. Velopack's start, once that copy is in,
-// moves the install to current\ and starts the app from there. True
-// when this start handed over to it.
+// folder, with Squirrel's Update.exe still at the root: Velopack's
+// (this version's Squirrel.exe) replaces it only if its own copy gets
+// in while Squirrel holds the file. So this puts it there, once
+// Squirrel lets go, and Velopack's start then moves the install to
+// current\ and starts the app from there. Squirrel's shortcuts start
+// this again from app-<version> until that happens. True when this
+// start handed over to it.
 export function movedToVelopack(): boolean {
   const folder = path.dirname(process.execPath);
   if (!app.isPackaged || !path.basename(folder).startsWith("app-")) {
     return false;
   }
-  const velopack = readFileSync(path.join(folder, "Squirrel.exe"));
-  const updateExe = path.join(folder, "..", "Update.exe");
-  const copied = () => {
-    try {
-      return velopack.equals(readFileSync(updateExe));
-    } catch {
-      return false;
+  const velopack = path.join(folder, "Squirrel.exe");
+  const updateExe = windowsUpdateExe(process.resourcesPath);
+  if (!readFileSync(velopack).equals(readFileSync(updateExe))) {
+    for (let tries = 0; ; tries++) {
+      try {
+        copyFileSync(velopack, updateExe);
+        break;
+      } catch {
+        if (tries === 120) return false;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+      }
     }
-  };
-  for (let tries = 0; !copied(); tries++) {
-    if (tries === 20) return false;
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
   }
   spawn(updateExe, ["start"], { detached: true, stdio: "ignore" }).unref();
   return true;

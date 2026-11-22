@@ -31,10 +31,6 @@ import type { Installation } from "./installation.ts";
 
 const pruneLeftovers = () => Effect.void;
 
-// Update.exe starts the app once it has swapped (swap).
-const relaunch = () =>
-  Effect.succeed<Ran>({ ok: true, output: "", cause: undefined });
-
 export const makeVelopack = ({
   flavor,
   files,
@@ -48,6 +44,25 @@ export const makeVelopack = ({
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const { download: downloadPath, extract: extractDir } = files.at;
     const { removeAll, makeDirectory, checkDigest } = files;
+
+    // Update.exe, left running once this process exits.
+    const startUpdateExe = Effect.fnUntraced(function* (
+      root: string,
+      args: ReadonlyArray<string>,
+      env: Record<string, string>,
+    ) {
+      const handle = yield* spawner.spawn(
+        ChildProcess.make(path.join(root, "Update.exe"), args, {
+          detached: true,
+          extendEnv: true,
+          env,
+          stdin: "ignore",
+          stdout: "ignore",
+          stderr: "ignore",
+        }),
+      );
+      yield* Effect.asVoid(handle.unref);
+    }, Effect.scoped);
 
     // The install's folder, two above the binary's resources.
     const installed = Effect.fn("Updater.installedVelopack")(function* (
@@ -87,52 +102,42 @@ export const makeVelopack = ({
       return candidate;
     });
 
-    // The package goes to the install's packages folder, Velopack's
-    // place for it, since the staged copy is cleared as this returns.
+    // The package moves to the install's packages folder, Velopack's
+    // place for it (copied, across volumes), since the staged copy is
+    // cleared as this returns.
     const swap = Effect.fn("Updater.swapVelopack")(function* (
       staged: string,
       root: string,
       version: string,
       pid: number,
-      carried?: Relaunched,
+      carried: Relaunched | undefined,
     ) {
       const packages = path.join(root, "packages");
       const nupkg = path.join(packages, packageFile(version));
+      const from = path.join(staged, packageFile(version));
       yield* Effect.gen(function* () {
         yield* removeAll(packages);
         yield* makeDirectory(packages);
-        yield* fs.copyFile(path.join(staged, packageFile(version)), nupkg);
+        yield* fs
+          .rename(from, nupkg)
+          .pipe(Effect.catch(() => fs.copyFile(from, nupkg)));
       }).pipe(
         Effect.mapError(
           (cause) => new SwapFailed({ reason: "move-next-to", cause }),
         ),
       );
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          const handle = yield* spawner.spawn(
-            ChildProcess.make(
-              path.join(root, "Update.exe"),
-              [
-                "apply",
-                "--silent",
-                "--waitPid",
-                String(pid),
-                "--package",
-                nupkg,
-                ...(carried === undefined ? ["--norestart"] : []),
-              ],
-              {
-                detached: true,
-                extendEnv: true,
-                env: carried === undefined ? {} : relaunchEnvVars(carried),
-                stdin: "ignore",
-                stdout: "ignore",
-                stderr: "ignore",
-              },
-            ),
-          );
-          yield* Effect.asVoid(handle.unref);
-        }),
+      yield* startUpdateExe(
+        root,
+        [
+          "apply",
+          "--silent",
+          "--waitPid",
+          String(pid),
+          "--package",
+          nupkg,
+          ...(carried === undefined ? ["--norestart"] : []),
+        ],
+        carried === undefined ? {} : relaunchEnvVars(carried),
       ).pipe(
         Effect.mapError(
           (cause) => new SwapFailed({ reason: "install", cause }),
@@ -140,11 +145,21 @@ export const makeVelopack = ({
       );
     });
 
+    // Velopack's start of the app, as its shortcuts start it.
+    const relaunch = (root: string, carried: Relaunched) =>
+      startUpdateExe(root, ["start"], relaunchEnvVars(carried)).pipe(
+        Effect.as<Ran>({ ok: true, output: "", cause: undefined }),
+        Effect.catch((cause) =>
+          Effect.succeed<Ran>({ ok: false, output: "", cause }),
+        ),
+      );
+
     return {
       installed,
       pruneLeftovers,
       unpack,
       swap,
+      startsAppOnSwap: true,
       relaunch,
     } satisfies Installation;
   });

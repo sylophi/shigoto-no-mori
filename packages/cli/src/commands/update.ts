@@ -9,7 +9,7 @@ import * as Command from "effect/cli/Command";
 import { rest } from "../here.ts";
 import * as Flag from "effect/cli/Flag";
 import { flavorNames } from "@shigomori/engine/flavor";
-import { byHostKind } from "@shigomori/engine/platform";
+import { byFamily, byHostKind } from "@shigomori/engine/platform";
 import { RELAUNCH_ENV } from "@shigomori/engine/relaunchEnv";
 import { flavor, version } from "../build.ts";
 import { UsageError } from "../errors.ts";
@@ -134,9 +134,11 @@ export const update = Command.make(
             `${green("update available: ")}${cyan(result.version)}${dim(` (installed ${result.installed})`)}`,
           );
           return yield* hint;
+        // Windows' installer swaps once this exits, as it stops this. It
+        // stops a run that asked the app too, before that one could say.
         case "updated":
           return yield* out(
-            `updated ${cyan(result.from)}${dim(" -> ")}${bold(green(result.to))}`,
+            `${byFamily({ posix: "updated", windows: "installing" })} ${cyan(result.from)}${dim(" -> ")}${bold(green(result.to))}`,
           );
       }
     }).pipe(Effect.scoped),

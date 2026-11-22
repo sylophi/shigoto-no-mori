@@ -41,6 +41,9 @@ export type Installation = {
     pid: number,
     carried: Relaunched | undefined,
   ) => Effect.Effect<void, InstallError>;
+  // Whether the swap, handed what a relaunch carries, starts the app
+  // itself once it has swapped, so a relaunch after it would be a second.
+  readonly startsAppOnSwap: boolean;
   // The installed app started again, with what the run carries on.
   readonly relaunch: (
     installed: string,

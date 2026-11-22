@@ -8,7 +8,9 @@
 // menu folder named for the publisher. The shortcuts carry the app user
 // model id Electron gives an app with Update.exe beside its folder, so
 // a pinned shortcut, the running app and its notifications are one
-// app's. SM_FLAVOR makes a test flavor's, as for the app.
+// app's. SM_FLAVOR makes a test flavor's, as for the app. Updates run
+// the Update.exe an install began with, so a newer vpk's reaches only
+// new installs.
 //
 // Run: pnpm package:windows
 import { execFileSync } from "node:child_process";

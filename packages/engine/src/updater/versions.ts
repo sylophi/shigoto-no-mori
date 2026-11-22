@@ -217,6 +217,7 @@ export const makeVersions = ({
       pruneLeftovers,
       unpack,
       swap,
+      startsAppOnSwap: false,
       relaunch,
     } satisfies Installation;
   });

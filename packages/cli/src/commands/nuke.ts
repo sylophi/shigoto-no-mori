@@ -277,10 +277,9 @@ export const nuke = Command.make(
         left = true;
         yield* out(`[nuke] left: ${path}: ${why}`);
       }
-      const { removal } = nuked;
-      if (removal !== null && !input.keepApp) yield* removal.remove;
+      const removal = input.keepApp ? null : nuked.removal;
       yield* out(
-        `nuked ${names.appName}${removal === null || input.keepApp ? "" : `, ${removal.place} with it`}`,
+        `nuked ${names.appName}${removal === null ? "" : `, ${removal.place} with it`}`,
       );
       if (left) {
         yield* note(
@@ -288,7 +287,9 @@ export const nuke = Command.make(
             ? `Some of it stayed, as said above. Once it's deleted, ${names.appName}'s next start finishes the nuke.`
             : "Some of it stayed, as said above.",
         );
-        return yield* new ExitCode({ code: 1 });
       }
+      // Last, as a Windows install's removal stops this command.
+      if (removal !== null) yield* removal.remove;
+      if (left) return yield* new ExitCode({ code: 1 });
     }),
 );
