@@ -22,6 +22,7 @@
     "headless": "node scripts/dev-cli.mts && node scripts/fetch-cloudflared.mts --best-effort && node scripts/build-headless.mts --dev && node dist-headless/host.cjs",
     "headless:build": "node scripts/build-headless.mts",
     "package:linux": "node scripts/package-linux.mts",
+    "package:windows": "electron-forge package && node scripts/package-windows.mts",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "typecheck": "$(effect-tsgo get-exe-path)",
@@ -39,13 +40,13 @@
     "villagers:fetch": "bun scripts/fetch-villager-data.mts",
     "extract-icon": "scripts/extract-app-icon.sh",
     "dmg:background": "electron scripts/build-dmg-background.cts",
-    "squirrel:loading": "electron scripts/build-squirrel-loading.cts",
+    "installer:loading": "electron scripts/build-installer-loading.cts",
     "cli:build": "node scripts/build-cli.mts",
     "file-sync:build": "node scripts/build-go.mts file-sync",
     "nativefs:build": "node scripts/build-go.mts nativefs",
     "cli-launcher:build": "node scripts/build-go.mts cli-launcher",
     "cli:install": "node scripts/install-cli.mts",
-    "postinstall": "node scripts/prepare-node-pty.mts && node scripts/prepare-winstaller.mts"
+    "postinstall": "node scripts/prepare-node-pty.mts"
   },
   "dependencies": {
     "@base-ui/react": "catalog:",
@@ -99,7 +100,6 @@
     "@effect/tsgo": "catalog:",
     "@electron-forge/cli": "^7.11.2",
     "@electron-forge/maker-dmg": "^7.11.2",
-    "@electron-forge/maker-squirrel": "^7.11.2",
     "@electron-forge/maker-zip": "^7.11.2",
     "@electron-forge/plugin-fuses": "^7.11.2",
     "@electron-forge/plugin-vite": "^7.11.2",

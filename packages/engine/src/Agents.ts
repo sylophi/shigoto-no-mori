@@ -248,7 +248,7 @@ const make = (binary: string) =>
     // path given. An install's version folder is pruned by updates, so
     // a Linux install's goes through `current`, which an update moves
     // on, and a Windows install's through the CLI's launcher, which runs
-    // the newest version, while the CLI is on PATH.
+    // the installed one, while the CLI is on PATH.
     const realBinary = yield* fs
       .realPath(binary)
       .pipe(Effect.orElseSucceed(() => binary));

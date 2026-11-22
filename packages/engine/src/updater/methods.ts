@@ -53,7 +53,7 @@ export const makeMethods = ({
 
     const { writeShared, appRunning, runningApp } = files;
     const { updates, queryFeed } = feeds;
-    const { installed: installedOf, relaunch } = installation;
+    const { installed: installedOf, relaunch, startsAppOnSwap } = installation;
     const { stageUpdate } = staging;
     const { installStaged } = swap;
     const { waitForRestart, appendInstallLog, noteInstallFailure } = restart;
@@ -155,12 +155,20 @@ export const makeMethods = ({
         phase: "restarting",
         version: staged.value.version,
       });
-      const restarted = yield* waitForRestart(app.value, request.id, input);
+      const restarted = yield* waitForRestart(
+        app.value,
+        request.id,
+        input,
+        startsAppOnSwap,
+      );
       return {
         ok: true,
         status: "updated",
         from: app.value.appVersion,
-        to: restarted.appVersion,
+        to:
+          restarted === "handed-off"
+            ? staged.value.version
+            : restarted.appVersion,
       } satisfies Updated;
     });
 
@@ -199,7 +207,7 @@ export const makeMethods = ({
         yield* failed(error, " (aborting)");
         return yield* error;
       }
-      const installed = yield* installStaged(bundle, pid).pipe(
+      const installed = yield* installStaged(bundle, pid, carried).pipe(
         // The app quit to restart, so the current version comes back rather
         // than leaving it closed. A failed swap has restored it.
         Effect.tapError((error) =>
@@ -208,6 +216,11 @@ export const makeMethods = ({
           ),
         ),
       );
+      if (startsAppOnSwap) {
+        return yield* appendInstallLog(
+          `finish-install: handed ${installed.version} to the installer, which starts the app once it has swapped`,
+        );
+      }
       const relaunched = yield* relaunch(bundle, carried);
       if (!relaunched.ok) {
         const error = new RelaunchFailed({

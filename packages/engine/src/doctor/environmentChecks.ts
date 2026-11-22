@@ -291,7 +291,7 @@ export const makeEnvironmentChecks = ({
         return line.ok(`${installed}, its host running`);
       });
 
-    // On Windows: the install this binary is from, Squirrel's folder two
+    // On Windows: the install this binary is from, Velopack's folder two
     // above its resources.
     const checkWindows = Effect.fnUntraced(function* ({
       version,

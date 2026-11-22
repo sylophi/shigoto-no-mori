@@ -83,7 +83,7 @@ export const ReleaseListCache = Schema.Struct({
 // --- picking a release -------------------------------------------------------
 
 // A platform's asset is "<name>-<platform>-<arch>-<version>" and its
-// archive's ending: a Mac's the zip maker's and Windows' Squirrel's full
+// archive's ending: a Mac's the zip maker's and Windows' Velopack's full
 // package, both uploaded as "update-<platform>-<arch>-<version>"
 // (release.yml), and Linux's the tarball app/scripts/package-linux.mts
 // makes (linuxInstall.ts linuxPackageName).

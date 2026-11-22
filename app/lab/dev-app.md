@@ -339,6 +339,11 @@ removed one the next time they read the registry. A relaunch after
   `--serve` leaves the app up on a third with the port open until it
   is stopped, and deletes that folder. `smlab nuke --yes` then takes
   everything of the build off the machine, its bundle too.
+- **Windows installer** (`pnpm package:windows`, with `SM_FLAVOR` for a
+  test flavor's). Setup.exe and the update package in
+  `out/make/velopack/`. A test flavor installs into its own folder
+  under `%LOCALAPPDATA%`, which its uninstall in Apps & features, or
+  `Update.exe uninstall` there, takes away with its shortcuts.
 - **Packaged prod build** (`pnpm make`). The only way to test a
   packaged scheme registration under the real names. On macOS, without
   `APPLE_SIGNING_IDENTITY` in the build environment the bundle is

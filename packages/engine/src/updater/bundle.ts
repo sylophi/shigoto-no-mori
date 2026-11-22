@@ -317,6 +317,7 @@ export const makeBundle = ({
       pruneLeftovers,
       unpack,
       swap,
+      startsAppOnSwap: false,
       relaunch,
     } satisfies Installation;
   });

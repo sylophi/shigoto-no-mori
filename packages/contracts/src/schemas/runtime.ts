@@ -91,6 +91,7 @@ const UpdaterStatusSchema = Schema.Struct({
       id: Schema.String,
       outcome: Schema.Literals([
         "claimed",
+        "installing",
         "declined",
         "nothing-staged",
         "failed",

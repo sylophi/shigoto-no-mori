@@ -25,8 +25,8 @@ import { makeFiles } from "./updater/files.ts";
 import { makeFeeds } from "./updater/feeds.ts";
 import { makeBundle } from "./updater/bundle.ts";
 import { makeSignatures } from "./updater/signatures.ts";
-import { makeSquirrel } from "./updater/squirrel.ts";
 import { makeStaging } from "./updater/staging.ts";
+import { makeVelopack } from "./updater/velopack.ts";
 import { makeVersions } from "./updater/versions.ts";
 import { byPlatform } from "./platform.ts";
 import { makeSwap } from "./updater/swap.ts";
@@ -122,7 +122,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
       makeBundle({ files, signatures }),
     ),
     linux: makeVersions({ flavor, files }),
-    win32: makeSquirrel({ flavor, files }),
+    win32: makeVelopack({ flavor, files }),
   });
   const staging = yield* makeStaging({ files, feeds, installation });
   const swap = yield* makeSwap({ files, staging, installation });

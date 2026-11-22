@@ -84,9 +84,14 @@ import {
   current as currentPlatform,
 } from "@shigomori/engine/platform";
 import { uppercasePath } from "@shigomori/engine/environment";
-import { handledSquirrelEvent } from "./electron/squirrel";
+import { handledInstallHook, movedToVelopack } from "./electron/install";
 
-if (byFamily({ posix: () => false, windows: handledSquirrelEvent })()) {
+if (
+  byFamily({
+    posix: () => false,
+    windows: () => handledInstallHook() || movedToVelopack(),
+  })()
+) {
   process.exit(0);
 }
 

@@ -1,9 +1,9 @@
-// Renders the card Squirrel shows while the Windows installer works
-// (forge.config.ts, MakerSquirrel's loadingGif) to a looping GIF.
+// Renders the card the Windows installer shows while it works
+// (scripts/package-windows.mts, vpk's splash image) to a looping GIF.
 //
-//   pnpm squirrel:loading
+//   pnpm installer:loading
 //
-// Painted from scripts/squirrel-loading.html (lib/artWindow.mts).
+// Painted from scripts/installer-loading.html (lib/artWindow.mts).
 // Re-run this after a doubutsu palette change. ffmpeg, which has to be
 // on PATH, makes the GIF from the frames.
 const {
@@ -21,16 +21,16 @@ const {
   capture,
 }: typeof import("./lib/artWindow.mts") = require("./lib/artWindow.mts");
 
-const OUT = join(dirname(__dirname), "assets", "squirrel-loading.gif");
+const OUT = join(dirname(__dirname), "assets", "installer-loading.gif");
 
 // One loop of the stripes at the app's own pace (ac-stripe-slide's
 // 0.6s).
 const FPS = 20;
 const FRAMES = 0.6 * FPS;
 
-paintArt("squirrel-loading.html", { width: 420, height: 232 }, async (win) => {
+paintArt("installer-loading.html", { width: 420, height: 232 }, async (win) => {
   await win.webContents.executeJavaScript("document.fonts.ready");
-  const frames = mkdtempSync(join(tmpdir(), "squirrel-loading-"));
+  const frames = mkdtempSync(join(tmpdir(), "installer-loading-"));
   try {
     for (let frame = 0; frame < FRAMES; frame++) {
       // oxlint-disable-next-line no-await-in-loop -- one window paints each frame in turn

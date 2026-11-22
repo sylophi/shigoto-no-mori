@@ -285,7 +285,7 @@ jobs:
           retention-days: 1
 
   # The Windows installer and the package its updates install
-  # (forge.config.ts, MakerSquirrel). Unsigned for now.
+  # (app/scripts/package-windows.mts, Velopack). Unsigned for now.
   release-windows:
     needs: tag
     runs-on: windows-latest
@@ -308,24 +308,20 @@ jobs:
 
       - uses: ./.github/actions/install-workspace
 
-      # Lays the 7-Zip Squirrel packs with and checks node-pty's ConPTY
-      # addon.
+      # Checks node-pty's ConPTY addon.
       - name: Postinstall
         working-directory: .
         run: pnpm run postinstall
 
       - name: Build the installer
-        run: pnpm run make
+        run: pnpm run package:windows
 
       # The terminal command on an empty data dir, then the installer
-      # installing as a user's would: Squirrel's folder with the version
-      # the package carries, the launcher, and that version's own sm.
+      # installing as a user's would: Velopack's folder, the stub, and
+      # the installed app's own sm.
       - name: Install the package
         run: |
-          MADE="$PWD/out/make/squirrel.windows/x64"
-          NUPKG="$(basename "$MADE"/*-full.nupkg)"
-          SQUIRREL_VERSION="${NUPKG#shigomori-}"
-          SQUIRREL_VERSION="${SQUIRREL_VERSION%-full.nupkg}"
+          MADE="$PWD/out/make/velopack"
           SM="$PWD/out/Shigoto no Mori-win32-x64/resources/sm.exe"
           SMOKE="$PWD/scripts/smoke-sm.sh"
           export SHIGOMORI_DATA_DIR="$RUNNER_TEMP/sm-empty-data"
@@ -339,7 +335,7 @@ jobs:
           ls -la "$ROOT"
           test -f "$ROOT/Update.exe"
           test -f "$ROOT/Shigoto no Mori.exe"
-          SM_VERSION="$("$ROOT/app-$SQUIRREL_VERSION/resources/sm.exe" --version)"
+          SM_VERSION="$("$ROOT/current/resources/sm.exe" --version)"
           echo "installed sm --version: $SM_VERSION"
           [[ "$SM_VERSION" == *"${TAG#v}"* ]]
 
@@ -348,7 +344,7 @@ jobs:
       # which finds it by "-win32-<arch>-".
       - name: Name the assets
         run: |
-          MADE=out/make/squirrel.windows/x64
+          MADE=out/make/velopack
           mkdir out/assets
           cp "$MADE"/*-full.nupkg "out/assets/update-win32-x64-${TAG#v}.nupkg"
           cp "$MADE"/*Setup.exe "out/assets/Shigoto.no.Mori-Windows-x64-Setup-${TAG#v}.exe"

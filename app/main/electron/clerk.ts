@@ -21,7 +21,7 @@ import type { TokenStorage } from "@clerk/electron";
 import { clerkTokenStorage } from "./clerkTokenStorage";
 import { clerkFrontendHost } from "@shigomori/contracts/accountServiceConfig";
 import { rendererContentPolicy } from "./contentPolicy";
-import { registerScheme } from "./squirrel";
+import { registerScheme } from "./install";
 import { byFamily } from "@shigomori/engine/platform";
 import {
   RENDERER_SCHEME_HOST,

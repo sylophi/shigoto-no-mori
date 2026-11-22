@@ -137,10 +137,7 @@ export const makeBridge = (version: string) => {
           installs,
           Effect.tryPromise(install).pipe(
             Effect.matchEffect({
-              onSuccess: (outcome) =>
-                outcome === "installing"
-                  ? Effect.void
-                  : noteHandoff({ id, outcome }),
+              onSuccess: (outcome) => noteHandoff({ id, outcome }),
               onFailure: (error) =>
                 noteHandoff({
                   id,

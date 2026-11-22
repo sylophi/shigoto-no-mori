@@ -1,6 +1,6 @@
 // The install's bin folder on the user's PATH on Windows (nativefs
 // user-path), for Settings (host/lib/cli/launchers.ts) and for the
-// uninstall (main/electron/squirrel.ts), which can only wait on it
+// uninstall (main/electron/install.ts), which can only wait on it
 // synchronously.
 import { execFile, spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";

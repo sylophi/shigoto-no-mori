@@ -34,11 +34,14 @@ export const makeRestart = ({ files }: { readonly files: FilesArea }) =>
     // install or an installer that didn't start fails at once. One no app
     // takes is withdrawn, and so is one this run leaves on its way out, so
     // no app picks it up after the asker gave up. A withdraw that finds
-    // it gone was taken meanwhile, and the wait goes on.
+    // it gone was taken meanwhile, and the wait goes on. An install that
+    // starts the app itself once swapped stops this run too, so there the
+    // wait ends as the app hands the install off.
     const waitForRestart = Effect.fn("Updater.waitForRestart")(function* (
       app: AppStatus,
       id: string,
       input: UpdateInput,
+      startsAppOnSwap: boolean,
     ) {
       const start = yield* elapsedMillis;
       let sameVersion = false;
@@ -72,6 +75,9 @@ export const makeRestart = ({ files }: { readonly files: FilesArea }) =>
         if (handoff?.id === id) {
           claimed = true;
           switch (handoff.outcome) {
+            case "installing":
+              if (startsAppOnSwap) return Option.some("handed-off" as const);
+              break;
             case "declined":
             case "nothing-staged":
               return yield* new HandoffFailed({ reason: handoff.outcome });
@@ -93,7 +99,7 @@ export const makeRestart = ({ files }: { readonly files: FilesArea }) =>
           hinted = true;
           yield* report(input, { phase: "waiting-for-restart" });
         }
-        return Option.none<AppStatus>();
+        return Option.none<AppStatus | "handed-off">();
       });
       const restarted = yield* look.pipe(
         Effect.repeat({
