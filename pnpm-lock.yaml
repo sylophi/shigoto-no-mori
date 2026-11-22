@@ -1253,10 +1253,10 @@ packages:
     resolution: {integrity: sha512-z6e5XDw6EF06RqkeyEa+qD0dZ2ZbLci99vx3zwDY//XO8X7166tqKJrR2XlQnzVmtcUuJtCd5fCvr9Cu6zzX7w==}
 
   '@colibrii/sdk@file:vendor/colibrii-sdk-0.1.0.tgz':
-    resolution: {integrity: sha512-EV/3rRPLQFo17TO7Siw3e3Q30Lvf/BmQXzHdVHt2WN/EmVrfUCJJv4sxRRhmwbhDG1772CGnmjxOGxTVT2eJOw==, tarball: file:vendor/colibrii-sdk-0.1.0.tgz}
+    resolution: {integrity: sha512-dKBtDS2JbKZhkwBT27MZMI7mwpNfrvgZnDiF8l8LY6P6lbTDjeSIj31oGyjbcGdCYsvu4uuarn6fMHRlxu8E5w==, tarball: file:vendor/colibrii-sdk-0.1.0.tgz}
     version: 0.1.0
     peerDependencies:
-      effect: 4.0.2
+      effect: 4.1.4
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
