@@ -48,6 +48,6 @@ Each change of state in several steps has one step after which it counts as done
 - **The move into `wt/`** (`WtFolder.ts`): each worktree's move as above. One that can't be made stays stuck, with why and a Retry.
 - **Project removal** (`Registry.ts`, `unregister`): one transaction, its primary's marks, shelf, agent sessions, unshelve time, clone records and icon included.
 - **Project relocate** (`worktrees/relocating.ts`): the new path and what its worktrees kept commit in one transaction.
-- **The updater's swap** (`updater/swap.ts`), by each OS's install: on a Mac one exchange commits it where the filesystem helper can make one, else two renames (`updater/bundle.ts`). On Linux the rename of `current` commits it (`updater/versions.ts`), and on Windows `Update.exe --update` (`updater/squirrel.ts`).
+- **The updater's swap** (`updater/swap.ts`), by each OS's install: on a Mac one exchange commits it where the filesystem helper can make one, else two renames (`updater/bundle.ts`). On Linux the rename of `current` commits it (`updater/versions.ts`), and on Windows Velopack's `Update.exe apply` once the updater exits (`updater/velopack.ts`).
 - **Carry-over** (`CarryOver.ts`): each entry is renamed in whole from a staging folder.
 - **The data-folder lock** (`DataDirLock.ts`) makes a data-folder move the one change under way, and says how. The move and its recovery are `src/dataDirMove.ts`, which the host asks with the checks and holds only it can make (`app/host/lib/dataDirMove.ts`).

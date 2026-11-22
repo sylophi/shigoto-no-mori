@@ -2,6 +2,7 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import type { Relaunched } from "../relaunchEnv.ts";
 import { UpdateInProgress } from "../stagingLock.ts";
 import { APP_QUIT_TIMEOUT, NothingStaged, polling } from "./documents.ts";
 import type { FilesArea } from "./files.ts";
@@ -31,6 +32,7 @@ export const makeSwap = ({
     const installStaged = Effect.fn("Updater.installStaged")(function* (
       installed: string,
       pid: number,
+      carried?: Relaunched,
     ) {
       yield* lock.pipe(
         Effect.retry({
@@ -45,6 +47,7 @@ export const makeSwap = ({
         installed,
         manifest.value.version,
         pid,
+        carried,
       );
       // The update is in: a staged copy left over is this version, which
       // nothing offers again, and the next stage clears it.

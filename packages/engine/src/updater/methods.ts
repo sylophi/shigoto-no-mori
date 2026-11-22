@@ -199,7 +199,7 @@ export const makeMethods = ({
         yield* failed(error, " (aborting)");
         return yield* error;
       }
-      const installed = yield* installStaged(bundle, pid).pipe(
+      const installed = yield* installStaged(bundle, pid, carried).pipe(
         // The app quit to restart, so the current version comes back rather
         // than leaving it closed. A failed swap has restored it.
         Effect.tapError((error) =>

@@ -151,8 +151,8 @@ const linuxApp = (
   };
 };
 
-// A Windows install's version, <root>\app-<version>\resources\<name>,
-// its app quit as its windows' close buttons quit it.
+// A Windows install's app, <root>\current\resources\<name>, quit as its
+// windows' close buttons quit it.
 const windowsApp = (appName: string): NukedApp | null => {
   const resources = dirname(realpathSync(process.execPath));
   const updateExe = windowsUpdateExe(resources);
@@ -162,8 +162,8 @@ const windowsApp = (appName: string): NukedApp | null => {
     Effect.map(table.running(program), (running) => !running),
   );
   return {
-    // The version's own, as Squirrel's launcher doesn't wait for what
-    // it starts.
+    // The app's own exe, as the install's stub doesn't wait for what it
+    // starts.
     start: [join(dirname(resources), program)],
     quit: Effect.suspend(() => {
       spawnSync("taskkill", ["/IM", program], { stdio: "ignore" });
@@ -172,11 +172,12 @@ const windowsApp = (appName: string): NukedApp | null => {
     gone: until(closed, GONE_WITHIN_MS).pipe(Effect.asVoid),
     removal: {
       place: windowsInstallRoot(resources),
-      // Squirrel's uninstall, as Apps & features starts it: the app's
-      // own (main/electron/squirrel.ts), then the install's folder,
-      // this command's among it, so it runs on once this exits.
+      // Velopack's uninstall, as Apps & features starts it but with no
+      // dialogs: the app's own (main/electron/install.ts), then the
+      // shortcuts and the install's folder. It stops what runs from the
+      // install, this command among it, so it runs detached.
       remove: Effect.sync(() =>
-        spawn(updateExe, ["--uninstall"], {
+        spawn(updateExe, ["uninstall", "--silent"], {
           detached: true,
           stdio: "ignore",
         }).unref(),

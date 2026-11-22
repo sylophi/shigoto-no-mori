@@ -36,8 +36,6 @@ import {
 } from "../core/liveness/rateLimit";
 import { log } from "@shared/log";
 import { names } from "../flavor";
-import { byFamily } from "@shigomori/engine/platform";
-import { setLoginItem as setSquirrelLoginItem } from "./squirrel";
 
 // Inert on a build with no account service: the setting exists so a
 // machine stays available to the account, and its UI is unreachable
@@ -72,10 +70,7 @@ function reconcileLaunchAtLogin(): void {
     return;
   }
   try {
-    byFamily({
-      posix: setLoginItem,
-      windows: setSquirrelLoginItem,
-    })(keepReachable);
+    setLoginItem(keepReachable);
   } catch (error) {
     log.error(
       `[liveness] setLoginItemSettings failed: ${errorMessageOf(error)}`,

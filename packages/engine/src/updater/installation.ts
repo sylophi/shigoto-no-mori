@@ -2,7 +2,7 @@
 // every install shares (the feeds, the download, the staging area and
 // its manifest, its lock, the handoff to a running app): a Mac's is the
 // signed bundle (bundle.ts), Linux's a folder per version (versions.ts),
-// Windows' a Squirrel install (squirrel.ts).
+// Windows' Velopack's (velopack.ts).
 import type * as Effect from "effect/Effect";
 import type { Relaunched } from "../relaunchEnv.ts";
 import type { ReleaseInfo } from "../updateFeed.ts";
@@ -31,12 +31,15 @@ export type Installation = {
     release: ReleaseInfo,
     input: UpdateInput,
   ) => Effect.Effect<string, StageError>;
-  // The staged copy of `version` put in place of the installed app.
+  // The staged copy of `version` put in place of the installed app. A
+  // relaunch to follow is `carried`, for an install that starts the app
+  // itself once swapped.
   readonly swap: (
     staged: string,
     installed: string,
     version: string,
     pid: number,
+    carried: Relaunched | undefined,
   ) => Effect.Effect<void, InstallError>;
   // The installed app started again, with what the run carries on.
   readonly relaunch: (

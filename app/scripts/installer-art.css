@@ -1,6 +1,6 @@
 /* What the installer art pages share: the stage and its type, the
    brand plaque and the hint band. Each page (dmg-background.html,
-   squirrel-loading.html) links doubutsu.css first and keeps its own
+   installer-loading.html) links doubutsu.css first and keeps its own
    geometry. */
 html,
 body {

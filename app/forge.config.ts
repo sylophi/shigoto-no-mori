@@ -1,6 +1,5 @@
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { MakerDMG } from "@electron-forge/maker-dmg";
-import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
@@ -11,17 +10,9 @@ import path from "node:path";
 import { config as loadEnv } from "dotenv";
 import { CLI_DIST_DIR, cliBinaryName } from "./shared/packaging/cliDist.mts";
 import { version } from "./package.json";
-import {
-  APP_REPO,
-  APP_REPO_OWNER,
-  flavorNames,
-} from "@shigomori/engine/flavor";
+import { APP_REPO_OWNER, flavorNames } from "@shigomori/engine/flavor";
 import { programFile } from "@shigomori/engine/executables";
 import { byFamily } from "@shigomori/engine/platform";
-import {
-  squirrelPackageId,
-  squirrelVersion,
-} from "@shigomori/engine/windowsInstall";
 import { buildFlavor } from "./shared/packaging/buildFlavor.mts";
 import {
   CLOUDFLARED_BINARY_NAME,
@@ -172,8 +163,8 @@ const config: ForgeConfig = {
     name: names.appName,
     appBundleId: names.bundleId,
     appCopyright: "© 2026 sylophi",
-    // Squirrel's Start menu folder is named for it
-    // (main/electron/squirrel.ts).
+    // The exe's publisher, as the installer's is
+    // (scripts/package-windows.mts).
     win32metadata: { CompanyName: APP_REPO_OWNER },
     // The renderer-origin scheme (main/electron/clerk.ts): packaged
     // builds load the renderer from <scheme>://app, and Clerk's OAuth
@@ -331,22 +322,6 @@ const config: ForgeConfig = {
       ["darwin"],
     ),
     new MakerZIP({}, ["darwin"]),
-    // Windows installs per user into %LOCALAPPDATA%\<name>, named like
-    // the Linux install's folder. The update feed serves its full
-    // .nupkg. The package's version is one Squirrel ranks right, and the
-    // app's own stays the real one. Apps & features fetches its icon
-    // from iconUrl at install. loadingGif is what shows while it
-    // installs (scripts/build-squirrel-loading.cts).
-    new MakerSquirrel(
-      {
-        name: squirrelPackageId(flavor),
-        version: squirrelVersion(version),
-        setupIcon: "assets/icon.ico",
-        loadingGif: "assets/squirrel-loading.gif",
-        iconUrl: `https://raw.githubusercontent.com/${APP_REPO}/main/app/assets/icon.ico`,
-      },
-      ["win32"],
-    ),
   ],
   plugins: [
     new VitePlugin({

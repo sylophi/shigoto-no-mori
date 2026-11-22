@@ -47,13 +47,13 @@
  *
  * 5. The installer artwork links this file on its own:
  *    scripts/dmg-background.html for the dmg and
- *    scripts/squirrel-loading.html for the Windows installer, which
+ *    scripts/installer-loading.html for the Windows installer, which
  *    render against the leaf-wallpaper ::before, the header/footer
  *    band rule and the --doubutsu-* tokens. Both are committed images,
  *    so a broken hook there is invisible until someone opens a
  *    release, and a palette edit means rendering them again
  *    (scripts/build-dmg-background.cts,
- *    scripts/build-squirrel-loading.cts).
+ *    scripts/build-installer-loading.cts).
  *
  * 6. Tailwind utility names (stable public API):
  *    .uppercase, .tracking-wide/-wider/-widest, .font-normal/-medium/
@@ -146,7 +146,7 @@
      elevation above, and the sliding stripe pattern below. Both resolve
      their var()s on the element, so the dark block's edge/stripe values
      flow through without a second definition. The installer artwork
-     (scripts/dmg-background.html, scripts/squirrel-loading.html)
+     (scripts/dmg-background.html, scripts/installer-loading.html)
      renders against these too, which is what keeps its arrow, its bar
      and its cards on the same recipe as the app's hover stripes and
      floating surfaces. */
