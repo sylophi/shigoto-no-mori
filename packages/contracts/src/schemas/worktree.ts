@@ -432,9 +432,11 @@ export const AgentSessionPayloadSchema = Schema.Struct({
   session: Schema.NonEmptyString,
 });
 
+// `create` makes the branch at the worktree's commit first.
 export const CheckoutBranchPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   branch: GitRefNameSchema,
+  create: Schema.optional(Schema.Boolean),
 });
 
 // `base` in place of the primary ref: any ref the repository holds.

@@ -48,6 +48,8 @@ export function BranchSwitcher({
   // was picked survives when several carry the same name).
   const localSet = new Set(branches?.local ?? []);
   const remoteSet = new Set(branches?.remote ?? []);
+  const taken = new Set([worktree.branch, ...localSet, ...remoteSet]);
+  for (const name of remoteSet) taken.add(localBranchOf(name, remoteSet));
   const entries: BranchEntry[] = [];
   for (const name of branches?.local ?? []) {
     if (!occupied.has(name)) entries.push({ name, kind: "local" });
@@ -61,12 +63,14 @@ export function BranchSwitcher({
     <BranchSwitcherView
       branch={worktree.branch}
       entries={entries}
+      taken={taken}
       fetching={isFetching}
-      onPick={(branch) =>
+      onPick={(branch, create) =>
         checkout.mutate({
           projectId: worktree.projectId,
           worktreeId: worktree.id,
           branch,
+          create,
         })
       }
       anchorRef={anchorRef}

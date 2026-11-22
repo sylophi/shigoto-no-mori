@@ -415,6 +415,11 @@ export class Git extends Context.Service<
       branch: string,
       remotes?: readonly string[],
     ) => Effect.Effect<void, GitError>;
+    // A new unpublished branch at the worktree's HEAD, switched onto.
+    readonly checkoutNewBranch: (
+      worktree: string,
+      name: string,
+    ) => Effect.Effect<void, GitError>;
     // A branch at `base` (HEAD without one), tracking it when it is the
     // remote branch of its own name, and otherwise unpublished.
     readonly createBranch: (input: {

@@ -9,6 +9,22 @@ export function sanitizeBranchName(name: string): string {
   return name.replace(INVALID_BRANCH_INPUT_CHARS, "-");
 }
 
+// A query as a new branch's name: the branch inputs' own filter
+// (sanitizeBranchName) over it, a run of whitespace as one dash, then
+// the ref rules that filter leaves to git: no "..", no empty component,
+// none starting with a dot or ending in a dot or ".lock", and no
+// leading dash. Null when nothing usable is left.
+export function newBranchName(query: string): string | null {
+  const name = sanitizeBranchName(query.trim().replace(/\s+/g, "-"))
+    .replace(/\.{2,}/g, ".")
+    .split("/")
+    .map((part) => part.replace(/^\.+/, "").replace(/(\.lock|\.)+$/, ""))
+    .filter(Boolean)
+    .join("/")
+    .replace(/^[-/]+/, "");
+  return name || null;
+}
+
 // No `/`: a folder name is one path segment.
 const INVALID_WORKTREE_NAME_INPUT_CHARS = /[^A-Za-z0-9._-]/g;
 
