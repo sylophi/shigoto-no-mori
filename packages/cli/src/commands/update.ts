@@ -134,8 +134,7 @@ export const update = Command.make(
             `${green("update available: ")}${cyan(result.version)}${dim(` (installed ${result.installed})`)}`,
           );
           return yield* hint;
-        // Windows' installer swaps once this exits, as it stops this. It
-        // stops a run that asked the app too, before that one could say.
+        // Windows' installer swaps once this exits, as it stops this.
         case "updated":
           return yield* out(
             `${byFamily({ posix: "updated", windows: "installing" })} ${cyan(result.from)}${dim(" -> ")}${bold(green(result.to))}`,

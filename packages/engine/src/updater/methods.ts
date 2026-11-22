@@ -155,12 +155,20 @@ export const makeMethods = ({
         phase: "restarting",
         version: staged.value.version,
       });
-      const restarted = yield* waitForRestart(app.value, request.id, input);
+      const restarted = yield* waitForRestart(
+        app.value,
+        request.id,
+        input,
+        startsAppOnSwap,
+      );
       return {
         ok: true,
         status: "updated",
         from: app.value.appVersion,
-        to: restarted.appVersion,
+        to:
+          restarted === "handed-off"
+            ? staged.value.version
+            : restarted.appVersion,
       } satisfies Updated;
     });
 
