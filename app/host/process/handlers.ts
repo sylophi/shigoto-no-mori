@@ -366,7 +366,11 @@ export const rootServices = Layer.mergeAll(
     AccountPeers.of({
       listDevices: withinAccountRead(
         Effect.tryPromise({
-          try: async () => [...(await deviceCalls.listDevices())],
+          // Signed out, there are none.
+          try: async () =>
+            accountIdOf(await deviceCalls.account()) === null
+              ? []
+              : [...(await deviceCalls.listDevices())],
           catch: listDevicesFailure,
         }),
       ),

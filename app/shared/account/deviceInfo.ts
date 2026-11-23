@@ -2,7 +2,14 @@
 // platform and icon are what sm keeps in its data (DeviceDataSchema). An
 // icon this build's catalog lacks reads as its platform's.
 import type { Device, DeviceRecord } from "@colibrii/sdk";
-import { HubRateLimitedError } from "@shigomori/contracts/errors";
+import {
+  errorMessageOf,
+  HubCredentialRejectedError,
+  HubDeviceRevokedError,
+  HubRateLimitedError,
+  HubUnreachableError,
+  HubUpdateRequiredError,
+} from "@shigomori/contracts/errors";
 import {
   fallbackDeviceIcon,
   isDeviceIcon,
@@ -10,7 +17,6 @@ import {
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import type { DevicePort } from "./handlers";
 
@@ -28,18 +34,26 @@ const deviceInfoOf = (record: DeviceRecord): DeviceInfo => {
   };
 };
 
-// The account's devices. The service's rate limit crosses as the
-// contract's, which keeps how long to wait.
+// The account's devices. The service's refusals and its rate limit
+// cross as the contract's, which a window and the terminal word apart.
 const listDevicesOf = (device: Device) =>
   device.devices.list.pipe(
     Effect.map((records) => records.map(deviceInfoOf)),
-    Effect.mapError((error) =>
-      Predicate.isTagged(error, "RateLimited")
-        ? new HubRateLimitedError({
-            retryAfterSeconds: error.retryAfterSeconds,
-          })
-        : error,
-    ),
+    Effect.catchTags({
+      RateLimited: ({ retryAfterSeconds }) =>
+        Effect.fail(new HubRateLimitedError({ retryAfterSeconds })),
+      DeviceRevoked: () => Effect.fail(new HubDeviceRevokedError()),
+      CredentialRejected: () => Effect.fail(new HubCredentialRejectedError()),
+      UpdateRequired: (error) =>
+        Effect.fail(
+          new HubUpdateRequiredError({
+            floor: error.floor,
+            error: error.message,
+          }),
+        ),
+      HubUnreachable: ({ cause }) =>
+        Effect.fail(new HubUnreachableError({ detail: errorMessageOf(cause) })),
+    }),
   );
 
 // The account calls on a Colibrii device, run on it as `onDevice` has it.
