@@ -153,12 +153,12 @@ jobs:
             exit 1
           fi
 
-      # A packaged build with no hub URL is valid but useless for remote
-      # features. An unset repository variable expands to "", so warn
-      # loudly instead of shipping an unconfigured release in silence.
+      # A packaged build with no hub URL or app is valid but useless for
+      # remote features. An unset repository variable expands to "", so
+      # warn loudly instead of shipping an unconfigured release in silence.
       - name: Warn when the account service config is unset
-        if: vars.SM_DEVICE_HUB_URL == '' || vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY == ''
-        run: echo "::warning::SM_DEVICE_HUB_URL or SM_ACCOUNT_CLERK_PUBLISHABLE_KEY is not set as a repository variable, so this build ships with remote features unconfigured"
+        if: vars.SM_DEVICE_HUB_URL == '' || vars.SM_DEVICE_HUB_APP == '' || vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY == ''
+        run: echo "::warning::SM_DEVICE_HUB_URL, SM_DEVICE_HUB_APP or SM_ACCOUNT_CLERK_PUBLISHABLE_KEY is not set as a repository variable, so this build ships with remote features unconfigured"
 
       - name: Build distributables
         env:
