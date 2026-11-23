@@ -1,5 +1,6 @@
 import { useEffect, useEffectEvent, useState } from "react";
 import { EditorFooterView } from "@shigomori/ui/views/shared/EditorFooterView.tsx";
+import { patchClientConfig } from "@/hooks/config/useClientConfig";
 import { useSettingsSave } from "@/hooks/config/useSettingsSave";
 import {
   type ClientFormState,
@@ -83,6 +84,7 @@ import {
   SettingsPageView,
 } from "@shigomori/ui/views/settings/SettingsFormView.tsx";
 import { useApi } from "@/lib/runtime/pageApi";
+import { useRegistry } from "@/lib/runtime/viewHooks";
 
 // The Settings page: one panel per section, picked from the app
 // sidebar (SettingsSidebarNav takes the project tree's place while this
@@ -131,6 +133,7 @@ function SettingsPage({
   editors: ReturnType<typeof useSettingsEditorRegistry>;
 }) {
   const api = useApi();
+  const registry = useRegistry();
   const localDeviceId = api.deviceId;
   const hasLocalHost = useHasLocalHost();
   const save = useSettingsSave();
@@ -305,6 +308,8 @@ function SettingsPage({
           )}
           darkTerminals={form.darkTerminals}
           onDarkTerminalsChange={setField("darkTerminals")}
+          terminalFontSize={form.terminalFontSize}
+          onTerminalFontSizeChange={setField("terminalFontSize")}
           villageLife={form.villageLife}
           onVillageLifeChange={setField("villageLife")}
           villageNews={form.villageNews}
@@ -313,8 +318,13 @@ function SettingsPage({
         <LayoutSectionView
           onReset={() => {
             resetLayout();
+            setField("terminalFontSize")(undefined);
+            void patchClientConfig(api, registry, {
+              terminalFontSize: undefined,
+            });
             if (hasLocalHost) void api.run(api.window.resetLayout());
           }}
+          zoom={hasLocalHost}
           {...(hasLocalHost && {
             widenForSideTerminals: {
               checked: form.widenForSideTerminals,

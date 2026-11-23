@@ -446,6 +446,11 @@ export const ClientConfigSchema = Schema.Struct({
   pauseAnimationsOnBattery: Schema.optional(Schema.Boolean),
   // Terminals stay dark whatever the window's appearance.
   darkTerminals: Schema.optional(Schema.Boolean),
+  // In pixels. Absent, the type scale's (larger on a phone).
+  terminalFontSize: Schema.optional(Schema.Finite),
+  // Desktop only: the windows' zoom (View → Zoom In), as Chromium counts
+  // it, each step a factor of 1.2.
+  zoomLevel: Schema.optional(Schema.Finite),
   // Desktop only: the window grows by the width of terminals docked at
   // its side while they show.
   widenForSideTerminals: Schema.optional(Schema.Boolean),
@@ -510,6 +515,7 @@ const CLIENT_CONFIG_DEFAULTS = {
   darkTerminals: false,
   widenForSideTerminals: false,
   keepReachable: true,
+  zoomLevel: 0,
   projectsSort: "manual",
   groupProjectsByOwner: true,
 } satisfies {

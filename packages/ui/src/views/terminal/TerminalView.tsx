@@ -153,10 +153,15 @@ const macEditKey = (
     ? undefined
     : keys[`${e.metaKey ? "Meta" : "Alt"}+${e.key}`];
 
+// Ctrl+= (or +), Ctrl+- and Ctrl+0, the window's zoom off a Mac.
+const isZoomKey = (e: KeyboardEvent): boolean =>
+  e.ctrlKey && !e.altKey && !e.metaKey && ["=", "+", "-", "0"].includes(e.key);
+
 // Windows Terminal's copy and paste: Ctrl+C copies a selection and
 // interrupts without one, Ctrl+V pastes, and with Shift they only ever
 // copy and paste. Alt+F4 closes the window, as everywhere on Windows.
 const windowsEditKeys = (term: Terminal, e: KeyboardEvent): boolean => {
+  if (isZoomKey(e)) return false;
   if (e.altKey && e.key === "F4") return false;
   if (!e.ctrlKey || e.altKey || e.metaKey) return true;
   const key = e.key.toLowerCase();
@@ -181,6 +186,7 @@ export function TerminalView({
   onLink,
   pathOfFile,
   lineFeedsReturn = false,
+  fontSize,
 }: {
   feed: TerminalFeed;
   // What its shell reads, which keys and dropped files are typed in.
@@ -197,6 +203,8 @@ export function TerminalView({
   // Output written to a file rather than a terminal, whose bare line
   // feeds no terminal turned into new lines.
   lineFeedsReturn?: boolean;
+  // In pixels, rather than the host's.
+  fontSize?: number;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -208,6 +216,9 @@ export function TerminalView({
   const input = useEffectEvent(onInput);
   const fitTo = useEffectEvent(onFit);
   const link = useEffectEvent(onLink);
+  const sizeOf = useEffectEvent(
+    (host: HTMLElement) => fontSize ?? fontSizeOf(host),
+  );
   const [copied, copy] = useCopied(() =>
     termRef.current ? textOf(termRef.current) : "",
   );
@@ -223,7 +234,7 @@ export function TerminalView({
     const doc = host.ownerDocument;
     const family = doc.defaultView?.getComputedStyle(host).fontFamily ?? "";
     void doc.fonts
-      .load(`${fontSizeOf(host)}px ${family}`, "a\ue0b0")
+      .load(`${sizeOf(host)}px ${family}`, "a\ue0b0")
       .catch(() => {})
       .then(() => {
         if (!cancelled) setFontsIn(true);
@@ -245,7 +256,7 @@ export function TerminalView({
       fontFamily:
         host.ownerDocument.defaultView?.getComputedStyle(host).fontFamily,
       fontWeight: fontWeightOf(host),
-      fontSize: fontSizeOf(host),
+      fontSize: sizeOf(host),
       lineHeight: 1,
       cursorBlink: true,
       scrollback: TERMINAL_SCROLLBACK,
@@ -276,6 +287,8 @@ export function TerminalView({
       });
     } else if (viewerOs === "windows") {
       term.attachCustomKeyEventHandler((e) => windowsEditKeys(term, e));
+    } else {
+      term.attachCustomKeyEventHandler((e) => !isZoomKey(e));
     }
     // Unicode 15 widths with graphemes clustered, as Ghostty and Ink TUIs
     // count them: a ZWJ sequence, flag or VS16 emoji takes two cells.
@@ -398,6 +411,16 @@ export function TerminalView({
       proposeRef.current = null;
     };
   }, [feed, fontsIn, lines, lineFeedsReturn]);
+
+  // A new size changes the grid the box has room for, which its box
+  // staying put never says.
+  useEffect(() => {
+    const term = termRef.current;
+    const host = hostRef.current;
+    if (!term || !host) return;
+    term.options.fontSize = sizeOf(host);
+    proposeRef.current?.(false);
+  }, [fontSize]);
 
   // An exited shell takes no keystrokes: the cursor goes, and focus is
   // handed back, so Tab and the app's bare-key shortcuts work again. One

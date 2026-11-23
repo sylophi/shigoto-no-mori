@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ShellSyntax } from "@shigomori/contracts/schemas";
+import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { attachTerminal } from "@/lib/terminalFeed";
 import { inputPieces } from "@/lib/terminalInput";
@@ -23,6 +24,7 @@ export function Terminal({
   const page = useApi();
   const { openUrl } = useOutside();
   const [ended, setEnded] = useState(false);
+  const { data: clientConfig } = useClientConfig();
   // Kept the same while the device and the terminal are (React
   // Compiler), so the view attaches once.
   const feed: TerminalFeed = (screen) =>
@@ -32,6 +34,7 @@ export function Terminal({
       feed={feed}
       syntax={syntax}
       live={!ended}
+      fontSize={clientConfig?.terminalFontSize}
       // A keystroke or a size for a shell on its way out is not worth
       // telling: its end shows.
       onInput={(data) => {

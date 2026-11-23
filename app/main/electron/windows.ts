@@ -24,6 +24,10 @@ import {
   type WebContents,
 } from "electron";
 import * as Schema from "effect/Schema";
+import {
+  clientSetting,
+  storedClientSetting,
+} from "@shigomori/contracts/schemas/config";
 import { windowContract } from "@shigomori/contracts/modules/window";
 import { navContract } from "@shigomori/contracts/modules/nav";
 import { errorMessageOf } from "@shigomori/contracts/errors";
@@ -47,7 +51,11 @@ import { noteWindowFocused, noteWindowGainedFocus } from "../hostProcess";
 import { clerkPublishableKey } from "./account";
 import { broadcast } from "../ipc/register";
 import { rendererSchemeUrl } from "./clerk";
-import { applyThemeSource, readClientConfigSync } from "./clientConfig";
+import {
+  applyThemeSource,
+  readClientConfigSync,
+  updateClientConfig,
+} from "./clientConfig";
 import { attachContextMenu } from "./contextMenu";
 import { attachRenderProcessRecovery } from "./liveness";
 import { forgetWindowMenu, noteMenuWindowFocused } from "./menu";
@@ -98,8 +106,8 @@ type Held = {
   bounds: Rectangle;
   minimized: boolean;
   // How much wider than the user made it the window should be, for the
-  // terminals at its side, how much wider it is, and how far left that
-  // moved it (widenWindow).
+  // terminals at its side (in the page's pixels, which its zoom scales),
+  // how much wider it is, and how far left that moved it (widenWindow).
   wanted: number;
   widened: number;
   shifted: number;
@@ -342,8 +350,15 @@ function create(
   webContents.on("will-navigate", (event, url) => {
     if (url !== webContents.getURL()) event.preventDefault();
   });
-  // A reloaded page shows no terminals yet.
-  webContents.on("did-navigate", () => widenWindow(entry.id, 0));
+  // A reloaded page shows no terminals yet. It takes the zoom the View
+  // menu last set (zoomTo), which a zoomFactor preference would put back
+  // to the one the window opened at on every load.
+  webContents.on("did-navigate", () => {
+    webContents.setZoomLevel(
+      clientSetting(readClientConfigSync(), "zoomLevel"),
+    );
+    widenWindow(entry.id, 0);
+  });
 
   // Both modes load over the renderer scheme rather than file:// or the
   // vite http origin. Clerk requires it (see main/electron/clerk.ts).
@@ -464,6 +479,26 @@ export function openWindow(route: string): void {
             y: from.y + CASCADE,
           },
         },
+  );
+}
+
+// The menu's half steps within Chromium's 25% to 500%.
+const MIN_ZOOM_LEVEL = -7.5;
+const MAX_ZOOM_LEVEL = 8.5;
+
+// Every window takes the zoom, and the width it keeps for its side
+// terminals with it. Kept for the windows opened later and the next
+// launch.
+export function zoomTo(level: number): void {
+  const zoomLevel = Math.min(MAX_ZOOM_LEVEL, Math.max(MIN_ZOOM_LEVEL, level));
+  for (const entry of held) {
+    entry.window.webContents.setZoomLevel(zoomLevel);
+    fitWidth(entry);
+  }
+  void updateClientConfig((config) =>
+    clientSetting(config, "zoomLevel") === zoomLevel
+      ? config
+      : { ...config, zoomLevel: storedClientSetting("zoomLevel", zoomLevel) },
   );
 }
 
@@ -649,14 +684,16 @@ export function widenWindow(windowId: number | undefined, width: number): void {
 // window has no room to give: it waits until it leaves that state.
 function fitWidth(entry: Held): void {
   const { window } = entry;
-  if (entry.wanted === entry.widened || window.isDestroyed()) return;
+  if (window.isDestroyed()) return;
+  const wanted = Math.round(entry.wanted * window.webContents.getZoomFactor());
+  if (wanted === entry.widened) return;
   if (window.isFullScreen() || window.isMaximized()) return;
   const bounds = window.getBounds();
   const { workArea } = screen.getDisplayMatching(bounds);
   const [minWidth = 0] = window.getMinimumSize();
   const next = Math.max(
     minWidth,
-    Math.min(bounds.width + entry.wanted - entry.widened, workArea.width),
+    Math.min(bounds.width + wanted - entry.widened, workArea.width),
   );
   const grown = next - bounds.width;
   const x =
@@ -667,8 +704,8 @@ function fitWidth(entry: Held): void {
         )
       : bounds.x + Math.min(entry.shifted, -grown);
   // Narrowed all the way, what its minimum size kept is the user's now.
-  entry.widened = entry.wanted === 0 ? 0 : entry.widened + grown;
-  entry.shifted = entry.wanted === 0 ? 0 : entry.shifted + bounds.x - x;
+  entry.widened = wanted === 0 ? 0 : entry.widened + grown;
+  entry.shifted = wanted === 0 ? 0 : entry.shifted + bounds.x - x;
   if (grown !== 0) window.setBounds({ ...bounds, x, width: next });
 }
 

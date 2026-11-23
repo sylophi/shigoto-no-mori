@@ -22,6 +22,7 @@ function toClientConfig(state: ClientFormState): ClientConfig {
       state.pauseAnimationsOnBattery,
     ),
     darkTerminals: storedClientSetting("darkTerminals", state.darkTerminals),
+    terminalFontSize: state.terminalFontSize,
     widenForSideTerminals: storedClientSetting(
       "widenForSideTerminals",
       state.widenForSideTerminals,

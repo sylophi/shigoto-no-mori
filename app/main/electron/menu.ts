@@ -24,7 +24,7 @@ import {
 import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
 import type { LaunchToolMenuEntry } from "@shigomori/contracts/schemas";
 import { broadcast } from "../ipc/register";
-import { openWindow, raisePageWindow } from "./windows";
+import { openWindow, raisePageWindow, zoomTo } from "./windows";
 
 // The keymap has nine launch tools, so anything beyond is unreachable.
 const MAX_LAUNCH_TOOL_SHORTCUTS = 9;
@@ -234,22 +234,49 @@ function launchToolMenuItems(): MenuItemConstructorOptions[] {
   ];
 }
 
-// Reload and devtools are developer tooling. A packaged build has no use
-// for them, and ⌘R in prod throws away the renderer's state (mirrors the
-// dev-only "Inspect Element" in the context menu). They are all the
-// View menu holds, so a packaged build has no View menu.
-function devViewMenu(): MenuItemConstructorOptions[] {
-  if (app.isPackaged) return [];
-  return [
-    {
-      label: "View",
-      submenu: [{ role: "reload" }, { role: "toggleDevTools" }],
-    },
-  ];
+const zoomBy =
+  (step: number): MenuItemConstructorOptions["click"] =>
+  (_item, focusedWindow) => {
+    const wc = (focusedWindow as BrowserWindow | undefined)?.webContents;
+    if (wc) zoomTo(wc.getZoomLevel() + step);
+  };
+
+// Chrome's View menu. macOS puts its own Enter Full Screen in it.
+function viewMenu(mac: boolean): MenuItemConstructorOptions {
+  return {
+    label: "View",
+    submenu: [
+      { role: "reload" },
+      { role: "forceReload" },
+      { role: "toggleDevTools" },
+      { type: "separator" },
+      {
+        label: "Actual Size",
+        accelerator: "CmdOrCtrl+0",
+        click: () => zoomTo(0),
+      },
+      { label: "Zoom In", accelerator: "CmdOrCtrl+=", click: zoomBy(0.5) },
+      // ⌘+ too, the same key with Shift.
+      {
+        label: "Zoom In",
+        accelerator: "CmdOrCtrl+Plus",
+        click: zoomBy(0.5),
+        visible: false,
+      },
+      { label: "Zoom Out", accelerator: "CmdOrCtrl+-", click: zoomBy(-0.5) },
+      ...(mac
+        ? []
+        : [
+            { type: "separator" } as const,
+            { role: "togglefullscreen" } as const,
+          ]),
+    ],
+  };
 }
 
 export function buildAppMenu(): void {
   const chords = shownChords();
+  const mac = currentPlatform() === "darwin";
   const template: MenuItemConstructorOptions[] = [
     {
       label: app.name,
@@ -300,11 +327,12 @@ export function buildAppMenu(): void {
         { role: "selectAll" },
       ],
     },
-    ...devViewMenu(),
+    viewMenu(mac),
     {
       label: "Window",
       submenu: [
         { role: "minimize" },
+        ...(mac ? [{ role: "zoom" } as const] : []),
         {
           label: "Close",
           accelerator: "CmdOrCtrl+W",

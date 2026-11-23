@@ -11,6 +11,7 @@ import {
   noteShowing,
   openWindow,
   widenWindow,
+  zoomTo,
 } from "../../electron/windows";
 import { host, hostAddress } from "../../hostProcess";
 
@@ -41,6 +42,7 @@ export const windowHandlers: Handlers<typeof windowContract, HandlerContext> = {
 
   resetLayout: () => {
     forgetTerminalsSize();
+    zoomTo(0);
   },
 
   widen: ({ width }, { windowId }) => {

@@ -26,6 +26,7 @@ export interface ClientFormState {
   themeRotationEvery: ThemeRotation;
   pauseAnimationsOnBattery: boolean;
   darkTerminals: boolean;
+  terminalFontSize: number | undefined;
   widenForSideTerminals: boolean;
   // Whether villager extras show is villageLifeShows' call (the
   // villager data downloaded too), never this field alone.
@@ -64,6 +65,7 @@ export function fromClientConfig(clientConfig: ClientConfig): ClientFormState {
       "pauseAnimationsOnBattery",
     ),
     darkTerminals: clientSetting(clientConfig, "darkTerminals"),
+    terminalFontSize: clientConfig.terminalFontSize,
     widenForSideTerminals: clientSetting(clientConfig, "widenForSideTerminals"),
     villageLife: clientSetting(clientConfig, "villageLife"),
     villageNews: clientSetting(clientConfig, "villageNews"),
