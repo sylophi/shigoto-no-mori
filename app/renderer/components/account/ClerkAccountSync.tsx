@@ -22,8 +22,10 @@
 //   socket reads revoked, until the account layer signs out): sign out
 //   in full, Clerk session included, once per block, so a failing
 //   sign-out doesn't loop. The status may already read signed out by
-//   then. No enrollment runs while the socket reads revoked, nor before
-//   the window has its socket's status. A window with a shared sign-in
+//   then, but it has to have loaded, since it says which sign-out, and
+//   so has Clerk, whose user the enroll guard is then armed for. No
+//   enrollment runs while the socket reads revoked, nor before the
+//   window has its socket's status. A window with a shared sign-in
 //   (status.sharedSignIn, a --clone-login dev profile) drops the account
 //   layer only, since ending the Clerk session would sign every clone
 //   out, and the enroll guard keeps it from enrolling again on the spot.
@@ -77,7 +79,14 @@ export function ClerkAccountSync() {
       signedOutForBlock.current = false;
       return;
     }
-    if (signedOutForBlock.current || signingOut) return;
+    if (
+      !isLoaded ||
+      enrolled === undefined ||
+      signedOutForBlock.current ||
+      signingOut
+    ) {
+      return;
+    }
     signedOutForBlock.current = true;
     armedFor.current = userId ?? null;
     // The one word the user gets on why every peer just vanished: the
@@ -89,7 +98,7 @@ export function ClerkAccountSync() {
       duration: 15_000,
     });
     signOutNow();
-  }, [revoked, signingOut, signOutNow, userId]);
+  }, [revoked, isLoaded, enrolled, signingOut, signOutNow, userId]);
 
   useEffect(() => {
     if (!isLoaded || enrolled === undefined || !configured) return;
