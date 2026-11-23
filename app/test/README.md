@@ -29,6 +29,9 @@ file here, and `lib/` holds what they share.
   and "Discard unticked" leaves it alone.
 - `control.mts`: an unmirror removes the copy only once the follower
   holds it, and never the original.
+- `account-upgrade.mts`: a device signed in on a build before Colibrii
+  reads as waiting to sign in again, not signed out, so its first start
+  after the upgrade keeps its mirrors.
 
 They run one file at a time, each in a process of its own
 (`../vitest.config.ts`), since they spawn real git, the real `sm` and

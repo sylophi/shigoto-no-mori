@@ -18,6 +18,10 @@ export type Profile = {
 export type ProfileStore = {
   readonly read: () => Profile;
   readonly write: (profile: Profile) => void;
+  // Whether the document still holds the enrollment a build before
+  // Colibrii kept in it: the device has yet to sign in again since. The
+  // next write drops it.
+  readonly enrolledBefore: () => boolean;
 };
 
 const decode = Schema.decodeUnknownOption(
@@ -27,6 +31,12 @@ const decode = Schema.decodeUnknownOption(
       deviceIcon: Schema.optional(Schema.Unknown),
       acceptsCommandsFor: Schema.optional(Schema.String),
     }),
+  ),
+);
+
+const decodeEnrolledBefore = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({ credential: Schema.String, accountId: Schema.String }),
   ),
 );
 
@@ -48,4 +58,8 @@ export const profileStore = (storage: {
     };
   },
   write: (profile) => storage.writeRaw(JSON.stringify(profile)),
+  enrolledBefore: () => {
+    const raw = storage.readRaw();
+    return raw !== null && Option.isSome(decodeEnrolledBefore(raw));
+  },
 });

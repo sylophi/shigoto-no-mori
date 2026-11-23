@@ -20,6 +20,7 @@ import { servedHub } from "@shared/hub/bridgeHandlers";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import * as Schedule from "effect/Schedule";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
@@ -99,9 +100,11 @@ import * as HostRpc from "@host/socket/hostRpc";
 import * as MirrorDaemon from "@host/mirror/MirrorDaemon";
 import { dataDir } from "@shared/paths";
 import type { AccountState } from "@colibrii/sdk";
+import { profileFile } from "@shared/account/profileFile";
 import { type AccountFacts, HostAccount } from "@host/lib/HostAccount";
 import { acceptsPeerCommands } from "./account";
 import { deviceCalls } from "./device";
+import { hostFacts } from "./facts";
 import { hubHandlers, peerAdmissions } from "./wires";
 import { log, warnOnFailure } from "@shared/log";
 import * as Graph from "./graph";
@@ -303,6 +306,20 @@ const applyNow = (): Promise<void> =>
       );
 
 export function noteDeviceAccount(state: AccountState): Promise<void> {
+  // Signed out at the start, with a build before Colibrii's enrollment
+  // still in the shell's profile, it is waiting to be signed in again:
+  // the account stays unknown, so the mirror sweep ends nothing (its
+  // device id carries over, and the mirrors resume once it is). A
+  // listing on the account it signs in to ends those with devices
+  // elsewhere.
+  if (
+    reportedAccount === undefined &&
+    Predicate.isTagged(state, "SignedOut") &&
+    !state.removed &&
+    profileFile(join(hostFacts().userDataPath, "account.json")).enrolledBefore()
+  ) {
+    return Promise.resolve();
+  }
   const next = accountIdOf(state);
   if (next === reportedAccount) return Promise.resolve();
   reportedAccount = next;
