@@ -260,7 +260,8 @@ on another device instead (`devices.md`).
   the hub, with its tunnel, until revoked. Leftovers show on the
   account page of any device on the account and can be revoked there.
   See `devices.md`, "Cleaning up". A sign-out made offline (or with
-  the hub down) leaves its device on the account too.
+  the hub down) owes its removal until the device reaches the hub, so
+  a profile deleted before then leaves its device on the account too.
 - **A device revoked while it was off** learns it on its next launch:
   the hub answers its credential as removed, and the app signs out
   exactly as if it had been online for the revoke.

@@ -10,7 +10,7 @@
 // no override that a later, better detection could not move. The pick
 // is made on the device hub, so any row offers it, a peer's included,
 // online or not: every device sees the new mark on its next registry
-// read, the picked one too (shared/account/enroll.ts).
+// read, the picked one too (shared/account/handlers.ts).
 import { ChevronDown } from "lucide-react";
 import {
   DEVICE_ICON_LABELS,

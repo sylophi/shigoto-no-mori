@@ -38,8 +38,8 @@ export type HandlerContext = {
   // from a new one.
   connection: AbortSignal;
   // The AUTHENTICATED deviceId of the calling peer, supplied only by a
-  // wire that verified one: the device link (the connect ticket bound
-  // the hello to a deviceId). The shell's port and the loopback, where
+  // wire that verified one: the device link, whose peer Colibrii
+  // authenticated. The shell's port and the loopback, where
   // every caller is this machine's own, leave it undefined, so a
   // handler that needs a peer identity fails closed on absence.
   callerDeviceId?: string;

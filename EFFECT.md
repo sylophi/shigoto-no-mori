@@ -177,7 +177,7 @@ export const layer = Layer.effect(Registry, make);
   module's tables the layer the loopback and the device link serve it
   from, and runs each call on the graph as it is when the call comes.
 - The host's composition root reaches its graph from the callbacks it
-  hands code that is not Effect (the hub connection, the account
+  hands code that is not Effect (the device calls, the account
   fan-out) through one door,
   `app/host/process/graph.ts`: a layer on top of the graph, so a run
   made before every service is up waits for it, and one made after the
@@ -330,10 +330,10 @@ export const layer = Layer.effect(Registry, make);
 - Contracts are Schema. Every call is an `Rpc` definition in a
   per-module `RpcGroup`. Its payload, success and error schemas are
   the single description of the call for every transport: the device
-  socket, the loopback the shells use, the terminal's control client,
-  the hub's relay. The hub's own routes are an `HttpApi`
+  socket, the loopback the shells use, the terminal's control client.
+  The hub's own routes are an `HttpApi`
   (`packages/contracts/src/hubApi.ts`), each endpoint's schemas the
-  one description of that route for the Worker and the app alike.
+  one description of that route.
 - The per-call classification travels as annotations on the
   definition, read by middleware: `remote` (reaches a peer), `gated`
   (served to a peer only with the command switch on),

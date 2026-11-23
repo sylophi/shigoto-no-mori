@@ -358,8 +358,7 @@ export function noteDeviceRemoved(removed: string): void {
 }
 
 // The services the root provides the graph from its own wiring: the
-// peers' reach, and the account the control ops read, its device
-// registry riding the stored credential.
+// peers' reach, and the account the control ops read.
 export const rootServices = Layer.mergeAll(
   peerReachLayer,
   Layer.succeed(

@@ -322,8 +322,8 @@ apart. The device detects its own shape at enrollment
 another. The hub keeps both the name and the icon, so either can be
 changed on the device's row of any device's account page, online or not,
 and every device draws every other one the same way. The device itself
-takes its own from the hub on each registry read (`syncHubDevice` in
-`shared/account/enroll.ts`).
+takes its own from the hub on each registry read (`listDevices` in
+`shared/account/handlers.ts`).
 
 Rules that keep a machine looking like itself everywhere:
 

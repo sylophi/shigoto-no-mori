@@ -1,6 +1,6 @@
 // A device's name, edited in place on its registry row, this device's
 // or a peer's. The name lives on the device hub (shared/account/
-// enroll.ts updateDevice), so a rename reaches a peer that is offline
+// handlers.ts setDeviceName), so a rename reaches a peer that is offline
 // too, and it takes the new name on its next registry read. Shared by
 // the desktop app ("This device") and the web client ("This browser"),
 // which differ only in how they address this machine -- the rename

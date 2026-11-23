@@ -27,7 +27,7 @@
 //   (status.sharedSignIn, a --clone-login dev profile) drops the account
 //   layer only, since ending the Clerk session would sign every clone
 //   out, and the enroll guard keeps it from enrolling again on the spot.
-//   Any other block (a refused ticket, a superseded socket) changes
+//   Any other block (a refused credential, a superseded socket) changes
 //   nothing here.
 import { useEffect, useRef } from "react";
 import { useAuth } from "@clerk/react";

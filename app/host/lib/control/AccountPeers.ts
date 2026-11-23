@@ -1,5 +1,5 @@
 // The account as the control ops read it (ops.ts, peers.ts): the device
-// registry, which rides the stored credential, and which peers have a
+// registry, and which peers have a
 // direct session up, which is the hub status snapshot's. The root
 // provides it (host/process/handlers.ts). The peers themselves are
 // reached through PeerReach (host/ipc/PeerReach.ts).

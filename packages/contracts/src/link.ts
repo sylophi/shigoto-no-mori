@@ -37,9 +37,8 @@ import type { PushKeys, PushProducerPayload } from "./types.ts";
 // link carries as one message.
 export const LINK_MAX_FRAME_BYTES = 32 * 1024 * 1024 - 10;
 
-// The standard "try again later" a link's listener closes with: at its
-// cap, or unable to check a ticket now (the account's roster
-// unavailable). Nothing against the dialer, which reads it as busy.
+// The standard "try again later" a link's listener closes with at its
+// cap. Nothing against the dialer, which reads it as busy.
 export const CLOSE_TRY_AGAIN = 1013;
 
 // Where the app publishes its loopback listener, in its data dir.

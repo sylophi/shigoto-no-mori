@@ -3,10 +3,9 @@
 // registry plus the hub bridge's live status (hubStatusAtom), on boot,
 // on every hub statusChanged push, and whenever the shared device-list
 // query moves in the cache (which is where account changes, this
-// window's own and everyone else's, land). There is no per-device
-// supervisor here: the one hub socket lives with the bridge (in the
-// host, or in the web shell's page), so a hub device's status derives
-// from the bridge instead of being driven.
+// window's own and everyone else's, land). The one hub socket lives
+// with the bridge (in the host, or in the web shell's page), so a hub
+// device's status derives from the bridge.
 //
 // Each peer's status is buildEntry's, one branch per case.
 import { departed } from "@shigomori/contracts/schemas/config";

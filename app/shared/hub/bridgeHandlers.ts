@@ -158,7 +158,7 @@ export type HubHandlers = {
   // (membership is what "has a direct session" means: the renderer
   // derives connectedness from the keys, and the skew check reads the
   // values), and whether its peer runs this device's commands and
-  // shares with it at all, the connectInfo answer's readings at dial
+  // shares with it at all, the welcome's readings at dial
   // time, moved since by the peer's own pushes (setPeerFact).
   directPeers(): DirectPeerFacts;
   // A peer's account:commandAccessChanged or sharing:changed push:

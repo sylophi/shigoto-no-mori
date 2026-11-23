@@ -219,7 +219,7 @@ export class ModuleOutdatedError extends Schema.TaggedError<ModuleOutdatedError>
 
 export const isModuleOutdatedError = Schema.is(ModuleOutdatedError);
 
-// Terminal for the dial: a redial with the same ticket gets the same
+// Terminal for the dial: a redial with the same token gets the same
 // answer.
 export class LinkRefusedError extends Schema.TaggedError<LinkRefusedError>()(
   "LinkRefusedError",
