@@ -3,9 +3,10 @@
 // (shared/remote/ladder.ts) when a dial fails or a session dies, so a
 // peer whose listener blipped comes back without a click.
 //
-// A peer that never listens (a web client) parks until it re-enters the
-// roster (its app restarted, or our own hub socket came back), or every
-// desktop would redial every open tab forever.
+// A peer that doesn't listen (a web client, or a desktop with direct
+// connections off) climbs to the ladder's top rung and is asked there
+// from then on: a desktop that turns them on may never leave the roster
+// (its new hub socket supersedes an old one the hub didn't hear close).
 //
 // The keeper is the only caller of the bridge's dialPeer, so its state
 // and the session cache can't drift. Pure shared code (no node
@@ -25,7 +26,7 @@ import {
   wakeable,
 } from "@shared/remote/ladder";
 import { coreOutdatedOf } from "@shared/remote/greeting";
-import { DialError, LinkRefusedError } from "@colibrii/sdk";
+import { LinkRefusedError } from "@colibrii/sdk";
 import { errorMessageOf, type OutdatedSide } from "@shigomori/contracts/errors";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
@@ -141,12 +142,6 @@ export const make = (
           // nothing of the peer's build: a session landing clears it.
           const verdict = coreVerdictOf(error);
           if (verdict !== null) noteCore(state, verdict);
-          // A peer that never listens (a web client) has nothing to dial
-          // while it is one, so the loop parks until its roster re-entry
-          // (see the header).
-          if (error instanceof DialError && error.reason === "no-listener") {
-            return yield* Effect.never;
-          }
           return 0;
         }
         const upSince = elapsedMillisUnsafe(clock);
