@@ -437,6 +437,7 @@ export function SceneSidebar({
     <SidebarAsideView>
       <SidebarHeaderView
         hasLocalHost={hasLocalHost}
+        isExperimental={false}
         showDevStyle={false}
         onRevealProd={noop}
       />

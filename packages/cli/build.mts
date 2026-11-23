@@ -17,9 +17,9 @@ if (stamp !== undefined && !/^--version=./.test(stamp)) {
   throw new Error("Give the version as --version=<v>.");
 }
 const version = stamp?.slice("--version=".length) ?? "dev";
-const arch = args
-  .find((arg) => arg.startsWith("--arch="))
-  ?.slice("--arch=".length);
+const arch =
+  args.find((arg) => arg.startsWith("--arch="))?.slice("--arch=".length) ??
+  process.arch;
 const bunOs = process.platform === "win32" ? "windows" : process.platform;
 const outfile =
   args.find((arg) => !arg.startsWith("--")) ??
@@ -34,7 +34,7 @@ execFileSync(
     "--bytecode",
     "--format=esm",
     "src/main.ts",
-    ...(arch === undefined ? [] : [`--target=bun-${bunOs}-${arch}`]),
+    `--target=bun-${bunOs}-${arch}`,
     "--define",
     `SM_FLAVOR="${flavor}"`,
     "--define",

@@ -244,7 +244,6 @@ const config: ForgeConfig = {
         runScript("build-go.mts", "cli-launcher", "--arch", arch);
       }
       runScript("build-cli.mts", "--arch", arch);
-      // Fetch the pinned cloudflared, for the target platform too.
       runScript(
         "fetch-cloudflared.mts",
         "--platform",

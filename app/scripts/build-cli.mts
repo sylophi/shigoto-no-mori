@@ -8,8 +8,6 @@
 // The binary finds the filesystem helper beside itself, as the app's
 // Resources ship them, so the build gets a copy of the one in
 // dist-nativefs/ (build it first, as dev-cli.mts and install-cli.mts do).
-// It is built for this machine's arch, or the one --arch names, as the
-// prePackage hook names the package's.
 //
 // Run: pnpm cli:build [--dev] [--arch arm64]
 import { execFileSync } from "node:child_process";
@@ -34,7 +32,7 @@ const version =
     : JSON.parse(readFileSync(join(appRoot, "package.json"), "utf8")).version;
 
 const archAt = process.argv.indexOf("--arch");
-const arch = archAt >= 0 ? process.argv[archAt + 1] : undefined;
+const arch = archAt >= 0 ? process.argv[archAt + 1] : process.arch;
 
 const outdir = join(appRoot, CLI_DIST_DIR);
 // Bun names a Windows binary .exe whatever it is asked for.
@@ -47,7 +45,7 @@ execFileSync(
     outfile,
     `--flavor=${flavor}`,
     `--version=${version}`,
-    ...(arch === undefined ? [] : [`--arch=${arch}`]),
+    `--arch=${arch}`,
   ],
   { cwd: join(repoRoot, "packages", "cli"), stdio: "inherit" },
 );

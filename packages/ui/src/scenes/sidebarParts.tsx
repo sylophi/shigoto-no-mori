@@ -162,7 +162,20 @@ export function SidebarPartsScene() {
       </ScenePart>
       <div className="flex flex-col gap-6">
         <ScenePart label="Dev build">
-          <SidebarHeaderView hasLocalHost showDevStyle onRevealProd={noop} />
+          <SidebarHeaderView
+            hasLocalHost
+            isExperimental={false}
+            showDevStyle
+            onRevealProd={noop}
+          />
+        </ScenePart>
+        <ScenePart label="Experimental build">
+          <SidebarHeaderView
+            hasLocalHost
+            isExperimental
+            showDevStyle={false}
+            onRevealProd={noop}
+          />
         </ScenePart>
         <ScenePart label="A page's list">
           <SidebarTakeoverSlotView>

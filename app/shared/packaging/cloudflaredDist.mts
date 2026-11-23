@@ -28,6 +28,11 @@ export const CLOUDFLARED_REPOSITORY =
 // the binary.
 type CloudflaredAsset = { name: string; sha256: string };
 
+const WINDOWS_X64: CloudflaredAsset = {
+  name: "cloudflared-windows-amd64.exe",
+  sha256: "411b16d40c8d872243efeb52c550053d00af0a8a97fbb32e730fb8aba429eaa8",
+};
+
 // Keyed by node's `${process.platform}-${process.arch}`, the vocabulary
 // forge's prePackage hook passes too.
 const ASSETS: Record<string, CloudflaredAsset> = {
@@ -43,16 +48,10 @@ const ASSETS: Record<string, CloudflaredAsset> = {
     name: "cloudflared-linux-amd64",
     sha256: "ae5e8add7884b0531d66bbca4570d1de491ff6da51e4ebe7eb160cdf241d9e42",
   },
-  "win32-x64": {
-    name: "cloudflared-windows-amd64.exe",
-    sha256: "411b16d40c8d872243efeb52c550053d00af0a8a97fbb32e730fb8aba429eaa8",
-  },
+  "win32-x64": WINDOWS_X64,
   // Cloudflare publishes no Windows arm64 build, and Windows on Arm runs
   // the x64 one under emulation.
-  "win32-arm64": {
-    name: "cloudflared-windows-amd64.exe",
-    sha256: "411b16d40c8d872243efeb52c550053d00af0a8a97fbb32e730fb8aba429eaa8",
-  },
+  "win32-arm64": WINDOWS_X64,
 };
 
 export function cloudflaredAsset(

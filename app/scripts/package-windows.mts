@@ -10,12 +10,9 @@
 // a pinned shortcut, the running app and its notifications are one
 // app's. SM_FLAVOR makes a test flavor's, as for the app. Updates run
 // the Update.exe an install began with, so a newer vpk's reaches only
-// new installs. It packs this machine's arch, or the one --arch names,
-// which `electron-forge package --arch` must have packaged.
+// new installs.
 //
-// Run: pnpm package:windows, or for arm64 from an x64 machine,
-// `pnpm exec electron-forge package --arch=arm64` then
-// `node scripts/package-windows.mts --arch arm64`
+// Run: pnpm package:windows
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -30,8 +27,6 @@ const { version } = JSON.parse(
   readFileSync(join(appRoot, "package.json"), "utf8"),
 ) as { version: string };
 const id = windowsPackageId(flavor);
-const archAt = process.argv.indexOf("--arch");
-const arch = archAt >= 0 ? process.argv[archAt + 1] : process.arch;
 const noSpaces = (text: string) => text.replaceAll(/\s/g, "");
 
 const run = (args: string[]) =>
@@ -46,9 +41,9 @@ run([
   "--packVersion",
   version,
   "--runtime",
-  `win-${arch}`,
+  `win-${process.arch}`,
   "--packDir",
-  join(appRoot, "out", `${appName}-win32-${arch}`),
+  join(appRoot, "out", `${appName}-win32-${process.arch}`),
   "--mainExe",
   `${appName}.exe`,
   "--packTitle",
