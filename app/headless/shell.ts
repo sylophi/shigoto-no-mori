@@ -24,7 +24,7 @@ const call = <A>(run: () => Promise<A>) =>
 
 export const layer = (
   facts: HostFacts,
-  account: Pick<HeadlessAccount, "setAcceptsCommands" | "changed">,
+  account: Pick<HeadlessAccount, "setAcceptsCommands">,
 ) =>
   Layer.unwrap(
     Effect.map(PubSub.unbounded<UpdaterState>(), (states) => {
@@ -60,7 +60,7 @@ export const layer = (
           stopUpdaterBridge: Effect.promise(updater.releaseBridge),
           migration: () => Effect.void,
           guide: () => refused("This machine has no window to guide."),
-          account: (state) => Effect.promise(() => account.changed(state)),
+          account: () => Effect.void,
           // Plain, in a file only its owner reads: a server has no
           // keychain to keep a key in.
           deviceStoreKey: Effect.succeed(null),

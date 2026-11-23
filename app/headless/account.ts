@@ -11,7 +11,6 @@ import {
   loginContract,
   type LoginStatus,
 } from "@shigomori/contracts/modules/login";
-import type { DeviceAccount } from "@shigomori/contracts/modules/session";
 import { current as currentPlatform } from "@shigomori/engine/platform";
 import * as Effect from "effect/Effect";
 import {
@@ -73,6 +72,9 @@ export function headlessAccount(facts: HostFacts) {
     deviceIdIs = resolve;
   });
   const profile = profileFile(join(facts.userDataPath, "account.json"));
+
+  // The host holds the switch against the account it is on.
+  void noteAcceptsCommands(profile.read().acceptsCommandsFor ?? null);
 
   const account = makeAccountHandlers({
     config: () => config,
@@ -173,26 +175,11 @@ export function headlessAccount(facts: HostFacts) {
       }),
   });
 
-  // The account the device is on, as the host reports it: the switch
-  // for it goes back to the host's gates.
-  let reported: string | null | undefined;
-  const changed = async (state: DeviceAccount) => {
-    const accountId = accountIdOf(state);
-    if (accountId === reported) return;
-    reported = accountId;
-    await noteAcceptsCommands(
-      accountId !== null && profile.read().acceptsCommandsFor === accountId
-        ? accountId
-        : null,
-    );
-  };
-
   return {
     // The login contract, which the loopback serves.
     login,
     setAcceptsCommands: (enabled: boolean) =>
       account.setAcceptsCommands(enabled, null),
-    changed,
     boot: (deviceId: string) => {
       deviceIdIs(deviceId);
       void listDevices();
