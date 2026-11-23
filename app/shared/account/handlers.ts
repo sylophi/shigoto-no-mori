@@ -24,6 +24,7 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Predicate from "effect/Predicate";
 import { joinInFlight } from "@shared/inFlight";
+import { log } from "@shared/log";
 import type { Profile, ProfileStore } from "./profile";
 
 // The device's account calls, wherever the device runs: the host's
@@ -218,7 +219,11 @@ export function makeAccountHandlers(
     const { acceptsCommandsFor: _, ...rest } = store.read();
     store.write(rest);
     await shell.acceptsCommandsChanged(null);
-    await shell.device.signOut();
+    if (!(await shell.device.signOut())) {
+      log.warn(
+        "[account] the account service couldn't be told of this sign-out, so the device owes it until it next reaches the service",
+      );
+    }
   };
 
   // A concurrent enroll (a re-fired renderer effect, two windows) rides
