@@ -133,7 +133,7 @@ export class HubUpgradeRequiredError extends Schema.TaggedError<HubUpgradeRequir
 // v2 builds send no version at all. The connect route needs no check of
 // its own: its ticket comes from a mint, which the floor guards. The
 // last core that talked to this hub: later builds use Colibrii.
-export const HUB_PROTOCOL_FLOOR = 21;
+export const HUB_PROTOCOL_FLOOR = 22;
 
 export const PROTOCOL_HEADER = "sm-protocol";
 
