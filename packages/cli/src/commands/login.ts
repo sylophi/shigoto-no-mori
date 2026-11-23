@@ -62,7 +62,9 @@ export const logout = Command.make("logout", { rest }, () =>
     const { json } = yield* Effect.service(Output);
     const app = (yield* Control.Control).client(loginContract);
     const status = yield* app.status();
-    if (status.signedIn) yield* app.signOut();
+    // Even signed out, since a host upgraded from a build before
+    // Colibrii keeps its mirrors until it is signed in or out.
+    yield* app.signOut();
     if (json) return yield* emit({ ok: true, signedIn: false });
     yield* out(
       status.signedIn ? "Signed out." : "This machine isn't signed in.",

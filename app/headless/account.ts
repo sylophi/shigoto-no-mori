@@ -20,7 +20,7 @@ import {
   type Named,
 } from "@host/lib/control/plan";
 import { deviceCalls } from "@host/process/device";
-import { noteAcceptsCommands } from "@host/process/handlers";
+import { noteAcceptsCommands, noteDeviceAccount } from "@host/process/handlers";
 import * as HostRpc from "@host/socket/hostRpc";
 import { defaultDesktopDeviceName } from "@shared/account/defaultDeviceName";
 import {
@@ -115,7 +115,14 @@ export function headlessAccount(facts: HostFacts) {
           ),
         ),
       ),
-    signOut: () => call(async () => account.signOut(undefined, null)),
+    // Signed out already, the device's state doesn't change, so the host
+    // is told it again to let go of a hold for the upgrade
+    // (noteDeviceAccount).
+    signOut: () =>
+      call(async () => {
+        await account.signOut(undefined, null);
+        await noteDeviceAccount(await deviceCalls.account());
+      }),
     rename: (name) =>
       call(async () => {
         await signedIn();

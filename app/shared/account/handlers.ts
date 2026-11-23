@@ -213,9 +213,7 @@ export function makeAccountHandlers(
       name,
       data: { platform: shell.platform, icon: await iconOf(profile) },
     });
-    if (profile.deviceName === undefined) {
-      shell.profile().write({ ...shell.profile().read(), deviceName: name });
-    }
+    shell.profile().write({ ...shell.profile().read(), deviceName: name });
     return status();
   };
 
