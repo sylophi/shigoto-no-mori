@@ -78,7 +78,7 @@ export type DirectPlane = {
 };
 
 // The words a person reads for each socket a person must act on.
-const BLOCKED = {
+export const BLOCKED = {
   revoked: "this device was removed from the account, sign in again",
   superseded: "another instance of this device took over its connection",
   refused: "the account service no longer takes this device's sign-in",
