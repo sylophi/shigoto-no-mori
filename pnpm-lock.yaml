@@ -351,8 +351,8 @@ importers:
         specifier: 6.14.5
         version: 6.14.5(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@colibrii/sdk':
-        specifier: file:../vendor/colibrii-sdk-0.1.0.tgz
-        version: file:vendor/colibrii-sdk-0.1.0.tgz(bufferutil@4.1.0)(effect@4.1.4)(utf-8-validate@6.0.6)
+        specifier: https://github.com/sylophi/Colibrii/releases/download/v0.1.0/colibrii-sdk-0.1.0.tgz
+        version: https://github.com/sylophi/Colibrii/releases/download/v0.1.0/colibrii-sdk-0.1.0.tgz(bufferutil@4.1.0)(effect@4.1.4)(utf-8-validate@6.0.6)
       '@dnd-kit/core':
         specifier: 'catalog:'
         version: 6.3.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -1252,8 +1252,8 @@ packages:
   '@coinbase/wallet-sdk@4.3.7':
     resolution: {integrity: sha512-z6e5XDw6EF06RqkeyEa+qD0dZ2ZbLci99vx3zwDY//XO8X7166tqKJrR2XlQnzVmtcUuJtCd5fCvr9Cu6zzX7w==}
 
-  '@colibrii/sdk@file:vendor/colibrii-sdk-0.1.0.tgz':
-    resolution: {integrity: sha512-FTEDO8SW9X4EatvXZJronFQd1UY31mutUtKOs7pp2DECFQaCYTWpAMTeRdxl/8ac//bCWxNYKYBoaI0usWWs0A==, tarball: file:vendor/colibrii-sdk-0.1.0.tgz}
+  '@colibrii/sdk@https://github.com/sylophi/Colibrii/releases/download/v0.1.0/colibrii-sdk-0.1.0.tgz':
+    resolution: {integrity: sha512-wRToquwn5oHOa1WkEiZU+ejmWMAH3vhaomWGnBeNKiMaXDoR2hM27JpkTWJgCry9Rj79Wu0f2F3jfT8tHtn/zA==, tarball: https://github.com/sylophi/Colibrii/releases/download/v0.1.0/colibrii-sdk-0.1.0.tgz}
     version: 0.1.0
     peerDependencies:
       effect: 4.1.4
@@ -7723,7 +7723,7 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@colibrii/sdk@file:vendor/colibrii-sdk-0.1.0.tgz(bufferutil@4.1.0)(effect@4.1.4)(utf-8-validate@6.0.6)':
+  '@colibrii/sdk@https://github.com/sylophi/Colibrii/releases/download/v0.1.0/colibrii-sdk-0.1.0.tgz(bufferutil@4.1.0)(effect@4.1.4)(utf-8-validate@6.0.6)':
     dependencies:
       '@noble/ciphers': 2.4.0
       '@noble/curves': 2.4.0
