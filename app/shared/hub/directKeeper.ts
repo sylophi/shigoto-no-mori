@@ -3,10 +3,11 @@
 // (shared/remote/ladder.ts) when a dial fails or a session dies, so a
 // peer whose listener blipped comes back without a click.
 //
-// A peer that doesn't listen (a web client, or a desktop with direct
-// connections off) climbs to the ladder's top rung and is asked there
-// from then on: a desktop that turns them on may never leave the roster
-// (its new hub socket supersedes an old one the hub didn't hear close).
+// A desktop with direct connections off climbs to the ladder's top rung
+// and is asked there from then on: one that turns them on may never
+// leave the roster (its new hub socket supersedes an old one the hub
+// didn't hear close). Web clients, which never listen, aren't given to
+// the keeper (directPlane.ts).
 //
 // The keeper is the only caller of the bridge's dialPeer, so its state
 // and the session cache can't drift. Pure shared code (no node

@@ -224,7 +224,12 @@ export const make = (
         if (!next.includes(id)) log.info(`[hub] ${id} went offline`);
       }
       online = next;
-      keeper.reconcile(online);
+      // A web client, a hub connection per tab, never listens.
+      keeper.reconcile(
+        peers
+          .filter((peer) => peer.connections === "single")
+          .map((peer) => peer.deviceId),
+      );
     });
     yield* deps.device.wakes.pipe(
       Stream.runForEach(() => Effect.sync(() => keeper.dialNow())),
