@@ -305,6 +305,9 @@ export function SettingsAppearanceScene() {
             onPauseAnimationsOnBatteryChange={noop}
             darkTerminals={false}
             onDarkTerminalsChange={noop}
+            terminalFontSize={undefined}
+            onTerminalFontSizeChange={noop}
+            defaultTerminalFontSize={12}
             battery
             lightPalette={
               <ThemePickerView
@@ -350,6 +353,7 @@ export function SettingsAppearanceScene() {
           />
           <LayoutSectionView
             onReset={noop}
+            zoom
             widenForSideTerminals={{ checked: false, onCheckedChange: noop }}
           />
           <SidebarSectionView

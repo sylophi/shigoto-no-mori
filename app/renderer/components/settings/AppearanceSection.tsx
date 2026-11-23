@@ -6,6 +6,7 @@ import {
   type LightTheme,
 } from "@shigomori/ui/lib/themes.ts";
 import { batterySupported } from "@/hooks/ui/usePauseAnimationsOnBattery";
+import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { useHasLocalHost } from "@/lib/localHost";
 import { AppearanceSectionView } from "@shigomori/ui/views/settings/AppearanceSectionView.tsx";
 import { ThemePicker } from "./ThemePicker";
@@ -40,15 +41,20 @@ export function AppearanceSection({
   onPauseAnimationsOnBatteryChange: (next: boolean) => void;
   darkTerminals: boolean;
   onDarkTerminalsChange: (next: boolean) => void;
+  terminalFontSize: number | undefined;
+  onTerminalFontSizeChange: (next: number | undefined) => void;
   villageLife: boolean;
   onVillageLifeChange: (next: boolean) => void;
   villageNews: boolean;
   onVillageNewsChange: (next: boolean) => void;
 }) {
   const hasLocalHost = useHasLocalHost();
+  const phone = usePhoneLayout();
   return (
     <AppearanceSectionView
       {...props}
+      // The type scale's text-xs, the terminals' own (phone.css).
+      defaultTerminalFontSize={phone ? 14 : 12}
       battery={batterySupported}
       lightPalette={
         <ThemePicker

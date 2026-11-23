@@ -12,6 +12,8 @@ const THEMES: { value: Theme; label: string; Icon: typeof Sun }[] = [
   { value: "system", label: "System", Icon: SunMoon },
 ];
 
+const TERMINAL_FONT_SIZES = [10, 11, 12, 13, 14, 16, 18];
+
 const ROTATIONS: { value: ThemeRotation; label: string }[] = [
   { value: "launch", label: "Each launch" },
   { value: "hourly", label: "Hourly" },
@@ -32,6 +34,10 @@ export interface AppearanceSectionViewProps {
   onPauseAnimationsOnBatteryChange: (next: boolean) => void;
   darkTerminals: boolean;
   onDarkTerminalsChange: (next: boolean) => void;
+  terminalFontSize: number | undefined;
+  onTerminalFontSizeChange: (next: number | undefined) => void;
+  // What terminals take with no size of their own.
+  defaultTerminalFontSize: number;
   // A browser without the Battery Status API has nothing to pause on.
   battery: boolean;
   // The two palette picks (ThemePicker).
@@ -54,6 +60,9 @@ export function AppearanceSectionView({
   onPauseAnimationsOnBatteryChange,
   darkTerminals,
   onDarkTerminalsChange,
+  terminalFontSize,
+  onTerminalFontSizeChange,
+  defaultTerminalFontSize,
   battery,
   lightPalette,
   darkPalette,
@@ -121,6 +130,25 @@ export function AppearanceSectionView({
         onCheckedChange={onDarkTerminalsChange}
         label="Always dark terminals"
       />
+      <div className="space-y-2">
+        <p className="text-sm">Terminal font size</p>
+        <SegmentedControl
+          aria-label="Terminal font size"
+          value={String(terminalFontSize ?? defaultTerminalFontSize)}
+          onChange={(next) =>
+            onTerminalFontSizeChange(
+              Number(next) === defaultTerminalFontSize
+                ? undefined
+                : Number(next),
+            )
+          }
+          options={TERMINAL_FONT_SIZES.map((px) => ({
+            value: String(px),
+            label: px === defaultTerminalFontSize ? `${px} (Default)` : px,
+          }))}
+          optionClassName="px-2.5 py-1.5 text-xs whitespace-nowrap tabular-nums"
+        />
+      </div>
       {/* A browser without the Battery Status API has nothing to pause
           on, and neither does the plain look: the wallpaper is doubutsu's. */}
       {battery && (

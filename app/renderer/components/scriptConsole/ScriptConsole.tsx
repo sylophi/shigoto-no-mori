@@ -5,6 +5,7 @@ import {
   type TerminalScreen,
   TerminalView,
 } from "@shigomori/ui/views/terminal/TerminalView.tsx";
+import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
@@ -33,6 +34,7 @@ export function ScriptConsole({
   const deviceLabel = useScopedDeviceLabel();
   const { openUrl } = useOutside();
   const { data: config } = useShigomoriConfig(worktree.projectId);
+  const { data: clientConfig } = useClientConfig();
   const { data: pkg } = usePackageScripts(worktree.projectId, worktree.id);
   const screen = useRef<TerminalScreen | null>(null);
   const feed: TerminalFeed = (next) => {
@@ -72,6 +74,7 @@ export function ScriptConsole({
           // A run with no PTY (a create's setup, an rm's teardown) writes
           // to a file.
           lineFeedsReturn={!state.interactive}
+          fontSize={clientConfig?.terminalFontSize}
           onInput={(data) => scriptRuns.write(key, data)}
           onFit={(cols, rows) => {
             screen.current?.resize(cols, rows);
