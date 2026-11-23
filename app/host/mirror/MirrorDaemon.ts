@@ -40,7 +40,7 @@ import {
   type MirrorSessionRaw,
   MirrorSessionRawSchema,
 } from "@shigomori/contracts/modules/mirror";
-import { BACKOFF_LADDER_MS, restartSchedule } from "@shared/remote/supervisor";
+import { BACKOFF_LADDER_MS, restartSchedule } from "@shared/remote/ladder";
 import { MIRROR_GATEWAY_TOKEN_ENV, MirrorGateway } from "./MirrorGateway";
 
 // A request the daemon did not answer with its session. `detail` is the

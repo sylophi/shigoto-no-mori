@@ -1,4 +1,4 @@
-// The device link a second time, on loopback, for the processes on this
+// The link server (DeviceLink.ts) on loopback, for the processes on this
 // machine: the terminal `sm` (packages/cli/src/Control.ts), the
 // app's windows and its shell. It serves
 // LoopbackGroup (@shigomori/contracts/link): every host call, its pushes
@@ -12,23 +12,77 @@
 // the shell alone over the port they share and written nowhere, opens
 // the shell's session calls too (modules/session.ts).
 //
-// A token in the clear is enough here, where a peer's link needs a
-// sealed socket: loopback traffic never leaves the machine, so only
-// this machine's own processes see it, and a dialer learns the port
-// from the same owner-only file as the token, so nothing else can stand
-// in for the listener it dials.
+// A token in the clear is enough here: loopback traffic never leaves the
+// machine, so only this machine's own processes see it, and a dialer
+// learns the port from the same owner-only file as the token, so nothing
+// else can stand in for the listener it dials.
+import type { IncomingMessage } from "node:http";
+import { type WebSocket, WebSocketServer } from "ws";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FiberSet from "effect/FiberSet";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import {
+  CLOSE_TRY_AGAIN,
   LoopbackFile,
   LoopbackGroup,
   loopbackPartialOf,
 } from "@shigomori/contracts/link";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import { mintHexId } from "@host/lib/hexId";
-import { make as makeLink } from "./DeviceLink";
+import { log } from "@shared/log";
+import { MAX_MESSAGE_BYTES } from "./boundedMessages";
+import { makeServer } from "./DeviceLink";
+
+// Sockets the listener holds at once, a sanity bound against a runaway
+// client.
+const MAX_CONNECTIONS = 64;
+// How long a socket asked to close has before it is cut.
+const TERMINATE_GRACE_MS = 1_500;
+
+// The page origins the upgrade admits beside an origin-less dial (the
+// terminal's, the shell's): the window's own, and a loopback http page
+// (the web client's dev server).
+function isAllowedOrigin(
+  origin: string | undefined,
+  allowedOrigin: string | undefined,
+): boolean {
+  if (origin === undefined) return true;
+  if (allowedOrigin !== undefined && origin === allowedOrigin) return true;
+  try {
+    const url = new URL(origin);
+    return (
+      url.protocol === "http:" &&
+      (url.hostname === "localhost" || url.hostname === "127.0.0.1")
+    );
+  } catch {
+    return false;
+  }
+}
+
+// close() alone is advisory: ws keeps delivering frames for a while.
+// The close frame, then a hard cut.
+function closeThenTerminate(
+  ws: WebSocket,
+  code: number,
+  reason: string,
+  delayMs: number,
+): void {
+  try {
+    ws.close(code, reason);
+  } catch {
+    // Already closing.
+  }
+  setTimeout(() => {
+    try {
+      ws.terminate();
+    } catch {
+      // Already gone.
+    }
+  }, delayMs).unref();
+}
 
 class LoopbackBindError extends Schema.TaggedError<LoopbackBindError>()(
   "LoopbackBindError",
@@ -70,29 +124,63 @@ const make = (options: {
     const fs = yield* FileSystem.FileSystem;
     const token = mintHexId();
     const shellToken = mintHexId();
-    const link = yield* makeLink({
+    const server = yield* makeServer({
       group: LoopbackGroup,
-      local: true,
-      auth: {
-        opens: { token, shellToken },
-        // Its callers command this machine as its owner.
-        isCommandGranted: () => true,
-      },
+      tokens: { token, shellToken },
+      deviceId: options.deviceId,
+      appVersion: options.appVersion,
+      // Its callers command this machine as its owner.
+      isCommandGranted: () => true,
     });
-    yield* link.reconcile(
-      Effect.succeed({
-        port: 0,
-        bindAddress: "127.0.0.1",
-        deviceId: options.deviceId,
-        appVersion: options.appVersion,
-        allowedOrigin: options.allowedOrigin,
+    const runFork = yield* FiberSet.makeRuntime<never>();
+    const wss = new WebSocketServer({
+      host: "127.0.0.1",
+      port: 0,
+      maxPayload: MAX_MESSAGE_BYTES,
+      perMessageDeflate: false,
+      verifyClient: (info: { req: IncomingMessage }) =>
+        isAllowedOrigin(info.req.headers.origin, options.allowedOrigin),
+    });
+    wss.on("connection", (ws) => {
+      if (wss.clients.size > MAX_CONNECTIONS) {
+        closeThenTerminate(ws, CLOSE_TRY_AGAIN, "over capacity", 50);
+        return;
+      }
+      ws.on("error", (error) => {
+        log.warn(`[link] connection error: ${messageOf(error)}`);
+      });
+      runFork(
+        server.accept(ws, {
+          from: "loopback",
+          cut: (code, reason) => closeThenTerminate(ws, code, reason, 250),
+        }),
+      );
+    });
+    yield* Effect.callback<void, LoopbackBindError>((resume) => {
+      wss.once("error", (error) =>
+        resume(
+          Effect.fail(new LoopbackBindError({ reason: messageOf(error) })),
+        ),
+      );
+      wss.once("listening", () => resume(Effect.void));
+    });
+    wss.on("error", (error) => {
+      log.warn(`[link] loopback listener error: ${messageOf(error)}`);
+    });
+    yield* Effect.addFinalizer(() =>
+      Effect.callback<void>((resume) => {
+        const grace = setTimeout(() => {
+          for (const ws of wss.clients) ws.terminate();
+        }, TERMINATE_GRACE_MS);
+        wss.close(() => {
+          clearTimeout(grace);
+          resume(Effect.void);
+        });
       }),
     );
-    const status = yield* link.status;
-    if (!status.listening || status.port === null) {
-      return yield* new LoopbackBindError({ reason: status.error ?? "" });
-    }
-    const port = status.port;
+    const address = wss.address();
+    const port =
+      typeof address === "object" && address !== null ? address.port : 0;
     const content = Schema.encodeSync(LoopbackFile)({
       pid: process.pid,
       port,

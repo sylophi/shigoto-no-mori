@@ -100,6 +100,10 @@ export class DevApp {
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
+        // main.log stamps its lines in local time with no zone, which
+        // the lab's Node and the app's Electron may read by different
+        // rules (their time zone data differ), so both run on UTC.
+        TZ: "UTC",
         ...this.options.env,
         SHIGOMORI_DEBUG_PORT: String(this.debugPort),
       },
@@ -147,7 +151,7 @@ export class DevApp {
     );
     if (!this.options.needsTunnel) return;
     // A tunnel routes in seconds, a new hostname's too. The bound
-    // leaves room for the host's own restarts (host/direct/Tunnel.ts).
+    // leaves room for the tunnel's own restarts (Colibrii's).
     const started = Date.now();
     let told = started;
     await waitFor(
@@ -353,7 +357,9 @@ export class DevApp {
             row,
           );
         if (match === null) continue;
-        const lineAt = new Date(match[1]?.replace(" ", "T") ?? "").getTime();
+        const lineAt = new Date(
+          `${match[1]?.replace(" ", "T") ?? ""}Z`,
+        ).getTime();
         if (lineAt < at) continue;
         lines.push({
           at: lineAt,

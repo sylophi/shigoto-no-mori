@@ -18,14 +18,19 @@
 //   session this process saw (sawSession). No session at boot isn't a
 //   sign-out: the credential is long-lived and independent of Clerk, and
 //   revoking it on a hunch would destroy real state.
-// - The hub closes this device's socket as revoked (it was removed from
-//   the account on another device): sign out in full, Clerk session
-//   included, once per block, so a failing sign-out doesn't loop. A
-//   window with a shared sign-in (status.sharedSignIn, a --clone-login
-//   dev profile) drops the account layer only, since ending the Clerk
-//   session would sign every clone out, and the enroll guard keeps it
-//   from enrolling again on the spot. Any other block (a refused ticket,
-//   a superseded socket) changes nothing here.
+// - The device was removed from the account on another device (the
+//   socket reads revoked, until the account layer signs out): sign out
+//   in full, Clerk session included, once per block, so a failing
+//   sign-out doesn't loop. The status may already read signed out by
+//   then, but it has to have loaded, since it says which sign-out, and
+//   so has Clerk, whose user the enroll guard is then armed for. No
+//   enrollment runs while the socket reads revoked, nor before the
+//   window has its socket's status. A window with a shared sign-in
+//   (status.sharedSignIn, a --clone-login dev profile) drops the account
+//   layer only, since ending the Clerk session would sign every clone
+//   out, and the enroll guard keeps it from enrolling again on the spot.
+//   Any other block (a refused credential, a superseded socket) changes
+//   nothing here.
 import { useEffect, useRef } from "react";
 import { useAuth } from "@clerk/react";
 import {
@@ -33,9 +38,9 @@ import {
   useAccountStatus,
   useEnroll,
 } from "@/hooks/account/useAccount";
-import { credentialRevoked } from "@shared/remote/supervisor";
+import { credentialRevoked } from "@shigomori/contracts/modules/hub";
 import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
-import { useHubBlock } from "@/hooks/remote/useHubStatus";
+import { useHubBlock, useHubStatusKnown } from "@/hooks/remote/useHubStatus";
 import { toast } from "@/lib/toast";
 import { useFinishRedirectSignIn } from "@/hooks/account/useEnrollment";
 
@@ -54,6 +59,7 @@ export function ClerkAccountSync() {
   const armedFor = useRef<string | null>(null);
   const sawSession = useRef(false);
 
+  const hubKnown = useHubStatusKnown();
   const block = useHubBlock();
   const revoked = block !== null && credentialRevoked(block);
   const sharedSignIn = status?.sharedSignIn === true;
@@ -73,8 +79,16 @@ export function ClerkAccountSync() {
       signedOutForBlock.current = false;
       return;
     }
-    if (!enrolled || signedOutForBlock.current || signingOut) return;
+    if (
+      !isLoaded ||
+      enrolled === undefined ||
+      signedOutForBlock.current ||
+      signingOut
+    ) {
+      return;
+    }
     signedOutForBlock.current = true;
+    armedFor.current = userId ?? null;
     // The one word the user gets on why every peer just vanished: the
     // registry's own banner says it too, but that page is replaced by
     // the signed-out panel the moment the sign-out lands.
@@ -84,7 +98,7 @@ export function ClerkAccountSync() {
       duration: 15_000,
     });
     signOutNow();
-  }, [revoked, enrolled, signingOut, signOutNow]);
+  }, [revoked, isLoaded, enrolled, signingOut, signOutNow, userId]);
 
   useEffect(() => {
     if (!isLoaded || enrolled === undefined || !configured) return;
@@ -96,7 +110,7 @@ export function ClerkAccountSync() {
         // Stale other-account credential (a failed sign-out, Clerk
         // account switching): release it before enrolling.
         if (!signOutPending) signOutMutate();
-      } else if (armedFor.current !== userId) {
+      } else if (armedFor.current !== userId && hubKnown && !revoked) {
         armedFor.current = userId;
         enrollMutate(() => getToken({ skipCache: true }));
       }
@@ -109,6 +123,8 @@ export function ClerkAccountSync() {
     }
   }, [
     isLoaded,
+    hubKnown,
+    revoked,
     isSignedIn,
     userId,
     enrolled,

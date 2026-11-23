@@ -30,13 +30,15 @@ import { shellCallsContract } from "./modules/shellCalls.ts";
 import { linkContract, type Welcome } from "./modules/link.ts";
 import type { PushKeys, PushProducerPayload } from "./types.ts";
 
-// Twice layerSchemaBinary's default: a 16 MiB media file crosses as
-// base64 in one frame, about 21.4 MiB with its envelope.
-export const LINK_MAX_FRAME_BYTES = 32 * 1024 * 1024;
+// A frame's body, which the cap counts without its length header (at
+// most 10 bytes): about twice layerSchemaBinary's default, so a 16 MiB
+// media file crosses as base64 in one frame, about 21.4 MiB with its
+// envelope, and the whole frame stays within the 32 MiB a Colibrii
+// link carries as one message.
+export const LINK_MAX_FRAME_BYTES = 32 * 1024 * 1024 - 10;
 
-// The standard "try again later" a link's listener closes with: at its
-// cap, or unable to check a ticket now (the account's roster
-// unavailable). Nothing against the dialer, which reads it as busy.
+// The standard "try again later" a link's listener closes with at its
+// cap. Nothing against the dialer, which reads it as busy.
 export const CLOSE_TRY_AGAIN = 1013;
 
 // Where the app publishes its loopback listener, in its data dir.

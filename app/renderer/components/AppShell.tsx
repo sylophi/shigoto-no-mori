@@ -27,10 +27,7 @@ import { Sidebar } from "@/components/sidebar/Sidebar";
 import { InstallFailedToast } from "@/components/InstallFailedToast";
 import { UpdateReadyToast } from "@/components/UpdateReadyToast";
 import { QueuedMoveToasts } from "@/components/QueuedMoveToasts";
-import {
-  useAccountStatus,
-  useWatchAccountChanges,
-} from "@/hooks/account/useAccount";
+import { useWatchAccountChanges } from "@/hooks/account/useAccount";
 import { useDoctorWatch } from "@/hooks/cli/useDoctor";
 import { useSidebarView } from "@/hooks/projects/useSidebarView";
 import { useOpenProject } from "@/components/sidebar/openProject";
@@ -53,10 +50,7 @@ import { MIGRATION_PATH } from "@/lib/routePaths";
 import { useWindowRoot } from "@/lib/themeRoot";
 import { watchTheme } from "@shigomori/ui/root.tsx";
 import { useMigration } from "@/hooks/useMigration";
-import {
-  migrationOwed,
-  migrationShows,
-} from "@shigomori/contracts/schemas/migration";
+import { migrationShows } from "@shigomori/contracts/schemas/migration";
 import { navContract } from "@shigomori/contracts/modules/nav";
 import { useApi } from "@/lib/runtime/pageApi";
 
@@ -95,14 +89,9 @@ export function AppShell() {
     [navigate, api],
   );
   // The v3 migration's page until the app opens past it, whatever the
-  // window showed: while a step isn't done, or this device's key is due
-  // on a device that migrated now.
+  // window showed: while a step isn't done.
   const migration = useMigration();
-  const { data: account } = useAccountStatus();
-  const migrating =
-    migration != null &&
-    (migrationShows(migration) ||
-      (migrationOwed(migration) && account?.needsDeviceKey === true));
+  const migrating = migration != null && migrationShows(migration);
   useEffect(() => {
     if (migrating && pathname !== MIGRATION_PATH) {
       void navigate({ to: MIGRATION_PATH, replace: true });

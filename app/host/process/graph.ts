@@ -1,6 +1,6 @@
 // The root's one way into the layer graph: the services the listeners
-// serve calls on, and the runs of the root's own callbacks (the hub
-// connection's, the account fan-out's). Its layer sits on top of the
+// serve calls on, and the runs of the root's own callbacks (the device
+// calls', the account fan-out's). Its layer sits on top of the
 // graph (host.ts), so it opens once every service is up: a call or a
 // run before then waits for it, one after the graph failed is refused,
 // and closing the graph turns new runs away and interrupts those still
@@ -13,7 +13,7 @@ import * as Exit from "effect/Exit";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import type * as Tunnel from "@host/direct/Tunnel";
+import type * as PeerDevice from "@host/lib/PeerDevice";
 import type * as HostAccount from "@host/lib/HostAccount";
 import type * as MirrorDaemon from "@host/mirror/MirrorDaemon";
 import type * as Loopback from "@host/socket/Loopback";
@@ -26,7 +26,7 @@ export type GraphServices =
   | HostAccount.HostAccount
   | DeviceLink.DeviceLink
   | Loopback.Loopback
-  | Tunnel.Tunnel
+  | PeerDevice.PeerDevice
   | MirrorDaemon.MirrorDaemon;
 
 class GraphDownError extends Schema.TaggedError<GraphDownError>()(

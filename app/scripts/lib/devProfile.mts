@@ -15,7 +15,6 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -126,22 +125,6 @@ export function parseDevProfileArgs(argv: string[]): DevProfileArgs {
   return out;
 }
 
-function holdsCredential(accountFile: string): boolean {
-  if (!existsSync(accountFile)) return false;
-  try {
-    const doc = JSON.parse(readFileSync(accountFile, "utf8")) as {
-      signedOut?: boolean;
-      parked?: unknown;
-    };
-    // A parked revoke (a sign-out that never reached the hub) is an
-    // enrollment the hub still holds, and the wipe takes the one
-    // credential that could end it.
-    return doc.signedOut !== true || doc.parked !== undefined;
-  } catch {
-    return false;
-  }
-}
-
 // Removes a tree a killed Electron may still be writing into. A wipe
 // usually follows a kill, and a Chromium helper that has not noticed
 // yet can write into userData while the walk is partway through it,
@@ -160,9 +143,9 @@ function rmTree(target: string): void {
 // revoked, so revoking is the tidy way to end a profile, and this is
 // the way to start over after a crash or a hard kill.
 function wipeDevProfile(profile: DevProfile): void {
-  // The file also holds a signed-out remainder (the device's name, a
-  // parked revoke), so only a live credential means enrolled.
-  if (holdsCredential(join(profile.userData, "account.json"))) {
+  // The Colibrii store (host/lib/PeerDevice.ts) holds an enrollment, or
+  // a removal the service never heard of, and is gone once neither.
+  if (existsSync(join(profile.userData, "colibrii.json"))) {
     console.warn(
       `[dev-profile] ${profile.name} may still be enrolled on the device ` +
         "hub. Revoke it from another device's account page if it lingers.",

@@ -1,8 +1,8 @@
 // What crosses the wire between two builds is versioned in parts
 // (README.md, "Wire samples"). The core is what any link needs: the
-// hello and the byte channels (modules/link.ts), the frame encoding,
-// the failure union (errors.ts) and the hub's wire (hubProtocol.ts).
-// Two builds link only on the same core, and the hub's floor is it.
+// greeting a peer link opens with and the loopback's hello, the byte
+// channels (modules/link.ts), the frame encoding and the failure union
+// (errors.ts). Two builds link only on the same core.
 // Every other module another build calls names a version of its own
 // (defineContract), and a call into one the two builds hold at
 // different versions is refused alone (link.ts, outdatedModules). The

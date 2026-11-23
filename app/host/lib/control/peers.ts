@@ -20,7 +20,6 @@ import {
 } from "@shigomori/contracts/modules/mirror";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
-import { byHostKind } from "@shigomori/engine/platform";
 import type { SyncCloneInto } from "@shigomori/contracts/modules/sync";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { tildify } from "@shigomori/contracts/projectPaths";
@@ -63,17 +62,6 @@ const probe = <A, E, R>(asked: Effect.Effect<A, E, R>, late: () => A) =>
     ),
   );
 
-export const signedOut = () =>
-  new ControlError(
-    "signed-out",
-    `This device isn't signed in to an account, so it has no other devices to reach. ${byHostKind(
-      {
-        app: "Sign in from the app first.",
-        headless: "Sign in first (`login`).",
-      },
-    )}`,
-  );
-
 const accountDevices = Effect.flatMap(
   AccountPeers.AccountPeers,
   (account) => account.listDevices,
@@ -83,7 +71,7 @@ export const roster = Effect.gen(function* () {
   const devices = yield* accountDevices;
   const hereId = yield* DeviceId.current;
   const here = devices.find((device) => device.deviceId === hereId);
-  if (here === undefined) return yield* Effect.fail(signedOut());
+  if (here === undefined) return yield* Effect.fail(AccountPeers.signedOut());
   return {
     here: { deviceId: hereId, name: nameOf(here) } as Named,
     peers: peersOf(devices, hereId),

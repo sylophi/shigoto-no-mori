@@ -4,20 +4,17 @@ import { DeviceIdSchema } from "../hubProtocol.ts";
 import { push, defineContract, invoke, view } from "../contract.ts";
 import { VoidSchema } from "../schemas/index.ts";
 
-// The hub socket lives with the bridge, in the host (one per desktop
-// device: the Durable Object supersedes a second) or in the web shell's
-// page, so windows reach peers through it.
+// The device (@colibrii/sdk) lives with the bridge, in the host or in
+// the web client's page, so windows reach peers through it.
 // Client-scoped, so the bridge can never be served back to a peer.
 
+// This device's hub socket. Blocked is what a person must act on: the
+// device was removed from the account, another copy of it took over, its
+// credential was replaced, or the service wants a newer build.
 const HubSocketStatusSchema = Schema.Union([
-  Schema.Struct({ phase: Schema.Literal("idle") }),
+  Schema.Struct({ phase: Schema.Literal("stopped") }),
   Schema.Struct({ phase: Schema.Literal("connecting") }),
   Schema.Struct({ phase: Schema.Literal("connected") }),
-  Schema.Struct({
-    phase: Schema.Literal("backoff"),
-    attempt: Schema.Int,
-    delayMs: Schema.Finite,
-  }),
   Schema.Struct({
     phase: Schema.Literal("blocked"),
     reason: Schema.Literals([
@@ -28,19 +25,21 @@ const HubSocketStatusSchema = Schema.Union([
     ]),
     message: Schema.String,
   }),
-  Schema.Struct({ phase: Schema.Literal("stopped") }),
 ]);
+export type HubSocketStatus = typeof HubSocketStatusSchema.Type;
 
-// off: not wanted (listener down, opted out, signed out). no-binary:
-// wanted, but no usable cloudflared. unconfigured: the Worker has no
-// tunnel env. starting: provisioning, spawning or probing readiness.
-// up: probed routable and advertised. error: the last attempt failed,
-// and a restart is scheduled, or, for a denied provision, nothing
-// retries until the next reconcile.
+// The account let this device go, which the window's Clerk session
+// follows it out on.
+export const credentialRevoked = (status: HubSocketStatus): boolean =>
+  status.phase === "blocked" && status.reason === "revoked";
+
+// off: not listening (opted out, signed out). no-binary: no usable
+// cloudflared. starting: provisioning, spawning or waiting for the
+// hostname to route. up: routes, and is offered. error: the last run
+// failed, and a restart is due.
 const TunnelStateSchema = Schema.Literals([
   "off",
   "no-binary",
-  "unconfigured",
   "starting",
   "up",
   "error",

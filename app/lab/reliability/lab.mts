@@ -3,7 +3,8 @@
 // throws (networkSwitch.mts):
 //
 // - web: the web client's dev server and a Chrome profile of its own
-//   holding its tabs, reaching B through the dev hub over B's tunnel.
+//   holding its tabs, reaching B over B's tunnel, which the Colibrii
+//   instance introduces.
 // - desktop: a second dev app (A), two windows, reaching B over the
 //   LAN, its hub behind a front.
 // - tunnel: a third (C), one window, dialing B's tunnel only
@@ -30,8 +31,8 @@ import {
   type CDPSession,
   type Page,
 } from "playwright-core";
-import { createAccountService } from "../../shared/account/service.ts";
 import { signalIfAlive } from "../../../test/testProcesses.mts";
+import { devSignInToken } from "../devSignIn.mts";
 import { DevApp } from "./devApp.mts";
 import { withPageApi } from "./pageApi.mts";
 import {
@@ -590,9 +591,9 @@ export class Lab {
     this.tabs.splice(this.tabs.indexOf(tab), 1);
   }
 
-  // Signs the browser profile in when it holds no Clerk session: the
-  // hub mints a sign-in token for B's session (B signs in by cloning the
-  // plain dev app's), and the tab redeems it for a session of its own.
+  // Signs the browser profile in when it holds no Clerk session, to the
+  // dev account B is on: a one-time sign-in token (../devSignIn.mts),
+  // which the tab redeems for a session of its own.
   async ensureSignedIn(tab: Tab): Promise<void> {
     const signedIn = () =>
       tab.page.evaluate(() => {
@@ -605,19 +606,8 @@ export class Lab {
       120_000,
     );
     if (await signedIn()) return;
-    this.note(`signing the browser profile in as ${this.hostApp.profile}`);
-    const sessionToken = await this.hostApp
-      .windows()[0]
-      ?.evaluate(() => window.Clerk?.session?.getToken({ skipCache: true }));
-    if (sessionToken === undefined || sessionToken === null) {
-      throw new Error(
-        `${this.hostApp.profile} holds no Clerk session to sign the browser in with`,
-      );
-    }
-    const hubUrl = envFile(".env.local").SM_DEVICE_HUB_URL ?? "";
-    const ticket = await createAccountService({
-      baseUrl: hubUrl,
-    }).signInToken(sessionToken);
+    this.note("signing the browser profile in to the dev account");
+    const ticket = await devSignInToken();
     await tab.page.evaluate(async (redeem) => {
       const clerk = window.Clerk;
       if (clerk === undefined) throw new Error("no Clerk on the page");
@@ -649,23 +639,23 @@ export class Lab {
     }
     await step("the network", () => this.network.restore({ cut: true }));
     // B is kept, unless asked or it read signed out, which the next run
-    // would only wait on again. It goes only once it is up to sign
+    // would only wait on again. An app goes only once it is up to sign
     // itself out, or its device would stay enrolled with no profile to
     // revoke it from.
-    const hostUp = this.hostApp.windows().length > 0;
-    if (this.options.revokeHost && !this.options.keep && !hostUp) {
-      this.note(
-        `${this.hostApp.profile} is kept: it is not up to sign itself out`,
-        "warning",
-      );
-    }
-    const dropped = this.options.keep
-      ? []
-      : apps.filter(
-          (app) =>
-            app !== this.hostApp ||
-            (hostUp && (this.options.revokeHost || app.stuckSignedOut)),
+    const going = (app: DevApp) =>
+      !this.options.keep &&
+      (app !== this.hostApp || this.options.revokeHost || app.stuckSignedOut);
+    const dropped = apps.filter(
+      (app) => going(app) && app.windows().length > 0,
+    );
+    for (const app of apps) {
+      if (going(app) && !dropped.includes(app)) {
+        this.note(
+          `${app.profile} is kept: it is not up to sign itself out`,
+          "warning",
         );
+      }
+    }
     if (!this.options.keep) {
       // The web client's device, and each app's. The browser keeps its
       // Clerk session, so the next run enrolls it again.

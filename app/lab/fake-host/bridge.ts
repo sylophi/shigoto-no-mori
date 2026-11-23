@@ -88,6 +88,7 @@ import type {
   MirrorSession,
 } from "@shigomori/contracts/modules/mirror";
 import type { Link } from "@shared/ipc/transport";
+import { BLOCKED } from "@shared/hub/directPlane";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
@@ -2042,26 +2043,13 @@ function initPresence(): void {
     }
   }
   // ?hubBlocked=update-required: this device's hub socket blocked for
-  // that reason, with the words the hub or the supervisor gives it.
+  // that reason, in the app's words for it.
   const blocked = pose.get("hubBlocked");
-  if (blocked !== null && blocked in BLOCK_MESSAGES) {
-    const reason = blocked as keyof typeof BLOCK_MESSAGES;
-    socketPhase = {
-      phase: "blocked",
-      reason,
-      message: BLOCK_MESSAGES[reason],
-    };
+  if (blocked !== null && blocked in BLOCKED) {
+    const reason = blocked as keyof typeof BLOCKED;
+    socketPhase = { phase: "blocked", reason, message: BLOCKED[reason] };
   }
 }
-
-const BLOCK_MESSAGES = {
-  "update-required":
-    "This version of Shigoto no Mori is too old for the device hub. Update it to connect.",
-  refused:
-    "ticket mint failed: The device hub no longer accepts this device's credential.",
-  revoked: "this device was removed from the account, sign in again",
-  superseded: "another instance of this device took over the device hub",
-};
 
 // ?crowd=<n>: that many more projects on Studio Mac, for the forest at
 // the size where finding a project gets hard. Most hold their primary
@@ -2378,23 +2366,15 @@ export function installFakeHostBridge(
   // signed-out window to show), for the settings that need an account.
   const signedOut =
     !WEB_SHELL && new URLSearchParams(location.search).get("signedOut") === "1";
-  // ?deviceKey=due|lapsed poses a device on a 2.x enrollment (no device
-  // key), which reads signed out until it enrolls again: with its
-  // session live (the enrollment goes by itself, a second and a half),
-  // or lapsed.
-  let keyDue = ["due", "lapsed"].includes(
-    new URLSearchParams(location.search).get("deviceKey") ?? "",
-  );
   const accountStatus = () => ({
     configured: true,
-    signedIn: !signedOut && !keyDue,
+    signedIn: !signedOut,
     accountId: signedOut ? "" : FAKE_ACCOUNT_ID,
     deviceName: WEB_SHELL ? "Chrome on MacBook" : deviceName,
     deviceIcon: deviceIcon ?? detectedIcon(),
     detectedDeviceIcon: detectedIcon(),
     sharedSignIn: false,
     codeSignIn: false,
-    needsDeviceKey: keyDue,
   });
 
   // The engine's forward table, mutated by start/stop so the switches
@@ -2483,12 +2463,7 @@ export function installFakeHostBridge(
     },
     // A pose holds still, so a retry leaves a stuck move stuck.
     "migration:retry": () => {},
-    "account:enroll": async () => {
-      await sleep(1_500);
-      keyDue = false;
-      client.emit("account:changed", { accountId: accountStatus().accountId });
-      return accountStatus();
-    },
+    "account:enroll": () => accountStatus(),
     "account:signOut": () => undefined,
     // ?view=inbox poses the sidebar layout over whatever the fake host session
     // has saved, so a shot can open on either view.

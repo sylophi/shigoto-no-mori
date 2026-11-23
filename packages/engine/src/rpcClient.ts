@@ -26,7 +26,7 @@ export type FlatClient = (
 // pings: Effect's pinger condemns a link with a ping out on the age of
 // its last frame, on the wall clock, so a sleep or a stopped process
 // would cut links both ends still serve (EFFECT.md, section 8). A link
-// to another machine is judged by watchLiveness (liveness.ts), one to
+// to another machine is judged by Colibrii, which carries it, one to
 // this machine's own app by nothing here. Pings still go every
 // `pingInterval`, for a far end that times a quiet link out. One
 // socket, no redial: a dropped link is its owner's to dial again.

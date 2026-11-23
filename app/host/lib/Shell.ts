@@ -3,6 +3,7 @@
 // stay there). The root provides it over the port the shell handed
 // over (process/host.ts).
 import type { CallFailure } from "@shigomori/contracts/errors";
+import type { DeviceAccount } from "@shigomori/contracts/modules/session";
 import type { UpdaterState } from "@shigomori/contracts/schemas";
 import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
 import type {
@@ -69,8 +70,15 @@ export class Shell extends Context.Service<
     readonly guide: (
       payload: GuideDrivePayload,
     ) => Effect.Effect<GuideReply, CallFailure>;
-    // This device's command switch, which the shell keeps on the
-    // account's record. Refused signed out.
+    // This device's place on the account, told at start and on every
+    // change.
+    readonly account: (state: DeviceAccount) => Effect.Effect<void>;
+    // The key the Colibrii store is sealed with (PeerDevice.ts), null
+    // where the shell has no keychain to keep one in. A failure is a
+    // keychain that could not be had, never a reason to store plain.
+    readonly deviceStoreKey: Effect.Effect<string | null, CallFailure>;
+    // This device's command switch, which the shell keeps for the
+    // account. Refused signed out.
     readonly setAcceptsCommands: (
       enabled: boolean,
     ) => Effect.Effect<void, CallFailure>;

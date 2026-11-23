@@ -62,8 +62,8 @@ function sharesData(deviceLabel: string): string {
 }
 
 // Whether THIS device may command a device: the other machine's own
-// "allow control from other devices" switch, as its connectInfo answer
-// and its live push report it (HubStatus.peerAcceptsCommands, carried
+// "allow control from other devices" switch, as its welcome and its
+// live push report it (HubStatus.peerAcceptsCommands, carried
 // on the registry entry). A reading for the UI only (the app's useCommandAccess): the peer's direct
 // listener enforces the switch on every call regardless.
 export interface CommandAccess {

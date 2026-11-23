@@ -6,15 +6,13 @@ import { HexId32Schema } from "../schemas/hexId.ts";
 import { VoidSchema } from "../schemas/void.ts";
 import { strict } from "../schemas/strict.ts";
 
-// Between devices the socket is sealed (a ticket and a Noise handshake),
-// so both ends know who the other is before the hello. The hello names
-// the connection and supersedes the device's older links, so a dialer
-// opens every candidate at once and says hello on one at a time.
+// A link between devices is Colibrii's (@colibrii/sdk), which proves
+// both ends and carries the greeting below before the link opens. The
+// loopback's opens with link:hello and the host's token instead.
 
 const AppVersionSchema = Schema.String.check(Schema.isMaxLength(64));
 
-// A desktop holds one link to a host (a second supersedes the first), a
-// web client one per tab.
+// What dials the loopback, which it keeps no record of.
 const DeviceKindSchema = Schema.Literals(["desktop", "web"]);
 export type DeviceKind = typeof DeviceKindSchema.Type;
 
@@ -22,14 +20,10 @@ const HelloSchema = strict(
   Schema.Struct({
     deviceId: DeviceIdSchema,
     deviceKind: DeviceKindSchema,
-    // So a host tells a web device's tabs apart, and a redial replaces its
-    // own stale link and no other.
     connectionId: HexId32Schema,
     appVersion: AppVersionSchema,
     // The core's (protocol.ts).
     protocolVersion: Schema.Int,
-    // The loopback's token. A device link has none: its ticket opened the
-    // socket.
     token: Schema.optional(Schema.String.check(Schema.isMaxLength(64))),
   }),
 );
@@ -44,6 +38,30 @@ const WelcomeSchema = Schema.Struct({
   versions: Schema.Record(Schema.String, Schema.Int),
 });
 export type Welcome = typeof WelcomeSchema.Type;
+
+// A peer link's greeting, as Colibrii's app hello, welcome and refusal
+// carry it. JSON, and plain, so a build on another core reads enough of
+// it to refuse, or to show why it was refused.
+export const PeerHelloSchema = Schema.Struct({
+  appVersion: AppVersionSchema,
+  coreVersion: Schema.Int,
+});
+export type PeerHello = typeof PeerHelloSchema.Type;
+
+export const PeerWelcomeSchema = Schema.Struct({
+  appVersion: AppVersionSchema,
+  versions: Schema.Record(Schema.String, Schema.Int),
+  // The host's switches as the link opens. Their pushes move them after.
+  acceptsCommands: Schema.Boolean,
+  sharesData: Schema.Boolean,
+});
+export type PeerWelcome = typeof PeerWelcomeSchema.Type;
+
+// The refusal of a dialer on another core.
+export const PeerRefusalSchema = Schema.Struct({
+  hostVersion: Schema.Int,
+  clientVersion: Schema.Int,
+});
 
 // Minted by the opener before the call that attaches the far end.
 const ChannelSchema = strict(Schema.Struct({ channelId: HexId32Schema }));

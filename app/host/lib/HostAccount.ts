@@ -1,32 +1,25 @@
-// The account as the host knows it: the facts its shell hands over at
-// start and after every change (main/electron/account.ts keeps the
-// credential in the keychain and the Clerk session; the host never
-// opens either), with the hub's account service for them. Null is
-// signed out, or a build with no account service, which the hub
-// socket, the device link's listener and the tunnel all read as "stop".
-// Until the shell's first report the account is unknown, not signed
-// out: a host started again under a running shell may still be on one.
-import type { AccountFacts } from "@shigomori/contracts/modules/session";
-import {
-  type AccountService,
-  createAccountService,
-} from "@shared/account/service";
+// The account as the host knows it: the one its Colibrii device is
+// enrolled under (PeerDevice.ts), with the command switch the shell
+// keeps for it. Null is signed out, or a build with no account service.
+// Until the device's first report the account is unknown, not signed
+// out: a host started again may still be on one.
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 
-export type Account = { readonly reported: boolean } & (
-  | { readonly facts: null; readonly service: null }
-  | { readonly facts: AccountFacts; readonly service: AccountService }
-);
-
-export const UNREPORTED: Account = {
-  reported: false,
-  facts: null,
-  service: null,
+export type AccountFacts = {
+  readonly accountId: string;
+  readonly acceptsCommands: boolean;
 };
+
+export type Account = {
+  readonly reported: boolean;
+  readonly facts: AccountFacts | null;
+};
+
+export const UNREPORTED: Account = { reported: false, facts: null };
 
 export class HostAccount extends Context.Service<
   HostAccount,
@@ -48,17 +41,7 @@ export const layer = Layer.effect(
       set: Effect.fn("HostAccount.set")((next: AccountFacts | null) =>
         SubscriptionRef.modify(account, (previous) => [
           previous,
-          next === null
-            ? { reported: true, facts: null, service: null }
-            : {
-                reported: true,
-                facts: next,
-                service:
-                  previous.facts !== null &&
-                  previous.facts.hubUrl === next.hubUrl
-                    ? previous.service
-                    : createAccountService({ baseUrl: next.hubUrl }),
-              },
+          { reported: true, facts: next },
         ]),
       ),
     }),

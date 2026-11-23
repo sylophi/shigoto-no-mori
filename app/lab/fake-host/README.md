@@ -35,7 +35,7 @@ Some ways to use it:
   poses the hub socket's status, or makes a worktree appear behind the
   app's back, to see how a screen already open reacts. The socket is a
   pose: the web shell here runs on a fixture page api and never
-  dials (`web/hub/` does not run), so a redial or its trace is the
+  dials (no Colibrii device runs), so a redial or its trace is the
   real web client's (`../reliability/README.md`).
 - **A slow host.** `window.fakeHost.setLatency(ms)` has every answer
   from then on come that late, to see what a list, a fold or a dialog
@@ -122,11 +122,6 @@ Poses ride the URL:
   state (`MIGRATION_POSES` in the fixtures' `stepsFixtures.ts`),
   for its page (`?to=/migration`). Without it there is nothing to
   migrate, and the page opens the app.
-- `?deviceKey=due|lapsed`: the desktop on a 2.x enrollment (no device
-  key), which reads signed out until it enrolls again, with its Clerk
-  session live (the enrollment goes by itself, in a second and a half)
-  or lapsed (the sign-in waits on its button). Pairs with
-  `?migration=`.
 - `?fresh=1`: Studio Mac a fresh install with no project, for the
   home a fresh install opens on.
 - `?windows=sm,mb`: the devices on Windows, by the same keys, with

@@ -16,7 +16,7 @@ export const sharingContract = defineContract(
   view("watch", VoidSchema, Schema.Boolean, { remote: false, gated: false }),
   invoke("set", Schema.Boolean, VoidSchema, { remote: false, gated: true }),
   // The switch as it now stands. A peer hears it whether or not this
-  // device shares, beside the connectInfo answer's sharesData: it is
+  // device shares, beside the welcome's sharesData: it is
   // how the peer's status follows the switch (HubStatus.peerSharesData).
   push("changed", Schema.Boolean, { remote: true }),
 );

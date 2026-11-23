@@ -19,14 +19,10 @@ export function ClerkProvider({ children }: ClerkProviderProps) {
   return children;
 }
 
-// ?deviceKey=lapsed: the session gone with the key still owed.
-const lapsed =
-  new URLSearchParams(location.search).get("deviceKey") === "lapsed";
-
 export function useAuth() {
   return {
     isLoaded: true,
-    isSignedIn: !lapsed,
+    isSignedIn: true,
     userId: FAKE_ACCOUNT_ID,
     getToken: async () => "fake-session-token",
   };

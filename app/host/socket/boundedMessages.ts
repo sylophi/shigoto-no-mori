@@ -3,7 +3,7 @@
 // stream backed by a queue hands over everything waiting: a terminal's
 // output a slow window has not taken, a peer's view relayed through
 // hub:watchPeer. Unbounded, that is one frame past what the far end's
-// decoder takes (LINK_MAX_FRAME_BYTES, 32 MiB), which fails it, and
+// decoder takes (LINK_MAX_FRAME_BYTES, about 32 MiB), which fails it, and
 // holds the link for as long as the frame takes besides.
 // So a piece is cut into messages of at most MAX_MESSAGE_BYTES, by an
 // upper bound on their encoded size; a single value past it goes alone.

@@ -177,7 +177,7 @@ export const layer = Layer.effect(Registry, make);
   module's tables the layer the loopback and the device link serve it
   from, and runs each call on the graph as it is when the call comes.
 - The host's composition root reaches its graph from the callbacks it
-  hands code that is not Effect (the hub connection, the account
+  hands code that is not Effect (the device calls, the account
   fan-out) through one door,
   `app/host/process/graph.ts`: a layer on top of the graph, so a run
   made before every service is up waits for it, and one made after the
@@ -287,8 +287,7 @@ export const layer = Layer.effect(Registry, make);
   a service, `app/shared`, the host, the shell, the engine, the
   contracts or the terminal `sm` reads `Date.now()` or `new Date()`
   (`no-wall-clock`). Code there that is not Effect takes `now` as a
-  parameter, as `host/direct/tickets.ts` does, and measures with
-  `performance.now()`.
+  parameter and measures with `performance.now()`.
 - Every time decision names its meaning, its owner and its clock. An
   instant (a date shown to a person, a persisted record, file metadata,
   an authority's token expiry, a time compared with another device's)
@@ -331,10 +330,10 @@ export const layer = Layer.effect(Registry, make);
 - Contracts are Schema. Every call is an `Rpc` definition in a
   per-module `RpcGroup`. Its payload, success and error schemas are
   the single description of the call for every transport: the device
-  socket, the loopback the shells use, the terminal's control client,
-  the hub's relay. The hub's own routes are an `HttpApi`
+  socket, the loopback the shells use, the terminal's control client.
+  The hub's own routes are an `HttpApi`
   (`packages/contracts/src/hubApi.ts`), each endpoint's schemas the
-  one description of that route for the Worker and the app alike.
+  one description of that route.
 - The per-call classification travels as annotations on the
   definition, read by middleware: `remote` (reaches a peer), `gated`
   (served to a peer only with the command switch on),
@@ -366,24 +365,17 @@ export const layer = Layer.effect(Registry, make);
 - One owner retries a link, and one authority reports its liveness. A
   transport dials once (`quietProtocol` in `engine/rpcClient.ts`), and a
   link that is dialed again has one owner that does it: the direct
-  keeper (`shared/hub/directKeeper.ts`) for a peer's, the supervisor
-  (`shared/remote/supervisor.ts`) for the hub socket's, and
-  `shared/remote/hostLink.ts` for this machine's host's. The host's cut
-  of a silent peer frees its slot. It isn't a second verdict on the
-  peer. A link is torn down once and tells its owner once.
+  keeper (`shared/hub/directKeeper.ts`) for a peer's, Colibrii for the
+  hub socket's, and `shared/remote/hostLink.ts` for this machine's
+  host's. A link is torn down once and tells its owner once.
 - No overdue timer is evidence that the other side had a chance to
   answer. A link to another machine (a device's, the hub socket) is
-  judged only on a fresh probe that was out for its whole window while
-  this end ran (`engine/liveness.ts`): a probe past its timeout is the
-  cue for a fresh one, a turn that comes late by either clock (a hidden
-  page's throttled timers, a sleep, a stopped process) asks again, and
-  any frame after the probe answers it. A question asked once follows
-  the same rule (`answerWithin`): one whose limit came late asks again
-  rather than give up. The host's cut of a silent remote peer counts
-  silence in monotonic time (`host/socket/DeviceLink.ts`). Effect's RPC
-  pinger judges a link by its last frame's age on the wall clock, so
-  `quietProtocol` gives it no timeout. Its pings only keep the far end's
-  slot.
+  Colibrii's to judge. A question asked once (`answerWithin`,
+  `engine/liveness.ts`) whose limit came late by either clock (a hidden
+  page's throttled timers, a sleep, a stopped process) asks again
+  rather than give up. Effect's RPC pinger judges a link by its last
+  frame's age on the wall clock, so `quietProtocol` gives it no
+  timeout. Its pings only keep the far end's slot.
 - An adapter keeps the transport's status and the peer's identity in
   what it raises, and a link logs its lifecycle transitions, inbound
   and outbound.

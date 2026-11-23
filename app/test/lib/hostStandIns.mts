@@ -140,6 +140,8 @@ const standIns = Layer.mergeAll(
       stopUpdaterBridge: Effect.void,
       migration: () => Effect.void,
       guide: () => Effect.die(new Error("not in this check")),
+      account: () => Effect.void,
+      deviceStoreKey: Effect.succeed(null),
       setAcceptsCommands: () => Effect.void,
       keepReachable: Effect.succeed(null),
       setKeepReachable: () => Effect.void,

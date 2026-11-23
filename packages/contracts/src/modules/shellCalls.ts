@@ -4,6 +4,7 @@ import { HexId32Schema } from "../schemas/hexId.ts";
 import { MigrationSchema, VoidSchema } from "../schemas/index.ts";
 import { strict } from "../schemas/strict.ts";
 import { GuideDrivePayloadSchema, GuideReplySchema } from "./guide.ts";
+import { DeviceAccountSchema } from "./session.ts";
 import { HostAddressSchema } from "./window.ts";
 
 // Served by the shell alone, so kept out of allContractModules.
@@ -67,5 +68,11 @@ export const shellCallsContract = defineContract(
   // too (control:setAccess).
   invoke("setAcceptsCommands", Schema.Boolean, VoidSchema),
   invoke("keepReachable", VoidSchema, Schema.Boolean),
+  // This device's place on the account, at start and on every change.
+  invoke("account", DeviceAccountSchema, VoidSchema),
+  // The key the host's Colibrii store is sealed with, which the shell
+  // keeps in the OS keychain. Null where there is none: the store is
+  // then a file only its owner reads.
+  invoke("deviceStoreKey", VoidSchema, Schema.NullOr(Schema.String)),
   invoke("setKeepReachable", Schema.Boolean, VoidSchema),
 );

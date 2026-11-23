@@ -37,10 +37,12 @@ window and a crash of it is a reconnect. The shell forks it at launch
 screen, `../headless`) and reaches it over RPC as every client does:
 a window, the shell and the terminal `sm` on the loopback, the web
 client and the other devices over the device link. The shell owns the
-account (Clerk, the keychain) and tells the host the account's facts,
-which bring its hub socket up, as the host comes up and at every
-change. The device identity is the host's, in its store, reported to
-the shell as the host comes up. A quit is the shell asking the host
+person's sign-in (Clerk) and the device's profile, and the host owns
+the device on the account (`lib/PeerDevice.ts`, on Colibrii): its
+enrollment, its hub socket and its links. The host tells the shell the
+device's place on the account as it comes up and at every change. The
+device identity is the host's, in its store, reported to the shell as
+the host comes up. A quit is the shell asking the host
 whether it is busy, then closing its scope. It lives in `app/` rather
 than a package of its own because it ships only inside the app, built
 by the app's Vite config beside the shell and the renderer it serves.

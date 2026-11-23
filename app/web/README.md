@@ -17,9 +17,8 @@ page.
   the client config, the hub bridge, the shell, the releases, its copy
   of the shared settings), and `ipc/stubDefaults.ts` answers a local
   host call it lacks with a schema-derived stub.
-- `hub/`: the tab's hub socket (`connection.ts`), and its trace
-  (`trace.ts`): a console line per phase change.
-- `account/`: the browser's credential store, device id, name and icon.
+- `account/`: the build's account service configuration, and the
+  browser's device id, name and icon.
 - `lib/kvStorage.ts`: localStorage behind a schema.
 
 `pnpm web:dev` (from `app/`) serves it against the dev hub, and signing

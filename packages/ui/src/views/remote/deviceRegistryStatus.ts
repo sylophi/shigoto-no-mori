@@ -23,8 +23,6 @@ export function tunnelNote(state: TunnelState | undefined): string | null {
   switch (state) {
     case "no-binary":
       return `No tunnel: no usable cloudflared (see the log), so ${LOCAL_ONLY}`;
-    case "unconfigured":
-      return `No tunnel: the device hub isn't set up for tunnels, so ${LOCAL_ONLY}`;
     case "error":
       return `Tunnel is down (retrying). Until it's back, ${LOCAL_ONLY}`;
     case "starting":

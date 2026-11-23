@@ -9,7 +9,6 @@ import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
 import * as HttpApiMiddleware from "effect/http-api/HttpApiMiddleware";
 import * as HttpApiSchema from "effect/http-api/HttpApiSchema";
 import * as HttpApiSecurity from "effect/http-api/HttpApiSecurity";
-import { CORE_VERSION } from "./protocol.ts";
 import { HexId32Schema } from "./schemas/hexId.ts";
 import {
   DeviceIdSchema,
@@ -132,8 +131,9 @@ export class HubUpgradeRequiredError extends Schema.TaggedError<HubUpgradeRequir
 // ---- The version floor ----
 
 // v2 builds send no version at all. The connect route needs no check of
-// its own: its ticket comes from a mint, which the floor guards.
-export const HUB_PROTOCOL_FLOOR = CORE_VERSION;
+// its own: its ticket comes from a mint, which the floor guards. The
+// last core that talked to this hub: later builds use Colibrii.
+export const HUB_PROTOCOL_FLOOR = 22;
 
 export const PROTOCOL_HEADER = "sm-protocol";
 

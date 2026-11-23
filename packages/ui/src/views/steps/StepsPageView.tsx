@@ -220,31 +220,3 @@ export function StepActionView({
     </Button>
   );
 }
-
-// The sign-in: a button while it waits on
-// the person, and its mark alone while it goes by itself.
-export function SignInStepView({
-  state,
-  asks,
-  onSignIn,
-}: {
-  state: StepState;
-  asks: boolean;
-  onSignIn: () => void;
-}) {
-  return (
-    <StepRowView
-      label="Sign in"
-      state={state}
-      trailing={
-        asks && (
-          <StepActionView
-            label="Continue with GitHub"
-            pending={state === "running"}
-            onClick={onSignIn}
-          />
-        )
-      }
-    />
-  );
-}

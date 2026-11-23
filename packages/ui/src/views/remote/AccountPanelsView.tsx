@@ -86,7 +86,8 @@ export function NotConfiguredPanelView({
     <StatePanel icon={CloudOff} title="Device sync isn't set up in this build.">
       <p className="max-w-sm text-xs">
         The account service settings{" "}
-        <code className="font-mono">{ACCOUNT_ENV.hubUrl}</code> and{" "}
+        <code className="font-mono">{ACCOUNT_ENV.hubUrl}</code>,{" "}
+        <code className="font-mono">{ACCOUNT_ENV.app}</code> and{" "}
         <code className="font-mono">{ACCOUNT_ENV.publishableKey}</code> are
         missing, so sign-in is unavailable and other devices can't appear here.
       </p>

@@ -55,8 +55,8 @@ bindings are parallel:
 | --- | --- | --- |
 | Composition root: handlers on the wires, the direct plane, the page api | `host/process/` (the host) + `main/ipc/register.ts` (the shell) + `main/preload.ts` + `renderer/lib/runtime/` | `web/ipc/register.ts` + `web/preload.ts` |
 | Transport under the page api | `shared/ipc/shell.ts` (the shell, over a port) + `shared/remote/hostLink.ts` (the host, over the loopback) | `web/ipc/localRegistrar.ts` (the tab's own modules) + the direct plane (every host, a peer) |
-| Account: credential store, enroll, device name | `main/core/account/` | `web/account/` |
-| Device hub socket | `host/hub/connection.ts` (node) | `web/hub/connection.ts` (browser) |
+| Account: profile, device name and icon | `main/electron/account.ts` + `main/core/account/` | `web/account/` |
+| Colibrii device: enrollment, hub socket, links | `host/lib/PeerDevice.ts` (the host's, node) | `web/ipc/register.ts` (the tab's, browser) |
 | Page entry | `index.html` → `renderer/index.tsx` | `web/index.html` → `web/main.tsx` → `web/boot.tsx` |
 
 `host/` is what a binding serves: the projects, worktrees, scripts and

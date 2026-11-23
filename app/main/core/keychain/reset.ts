@@ -21,8 +21,8 @@
 // The cure is for the signed app to create the item itself, which
 // means deleting the one it found. Deletion needs no ACL grant (it
 // decrypts nothing), so it never prompts. The cost is that whatever
-// was encrypted under the old key (the hub device credential, the
-// Clerk tokens) can no longer be read: both stores treat an
+// was encrypted under the old key (the device store's key, the Clerk
+// tokens) can no longer be read: both stores treat an
 // undecryptable value as absent, so the user is signed out once and
 // signs in again. That happens once per userData: the marker written
 // after the deletion says a signed build owns the item, and a reset

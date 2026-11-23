@@ -52,9 +52,10 @@ import {
   updaterCalls,
 } from "./electron/updater";
 import {
-  accountFactsForHost,
-  desktopAccount,
-  retryParkedSignOut,
+  accountHandlers,
+  accountReported,
+  commandSwitchForHost,
+  deviceStoreKey,
 } from "./electron/account";
 import {
   patchClientConfig,
@@ -242,14 +243,11 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
       link().reconnect();
     } else {
       started = true;
-      // A sign-out whose revoke never reached the hub, delivered once a
-      // host is up to name the device.
-      void retryParkedSignOut();
     }
-    // A new host knows nothing yet: the account, which brings its hub
-    // socket up, the focus and the updater's state. Through the link,
-    // whose calls wait for it to reach this host.
-    tell(host().account(accountFactsForHost()));
+    // A new host knows nothing yet: the command switch, the focus and
+    // the updater's state. Through the link, whose calls wait for it to
+    // reach this host.
+    tell(host().acceptsCommands(commandSwitchForHost()));
     tell(host().windowFocused(windowFocused));
     tell(host().updaterState(currentUpdaterState()));
     const watched = child;
@@ -288,7 +286,10 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
   stopUpdaterBridge: () => releaseUpdaterBridge(),
   guide: ({ session: token, action }) =>
     onGuide((guide) => guide.drive(token, action)),
-  setAcceptsCommands: (enabled) => desktopAccount.setAcceptsCommands(enabled),
+  setAcceptsCommands: (enabled) =>
+    accountHandlers.setAcceptsCommands(enabled, null),
+  account: (state) => accountReported(state),
+  deviceStoreKey: () => deviceStoreKey(),
   keepReachable: () => clientSetting(readClientConfigSync(), "keepReachable"),
   setKeepReachable: async (on) => {
     await patchClientConfig({ keepReachable: on }, []);

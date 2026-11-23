@@ -1,8 +1,8 @@
 // pnpm reliability [--clients web,desktop,tunnel,terminal]
 //   [--scenarios a,b] [--soak <duration>] [--gap <min>-<max>] [--seed <n>]
-//   [--headed] [--keep] [--revoke-host] [--deploy-local-hub]
+//   [--headed] [--keep] [--revoke-host]
 //
-// The clients' reliability scenarios against the dev hub, once each
+// The clients' reliability scenarios against the Colibrii instance, once each
 // or looped for a soak, with a report of every recovery and failure and
 // the trace each one left (README.md beside this file).
 import { writeFileSync } from "node:fs";
@@ -13,7 +13,6 @@ import { endAll } from "../../../test/testProcesses.mts";
 import { CLIENT_KINDS, Lab, type ClientKind } from "./lab.mts";
 import {
   ALL_SCENARIOS,
-  hubDiffersFromMain,
   recovered,
   showProject,
   silentFailures,
@@ -36,7 +35,6 @@ const { values } = parseArgs({
     headed: { type: "boolean", default: false },
     keep: { type: "boolean", default: false },
     "revoke-host": { type: "boolean", default: false },
-    "deploy-local-hub": { type: "boolean", default: false },
   },
 });
 
@@ -88,18 +86,6 @@ chosen = [
   ...chosen.filter((scenario) => !scenario.destructive),
   ...chosen.filter((scenario) => scenario.destructive),
 ];
-const differs =
-  chosen.some((scenario) => scenario.name === "hub-redeploy") &&
-  !values["deploy-local-hub"]
-    ? hubDiffersFromMain()
-    : null;
-if (differs !== null) {
-  console.log(
-    `[reliability] skipping hub-redeploy: ${differs} (--deploy-local-hub deploys it anyway)`,
-  );
-  chosen = chosen.filter((scenario) => scenario.name !== "hub-redeploy");
-}
-
 const out = join(import.meta.dirname, "report");
 const lab = new Lab({
   headed: values.headed,

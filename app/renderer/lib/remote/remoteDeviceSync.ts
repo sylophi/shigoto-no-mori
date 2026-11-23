@@ -3,10 +3,9 @@
 // registry plus the hub bridge's live status (hubStatusAtom), on boot,
 // on every hub statusChanged push, and whenever the shared device-list
 // query moves in the cache (which is where account changes, this
-// window's own and everyone else's, land). There is no per-device
-// supervisor here: the one hub socket lives with the bridge (in the
-// host, or in the web shell's page), so a hub device's status derives
-// from the bridge instead of being driven.
+// window's own and everyone else's, land). The one hub socket lives
+// with the bridge (in the host, or in the web shell's page), so a hub
+// device's status derives from the bridge.
 //
 // Each peer's status is buildEntry's, one branch per case.
 import { departed } from "@shigomori/contracts/schemas/config";
@@ -14,7 +13,11 @@ import { fetchAgain } from "@/lib/askAgain";
 import { throughCancel } from "@/lib/queryClientOptions";
 import { hashKey, type QueryClient } from "@tanstack/react-query";
 import { accountContract } from "@shigomori/contracts/modules/account";
-import { hubContract, type HubStatus } from "@shigomori/contracts/modules/hub";
+import {
+  credentialRevoked,
+  hubContract,
+  type HubStatus,
+} from "@shigomori/contracts/modules/hub";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import * as Effect from "effect/Effect";
 import * as Atom from "effect/reactivity/Atom";
@@ -24,7 +27,6 @@ import * as Stream from "effect/Stream";
 import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
 import { heard } from "@/lib/runtime/atoms";
 import type { RendererApi } from "@/lib/runtime/pageApi";
-import { directPresenceRule } from "@shared/hub/directPresence";
 import {
   hostKeyDeviceId,
   invalidateDeviceSession,
@@ -329,11 +331,14 @@ export function startRemoteDeviceSync({
       phase === "connected" && lastSocketPhase !== "connected";
     lastSocketPhase = phase;
     // No account (the socket stopped by the sign-out, or blocked as
-    // revoked), no peers: the store empties by the direct plane's own
-    // rule rather than by trusting the device-list refetch to come back
-    // empty, since a refetch that fails falls back to the cached list
-    // below, which would put the old account's device tabs back.
-    if (directPresenceRule(current.socket) === "gone") {
+    // revoked), no peers: the store empties here rather than by
+    // trusting the device-list refetch to come back empty, since a
+    // refetch that fails falls back to the cached list below, which
+    // would put the old account's device tabs back.
+    if (
+      current.socket.phase === "stopped" ||
+      credentialRevoked(current.socket)
+    ) {
       setRemoteDevices(registry, []);
       lastRoster = new Set();
       return;

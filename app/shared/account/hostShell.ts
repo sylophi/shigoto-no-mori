@@ -1,21 +1,16 @@
 // What the two shells a host runs under share of the account: the
 // desktop's main (main/electron/account.ts) and the headless host's
-// (headless/account.ts). The service's config, the account as the host
-// is told it, and a nuke's sign-out.
+// (headless/account.ts), with the host itself: the service's config,
+// and a nuke's sign-out.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
 import {
-  isConfigured,
   mergeServiceEnv,
   resolveServiceConfig,
   type AccountServiceConfig,
 } from "@shigomori/contracts/accountServiceConfig";
-import { errorMessageOf } from "@shigomori/contracts/errors";
-import type { AccountFacts } from "@shigomori/contracts/modules/session";
-import type { AccountStore, StoredAccount } from "./credentialStore";
-import { retryParkedRevoke, signOutDevice } from "./enroll";
-import type { AccountService } from "./service";
+import type { DevicePort } from "./handlers";
 
 // Three layers, lowest to highest precedence: the optional .env.local
 // file (dev convenience), the account service values baked into the
@@ -54,46 +49,12 @@ export function serviceConfigOf(packaged: boolean): AccountServiceConfig {
   );
 }
 
-// The account as the host is to know it (host/process/account.ts),
-// reported after every change: null when signed out or unconfigured.
-export function accountFactsOf(
-  config: AccountServiceConfig,
-  record: StoredAccount | null,
-): AccountFacts | null {
-  if (record === null || !isConfigured(config)) return null;
-  return {
-    hubUrl: config.hubUrl,
-    accountId: record.accountId,
-    credential: record.credential,
-    deviceKey: record.deviceKey,
-    webOrigin: config.webOrigin,
-    acceptsCommands: record.acceptsCommands === true,
-  };
-}
-
-// A nuke's sign-out: this device revoked on the hub and its credential
-// dropped. Answers why the revoke didn't land when it stays parked for
-// later (offline, the hub down), since the parking goes with userData
-// at the next start. Null when it landed, the hub had already let the
-// device go, or there was nothing to revoke. A device signed out
-// before, whose revoke is parked still, tries that one once more.
-export async function nukeSignOut(device: {
-  config: AccountServiceConfig;
-  service: AccountService;
-  store: AccountStore;
-  deviceId: string;
-}): Promise<string | null> {
-  const signedIn = device.store.read() !== null;
-  let failure = "";
-  await signOutDevice({
-    ...device,
-    onRevokeFailure: (error) => {
-      failure = errorMessageOf(error);
-    },
-  });
-  if (!signedIn) {
-    const parked = await retryParkedRevoke(device);
-    if (parked.kind === "failed") failure = errorMessageOf(parked.error);
-  }
-  return device.store.readParked() === null ? null : failure;
+// A nuke's sign-out, which also delivers a removal an earlier sign-out
+// owes. Answers why the service may still list this device, since the
+// nuke takes with it what would tell the service later. Null when it
+// let the device go.
+export async function nukeSignOut(device: DevicePort): Promise<string | null> {
+  return (await device.signOut())
+    ? null
+    : "The account service couldn't be told this device signed out.";
 }

@@ -1,7 +1,6 @@
 // Shared plumbing for the proofs: fixtures, teardown, sandboxes and the
 // sm runner. The harness itself is vitest's.
 import { execFileSync, spawn } from "node:child_process";
-import { type AddressInfo } from "node:net";
 import {
   existsSync,
   mkdirSync,
@@ -30,17 +29,6 @@ const appRoot = join(import.meta.dirname, "..", "..");
 
 // The repo root, one level up: where packages/ and file-sync/ live.
 export const repoRoot = dirname(appRoot);
-
-// The port a listening TCP server (a net server, a ws server) bound.
-export function boundPort(server: {
-  address(): AddressInfo | string | null;
-}): number {
-  const address = server.address();
-  if (address === null || typeof address === "string") {
-    throw new Error("the server is not listening on a TCP port");
-  }
-  return address.port;
-}
 
 type Teardown = () => unknown;
 

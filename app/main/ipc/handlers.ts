@@ -24,7 +24,7 @@ import { navHandlers } from "./modules/nav";
 import { releasesHandlers } from "./modules/releases";
 import { shellHandlers } from "./modules/shell";
 import { windowHandlers } from "./modules/window";
-import { accountHandlers } from "./modules/account";
+import { accountHandlers } from "../electron/account";
 import { registerContract, registerViews } from "./register";
 
 export function registerShellHandlers(): void {
