@@ -5,7 +5,7 @@
 import { Check } from "lucide-react";
 import type { ReactNode } from "react";
 import { VillagerFaceView } from "../shared/VillagerSaysView.tsx";
-import type { Speaker } from "../../lib/villagerVoice.ts";
+import type { MoveDetail, Speaker } from "../../lib/villagerVoice.ts";
 import { cn } from "../../lib/utils.ts";
 import { MovingBoxView } from "./MovingBoxView.tsx";
 
@@ -89,23 +89,18 @@ export function TickingTitleView({ children }: { children: ReactNode }) {
   return <span className="villager-tick block">{children}</span>;
 }
 
-// The news's note under its title, and the branch it is about.
-export function MoveDetailView({
-  detail,
-  branch,
-}: {
-  detail: string;
-  branch: string | null | undefined;
-}) {
+// The news's note under its title, with the branch it is about.
+export function MoveDetailView({ detail }: { detail: MoveDetail }) {
   return (
-    <span className="block truncate">
-      {detail}
-      {branch && (
+    <span className="block wrap-anywhere">
+      {detail.lead}
+      {detail.branch && (
         <>
           {" "}
-          <span className="font-mono">{branch}</span>
+          <span className="font-mono">{detail.branch}</span>
         </>
       )}
+      {detail.tail}
     </span>
   );
 }

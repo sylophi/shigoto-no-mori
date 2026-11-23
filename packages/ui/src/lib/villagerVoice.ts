@@ -187,17 +187,20 @@ export type MoveKind = "in" | "out";
 
 export type MoveSubject = Pick<
   Worktree,
-  "id" | "name" | "branch" | "detached" | "mergedIntoPrimary"
+  "id" | "projectId" | "name" | "branch" | "detached" | "mergedIntoPrimary"
 >;
 
 export interface MoveNews {
   kind: MoveKind;
   // The worktrees it tells of.
   worktreeIds: string[];
+  // The project they all moved into or out of, by name, or null when
+  // they span several or its name isn't known.
+  project: string | null;
   // Another device the move happened on, by name.
   device: string | null;
-  // "Lucha moved out", "Lucha and Raymond moved in". With a device
-  // named, "on MacBook" follows.
+  // "Lucha moved out of shigoto-no-mori", "Lucha and Raymond moved
+  // in". With a device named, "on MacBook" follows.
   title: string;
   // The title in the villager's voice, for one common villager with a
   // catchphrase this voice can use.
@@ -206,13 +209,20 @@ export interface MoveNews {
   // dialogue box or their letter: their quote, or with none this voice
   // can use, the move in their own words ("I'm moving in!").
   words: string | null;
-  // "Held v2-exp/flows", "Landed 2 of 3 branches", or null.
-  detail: string | null;
-  // The branch named in `detail`, for one villager, set in mono.
-  branch: string | null;
+  // "Living on v2-exp/flows", "Left v2-exp/flows behind", "Landed 2 of
+  // 3 branches", or null.
+  detail: MoveDetail | null;
   speakers: [Speaker, ...Speaker[]];
   // The rarest among them, which sets how long the news stays.
   rarity: VillagerRarity;
+}
+
+// A move's note under its title. For one villager it names their
+// branch, between `lead` and `tail`, set in mono.
+export interface MoveDetail {
+  lead: string;
+  branch?: string;
+  tail?: string;
 }
 
 const RANK: Record<VillagerRarity, number> = {
@@ -258,14 +268,28 @@ function landedSummary(worktrees: readonly MoveSubject[]): string | null {
   return `Landed all ${branches.length} branches`;
 }
 
+// "moved into shigoto-no-mori on MacBook", how the news says where.
+export function movedWhere({
+  kind,
+  project,
+  device,
+}: Pick<MoveNews, "kind" | "project" | "device">): string {
+  const [bare, to] =
+    kind === "in" ? ["moved in", "moved into"] : ["moved out", "moved out of"];
+  const verb = project === null ? bare : `${to} ${project}`;
+  return device === null ? verb : `${verb} on ${device}`;
+}
+
 // The news for villagers moving in or out of one device at once, or
 // null when none of the worktrees is a character's. `speakers` holds
-// the speaker for each worktree that has one, by worktree id. `device`
-// names another device the move happened on.
+// the speaker for each worktree that has one, by worktree id, and
+// `projects` each project's name, by id. `device` names another device
+// the move happened on.
 export function moveNews(
   kind: MoveKind,
   worktrees: readonly MoveSubject[],
   speakers: ReadonlyMap<string, Speaker>,
+  projects: ReadonlyMap<string, string>,
   device?: string,
 ): MoveNews | null {
   const moving = worktrees.flatMap((w) => {
@@ -278,13 +302,17 @@ export function moveNews(
   const others = new Map(moving.map(({ speaker }) => [speaker.slug, speaker]));
   others.delete(first.speaker.slug);
   const who: [Speaker, ...Speaker[]] = [first.speaker, ...others.values()];
-  const verb = kind === "in" ? "moved in" : "moved out";
-  const where = device === undefined ? "" : ` on ${device}`;
-  const title = `${names(who.map((s) => s.profile.name))} ${verb}${where}`;
-  const shared = {
+  const place = {
     kind,
-    worktreeIds: moving.map((w) => w.id),
+    project: moving.every((w) => w.projectId === first.projectId)
+      ? (projects.get(first.projectId) ?? null)
+      : null,
     device: device ?? null,
+  };
+  const title = `${names(who.map((s) => s.profile.name))} ${movedWhere(place)}`;
+  const shared = {
+    ...place,
+    worktreeIds: moving.map((w) => w.id),
     title,
     speakers: who,
     rarity: rarest(who),
@@ -293,12 +321,12 @@ export function moveNews(
   // Several villagers: one line for all of them. Several worktrees of
   // one villager (sheldon, sheldon-2) are still them talking.
   if (who.length > 1) {
+    const landed = kind === "out" ? landedSummary(moving) : null;
     return {
       ...shared,
       line: null,
       words: null,
-      detail: kind === "out" ? landedSummary(moving) : null,
-      branch: null,
+      detail: landed === null ? null : { lead: landed },
     };
   }
 
@@ -316,11 +344,10 @@ export function moveNews(
     detail: worktree.detached
       ? null
       : kind === "in"
-        ? "Holding"
+        ? { lead: "Living on", branch: worktree.branch }
         : worktree.mergedIntoPrimary
-          ? "Landed"
-          : "Held",
-    branch: worktree.detached ? null : worktree.branch,
+          ? { lead: "Landed", branch: worktree.branch }
+          : { lead: "Left", branch: worktree.branch, tail: " behind" },
   };
 }
 
@@ -341,6 +368,7 @@ export function moveNewsFor(
   kind: MoveKind,
   worktrees: readonly MoveSubject[],
   speakers: ReadonlyMap<string, Speaker>,
+  projects: ReadonlyMap<string, string>,
   device?: string,
 ): MoveNews[] {
   const groups = new Map<string, MoveSubject[]>();
@@ -352,7 +380,7 @@ export function moveNewsFor(
   }
   return [...groups.values()]
     .flatMap((group) => {
-      const news = moveNews(kind, group, speakers, device);
+      const news = moveNews(kind, group, speakers, projects, device);
       return news === null ? [] : [news];
     })
     .toSorted((a, b) => RANK[a.rarity] - RANK[b.rarity]);

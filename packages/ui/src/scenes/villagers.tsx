@@ -24,7 +24,6 @@ import { TypedWordsView } from "../views/villagers/TypedWordsView.tsx";
 import {
   MoveDetailView,
   MovingBoxBadgeView,
-  SuccessBadgeView,
   TickingTitleView,
   ToastFacesView,
   VillageToasterView,
@@ -157,12 +156,12 @@ function news(who: Speaker, words: string | null): MoveNews {
   return {
     kind: "in",
     worktreeIds: ["a10000000002"],
+    project: "shigoto-no-mori",
     device: null,
-    title: `${who.profile.name} moved in`,
+    title: `${who.profile.name} moved into shigoto-no-mori`,
     line: null,
     words,
-    detail: "Held",
-    branch: "v2-exp/remote-ui-flows",
+    detail: { lead: "Living on", branch: "v2-exp/remote-ui-flows" },
     speakers: [who],
     rarity: who.rarity,
   };
@@ -207,15 +206,14 @@ export function VillagersPartsScene() {
                   { ...RAYMOND, face: FACE },
                   { ...speaker("judy"), face: FACE },
                 ]}
-                badge={<SuccessBadgeView />}
+                badge={<MovingBoxBadgeView />}
                 joined={new Set(["judy"])}
               />
               <div className="min-w-0 flex-1 text-sm">
-                <TickingTitleView>Raymond and Judy moved in</TickingTitleView>
-                <MoveDetailView
-                  detail="Held v2-exp/remote-ui-flows"
-                  branch={null}
-                />
+                <TickingTitleView>
+                  Raymond and Judy moved out of shigoto-no-mori
+                </TickingTitleView>
+                <MoveDetailView detail={{ lead: "Landed both branches" }} />
               </div>
             </div>
           </VillageToasterView>

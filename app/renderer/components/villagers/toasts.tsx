@@ -163,9 +163,7 @@ export function toastVillagerMove(
       action: (
         <NextArrowView className="mb-0.5 ml-auto self-end text-muted-foreground" />
       ),
-      description: news.detail && (
-        <MoveDetailView detail={news.detail} branch={news.branch} />
-      ),
+      description: news.detail && <MoveDetailView detail={news.detail} />,
     },
   );
 }
