@@ -71,8 +71,9 @@ At the end it signs the browser, A and C out (revoking their devices)
 and deletes A's and C's profiles, unless `--keep`. The browser profile
 stays, and enrolls again on the next run. B stays enrolled, with its
 profile and its tunnel, until a run with `--revoke-host` (or a run
-whose B reads signed out, so the next starts afresh), once B is up to
-sign itself out. Run one before the worktree goes: the app holds 16
+whose B reads signed out, so the next starts afresh). An app goes only
+once it is up to sign itself out: one that isn't keeps its profile,
+and the next run signs it out. Run one before the worktree goes: the app holds 16
 devices on an account, past which a new one takes the place of the
 offline device seen longest ago.
 

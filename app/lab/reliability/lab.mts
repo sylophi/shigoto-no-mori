@@ -639,23 +639,23 @@ export class Lab {
     }
     await step("the network", () => this.network.restore({ cut: true }));
     // B is kept, unless asked or it read signed out, which the next run
-    // would only wait on again. It goes only once it is up to sign
+    // would only wait on again. An app goes only once it is up to sign
     // itself out, or its device would stay enrolled with no profile to
     // revoke it from.
-    const hostUp = this.hostApp.windows().length > 0;
-    if (this.options.revokeHost && !this.options.keep && !hostUp) {
-      this.note(
-        `${this.hostApp.profile} is kept: it is not up to sign itself out`,
-        "warning",
-      );
-    }
-    const dropped = this.options.keep
-      ? []
-      : apps.filter(
-          (app) =>
-            app !== this.hostApp ||
-            (hostUp && (this.options.revokeHost || app.stuckSignedOut)),
+    const going = (app: DevApp) =>
+      !this.options.keep &&
+      (app !== this.hostApp || this.options.revokeHost || app.stuckSignedOut);
+    const dropped = apps.filter(
+      (app) => going(app) && app.windows().length > 0,
+    );
+    for (const app of apps) {
+      if (going(app) && !dropped.includes(app)) {
+        this.note(
+          `${app.profile} is kept: it is not up to sign itself out`,
+          "warning",
         );
+      }
+    }
     if (!this.options.keep) {
       // The web client's device, and each app's. The browser keeps its
       // Clerk session, so the next run enrolls it again.
