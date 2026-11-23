@@ -5,7 +5,6 @@
 // in is the terminal's (`sm login`, the login contract): Clerk's device
 // grant, whose access token enrolls this device once and is dropped.
 import { join } from "node:path";
-import * as Colibrii from "@colibrii/sdk";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import type { AccountStatus } from "@shigomori/contracts/modules/account";
 import {
@@ -15,7 +14,6 @@ import {
 import type { DeviceAccount } from "@shigomori/contracts/modules/session";
 import { current as currentPlatform } from "@shigomori/engine/platform";
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import {
   listed,
   matchDevices,
@@ -27,9 +25,11 @@ import { noteAcceptsCommands } from "@host/process/handlers";
 import * as HostRpc from "@host/socket/hostRpc";
 import { defaultDesktopDeviceName } from "@shared/account/defaultDeviceName";
 import {
+  accessTokenFor,
   accountIdOf,
   type DevicePort,
   makeAccountHandlers,
+  startCodeSignIn,
 } from "@shared/account/handlers";
 import { nukeSignOut, serviceConfigOf } from "@shared/account/hostShell";
 import { profileFile } from "@shared/account/profileFile";
@@ -101,16 +101,6 @@ export function headlessAccount(facts: HostFacts) {
     }
   };
 
-  const codeOptions = () => {
-    if (config.oauthClientId === "") {
-      throw new Error("This build has no OAuth client to sign in with.");
-    }
-    return {
-      publishableKey: config.publishableKey,
-      clientId: config.oauthClientId,
-    };
-  };
-
   const login = HostRpc.handlers(loginContract, {
     status: () =>
       call(async () => loginStatus(await account.status(undefined, null))),
@@ -122,31 +112,13 @@ export function headlessAccount(facts: HostFacts) {
             `This machine is signed in already, as ${status.deviceName}. Sign out first.`,
           );
         }
-        const { verificationUriComplete, ...code } = await Effect.runPromise(
-          Colibrii.startCodeSignIn(codeOptions()).pipe(
-            Effect.provide(FetchHttpClient.layer),
-          ),
-        );
-        return {
-          ...code,
-          ...(verificationUriComplete === undefined
-            ? {}
-            : { verificationUriComplete }),
-        };
+        return Effect.runPromise(startCodeSignIn(config));
       }),
     // Enrolls under the access token once the person approved. A
     // terminal that goes away while it waits stops the wait with it.
     finish: (code) =>
-      Effect.try({ try: codeOptions, catch: callFailureOf }).pipe(
-        Effect.flatMap((options) =>
-          Colibrii.finishCodeSignIn(options, {
-            ...code,
-            verificationUriComplete: code.verificationUriComplete,
-          }).pipe(
-            Effect.provide(FetchHttpClient.layer),
-            Effect.mapError(callFailureOf),
-          ),
-        ),
+      accessTokenFor(config, code).pipe(
+        Effect.mapError(callFailureOf),
         Effect.flatMap((accessToken) =>
           call(async () =>
             loginStatus(await account.enroll(accessToken, null)),

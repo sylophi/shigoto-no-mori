@@ -6,6 +6,7 @@
 import * as Colibrii from "@colibrii/sdk";
 import type { AccountServiceConfig } from "@shigomori/contracts/accountServiceConfig";
 import { isConfigured } from "@shigomori/contracts/accountServiceConfig";
+import { RemoteCallError } from "@shigomori/contracts/errors";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import type {
@@ -86,6 +87,45 @@ export const switchFor = (
     ? accountId
     : null;
 };
+
+// Clerk's device grant, which a window and the terminal's `sm login`
+// sign in with.
+const codeOptionsOf = (
+  config: AccountServiceConfig,
+): Effect.Effect<Colibrii.CodeSignInOptions, RemoteCallError> =>
+  config.oauthClientId === ""
+    ? Effect.fail(
+        new RemoteCallError({
+          text: "This build has no OAuth client to sign in with a code.",
+        }),
+      )
+    : Effect.succeed({
+        publishableKey: config.publishableKey,
+        clientId: config.oauthClientId,
+      });
+
+export const startCodeSignIn = (config: AccountServiceConfig) =>
+  codeOptionsOf(config).pipe(
+    Effect.flatMap(Colibrii.startCodeSignIn),
+    Effect.map(({ verificationUriComplete, ...code }): LoginCode =>
+      verificationUriComplete === undefined
+        ? code
+        : { ...code, verificationUriComplete },
+    ),
+    Effect.provide(FetchHttpClient.layer),
+  );
+
+// The access token Clerk gives once the person approved the code.
+export const accessTokenFor = (config: AccountServiceConfig, code: LoginCode) =>
+  codeOptionsOf(config).pipe(
+    Effect.flatMap((options) =>
+      Colibrii.finishCodeSignIn(options, {
+        ...code,
+        verificationUriComplete: code.verificationUriComplete,
+      }),
+    ),
+    Effect.provide(FetchHttpClient.layer),
+  );
 
 // The session token an enroll was asked with, which the run reads.
 class EnrollToken extends Context.Service<EnrollToken, string>()(
@@ -182,44 +222,17 @@ export function makeAccountHandlers(
   );
   const signOutOnce = joinInFlight(Effect.promise(signOut));
 
-  const codeOptions = () => {
-    const config = shell.config();
-    if (config.oauthClientId === "") {
-      throw new Error("This build has no OAuth client to sign in with a code.");
-    }
-    return {
-      publishableKey: config.publishableKey,
-      clientId: config.oauthClientId,
-    };
-  };
-
   return {
     status,
     enroll: (token) =>
       Effect.runPromise(Effect.provideService(enrollOnce, EnrollToken, token)),
     signOut: () => Effect.runPromise(signOutOnce),
 
-    startCodeSignIn: async (): Promise<LoginCode> => {
-      const code = await Effect.runPromise(
-        Colibrii.startCodeSignIn(codeOptions()).pipe(
-          Effect.provide(FetchHttpClient.layer),
-        ),
-      );
-      const { verificationUriComplete, ...rest } = code;
-      return {
-        ...rest,
-        ...(verificationUriComplete === undefined
-          ? {}
-          : { verificationUriComplete }),
-      };
-    },
+    startCodeSignIn: () => Effect.runPromise(startCodeSignIn(shell.config())),
     finishCodeSignIn: (code) => {
       const config = shell.config();
       return Effect.runPromise(
-        Colibrii.finishCodeSignIn(codeOptions(), {
-          ...code,
-          verificationUriComplete: code.verificationUriComplete,
-        }).pipe(
+        accessTokenFor(config, code).pipe(
           Effect.flatMap((accessToken) =>
             Colibrii.signInToken({
               hub: config.hubUrl,
