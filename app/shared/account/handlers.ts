@@ -194,8 +194,14 @@ export function makeAccountHandlers(
   const pickOf = async (icon: DeviceIcon) =>
     icon === (await shell.detectedIcon()) ? undefined : icon;
 
+  // An enrollment starts with the command switch off, however the last
+  // one ended.
   const enroll = async (token: string): Promise<AccountStatus> => {
-    const profile = shell.profile().read();
+    const { acceptsCommandsFor, ...profile } = shell.profile().read();
+    if (acceptsCommandsFor !== undefined) {
+      shell.profile().write(profile);
+      await shell.acceptsCommandsChanged(null);
+    }
     let name = profile.deviceName;
     if (name === undefined) {
       let fallback = await shell.defaultName();
