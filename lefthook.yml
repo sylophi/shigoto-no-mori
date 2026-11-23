@@ -44,8 +44,8 @@ pre-commit:
             run: pnpm run format:check
           # The proofs (app/test/README.md), whole, for a change to what
           # they run: the host, the shell, the shared code, the engine,
-          # the terminal, the contracts and the Go helpers. On Windows CI
-          # runs them: beside the other suites there they take minutes
+          # the terminal, the contracts and the Go helpers. Not on
+          # Windows: beside the other suites there they take minutes
           # longer than alone and come out unreliable.
           - name: proofs
             skip:
