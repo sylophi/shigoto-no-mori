@@ -7,12 +7,14 @@
 import { join } from "node:path";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import type { AccountStatus } from "@shigomori/contracts/modules/account";
+import type { DeviceAccount } from "@shigomori/contracts/modules/session";
 import {
   loginContract,
   type LoginStatus,
 } from "@shigomori/contracts/modules/login";
 import { current as currentPlatform } from "@shigomori/engine/platform";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import {
   listed,
   matchDevices,
@@ -168,6 +170,13 @@ export function headlessAccount(facts: HostFacts) {
     login,
     setAcceptsCommands: (enabled: boolean) =>
       account.setAcceptsCommands(enabled, null),
+    // Removed from the account, it signs out, as a window does
+    // (ClerkAccountSync): its command switch goes with it, so `sm login`
+    // signs it in with commands off.
+    accountReported: (state: DeviceAccount) => {
+      if (!Predicate.isTagged(state, "SignedOut") || !state.removed) return;
+      void Promise.resolve(account.signOut(undefined, null)).catch(() => {});
+    },
     boot: (deviceId: string) => {
       deviceIdIs(deviceId);
       void listDevices();
