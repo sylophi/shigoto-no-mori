@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { LOOPBACK_FILE } from "@shigomori/contracts/link";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import * as DirectPlane from "@shared/hub/directPlane";
+import { notStarted } from "@shared/hub/inertDevice";
 import { serviceConfigOf } from "@shared/account/hostShell";
 import { LayerDownError, layerLatch } from "@shared/layerLatch";
 import * as DeviceId from "@host/lib/config/DeviceId";
@@ -102,12 +103,14 @@ export const remotePlanesLayer = Layer.effectDiscard(
 );
 
 // The device's place on the account, as it moves: the host's account
-// (handlers.ts) and the shell follow it.
+// (handlers.ts) and the shell follow it. A device that could not start
+// tells them nothing.
 export const followDeviceAccount = Layer.effectDiscard(
   Effect.gen(function* () {
     const device = yield* PeerDevice.PeerDevice;
     const shell = yield* Shell.Shell;
     yield* device.account.pipe(
+      Stream.filter((state) => state !== notStarted),
       Stream.runForEach((state) =>
         Effect.promise(() => noteDeviceAccount(state)).pipe(
           Effect.andThen(shell.account(state)),
