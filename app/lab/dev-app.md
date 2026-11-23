@@ -31,7 +31,7 @@ one place (`main/flavor.ts`), which hands it to the host.
 | Single-instance lock  | in its userData                                 | in its userData                                                          |
 | CLI                   | `sm`, `shigomori` (bundled)                     | `smd`, `shigomori-dev` (`dist-cli/smd`)                                  |
 | Updates               | the app's releases                              | none                                                                     |
-| Hub and Clerk config  | Baked in at build time                          | `.env.local` (`hub-dev.shigomori.com`)                                   |
+| Hub and Clerk config  | Baked in at build time                          | `.env.local` (`hub.colibrii.link`)                                       |
 
 Settings' Danger zone (Nuke everything) returns a build to a fresh
 install: its worktrees, its `sm` links and hooks, its device on the
