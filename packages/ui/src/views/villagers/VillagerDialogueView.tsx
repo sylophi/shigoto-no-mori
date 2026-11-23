@@ -1,7 +1,12 @@
 import { type CSSProperties, type ReactNode, useState } from "react";
+import { capitalized } from "@shigomori/contracts/words";
 import { VillagerFaceView } from "../shared/VillagerSaysView.tsx";
 import { cn } from "../../lib/utils.ts";
-import type { MoveNews, Speaker } from "../../lib/villagerVoice.ts";
+import {
+  type MoveNews,
+  movedWhere,
+  type Speaker,
+} from "../../lib/villagerVoice.ts";
 import { MovingBoxView } from "./MovingBoxView.tsx";
 import { NextArrowView } from "./NextArrowView.tsx";
 import { TypedWordsView } from "./TypedWordsView.tsx";
@@ -121,8 +126,9 @@ export function VillagerDialogueView({
   );
 }
 
-// "Moved in on MacBook, holding katrina", the branch picked out in
-// `ink` (a text color class) the way a dialogue picks out its key words.
+// "Moved into shigoto-no-mori on MacBook, living on katrina", the branch
+// picked out in `ink` (a text color class) the way a dialogue picks out
+// its key words.
 export function MoveCaptionView({
   news,
   ink,
@@ -130,18 +136,16 @@ export function MoveCaptionView({
   news: MoveNews;
   ink: string;
 }) {
-  const verb = news.kind === "in" ? "Moved in" : "Moved out";
-  const where = news.device === null ? "" : ` on ${news.device}`;
   return (
-    <p className="mt-1.5 truncate text-xs text-muted-foreground">
-      {verb}
-      {where}
-      {news.detail && news.branch && (
+    <p className="mt-1.5 text-xs wrap-anywhere text-muted-foreground">
+      {capitalized(movedWhere(news))}
+      {news.detail?.branch && (
         <>
-          , {news.detail.toLowerCase()}{" "}
+          , {news.detail.lead.toLowerCase()}{" "}
           <span className={cn("font-mono font-medium", ink)}>
-            {news.branch}
+            {news.detail.branch}
           </span>
+          {news.detail.tail}
         </>
       )}
     </p>

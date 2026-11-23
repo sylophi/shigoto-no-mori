@@ -28,7 +28,7 @@ import { toastVillagerMove } from "@/components/villagers/toasts";
 import { hostScopeOf } from "@/hooks/remote/useHostScope";
 import { clientConfigOnce } from "@/hooks/config/useClientConfig";
 import type { RendererApi } from "@/lib/runtime/pageApi";
-import { onWorktreeLists } from "@/lib/viewFeed";
+import { heldProjects, onWorktreeLists } from "@/lib/viewFeed";
 import { remoteDeviceById } from "@/lib/remote/devices";
 import {
   type MoveKind,
@@ -186,12 +186,21 @@ async function tell({
       const device = scope.remote
         ? remoteDeviceById(registry, deviceId)?.label
         : undefined;
+      const projects = new Map(
+        heldProjects(deviceId)?.map((project) => [project.id, project.name]),
+      );
       const told: [MoveKind, Worktree[]][] = [
         ["in", movedIn],
         ["out", movedOut],
       ];
       for (const [kind, worktrees] of told) {
-        for (const fresh of moveNewsFor(kind, worktrees, speakers, device)) {
+        for (const fresh of moveNewsFor(
+          kind,
+          worktrees,
+          speakers,
+          projects,
+          device,
+        )) {
           const key = [deviceId, kind, moveGroup(fresh.speakers[0])].join(
             "\u0000",
           );
@@ -207,7 +216,7 @@ async function tell({
               return speaker === undefined ? [] : [[w.id, speaker] as const];
             }),
           );
-          const news = moveNews(kind, moved, voices, device) ?? fresh;
+          const news = moveNews(kind, moved, voices, projects, device) ?? fresh;
           // Told again under its id, a toast still showing changes in
           // place.
           const id =
