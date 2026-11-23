@@ -262,15 +262,18 @@ export function makeAccountHandlers(
       const state = await shell.device.account();
       const accountId = accountIdOf(state);
       if (accountId === null) return [];
+      const askedWith = shell.profile().read();
       const devices = await shell.device.listDevices();
       lastListed = { accountId, devices };
       // A peer's change to this device's name or icon, taken from the
-      // listing.
+      // listing, unless one made here while it was asked for is newer.
       const self = await shell.deviceId();
       const listed = devices.find((device) => device.deviceId === self);
       const profile = shell.profile().read();
       if (
         listed !== undefined &&
+        profile.deviceName === askedWith.deviceName &&
+        profile.deviceIcon === askedWith.deviceIcon &&
         (listed.name !== (await nameOf(profile)) ||
           listed.icon !== (await iconOf(profile)))
       ) {
