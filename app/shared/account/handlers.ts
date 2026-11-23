@@ -278,17 +278,26 @@ export function makeAccountHandlers(
       // listing, unless one made here while it was asked for is newer.
       const self = await shell.deviceId();
       const listed = devices.find((device) => device.deviceId === self);
-      const profile = shell.profile().read();
-      if (
-        listed !== undefined &&
-        profile.deviceName === askedWith.deviceName &&
-        profile.deviceIcon === askedWith.deviceIcon &&
-        (listed.name !== (await nameOf(profile)) ||
-          listed.icon !== (await iconOf(profile)))
-      ) {
+      if (listed === undefined) return [...devices];
+      const detected = await shell.detectedIcon();
+      const unnamed =
+        askedWith.deviceName === undefined
+          ? (await shell.defaultName()).name
+          : undefined;
+      // Nothing is awaited from this read to keep's write.
+      const now = shell.profile().read();
+      const takeName =
+        now.deviceName === askedWith.deviceName &&
+        listed.name !== (now.deviceName ?? unnamed);
+      const takeIcon =
+        now.deviceIcon === askedWith.deviceIcon &&
+        listed.icon !== (now.deviceIcon ?? detected);
+      if (takeName || takeIcon) {
         await keep({
-          deviceName: listed.name,
-          deviceIcon: await pickOf(listed.icon),
+          ...(takeName ? { deviceName: listed.name } : {}),
+          ...(takeIcon
+            ? { deviceIcon: listed.icon === detected ? undefined : listed.icon }
+            : {}),
         });
       }
       return [...devices];
