@@ -11,7 +11,7 @@ import { HostAccount } from "@host/lib/HostAccount";
 import * as Sharing from "@host/lib/Sharing";
 import * as Shell from "@host/lib/Shell";
 import type { HostServices } from "@host/process/services";
-import { signedOut } from "./peers";
+import { signedOut } from "./AccountPeers";
 
 type Handler = EffectHandlers<
   typeof controlContract,

@@ -6,7 +6,9 @@
 import { ControlError } from "@shigomori/contracts/modules/control";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import {
+  HubCredentialRejectedError,
   type HubRateLimitedError,
+  HubUpdateRequiredError,
   isHubRateLimitedError,
   isHubRefusal,
 } from "@shigomori/contracts/errors";
@@ -14,9 +16,11 @@ import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import { answerWithin } from "@shigomori/engine/liveness";
 import { byHostKind } from "@shigomori/engine/platform";
 import * as Schema from "effect/Schema";
+import { BLOCKED } from "@shared/hub/directPlane";
 
 export type DirectPeer = {
   readonly sharesData: boolean;
@@ -68,19 +72,54 @@ export const withinAccountRead = <A, E, R>(read: Effect.Effect<A, E, R>) =>
     ),
   );
 
+export const signedOut = () =>
+  new ControlError(
+    "signed-out",
+    `This device isn't signed in to an account, so it has no other devices to reach. ${byHostKind(
+      {
+        app: "Sign in from the app first.",
+        headless: "Sign in first (`login`).",
+      },
+    )}`,
+  );
+
+// A blocked device's words in a window (BLOCKED), as a sentence.
+const sentenceOf = (words: string) =>
+  `${words.charAt(0).toUpperCase()}${words.slice(1)}.`;
+
+const signInAgain = () =>
+  byHostKind({
+    app: "Sign in again from the app.",
+    headless: "Sign in again (`login`).",
+  });
+
 // Why the device list failed, in the words the terminal prints: a
-// credential the hub no longer honors (the device was removed from the
-// account while the app held it) is the signed-out case, the hub's rate
-// limit crosses as itself (the terminal says when to try again), and
-// anything else is the hub out of reach, with its cause.
+// device signed out since its account was read reads as signed out, a
+// hub that wants a newer build says so, a credential the hub no longer
+// honors or a device removed from the account is signed in again, the
+// hub's rate limit crosses as itself (the terminal says when to try
+// again), and anything else is the hub out of reach, with its cause.
 export function listDevicesFailure(
   error: unknown,
 ): ControlError | AccountUnreachableError | HubRateLimitedError {
   if (isHubRateLimitedError(error)) return error;
+  if (Predicate.isTagged(error, "NotEnrolled")) return signedOut();
+  if (error instanceof HubUpdateRequiredError) {
+    return new ControlError(
+      "device-blocked",
+      sentenceOf(BLOCKED["update-required"]),
+    );
+  }
+  if (error instanceof HubCredentialRejectedError) {
+    return new ControlError(
+      "signed-out",
+      `${sentenceOf(BLOCKED.refused)} ${signInAgain()}`,
+    );
+  }
   return isHubRefusal(error)
     ? new ControlError(
         "signed-out",
-        `This device's access to the account was removed. ${byHostKind({ app: "Sign in again from the app.", headless: "Sign in again (`login`)." })}`,
+        `This device's access to the account was removed. ${signInAgain()}`,
       )
     : new AccountUnreachableError({ reason: messageOf(error) });
 }
