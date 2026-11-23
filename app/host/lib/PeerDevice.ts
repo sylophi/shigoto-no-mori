@@ -41,7 +41,7 @@ import * as DeviceId from "@host/lib/config/DeviceId";
 import * as HostFacts from "@host/lib/HostFacts";
 import * as Shell from "@host/lib/Shell";
 import * as DeviceLink from "@host/socket/DeviceLink";
-import { inertDevice } from "@shared/hub/inertDevice";
+import { orInertDevice, unconfiguredDevice } from "@shared/hub/inertDevice";
 
 export class PeerDevice extends Context.Service<PeerDevice, Colibrii.Device>()(
   "sm/host/PeerDevice",
@@ -190,12 +190,7 @@ export const layer = (config: AccountServiceConfig) =>
             ),
           ),
           Scope.provide(scope),
-          Effect.catchCause((cause) =>
-            Effect.as(
-              Effect.logError("[peers] the device could not start", cause),
-              inertDevice(cause),
-            ),
-          ),
+          orInertDevice,
         );
 
       const current = yield* SubscriptionRef.make<Colibrii.Device | null>(null);
@@ -228,10 +223,7 @@ export const layer = (config: AccountServiceConfig) =>
       );
 
       if (!isConfigured(config)) {
-        yield* SubscriptionRef.set(
-          current,
-          inertDevice(new Error("This build has no account service.")),
-        );
+        yield* SubscriptionRef.set(current, unconfiguredDevice);
       } else {
         yield* Effect.flatMap(settingsNow, remake);
         const written = yield* (yield* StoreChanges.StoreChanges).subscribe;

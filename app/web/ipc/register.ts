@@ -39,7 +39,7 @@ import { shellContract } from "@shigomori/contracts/modules/shell";
 import type { Handlers } from "@shigomori/contracts/types";
 import { servedHub } from "@shared/hub/bridgeHandlers";
 import * as DirectPlane from "@shared/hub/directPlane";
-import { inertDevice } from "@shared/hub/inertDevice";
+import { orInertDevice, unconfiguredDevice } from "@shared/hub/inertDevice";
 import { fetchReleases } from "@shared/releases";
 import {
   type SharedSettingsDoc,
@@ -163,15 +163,10 @@ export async function createWebBridge(deps: WebBridgeDeps): Promise<WebBridge> {
             ),
           ),
           Scope.provide(deviceScope),
-          Effect.catchCause((cause) =>
-            Effect.as(
-              Effect.logError("[peers] the device could not start", cause),
-              inertDevice(cause),
-            ),
-          ),
+          orInertDevice,
         ),
       )
-    : inertDevice(new Error("This build has no account service."));
+    : unconfiguredDevice;
 
   // The direct plane's shared composition (shared/hub/directPlane.ts),
   // the same assembly the host's (host/process/wires.ts), with no
