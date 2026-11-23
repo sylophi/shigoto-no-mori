@@ -54,7 +54,7 @@ A device is made of two folders:
   and `sm doctor` warns.
 - **userData.** The app instance: `colibrii.json` (the device's
   enrollment on the account service and its listener's port, sealed
-  with `device-store-key`, the key the OS keychain keeps; plain on
+  with `device-store-key`, the key the OS keychain keeps, and plain on
   Linux), `account.json` (the device's name, its icon pick and the
   accept-commands switch), `clientConfig.json` (theme, keep reachable,
   keybindings), `clerk-tokens.json` (Clerk session), `windows.json`
