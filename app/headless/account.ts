@@ -26,7 +26,6 @@ import { defaultDesktopDeviceName } from "@shared/account/defaultDeviceName";
 import {
   accessTokenFor,
   accountIdOf,
-  type DevicePort,
   makeAccountHandlers,
   startCodeSignIn,
 } from "@shared/account/handlers";
@@ -49,18 +48,14 @@ const loginStatus = ({
   deviceIcon,
 }: AccountStatus): LoginStatus => ({ signedIn, deviceName, deviceIcon });
 
-export type HeadlessAccount = ReturnType<typeof headlessAccount>;
-
-// The device's calls, in this process.
-const device: DevicePort = {
-  account: deviceCalls.account,
-  enroll: deviceCalls.enroll,
-  signOut: deviceCalls.signOut,
-  list: deviceCalls.listDevices,
-  rename: (deviceId, name) => deviceCalls.renameDevice({ deviceId, name }),
-  setData: (deviceId, data) => deviceCalls.setDeviceData({ deviceId, data }),
-  remove: deviceCalls.removeDevice,
+// What the device calls take, said for the terminal.
+const signedIn = async () => {
+  if (accountIdOf(await deviceCalls.account()) === null) {
+    throw new Error("This machine isn't signed in. `login` signs it in.");
+  }
 };
+
+export type HeadlessAccount = ReturnType<typeof headlessAccount>;
 
 // Made before the host starts, since the loopback takes its contracts
 // as it starts. The device id comes once the host is up (boot), and a
@@ -78,7 +73,7 @@ export function headlessAccount(facts: HostFacts) {
 
   const account = makeAccountHandlers({
     config: () => config,
-    device,
+    device: deviceCalls,
     profile: () => profile,
     deviceId: () => deviceIdOf,
     defaultName: defaultDesktopDeviceName,
@@ -95,13 +90,6 @@ export function headlessAccount(facts: HostFacts) {
     Promise.resolve()
       .then(() => account.listDevices(undefined, null))
       .catch(() => {});
-
-  // What the device calls take, said for the terminal.
-  const signedIn = async () => {
-    if (accountIdOf(await device.account()) === null) {
-      throw new Error("This machine isn't signed in. `login` signs it in.");
-    }
-  };
 
   const login = HostRpc.handlers(loginContract, {
     status: () =>
@@ -185,6 +173,6 @@ export function headlessAccount(facts: HostFacts) {
       void listDevices();
       setInterval(() => void listDevices(), LIST_DEVICES_EVERY_MS).unref();
     },
-    signOutForNuke: () => nukeSignOut(device),
+    signOutForNuke: () => nukeSignOut(deviceCalls),
   };
 }

@@ -14,12 +14,11 @@
 import * as Colibrii from "@colibrii/sdk";
 import * as ColibriiBrowser from "@colibrii/sdk/browser";
 import { accountIdOf, makeAccountHandlers } from "@shared/account/handlers";
-import { listDevicesOf } from "@shared/account/deviceInfo";
+import { devicePortOf } from "@shared/account/deviceInfo";
 import { profileStore } from "@shared/account/profile";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
@@ -115,8 +114,6 @@ const MINT_WAIT_MS = 30_000;
 const MINT_LOCK = "sm.web.accountChange";
 
 export const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
-
-const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect);
 
 // The profile's device id. One already stored is read as it is (a tab
 // boots at once). A missing or mangled one is minted under a lock every
@@ -221,22 +218,17 @@ export async function createWebBridge(deps: WebBridgeDeps): Promise<WebBridge> {
   const announceProfile = () =>
     tab.push(accountContract, "changed", { accountId: knownAccountId });
 
+  const devicePort = devicePortOf((call) => Effect.runPromise(call(device)));
   const accountHandlers = makeAccountHandlers({
     config: () => config,
     device: {
-      account: () =>
-        run(Stream.runHead(device.account).pipe(Effect.map(Option.getOrThrow))),
+      ...devicePort,
       // The tab enrolls under the profile's id as storage holds it, so an
       // enrollment never lands beside an id other than its own.
       enroll: (input) => {
         keepWebDeviceId(deps.localStorage, deviceId);
-        return run(device.enroll(input));
+        return devicePort.enroll(input);
       },
-      signOut: () => run(device.signOut),
-      list: () => run(listDevicesOf(device)),
-      rename: (id, name) => run(device.devices.rename(id, name)),
-      setData: (id, data) => run(device.devices.setData(id, data)),
-      remove: (id) => run(device.devices.remove(id)),
     },
     profile: () => profile,
     deviceId: async () => deviceId,

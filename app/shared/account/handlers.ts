@@ -38,10 +38,16 @@ export type DevicePort = {
   }) => Promise<void>;
   // Whether the service has let the device go, so nothing is owed.
   readonly signOut: () => Promise<boolean>;
-  readonly list: () => Promise<readonly DeviceInfo[]>;
-  readonly rename: (deviceId: string, name: string) => Promise<void>;
-  readonly setData: (deviceId: string, data: DeviceData) => Promise<void>;
-  readonly remove: (deviceId: string) => Promise<void>;
+  readonly listDevices: () => Promise<readonly DeviceInfo[]>;
+  readonly renameDevice: (input: {
+    readonly deviceId: string;
+    readonly name: string;
+  }) => Promise<void>;
+  readonly setDeviceData: (input: {
+    readonly deviceId: string;
+    readonly data: DeviceData;
+  }) => Promise<void>;
+  readonly removeDevice: (deviceId: string) => Promise<void>;
 };
 
 export type AccountShell = {
@@ -248,7 +254,7 @@ export function makeAccountHandlers(
     // Removing this device reads as removed, which signs it out. One
     // that is offline changes no roster, so the windows hear it here.
     revokeDevice: async (deviceId) => {
-      await shell.device.remove(deviceId);
+      await shell.device.removeDevice(deviceId);
       await shell.changed();
     },
 
@@ -256,7 +262,7 @@ export function makeAccountHandlers(
       const state = await shell.device.account();
       const accountId = accountIdOf(state);
       if (accountId === null) return [];
-      const devices = await shell.device.list();
+      const devices = await shell.device.listDevices();
       lastListed = { accountId, devices };
       // A peer's change to this device's name or icon, taken from the
       // listing.
@@ -285,7 +291,7 @@ export function makeAccountHandlers(
 
     setDeviceName: async ({ deviceId, name }) => {
       await signedInAs();
-      await shell.device.rename(deviceId, name);
+      await shell.device.renameDevice({ deviceId, name });
       if (deviceId === (await shell.deviceId())) {
         await keep({ deviceName: name });
       }
@@ -301,7 +307,10 @@ export function makeAccountHandlers(
         ? shell.platform
         : (lastListed?.devices.find((device) => device.deviceId === deviceId)
             ?.platform ?? "");
-      await shell.device.setData(deviceId, { platform, icon });
+      await shell.device.setDeviceData({
+        deviceId,
+        data: { platform, icon },
+      });
       if (self) await keep({ deviceIcon: await pickOf(icon) });
       return status();
     },

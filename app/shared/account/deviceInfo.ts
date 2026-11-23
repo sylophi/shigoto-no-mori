@@ -9,7 +9,10 @@ import {
 } from "@shigomori/contracts/deviceIcon";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
+import type { DevicePort } from "./handlers";
 
 const deviceInfoOf = (record: DeviceRecord): DeviceInfo => {
   const { platform, icon } = record.data;
@@ -27,7 +30,7 @@ const deviceInfoOf = (record: DeviceRecord): DeviceInfo => {
 
 // The account's devices. The service's rate limit crosses as the
 // contract's, which keeps how long to wait.
-export const listDevicesOf = (device: Device) =>
+const listDevicesOf = (device: Device) =>
   device.devices.list.pipe(
     Effect.map((records) => records.map(deviceInfoOf)),
     Effect.mapError((error) =>
@@ -38,3 +41,22 @@ export const listDevicesOf = (device: Device) =>
         : error,
     ),
   );
+
+// The account calls on a Colibrii device, run on it as `onDevice` has it.
+export const devicePortOf = (
+  onDevice: <A, E>(call: (device: Device) => Effect.Effect<A, E>) => Promise<A>,
+): DevicePort => ({
+  account: () =>
+    onDevice((device) =>
+      Stream.runHead(device.account).pipe(Effect.map(Option.getOrThrow)),
+    ),
+  enroll: (input) => onDevice((device) => device.enroll(input)),
+  signOut: () => onDevice((device) => device.signOut),
+  listDevices: () => onDevice(listDevicesOf),
+  renameDevice: ({ deviceId, name }) =>
+    onDevice((device) => device.devices.rename(deviceId, name)),
+  setDeviceData: ({ deviceId, data }) =>
+    onDevice((device) => device.devices.setData(deviceId, data)),
+  removeDevice: (deviceId) =>
+    onDevice((device) => device.devices.remove(deviceId)),
+});

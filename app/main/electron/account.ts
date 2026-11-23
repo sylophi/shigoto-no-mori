@@ -167,12 +167,10 @@ const device: DevicePort = {
   account: () => Effect.runPromise(host().account()),
   enroll: (input) => Effect.runPromise(host().enroll(input)),
   signOut: () => Effect.runPromise(host().signOut()),
-  list: () => Effect.runPromise(host().listDevices()),
-  rename: (deviceId, name) =>
-    Effect.runPromise(host().renameDevice({ deviceId, name })),
-  setData: (deviceId, data) =>
-    Effect.runPromise(host().setDeviceData({ deviceId, data })),
-  remove: (deviceId) => Effect.runPromise(host().removeDevice(deviceId)),
+  listDevices: () => Effect.runPromise(host().listDevices()),
+  renameDevice: (input) => Effect.runPromise(host().renameDevice(input)),
+  setDeviceData: (input) => Effect.runPromise(host().setDeviceData(input)),
+  removeDevice: (deviceId) => Effect.runPromise(host().removeDevice(deviceId)),
 };
 
 // A nuke's sign-out (hostShell.ts).
