@@ -1,116 +1,36 @@
 # host
 
-What a machine serves: its projects, worktrees, scripts, mirrors, port
-forwards and device link, run as the app's utility process (below).
-Its data model is the engine's (`packages/engine`), which it runs
-in-process (`lib/Engine.ts`): the handlers and services resolve the
-ids a call names once (`lib/projects`) and call the engine's services
-on what that found.
+The host serves everything on a machine: its projects, worktrees, scripts, mirrors, port forwards, and device link, running as the app's utility process (see below). Its data model comes from the engine ([`packages/engine`](../../packages/engine)), which the host runs in-process ([`lib/Engine.ts`](lib/Engine.ts)): handlers and services resolve the ids named in a call once ([`lib/projects`](lib/projects)) and call the engine's services on those resolved values.
 
-- `process/`: the composition root. `run.ts` is the host's run,
-  whichever shell started it, and `host.ts` the Electron shell's entry
-  to it. `layer.ts` is the host's layer
-  graph, `services.ts` names the services the handlers answer on
-  (`HostServices`), `handlers.ts` holds every module's handlers as
-  one layer, `wires.ts` holds the loopback and the device link, and
-  `graph.ts` is the root's one way into the graph from callbacks that
-  are not Effect (EFFECT.md, section 3), which nothing outside
-  `process/` uses.
-- `ipc/modules/<module>.ts`: one handler table per host-scoped contract
-  module, an effect per call over the services, and its views
-  (`Views.view`, `lib/Views.ts`).
-- `lib/`: the services and what they use. A service module is named
-  for its service (`VillagerData.ts`, `GitWatcher.ts`), so the lint
-  rules for services read it (`lint/README.md`); lowercase modules are
-  helpers, Promise code and the engine calls, and `lib/cli/shell.ts`
-  holds the one service among them, `HookShell`.
-- `socket/`: the device link's server and its byte channels, the
-  loopback the windows dial, and the layer a module's handlers are
-  served from (`hostRpc.ts`). `direct/`, `hub/`: reaching peers.
-  `mirror/`, `fileSync/`, `portForward/`: the remote mechanisms.
+- [`process/`](process/): the composition root. [`run.ts`](process/run.ts) runs the host regardless of which shell started it, and [`host.ts`](process/host.ts) is the Electron shell's entry point to it. [`layer.ts`](process/layer.ts) defines the host's layer graph, [`services.ts`](process/services.ts) names the services that handlers depend on (`HostServices`), [`handlers.ts`](process/handlers.ts) combines every module's handlers into one layer, [`wires.ts`](process/wires.ts) sets up the loopback and the device link, and [`graph.ts`](process/graph.ts) is the composition root's single entry point into the graph from non-Effect callbacks ([`EFFECT.md`](../../EFFECT.md), section 3), which nothing outside `process/` uses.
+- `ipc/modules/<module>.ts`: one handler table per host-scoped contract module, defining an effect per call over the services along with its views (`Views.view`, [`lib/Views.ts`](lib/Views.ts)).
+- [`lib/`](lib/): the services and their supporting code. A service module is named for its service ([`VillagerData.ts`](lib/VillagerData.ts), [`GitWatcher.ts`](lib/GitWatcher.ts)), so the service lint rules apply to it ([`lint/README.md`](../../lint/README.md)). Lowercase modules hold helpers, Promise code, and engine calls. [`lib/cli/shell.ts`](lib/cli/shell.ts) is the one lowercase module that defines a service (`HookShell`).
+- [`socket/`](socket/): the device link server and its byte channels, the loopback socket that windows connect to, and the layer that serves a module's handlers ([`hostRpc.ts`](socket/hostRpc.ts)). Peer wiring lives in [`process/wires.ts`](process/wires.ts) and [`app/shared/hub/directPlane.ts`](../shared/hub/directPlane.ts), and [`mirror/`](mirror/), [`fileSync/`](fileSync/), and [`portForward/`](portForward/) implement the remote mechanisms.
 
 ## A process of its own
 
-The host runs apart from the shell so that its work never stalls a
-window and a crash of it is a reconnect. The shell forks it at launch
-(`main/hostProcess.ts`, or with no shell at all on a machine with no
-screen, `../headless`) and reaches it over RPC as every client does:
-a window, the shell and the terminal `sm` on the loopback, the web
-client and the other devices over the device link. The shell owns the
-person's sign-in (Clerk) and the device's profile, and the host owns
-the device on the account (`lib/PeerDevice.ts`, on Colibrii): its
-enrollment, its hub socket and its links. The host tells the shell the
-device's place on the account as it comes up and at every change. The
-device identity is the host's, in its store, reported to the shell as
-the host comes up. A quit is the shell asking the host
-whether it is busy, then closing its scope. It lives in `app/` rather
-than a package of its own because it ships only inside the app, built
-by the app's Vite config beside the shell and the renderer it serves.
+The host runs in a separate process from the shell so its work never stalls a window, and a crash of the host recovers with a reconnect. The shell forks the host at launch ([`main/hostProcess.ts`](../main/hostProcess.ts)), or it runs with no shell at all on a machine with no screen ([`../headless`](../headless)). The shell communicates with the host over RPC just as every client does: renderer windows, the shell, and the terminal `sm` connect over the loopback, while the web client and other devices connect over the device link.
+
+The shell owns the user's sign-in (Clerk) and the device's profile. The host owns the device on the account ([`lib/PeerDevice.ts`](lib/PeerDevice.ts), on Colibrii): its enrollment, its hub socket, and its links. The host reports the device's place on the account to the shell at startup and on every change. The host also owns the device identity, kept in its store, and reports it to the shell at startup. To quit, the shell asks the host whether it is busy, then closes its scope.
+
+The host lives in `app/` rather than its own package because it ships only inside the app, built by the app's Vite config alongside the shell and the renderer it serves.
 
 ## Commit points
 
-The host's multi-step changes of state, each with the step that
-commits it (`EFFECT.md`, section 5); the engine's are in
-`packages/engine/README.md`.
+Each multi-step state change in the host has a single commit point ([`EFFECT.md`](../../EFFECT.md), section 5). The engine's commit points are in [`packages/engine/README.md`](../../packages/engine/README.md).
 
-- **A transfer's source teardown** (`lib/sync/receipts.ts`): the
-  delete commits it, forced when the move captured uncommitted work.
-  The receipt is checked before the cleanup, so a source that changed
-  keeps its cleanup unrun, and again by the removal on the source's
-  own device, after its cleanup and right before the delete
-  (`movedSourceChange`, `Worktrees.remove`'s `expect`), since a cleanup
-  script or an editor can write to it meanwhile.
-- **The clone from a peer** (`lib/sync/cloneFromPeer.ts`): the rename
-  of the whole clone into its folder and its register, run
-  uninterrupted, commit it. It is built in a `.<name>.partial-<pid>`
-  sibling held in a scope, so a failure or a cancel removes it, and a
-  dead process's is swept by the next clone of that name. A
-  `sm-clone-pending` file in its `.git`, written before the rename and
-  removed after the register, lets the next clone of that repo into
-  the folder register a clone a crash left between the two.
-- **A landing** (`lib/sync/landing.ts`): the caller's run of the
-  `keep` it answers with commits it, once the move has nothing left to
-  fail. Until then a failure or a cancel undoes its create
-  (`Worktrees.createHeld`); after it only a cancel does, at a later
-  step of the move (a pull's files step).
-- **The data-folder move** (the engine's `src/dataDirMove.ts`, asked
-  for by `lib/dataDirMove.ts`): the pointer commits it. Its journal,
-  kept in the data folder, is written before the re-key: a start that
-  finds it at the source undoes the move, one that finds it at the
-  destination finishes it. A rename cut before the
-  pointer moves leaves the pointer naming a folder that is gone, so
-  every process, the terminal's included, finds the data dir through
-  `Paths`, which looks for a rename's journal at the staged pointer's
-  target and at the default place, and commits the pointer when that
-  journal names the folder that left
-  (`packages/engine/src/dataDirMoveJournal.ts`); a process that can't
-  write the pointer refuses to resolve, naming both folders. A copy to
-  another volume holds the store's write lock for its length, so no
-  store write tears the copy. The recovery keeps the journal until
-  every step it owes is done, and one it can't read stays, for a look.
-  The steps are in the engine module's header. The host adds the
-  checks and holds only it can make, and the copy itself.
-- **Nuke** (`lib/nuke.ts`, then the shell's `main/electron/nuke.ts`):
-  the marker the shell writes in userData commits it. The start that
-  finds it deletes what it names and userData, the marker last, and
-  one that can't read it deletes nothing (`shared/nuke.ts`).
+- **A transfer's source teardown** ([`lib/sync/receipts.ts`](lib/sync/receipts.ts)): deleting the source commits the teardown, forced when the move captured uncommitted work. The receipt is checked before cleanup runs, so a source that has changed skips its cleanup. After cleanup and right before deletion, removal on the source's own device compares the source against the snapshot passed in `Worktrees.remove`'s `expect` (`movedSourceChange`), because a cleanup script or an editor can write to the source in the meantime.
+- **The clone from a peer** ([`lib/sync/cloneFromPeer.ts`](lib/sync/cloneFromPeer.ts)): renaming the completed clone into its target folder and registering it, run uninterrupted, commits the clone. It is built in a `.<name>.partial-<pid>` sibling directory managed by a scope, so a failure or a cancellation removes it, and a partial directory left by a dead process is swept up by the next clone of that name. A `sm-clone-pending` file in its `.git` directory, written before the rename and removed after registration, lets the next clone of that repo into the same folder register a clone left behind by a crash between those two steps.
+- **A landing** ([`lib/sync/landing.ts`](lib/sync/landing.ts)): the landing returns a `keep` action, and the caller running `keep` commits it once the move has nothing left that can fail. Until `keep` runs, either a failure or a cancellation undoes the worktree creation (`Worktrees.createHeld`). After `keep` runs, only a cancellation at a later step of the move (a pull's files step) undoes it.
+- **The data-folder move** (the engine's [`src/dataDirMove.ts`](../../packages/engine/src/dataDirMove.ts), requested by [`lib/dataDirMove.ts`](lib/dataDirMove.ts)): updating the pointer commits the move. Its journal, stored in the data folder, is written before the re-key: on startup, finding the journal at the source undoes the move, while finding it at the destination finishes the move.
+  If a rename is interrupted before the pointer moves, the pointer still names a folder that is gone. Every process, including the terminal `sm`, therefore locates the data dir through `Paths`: it looks for a rename's journal at the staged pointer's target and at the default location, and commits the pointer when that journal names the moved folder ([`packages/engine/src/dataDirMoveJournal.ts`](../../packages/engine/src/dataDirMoveJournal.ts)). A process that cannot write the pointer refuses to resolve and names both folders.
+  A copy to another volume holds the store's write lock for its full duration so no store write tears the copy. Recovery keeps the journal until every remaining step finishes, and leaves an unreadable journal in place for inspection. The full step list is in the engine module's header. The host adds the checks and holds only the host can make, along with the copy itself.
+- **Nuke** ([`lib/nuke.ts`](lib/nuke.ts), followed by the shell's [`main/electron/nuke.ts`](../main/electron/nuke.ts)): the marker file the shell writes in userData commits the nuke. On the next startup, finding that marker deletes the paths it names along with userData, removing the marker last. If startup cannot read the marker, it deletes nothing ([`shared/nuke.ts`](../shared/nuke.ts)).
 
 ## A new call, end to end
 
-1. The call in its contract module
-   (`packages/contracts/src/modules/<module>.ts`), classified
-   (`packages/contracts/README.md`), with its wire sample.
-2. The capability as a method on the service that owns the domain
-   (EFFECT.md, section 1), in `lib/`; a new service also goes into
-   `process/layer.ts` and `HostServices`.
-3. The handler in `ipc/modules/<module>.ts`: decode, call the method,
-   nothing else. The table `satisfies` the contract's handlers type, so
-   typecheck fails until the call has one.
-4. A new module's table joins `hostHandlers` in `process/handlers.ts`
-   (`HostRpc.handlers`, `socket/hostRpc.ts`); a new call in an
-   existing module needs nothing there. The group's RPC server decodes
-   each payload and encodes each answer with the call's schemas.
-5. The renderer reaches it through its client; the lab's fake host
-   answers a call it has no fixture for with a stub derived from the
-   schema, so it needs an entry (`app/lab/fake-host/`) only when a
-   screen should show something real.
+1. Define the call in its contract module (`packages/contracts/src/modules/<module>.ts`), classify it per [`packages/contracts/README.md`](../../packages/contracts/README.md), and add its wire sample.
+2. Implement the capability as a method on the service that owns the domain ([`EFFECT.md`](../../EFFECT.md), section 1) in [`lib/`](lib/). If adding a new service, also add it to [`process/layer.ts`](process/layer.ts) and `HostServices`.
+3. Add the handler in `ipc/modules/<module>.ts`: decode, call the service method, and nothing else. Because the table `satisfies` the contract's handlers type, typecheck fails until the call has a handler.
+4. For a new module, add its table to `hostHandlers` in [`process/handlers.ts`](process/handlers.ts) (`HostRpc.handlers`, [`socket/hostRpc.ts`](socket/hostRpc.ts)). A new call in an existing module needs no change there. The group's RPC server decodes each payload and encodes each response using the call's schemas.
+5. Call it from the renderer through its client. The lab's fake host returns a schema-derived stub for any call without a fixture, so it needs an entry in [`app/lab/fake-host/`](../lab/fake-host/) only when a screen should show something real.

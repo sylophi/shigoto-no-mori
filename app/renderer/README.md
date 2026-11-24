@@ -1,50 +1,12 @@
 # renderer
 
-The app's UI as the desktop window and the web client both run it: the
-containers, hooks, stores and routes over the views in `@shigomori/ui`
-(`app/DESIGN.md`, "Views and containers"). The web client's entry
-(`../web`) mounts this same tree.
+The app's UI as run by both the desktop window and the web client: containers, hooks, stores, and routes built over the views in `@shigomori/ui` ([`app/DESIGN.md`](../DESIGN.md), "Views and containers"). The web client's entry ([`../web`](../web)) mounts this same tree.
 
-- `index.tsx`, `boot.tsx`: a desktop window's entry and the boot both
-  shells share. `startApp` runs once a page (the query client, the
-  atoms' registry and what it keeps mounted, the device registry sync,
-  each peer's push watch);
-  `mountWindow` draws a window into it (`App.tsx`, the provider tree,
-  and `router.tsx`, the one route tree).
-- `components/<area>/`: the containers, by area, each binding its data
-  to a view from `@shigomori/ui` under the plain name the view drops
-  `View` from. A container draws no markup of its own.
-- `hooks/<area>/`: where a container's data comes from (`EFFECT.md`,
-  section 10), unless one container alone reads it, which may ask in
-  place. `lib/runtime/atoms.ts` builds the atoms of host views and push
-  streams, and `lib/runtime/viewHooks.ts` reads a host view's; a
-  request's key comes from `lib/queryKeys.ts`. A hook under
-  `hooks/remote/` scopes its calls to a device (`useHostScope`). A hook
-  of the page's own logic (which device is picked, where a click goes,
-  what a menu offers) sits with the containers of the area it belongs
-  to (`components/shared/DeviceTabs.tsx`'s `useDeviceTabs`,
-  `components/sidebar/openProject.ts`), and another area imports it
-  from there.
-- `lib/runtime/`: the client's runtime, one per window or tab, built
-  from its links as the page boots and disposed as it goes
-  (EFFECT.md, section 3): `client.ts`, the links (`ClientLinks.ts`,
-  `peerLink.ts`), the api over them (`Api.ts`), and the page's api
-  (`pageApi.tsx`): the shell's facts, the device id and that api,
-  which the entry builds and hands to the boot. React reads it with
-  `useApi()`; what the boot starts outside React takes it as a
-  parameter. Nothing reads it off a global. A call on it, or on a
-  device's api (`useHostScope().api`, a peer's), is an effect, run
-  with that api's `run` (a query hands it React Query's `signal`, so
-  a fetch it drops cancels the call); a push or a view is a stream,
-  read with its `listen` or an atom.
-- `lib/`: the rest of the window's own logic (deep links, focus, the
-  theme root, toasts, the remote device registry and its sync).
-- `store/`: the page's own state kept outside React, a store to a
-  file. One kept per worktree is built with `createWorktreeStore`
-  (`worktreeState.ts`), so it is forgotten with the worktree and, if
-  it moves, follows it to a new id. Beside them, two helpers the
-  script runs use (the slot codec, keyed subscribers).
+- [`index.tsx`](index.tsx), [`boot.tsx`](boot.tsx): the desktop window's entry point and the boot flow shared by both shells. `startApp` runs once per page (setting up the query client, the atom registry and what it keeps mounted, the device registry sync, and each peer's push watch), and `mountWindow` renders a window into that setup using [`App.tsx`](App.tsx) (the provider tree) and [`router.tsx`](router.tsx) (the single route tree).
+- `components/<area>/`: containers organized by area, each binding data to a view from `@shigomori/ui` under the plain name obtained by dropping `View` from the view's name. A container draws no markup of its own.
+- `hooks/<area>/`: where a container's data comes from ([`EFFECT.md`](../../EFFECT.md), section 10), unless only one container reads it, in which case that container may query it in place. [`lib/runtime/atoms.ts`](lib/runtime/atoms.ts) builds atoms for host views and push streams, [`lib/runtime/viewHooks.ts`](lib/runtime/viewHooks.ts) reads host view atoms, and [`lib/queryKeys.ts`](lib/queryKeys.ts) defines request keys. Hooks under [`hooks/remote/`](hooks/remote/) scope their calls to a device (`useHostScope`). Hooks for the page's own logic (which device is picked, where a click goes, what a menu offers) live alongside the containers of the area they belong to (for example, `useDeviceTabs` in [`components/shared/DeviceTabs.tsx`](components/shared/DeviceTabs.tsx) and [`components/sidebar/openProject.ts`](components/sidebar/openProject.ts)), and other areas import them from there.
+- [`lib/runtime/`](lib/runtime/): the client's runtime (one per window or tab), built from its links when the page boots and disposed when the page closes ([`EFFECT.md`](../../EFFECT.md), section 3). It contains [`client.ts`](lib/runtime/client.ts), the links ([`ClientLinks.ts`](lib/runtime/ClientLinks.ts), [`peerLink.ts`](lib/runtime/peerLink.ts)), the API layered over them ([`Api.ts`](lib/runtime/Api.ts)), and the page API ([`pageApi.tsx`](lib/runtime/pageApi.tsx)), which bundles the shell's facts, the device id, and that API. The entry builds the page API and passes it to boot. React reads it with `useApi()`, and code started by boot outside React receives it as a parameter. Nothing reads it from a global. Calls on this API or on a peer device's API (`useHostScope().api`) return effects executed with that API's `run` (a query passes React Query's `signal` so a dropped fetch cancels the call). Pushes and views are streams, read through `listen` or an atom.
+- [`lib/`](lib/): the rest of the window's logic (deep links, focus, the theme root, toasts, and the remote device registry and its sync).
+- [`store/`](store/): page state stored outside React, one store per file. Per-worktree stores are built with `createWorktreeStore` ([`worktreeState.ts`](store/worktreeState.ts)) so their state is forgotten when the worktree goes away and follows the worktree to a new id if it moves. Alongside them are two helpers used by script runs (the slot codec and keyed subscribers).
 
-A new screen is a view in `@shigomori/ui` with a scene
-(`packages/ui/README.md`), a container here that binds it, a route in
-`router.tsx` when it is a page, and its data from a hook.
+A new screen consists of a view in `@shigomori/ui` with a scene ([`packages/ui/README.md`](../../packages/ui/README.md)), a container here that binds it, a route in [`router.tsx`](router.tsx) when it is a page, and a hook supplying its data.

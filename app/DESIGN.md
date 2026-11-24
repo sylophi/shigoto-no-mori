@@ -1,470 +1,142 @@
 # Shigoto no Mori: design notes
 
-Rules for the app's visual layer. They apply to every component in
-`renderer/` and in `@shigomori/ui` (`packages/ui`, the primitives and
-the views), which the desktop window and the web client (`web/`) both
-render.
+Rules for the app's visual layer. They apply to every component in [`renderer/`](renderer/) and in `@shigomori/ui` ([`packages/ui`](../packages/ui), which contains the primitives and views), both of which are rendered by the desktop window and the web client ([`web/`](web/)).
 
 ## Theming: two visual systems, one component tree
 
-The app ships two designs: **doubutsu** (default: Animal Crossing
-overlay, class `doubutsu` on the theme root, orthogonal to light/dark) and
-**plain mode** (neutral shadcn-style, turned on as "Boring mode" in
-Settings → Appearance). There is ONE component tree: doubutsu is
-`packages/ui/src/styles/doubutsu.css` remapping tokens and hooking
-stable attributes on top of the plain-mode base. Keep it that way, and
-never fork a component per theme. Components are still written in the
-plain-mode vocabulary (tokens, borders, shadows), and the overlay
-handles translation, so build in plain-mode terms and verify in both.
+The app ships two designs: **doubutsu** (the default Animal Crossing overlay, applied via the `doubutsu` class on the theme root and orthogonal to light/dark) and **plain mode** (neutral shadcn-style, enabled as "Boring mode" in Settings → Appearance). Both designs share ONE component tree: doubutsu is [`packages/ui/src/styles/doubutsu.css`](../packages/ui/src/styles/doubutsu.css) remapping tokens and targeting stable attributes on top of the plain-mode base. Keep this single tree and never fork a component per theme. Write components in the plain-mode vocabulary (tokens, borders, shadows) and let the overlay translate them. Build in plain-mode terms and verify in both designs.
 
-The theme lives on a **theme root**, an element carrying
-`data-theme-scope` with the theme classes (`dark`, `doubutsu`),
-`data-palette` and `data-shell`: the app's `#root`,
-stamped before the first paint by the boot scripts and kept in step by
-the theme hooks, or a scene's frame. The stylesheets select only the
-root and what is inside it, never `:root`, `html` or `body`, so a scene
-or a frame can wear a theme of its own. Menus, popovers, tooltips and
-dialogs mount inside the root (`@shigomori/ui`'s `root.tsx`), so they
-wear the window's theme. The page's own canvas is the shell's business:
-a browser tab paints it from the root's background (`AppShell`), and
-Clerk's modal, which mounts on the body, gets its colors resolved
-against the root (`ClerkGate`).
+The theme lives on a **theme root**: an element with `data-theme-scope`, the theme classes (`dark`, `doubutsu`), `data-palette`, and `data-shell`. In the app this element is `#root`, stamped before first paint by the boot scripts and kept in sync by the theme hooks. In the lab or on the marketing site it is a scene's frame. Stylesheets select only the theme root and what is inside it, never `:root`, `html`, or `body`, so any scene or frame can use its own theme independently. Menus, popovers, tooltips, and dialogs mount inside the theme root ([`root.tsx`](../packages/ui/src/root.tsx) in `@shigomori/ui`), so they inherit the window's theme. Painting the page canvas outside `#root` is the shell's responsibility: a browser tab paints it from the theme root's background (`AppShell`), and Clerk's modal (which mounts on `body`) gets its colors resolved against the theme root (`ClerkGate`).
 
-Doubutsu comes in palettes, picked per appearance in Appearance (a
-light one and a dark one, `lightTheme` / `darkTheme` beside `doubutsu`
-in client config, the catalog in `packages/ui/src/lib/themes.ts`). The
-pick lands as `data-palette` on the theme root:
-`packages/ui/src/styles/doubutsu.css` carries the defaults (cream,
-charcoal) and `packages/ui/src/styles/palettes.css` the rest, each
-remapping the surface tokens and its accent: `--primary` and `--ring`
-(switches, the loud button) and the emerald steps, so the online dots,
-the device tiles and every other positive status wear the palette's hue.
-A rule in doubutsu.css reaches every color through a token, never a
-literal, so a palette can move it. Settings paints its swatches with the
-same blocks (each swatch is a theme root of its own), so a new palette is
-one CSS block plus a catalog entry, and a light one also gets the
-terminal block (`terminal-<id>`) its always-dark terminals wear.
-Palettes that differ in a detail (latte's greens) are variants: ids of
-their own behind one swatch, left out of the picker and reached only by
-Ctrl+Alt+Shift+L (packages/ui/src/lib/themes.ts).
+Doubutsu comes in palettes, chosen separately for light and dark appearance in Settings → Appearance (`lightTheme` / `darkTheme` beside `doubutsu` in client config, with the catalog in [`packages/ui/src/lib/themes.ts`](../packages/ui/src/lib/themes.ts)). The selected palette lands as `data-palette` on the theme root: [`packages/ui/src/styles/doubutsu.css`](../packages/ui/src/styles/doubutsu.css) defines the defaults (cream, charcoal) and [`packages/ui/src/styles/palettes.css`](../packages/ui/src/styles/palettes.css) defines the rest. Each palette remaps the surface tokens and its accent (`--primary` and `--ring` for switches and the loud button, plus the emerald steps) so online dots, device tiles, and every other positive status use the palette's hue. Every color rule in `doubutsu.css` must reach its color through a token rather than a literal so palettes can override it.
+
+Settings paints its swatches with those same CSS blocks (each swatch is its own theme root). Adding a new palette therefore takes one CSS block plus a catalog entry, and a light palette also gets the terminal block (`terminal-<id>`) that its always-dark terminals use. Palettes that differ only in a detail (such as latte's greens) are variants: they have their own ids behind a single swatch, are left out of the picker, and are reached only with Ctrl+Alt+Shift+L ([`packages/ui/src/lib/themes.ts`](../packages/ui/src/lib/themes.ts)).
 
 Rules that keep both themes cheap to maintain:
 
-- **Colors come from theme tokens** (`bg-card`, `text-muted-foreground`,
-  `--input`, …), never hardcoded values. For status/semantic color, use
-  only the raw families already in use: `emerald` (success, which
-  follows the palette's accent), `rose` (danger/delete), `amber`
-  (warning), `sky` (info/update), `violet` and `indigo` (a pull
-  request's and a sync's states), and `green` for what is literally
-  green (a diff's additions, Nook's leaf), which no palette moves.
-  Those are what
-  doubutsu remaps via `--color-*`. A new raw family needs a matching
-  remap entry in doubutsu.css.
-- **A tone's classes come from the one tone table**,
-  `primitives/status-dot.tsx`: `TONE_TEXT` for a status word,
-  `TONE_MARK` for an icon or a compact mark, `TONE_FILL` for the wash
-  behind it, `TONE_PILL` for a word on its wash, and `StatusDot` for a
-  dot. A view maps its states to a tone, never to class strings.
-- **Interactive primitives carry `data-slot`** (and `data-variant` where
-  variants matter). Text fields use `primitives/input.tsx` /
-  `primitives/textarea.tsx`, chips use `primitives/chip-button.tsx`,
-  few-way toggles use `primitives/segmented-control.tsx`, a row's
-  label and status use `RowTag` and `ToneTag` (`primitives/row-tag.tsx`),
-  a popup's footer `primitives/footer-row.tsx`, a combobox's search
-  popup `primitives/combobox.tsx`, an empty body
-  `primitives/empty-panel.tsx`, and a bare icon button
-  `primitives/icon-button.tsx` (`reveal` for one that shows on its
-  row's hover, `size="xs"` in a diff's headers). Don't re-inline their
-  class strings, and count a noun or join a list through contracts'
-  `words.ts` (`pluralize`, `plural` for the word alone, `listed`).
-- **Hover has one fill.** A control with no fill at rest (a ghost
-  button, an icon button, a link with a box of its own) hovers with
-  `hover:bg-accent`. A row in a list hovers with `hover:bg-accent/60`,
-  and a picked row keeps its `bg-accent` under the pointer: the hover
-  class goes on the unpicked branch. `muted` is for a surface that
-  already has a fill. The two are one grey in plain mode and two colours in
-  doubutsu, so a `hover:bg-muted` on a bare control only shows as wrong
-  there.
-- **Hover hints are the app's tooltip**, `SimpleTooltip` from
-  `primitives/tooltip.tsx`, never a `title` attribute: the browser's tooltip
-  wears neither theme. `shigomori/no-native-tooltip` (oxlint) catches
-  `title` on DOM elements, and the primitives leave `title` out of
-  their props. The browser's own checkbox and radio wear neither
-  either: `shigomori/no-native-choice` sends them to `Checkbox`,
-  `Switch`, `OptionCard` or `SegmentedControl`. The tooltip is visual only, so an icon-only control
-  still needs its `aria-label`.
-- **A tooltip is for text that's cut off or a control that's unclear**,
-  nothing else: hints that pop up over what already reads fine get in
-  the way. Text on screen gets one only while it's cut off
-  (`whenTruncated`). Otherwise a hint says what the screen can't: why
-  a control is disabled, what a bare mark stands for, a shortcut or a
-  hidden gesture, the exact value behind a rounded one (the timestamp
-  behind "3d ago", which `RelativeDate` carries). A bare icon that marks something gets one naming
-  it (the primary checkout's house, a device's glyph). A label or a
-  familiar icon button (pencil, trash, pin, refresh) needs none, and
-  neither does an option in a picker (device pills and tabs, the
-  device icon grid): a tip that repeats a control's name or explains a
-  plain label is noise.
-- **A shortcut's keys come from the keymap** (`lib/keymap.ts`, through
-  the app's `useBinding`), drawn beside the verb they run wherever the
-  verb shows (a palette verb, a button's `Kbd`, a hint, a tip), and
-  never spelled at a call site: a device can bind them elsewhere. A
-  key no one rebinds (a submit's Enter, the palette's Tab) comes from
-  `KEYS` (`lib/keys.ts`), which writes it as the platform's keyboards
-  print it. `shigomori/ui-words` refuses a key's glyph anywhere else.
-- **doubutsu.css may only select**: theme tokens, `data-slot` /
-  `data-doubutsu-zone` / `data-doubutsu-page` attributes, upstream
-  library attributes (Base UI `data-highlighted` etc.), and plain
-  Tailwind utility names. Never a component's internal utility-class
-  combination. That breaks silently when the component is restyled.
-- **No outlines in doubutsu.** No border, hairline or ring draws an
-  edge: fills set surfaces apart, and a floating one stands on a hard,
-  blur-less drop (`--doubutsu-sticker-shadow`). Keyboard focus rings
-  are the one exception, and the guide's ring around what it points
-  at, a pointer like focus (`data-slot="guide-ring"`). So rows that plain mode rules off say what they are
-  instead: a search strip carries `data-slot="search-row"` (it becomes
-  an inset tray) and a popup's footer `data-slot="footer-row"` (a
-  muted band). A list or a panel that is a box from its border alone
-  carries `data-slot="frame"` (`FramedList` for ruled rows), and
-  becomes a tray the wallpaper shows through. A mark or a control drawn from a border alone has
-  nothing left here, so it takes a fill, in the component (a skipped
-  step's disc) or in doubutsu.css (an unticked checkbox, an off
-  switch). A two-state control is checked in doubutsu in both states.
-- The full dependency list lives in the CONTRACT header of
-  `packages/ui/src/styles/doubutsu.css`. A change to a hook it lists
-  updates the CSS and the CONTRACT together.
-- **A dialog is a `ModalShell`** (`primitives/modal-shell.tsx`), Base
-  UI's dialog: focus stays inside it while it is open and goes back to
-  what opened it when it closes, and the page under it is hidden from
-  assistive tech. Its `label` is its name for a screen reader, the
-  title it draws. What it draws comes from `primitives/dialog.tsx`: a
-  short confirm or form is a `DialogFrame`, whose Cancel takes the
-  focus when the action is destructive, and a bigger dialog stacks
-  `DialogHeader`, `DialogBody` and `DialogFooter`. A footer leads with
-  its way out (Cancel or Close, a ghost button) and ends on its main
-  action. A one-row pick is
-  Base UI's too: `Tabs` for what switches the body under it (a page's
-  device tabs, the terminal tabs), `RadioGroup` for a setting (the
-  segmented control, the sidebar's device filter). They carry the roles
-  and the arrow keys, and `useRevealPicked` keeps the picked item in
-  view.
-- When changing UI chrome (surfaces, borders, focus, hover), eyeball
-  all four modes, and a palette or two. In dev builds: Ctrl+T toggles
-  light/dark, Ctrl+D toggles doubutsu, Ctrl+P cycles its palette,
-  Ctrl+R resets to saved. These are non-persisted
-  previews (components/DevThemeHotkeys.tsx), inactive while a text
-  field has focus, except the script console's terminal, where they
-  still win (there Ctrl+D would be EOF and end the running program).
-  Settings → Appearance does the same with a save option.
+- **Colors come from theme tokens** (`bg-card`, `text-muted-foreground`, `--input`, …), never hardcoded values. For status or semantic color, use only the raw families already in use: `emerald` (success, which follows the palette's accent), `rose` (danger/delete), `amber` (warning), `sky` (info/update), `violet` and `indigo` (pull request and sync states), and `green` for things that are literally green (diff additions, Nook's leaf), which no palette remaps. Doubutsu remaps those families via `--color-*`, so adding a new raw family requires a matching remap entry in `doubutsu.css`.
+- **A tone's classes come from the single tone table** in [`primitives/status-dot.tsx`](../packages/ui/src/primitives/status-dot.tsx): `TONE_TEXT` for a status word, `TONE_MARK` for an icon or compact mark, `TONE_FILL` for the wash behind it, `TONE_PILL` for a word on its wash, and `StatusDot` for a dot. Views map their states to a tone, never directly to class strings.
+- **Interactive primitives carry `data-slot`** (and `data-variant` where variants matter). Use the shared primitives instead of re-inlining their class strings: [`primitives/input.tsx`](../packages/ui/src/primitives/input.tsx) and [`primitives/textarea.tsx`](../packages/ui/src/primitives/textarea.tsx) for text fields, [`primitives/chip-button.tsx`](../packages/ui/src/primitives/chip-button.tsx) for chips, [`primitives/segmented-control.tsx`](../packages/ui/src/primitives/segmented-control.tsx) for few-way toggles, `RowTag` and `ToneTag` ([`primitives/row-tag.tsx`](../packages/ui/src/primitives/row-tag.tsx)) for a row's label and status, [`primitives/footer-row.tsx`](../packages/ui/src/primitives/footer-row.tsx) for a popup's footer, [`primitives/combobox.tsx`](../packages/ui/src/primitives/combobox.tsx) for a combobox's search popup, [`primitives/empty-panel.tsx`](../packages/ui/src/primitives/empty-panel.tsx) for an empty body, and [`primitives/icon-button.tsx`](../packages/ui/src/primitives/icon-button.tsx) for a bare icon button (with `reveal` for one that appears on its row's hover, and `size="xs"` in diff headers). Count nouns and join lists through [`words.ts`](../packages/contracts/src/words.ts) in contracts (`pluralize`, `plural` for the word alone, and `listed`).
+- **Hover has one fill.** A control with no fill at rest (a ghost button, an icon button, or a link with its own box) hovers with `hover:bg-accent`. A list row hovers with `hover:bg-accent/60`, while a selected row keeps its `bg-accent` under the pointer by placing the hover class only on the unselected branch. `muted` is for a surface that already has a fill. `accent` and `muted` are the same grey in plain mode and two different colors in doubutsu, so `hover:bg-muted` on a bare control only shows up as wrong in doubutsu.
+- **Hover hints use the app's tooltip** (`SimpleTooltip` from [`primitives/tooltip.tsx`](../packages/ui/src/primitives/tooltip.tsx)), never a `title` attribute, because native browser tooltips ignore both themes. `shigomori/no-native-tooltip` (oxlint) catches `title` on DOM elements, and the primitives omit `title` from their props. Native browser checkboxes and radios ignore both themes as well: `shigomori/no-native-choice` redirects them to `Checkbox`, `Switch`, `OptionCard`, or `SegmentedControl`. Because the tooltip is visual only, icon-only controls still need an `aria-label`.
+- **A tooltip is for truncated text or an unclear control, and nothing else.** Hints that pop up over text that already reads clearly get in the way. On-screen text gets a tooltip only while cut off (`whenTruncated`). Otherwise, a tooltip states what the screen cannot: why a control is disabled, what a bare mark represents, a shortcut or hidden gesture, or the exact value behind a rounded one (such as the timestamp behind "3d ago", which `RelativeDate` provides). A bare icon that marks something gets a tooltip naming it (such as the primary checkout's house or a device's glyph). Plain labels, familiar icon buttons (pencil, trash, pin, refresh), and options in a picker (device pills, device tabs, the device icon grid) need no tooltip: a tip that repeats a control's name or explains a plain label is noise.
+- **Shortcut keys come from the keymap** ([`lib/keymap.ts`](../packages/ui/src/lib/keymap.ts), read through the app's `useBinding`) and appear beside the action they run wherever that action is shown (a palette verb, a button's `Kbd`, a hint, or a tooltip). Never spell out a shortcut at a call site because a device can rebind it. Keys that no one rebinds (such as Enter to submit or Tab in the palette) come from `KEYS` ([`lib/keys.ts`](../packages/ui/src/lib/keys.ts)), which formats them as the platform's keyboards print them. `shigomori/ui-words` rejects a key's glyph anywhere else.
+- **`doubutsu.css` may only select** theme tokens, `data-slot` / `data-doubutsu-zone` / `data-doubutsu-page` attributes, upstream library attributes (such as Base UI `data-highlighted`), and plain Tailwind utility names. Never select a component's internal utility-class combination, because that breaks silently when the component is restyled.
+- **No outlines in doubutsu.** No border, hairline, or ring draws an edge: fills separate surfaces, and floating surfaces stand on a hard, blur-less drop shadow (`--doubutsu-sticker-shadow`). The exceptions are keyboard focus rings and the guide's ring around what it points at (`data-slot="guide-ring"`, which acts as a pointer like focus). Because divider borders disappear, rows that plain mode separates with rules must identify themselves with `data-slot`: a search strip uses `data-slot="search-row"` (styled as an inset tray), a popup's footer uses `data-slot="footer-row"` (styled as a muted band), and a list or panel that relies on a border alone to look like a box uses `data-slot="frame"` (`FramedList` for ruled rows, styled as a tray that lets the wallpaper show through). A mark or control drawn from a border alone has nothing visible left in doubutsu, so it must take a fill either in the component (a skipped step's disc) or in `doubutsu.css` (an unticked checkbox, an off switch). Always verify two-state controls in doubutsu in both states.
+- The full dependency list lives in the CONTRACT header of [`packages/ui/src/styles/doubutsu.css`](../packages/ui/src/styles/doubutsu.css). Whenever you change a hook it lists, update both the CSS and the CONTRACT together.
+- **Dialogs use `ModalShell`** ([`primitives/modal-shell.tsx`](../packages/ui/src/primitives/modal-shell.tsx)), which wraps Base UI's dialog: focus stays inside while it is open and returns to whatever opened it when it closes, and the page beneath it is hidden from assistive technology. Its `label` prop gives screen readers its accessible name. When the dialog has a visible title, use that title as its `label`. Dialog internals come from [`primitives/dialog.tsx`](../packages/ui/src/primitives/dialog.tsx): a short confirmation or form uses `DialogFrame` (where Cancel takes initial focus when the action is destructive), and a larger dialog stacks `DialogHeader`, `DialogBody`, and `DialogFooter`. A footer leads with its exit action (Cancel or Close, as a ghost button) and ends with its main action. Single-row selectors use Base UI too: `Tabs` when the selection switches the body beneath it (a page's device tabs, terminal tabs) and `RadioGroup` for a setting (the segmented control, the sidebar's device filter). They handle the ARIA roles and arrow keys, and `useRevealPicked` keeps the selected item in view.
+- When changing UI chrome (surfaces, borders, focus, hover), visually check all four modes plus a palette or two. In dev builds, [`components/DevThemeHotkeys.tsx`](renderer/components/DevThemeHotkeys.tsx) provides non-persisted preview shortcuts: Ctrl+T toggles light/dark, Ctrl+D toggles doubutsu, Ctrl+P cycles doubutsu palettes, and Ctrl+R resets to saved settings. These hotkeys are inactive while a text field has focus, except inside the script console's terminal, where they still take precedence (otherwise Ctrl+D would send EOF and end the running program). Settings → Appearance offers the same switches with a save option.
 
 ## Words: one spelling of a thing
 
-What the app says is drawn as often as any component, and two
-spellings of one thing read as two things.
+UI copy appears as often as any component, and two spellings of one thing read as two different things.
 
-- **A thing has one name.** The app is Shigoto no Mori and its command
-  `sm`. An account's members are devices: "this machine" is only the
-  computer the window runs on, said against "your other devices". A
-  project's own checkout is its primary checkout.
-- **An act keeps its verb** on every surface it shows: the button, the
-  menu item, the confirm, the pending label, the toast. A worktree is
-  deleted, wherever that is said. "Remove" is for what only leaves a
-  list (a device, a port, a carry-over path).
-- **Sentence case** on everything: buttons, tags, headings, status
-  words. A name that is lowercase stays so (`port-pool`).
-- **`…` is one character.** It ends a pending label ("Deleting…") and a
-  verb that asks for more before it acts (a dialog, a page to fill in),
-  wherever that verb shows.
-- **Contractions**: "couldn't", "can't". A failure's title is
-  "Couldn't <verb> the <thing>".
-- **A search that finds nothing** says `noMatch` (contracts'
-  `words.ts`): "No branches match." One that quotes what was typed
-  writes its own line.
-- `shigomori/ui-words` (oxlint) holds the spellings a pattern can
-  catch. A new one that drifts goes in its table.
+- **A thing has one name.** The app is Shigoto no Mori and its command is `sm`. An account's members are devices: "this machine" refers only to the computer the window runs on, used in contrast with "your other devices". A project's own checkout is its primary checkout.
+- **An action keeps its verb** on every surface where it appears: the button, the menu item, the confirmation, the pending label, and the toast. A worktree is always "deleted". "Remove" is only for something that leaves a list (a device, a port, a carry-over path).
+- **Sentence case** on everything: buttons, tags, headings, and status words. A name that is inherently lowercase stays lowercase (`port-pool`).
+- **`…` is one character.** It ends a pending label ("Deleting…") and any verb that asks for more input before acting (a dialog or a page to fill in), wherever that verb appears.
+- **Contractions**: use "couldn't" and "can't". A failure title follows the form "Couldn't <verb> the <thing>".
+- **A search that finds nothing** uses `noMatch` from [`words.ts`](../packages/contracts/src/words.ts) in contracts ("No branches match."). A search message that quotes what the user typed writes its own line.
+- `shigomori/ui-words` (oxlint) enforces the spellings that a pattern can catch. Add any new phrasing that starts to drift to its table.
 
 ## Views and containers: data in, markup out
 
-Every component is one of two things. A **view** takes data and
-callbacks as props and only draws. It imports nothing that needs the
-running app (no queries, atoms, stores, router, the page's api). A
-**container** binds data to a view and has no markup of its own: it
-writes no element, only views and the primitives they are built from
-(a menu's items, a modal's shell, a status dot), with the props those
-take, a class among them. Views live in `@shigomori/ui` (`packages/ui/src/views`),
-which cannot import the app: what a view needs from the app's hooks or
-store is a type defined in the package, and a link it opens goes
-through `useOutside`. Containers stay in `renderer/components`. The
-marketing site renders the views over fixture scenes at build time,
-with no `window`, so a view must not reach for the runtime.
+Every component is either a view or a container. A **view** takes data and callbacks as props and only renders UI. It imports nothing that depends on the running app (no queries, atoms, stores, router, or page API). A **container** binds data to a view and renders no DOM elements of its own: it renders only views and the primitives they are built from (menu items, a modal shell, a status dot), passing their own props (including `className`).
 
-- Name the view `<Thing>View`. The container keeps the plain name and
-  the public props the rest of the app already uses.
-- A view may take a slot (a ready-made element) for a part that has
-  its own container, so both still render the same markup.
-- Measuring (how many pills fit, a fitted label) happens in the
-  container, which hands the view the result.
-- Open menus and dialogs render through portals, which produce nothing
-  on a server, so a scene uses the view's inline surface, which shares its
-  class constants with the live one.
-- The theme rides the theme root, not `<html>` (the theming section
-  above), so a view keeps its look wherever it is mounted.
-- A view or a primitive reads no global while it draws: what it needs of
-  the page comes through an element's own document (`el.ownerDocument`),
-  and a listener on `document` or `window` lives in a hook that owns its
-  lifetime. A handler a click runs may write the clipboard
-  (`navigator.clipboard`, as `CopyButton` does), which draws nothing. It
-  lays out by the window's width, a container query (`@min-[48rem]:`),
-  never the viewport's (`md:`). The host API comes through the runtime,
-  not `window.api`.
-- A container's data is a host view or the state kept from a push
-  stream (an atom on the client's runtime), or a request (a React Query
-  query), as `EFFECT.md` section 10 says. Atoms live in the app's hooks
-  and containers, never in `@shigomori/ui`.
+Views live in `@shigomori/ui` ([`packages/ui/src/views`](../packages/ui/src/views)), which cannot import the app: any shape a view needs from the app's hooks or store must be a type defined in the package, and any link a view opens goes through `useOutside`. Containers stay in [`renderer/components`](renderer/components). Because the marketing site renders views over fixture scenes at build time with no `window`, views must never reach for the runtime.
+
+- Name the view `<Thing>View`. The container keeps the plain name and the public props the rest of the app already uses.
+- A view may take a slot (a ready-made element) for a part that has its own container, so both still render the same markup.
+- Measuring (how many pills fit, a fitted label) happens in the container, which passes the result to the view.
+- Open menus and dialogs render through portals, which produce nothing on a server. A scene therefore renders the view's inline surface, which shares its class constants with the live portaled version.
+- Because the theme lives on the theme root rather than `<html>` (see the theming section above), a view keeps its styling wherever it is mounted.
+- A view or primitive reads no globals while rendering: anything it needs from the page comes through an element's own document (`el.ownerDocument`), and any listener on `document` or `window` lives in a hook that owns its lifetime. A click handler may write to the clipboard (`navigator.clipboard`, as `CopyButton` does), which draws nothing. Responsive layout uses the window's width via container queries (`@min-[48rem]:`), never viewport breakpoints (`md:`). The host API comes through the runtime, not `window.api`.
+- A container's data comes either from a host view or push-stream state (an atom on the client runtime) or from a request (a React Query query), as [`EFFECT.md`](../EFFECT.md) section 10 describes. Atoms live in the app's hooks and containers, never in `@shigomori/ui`.
 
 ## Sizing: one density in the components, the phone's in phone.css
 
-Components are written once, at desktop density. The web client's phone
-layout (the web shell's root under 48rem wide, a container query, so a
-phone-width frame takes it too) does not get a size per call site:
-`packages/ui/src/styles/phone.css` remaps the type and spacing scales
-there, gives the primitives their touch minimums, extends every other
-interactive element's hit area to 44px, and gives hover-only buttons a
-resting fill. Its header explains the layers.
+Components are written once, at desktop density. The web client's phone layout (triggered by a container query when the web shell's root is under 48rem wide, so a phone-width frame activates it too) is not sized per call site. Instead, [`packages/ui/src/styles/phone.css`](../packages/ui/src/styles/phone.css) remaps the type and spacing scales, gives primitives their touch minimums, extends every other interactive element's hit area to 44px, and gives hover-only buttons a resting fill. Its header explains the layers.
 
 Rules that keep that working:
 
-- **Sizes come from the scale.** `text-xs`, `text-2xs`, `h-7`, `p-1`,
-  `size-4`, never `text-[11px]` or `h-[28px]`: a literal stays the same
-  size on a phone. The steps under `text-xs` are `text-2xs` (11px),
-  `text-3xs` (10px) and `text-4xs` (9px). Display art (the wallpaper
-  glyphs) is the exception. An indent that lines up with a sized
-  neighbour is on the scale too (`pl-19`, not `pl-[4.75rem]`): the
-  phone grows the neighbour and leaves the literal behind.
-- **Tappable things are real controls**: a `<button>`, an `<a href>`,
-  or an element with the matching `role`. The hit-area rule finds them
-  by tag and role, so a `<div onClick>` gets no touch target. On a
-  phone that rule owns their `::after`, so don't style one.
-- **Small controls that pack tight get a real size, not a hit area.**
-  An expanded hit area reaches over its neighbours. Rows that stack
-  edge to edge and pills in a scrolling strip are sized in phone.css's
-  second layer (by role, or a `data-slot` on the row). Icon buttons
-  side by side sit a thumb apart (`phone:gap-3`), or take a real size
-  where there is room for one (the sidebar's `PROJECT_ACTION_HOOKS`).
-  A link in running text opts out with `data-no-hit-area`.
-- **`phone:` is for layout, not size.** Hiding a column, restacking a
-  row, showing a hover-only action, and the page gutters, which narrow
-  on a phone while everything else grows (`PAGE_BODY` in
-  `shared/PageShellView.tsx` and `PAGE_HEADER_PADDING` carry them, so a
-  page reuses those). A `phone:` utility that only makes a control or
-  its text bigger belongs in phone.css as a scale or control change.
-- **A button shows a fill at rest on a phone.** Nothing hovers there,
-  so a hover-only fill never says "tap me". phone.css gives the ghost
-  variants a resting fill, and a bare icon button joins them through
-  `data-icon-button`: use `primitives/icon-button.tsx`, which carries it. A
-  page's `<footer>` bar and the back button stay bare, since their
-  place on the screen already says control.
-- **Raw `:hover` in CSS goes inside `@media (hover: hover)`.** A tap on
-  a touch screen leaves `:hover` stuck on the tapped control. Tailwind's
-  `hover:` variant is already gated that way (index.css). Hand-written
-  theme CSS has to do it itself, and may pair it with `:active` for a
-  pressed state (doubutsu's stripes do).
-- When changing UI, check it at phone width as well. The fake host's
-  web flavor (`lab/fake-host/README.md`) renders the phone layout at
-  any viewport under 768px with no sign-in.
+- **Sizes come from the scale.** Use scale utilities (`text-xs`, `text-2xs`, `h-7`, `p-1`, `size-4`), never literals like `text-[11px]` or `h-[28px]`, because literals stay the same size on a phone. The steps under `text-xs` are `text-2xs` (11px), `text-3xs` (10px), and `text-4xs` (9px). Display art (the wallpaper glyphs) is the exception. An indent that lines up with a sized neighbor must also use the scale (`pl-19`, not `pl-[4.75rem]`): otherwise the phone layout scales up the neighbor and leaves the literal indent behind.
+- **Tappable things must be real controls**: a `<button>`, an `<a href>`, or an element with the matching `role`. The phone hit-area rule targets them by tag and role, so a `<div onClick>` gets no touch target. On a phone that rule owns their `::after` pseudo-element, so do not style `::after` on them.
+- **Small controls that pack tightly get a real size, not an expanded hit area**, because an expanded hit area overlaps its neighbors. Rows that stack edge to edge and pills in a scrolling strip are sized in `phone.css`'s second layer (by role, or via a `data-slot` on the row). Side-by-side icon buttons either sit a thumb apart (`phone:gap-3`) or take a real size where there is room for one (the sidebar's `PROJECT_ACTION_HOOKS`). A link in running text opts out with `data-no-hit-area`.
+- **`phone:` is for layout, not size.** Use `phone:` for hiding a column, restacking a row, revealing a hover-only action, and narrowing page gutters (which shrink on a phone while everything else grows). `PAGE_BODY` in [`shared/PageShellView.tsx`](../packages/ui/src/views/shared/PageShellView.tsx) and `PAGE_HEADER_PADDING` carry those gutters so pages reuse them. A `phone:` utility that only makes a control or its text bigger belongs in `phone.css` as a scale or control change instead.
+- **Buttons show a fill at rest on a phone.** Touch users can't rely on hover to discover a control, so a hover-only fill never signals "tap me". `phone.css` gives ghost variants a resting fill. For bare icon buttons, use [`primitives/icon-button.tsx`](../packages/ui/src/primitives/icon-button.tsx), which carries `data-icon-button`. A page's `<footer>` bar and the back button stay bare because their placement on screen already signals that they are controls.
+- **Raw `:hover` in CSS goes inside `@media (hover: hover)`.** Tapping on a touch screen leaves `:hover` stuck on the tapped control. Tailwind's `hover:` variant is already gated that way ([`index.css`](../packages/ui/src/styles/index.css)). Hand-written theme CSS must add the media query itself, and may pair it with `:active` for a pressed state (as doubutsu's stripes do).
+- When changing UI, check it at phone width as well. The fake host's web flavor ([`lab/fake-host/README.md`](lab/fake-host/README.md)) renders the phone layout at any viewport under 768px with no sign-in.
 
 ## Window size: design at the default, hold up around it
 
-A desktop window opens at 920×720 (`main/electron/windows.ts`), which
-leaves a page about 680px beside the sidebar. Design at that size. The
-desktop never switches to the phone layout, so a page also has to hold
-up smaller and larger:
+A desktop window opens at 920×720 ([`main/electron/windows.ts`](main/electron/windows.ts)), leaving about 680px for the page beside the sidebar. Design at that size. The desktop never switches to the phone layout, so every page must also hold up when resized smaller or larger:
 
-- **Down to about 800×550.** Text truncates (with a `whenTruncated`
-  tooltip) rather than pushing controls out, rows of controls wrap
-  rather than overlap, and nothing scrolls sideways. The window goes
-  smaller, but nothing needs designing for below that.
-- **Up to a full display.** More room at the same density, and a page
-  runs the pane's whole width, running text included.
+- **Down to about 800×550.** Text truncates (with a `whenTruncated` tooltip) rather than pushing controls out, rows of controls wrap rather than overlap, and nothing scrolls sideways. The window can go smaller, but layouts do not need designing below 800×550.
+- **Up to a full display.** More room at the same density, with the page spanning the pane's entire width, running text included.
 
 ## Window chrome: the sidebar holds the window's buttons
 
-A desktop window has no title bar. Its own buttons sit in the top strip
-of the sidebar, so the sidebar goes on the side they are on. On a Mac
-that is the left, with the traffic lights. On Windows it is the right,
-with the caption buttons Windows draws over the window's top right
-corner (`main/electron/windows.ts`). The page is the same on both. A
-browser tab has no window buttons and keeps the sidebar on the left.
+A desktop window has no title bar. Its window buttons sit in the top strip of the sidebar, so the sidebar goes on whichever side those buttons belong to. On macOS that is the left, with the traffic lights. On Windows it is the right, with the caption buttons that Windows draws over the window's top-right corner ([`main/electron/windows.ts`](main/electron/windows.ts)). The page is the same on both platforms. A browser tab has no window buttons and keeps the sidebar on the left.
 
-- **One notion of the side.** The theme root's `data-sidebar-side`
-  says it (`packages/ui/src/lib/platform.ts`). Markup lays out from it
-  with the `sidebar-right:` variant, and code reads it with
-  `useSidebarSide()`. Anything that sits beside the sidebar or away
-  from it, such as the resize handle and the toasts, follows it.
-- **Room for the buttons.** The strip under the caption buttons is
-  `--caption-room` wide, and a header that shares a row with them pads
-  past it. In plain mode the sidebar's title truncates to make
-  room. In doubutsu the buttons sit above the logo card.
-- **Something to drag by.** The top strips of the sidebar and the page
-  drag the window, as they do on a Mac. A window without a sidebar,
-  such as the terminals window, keeps a top strip that holds the
-  buttons and drags.
+- **One source of truth for the side.** The theme root's `data-sidebar-side` attribute sets it ([`packages/ui/src/lib/platform.ts`](../packages/ui/src/lib/platform.ts)). Markup adapts to it with the `sidebar-right:` variant, and code reads it with `useSidebarSide()`. Anything positioned beside or away from the sidebar, such as the resize handle and toasts, follows it.
+- **Room for the buttons.** The strip under the caption buttons is `--caption-room` wide, and any header sharing a row with them pads past that width. In plain mode the sidebar's title truncates to make room. In doubutsu the buttons sit above the logo card.
+- **Drag regions.** The top strips of the sidebar and the page drag the window, as on macOS. A window without a sidebar, such as the terminals window, keeps a top strip that holds the buttons and drags the window.
 
 ## Devices: one identity, drawn one way
 
-A device is its name and its icon. The icon is one of the closed catalog
-in `packages/contracts/src/deviceIcon.ts`: seven device shapes (laptop,
-desktop, mini, server, phone, tablet, browser) and a set of marks that
-are only ever picked (a leaf, a cat, a rocket), for telling two laptops
-apart. The device detects its own shape at enrollment
-(`main/core/account/defaultDeviceIcon.ts` on a machine,
-`web/account/deviceIcon.ts` in a browser), and its owner can pick
-another. The hub keeps both the name and the icon, so either can be
-changed on the device's row of any device's account page, online or not,
-and every device draws every other one the same way. The device itself
-takes its own from the hub on each registry read (`listDevices` in
-`shared/account/handlers.ts`).
+A device is identified by its name and its icon. The icon comes from the closed catalog in [`packages/contracts/src/deviceIcon.ts`](../packages/contracts/src/deviceIcon.ts): seven device shapes (laptop, desktop, mini, server, phone, tablet, browser) plus a set of manually picked marks (a leaf, a cat, a rocket) for telling two laptops apart. A device detects its own shape at enrollment ([`main/core/account/defaultDeviceIcon.ts`](main/core/account/defaultDeviceIcon.ts) on a machine, [`web/account/deviceIcon.ts`](web/account/deviceIcon.ts) in a browser), and its owner can pick another. The hub stores both the name and the icon, so either can be changed from the device's row on any device's account page whether the target device is online or not, and every device draws every other device the same way. Each device pulls updates to its own name and icon from the hub on every registry read (`listDevices` in [`shared/account/handlers.ts`](shared/account/handlers.ts)).
 
 Rules that keep a machine looking like itself everywhere:
 
-- **Every mark for a device goes through `shared/DeviceGlyphView.tsx`.**
-  `DeviceGlyphView` is the bare glyph, `DeviceLeadView` the connection
-  dot and glyph that leads a name, `DeviceMarkView` the glyph on a tile
-  in the device's connection tone. Never a lucide laptop or monitor
-  picked at a call site, and never a mark derived from the name.
-- **The icon comes off the device record**, never guessed: a
-  `RemoteDevice` and a `DeviceRosterEntry` carry `icon`, this device's
-  comes from `useLocalDeviceIcon`, and `useDeviceIcon(deviceId)`
-  answers for either.
-- **State stays on the dot and the tone.** A device's connection is
-  the `StatusDot` beside its glyph (or the tint of its mark), through
-  `deviceStatusView`. This device has no connection to show: it wears
-  the glyph alone, and where a surface tags it, the tag is
-  `THIS_DEVICE_VIEW` (a `RowTag` in a list), never a lowercase aside.
-  Its one state is its own host not answering the window (from the
-  host stopping, or the shell's watchdog stopping a silent one, until
-  the next one answers): then it wears a rose dot and reads "Not
-  responding" (`THIS_DEVICE_NOT_RESPONDING_VIEW`), wherever its tab,
-  filter or card shows it.
-- **A device's tooltip is `deviceTitle`** ("MacBook, Connected",
-  "Studio Mac, This device") where it has one, as on the chip. The
-  device pickers have none (above).
+- **Every mark for a device goes through [`shared/DeviceGlyphView.tsx`](../packages/ui/src/views/shared/DeviceGlyphView.tsx).** `DeviceGlyphView` renders the bare glyph, `DeviceLeadView` renders the connection dot and glyph before a name, and `DeviceMarkView` renders the glyph on a tile tinted in the device's connection tone. Never pick a lucide laptop or monitor at a call site, and never derive a mark from the device's name.
+- **The icon comes from the device record, never guessed.** `RemoteDevice` and `DeviceRosterEntry` carry `icon`, this device's icon comes from `useLocalDeviceIcon`, and `useDeviceIcon(deviceId)` returns the icon for either.
+- **State stays on the dot and the tone.** A remote device's connection status is shown by the `StatusDot` beside its glyph (or the tint of its mark), derived through `deviceStatusView`. This device has no remote connection to show: it renders the glyph alone, and where a surface tags it, the tag is `THIS_DEVICE_VIEW` (a `RowTag` in a list), never a lowercase aside. Its one status state is when its own host stops answering the window (either because the host stopped or because the shell's watchdog stopped an unresponsive host, lasting until the next host answers): in that state it displays a rose dot and reads "Not responding" (`THIS_DEVICE_NOT_RESPONDING_VIEW`), wherever its tab, filter, or card appears.
+- **A device's tooltip is `deviceTitle`** ("MacBook, Connected", "Studio Mac, This device") wherever it has one, such as on a chip. Device pickers have no tooltips (see the tooltip rule above).
 
 ## Village life: rarity
 
-Village life is the cosmetic villager flair: villagers speaking in
-toasts about their worktrees, moving in and out as those come and go,
-and their face beside the branch title on their worktree's page and
-beside the worktree's name in the inbox. It is a setting of each
-desktop window (client config, Appearance in Settings), with the
-villager data downloaded into that device's data dir
-(`host/lib/VillagerData.ts`), so it covers every device's worktrees
-that window shows. A web client offers none: it has no device of its
-own to hold the data. Every doubutsu character has a
-rarity, like a card's (`lib/villagers/rarity.ts`):
+Village life is the cosmetic villager flair: villagers speaking in toasts about their worktrees, moving in and out as worktrees come and go, and showing their face beside the branch title on their worktree's page and beside the worktree's name in the inbox. It is a setting of each desktop window (client config, under Settings → Appearance), backed by villager data downloaded into that device's data dir ([`host/lib/VillagerData.ts`](host/lib/VillagerData.ts)), so it covers every device's worktrees shown in that window. A web client offers no Village life because it has no local device of its own to store the data.
+
+Every doubutsu character has a rarity, like a collectible card ([`lib/villagers/rarity.ts`](../packages/ui/src/lib/villagers/rarity.ts)):
 
 - **Common**: regular villagers.
-- **Rare**: special characters that aren't regular villagers (Katrina,
-  Pelly, Leif): the villager data marks them special.
-- **Legendary**: the household names, picked by hand: Tom Nook,
-  Isabelle, K.K. Slider, Timmy, Tommy, Blathers, Celeste, Mr. Resetti,
-  Redd, Brewster, Kapp'n, Pascal.
+- **Rare**: special characters that are not regular villagers (Katrina, Pelly, Leif), marked as special in the villager data.
+- **Legendary**: the household names, picked by hand: Tom Nook, Isabelle, K.K. Slider, Timmy, Tommy, Blathers, Celeste, Mr. Resetti, Redd, Brewster, Kapp'n, Pascal.
 
-A rare character gets a little more flair than a villager, and a
-legendary one clearly the most. Common stays calm: most worktrees are
-villagers, and the app is still a work tool. Rarity follows the
-character, never the worktree (`raymond-2` is Raymond).
+A rare character gets slightly more flair than a regular villager, and a legendary character clearly gets the most. Common stays calm: most worktrees belong to regular villagers, and the app is still a work tool. Rarity follows the character, never the worktree (`raymond-2` is Raymond).
 
-A villager's face is the same whatever their rarity. The rarer the
-character, the more of Animal Crossing comes with their news when they
-move in or out (`components/villagers`):
+A villager's face renders the same regardless of rarity. The rarer the character, the more Animal Crossing presentation comes with their news when they move in or out ([`components/villagers`](renderer/components/villagers)):
 
 - **Common**: a toast with their face and catchphrase.
-- **Rare**: an Animal Crossing dialogue box. A soft cream bubble, their
-  name on a leaning plate in their own color (read off their face,
-  `lib/villagers/faceColor.ts`), their words typed out a letter at a
-  time, and the arrow bobbing once the line is out.
-- **Legendary**: a letter on their own stationery
-  (`lib/villagers/stationery.ts`, a pattern per character: music notes
-  for K.K. Slider, stars for Celeste), and the biggest moment the app
-  has. It arrives as a scene: the envelope's flap swings open and the
-  letter rises out, their face drops onto a perforated stamp, a
-  postmark presses the day's date over it as sparkles pop, the words
-  write themselves onto lined paper, and the name signs itself with a
-  swash, over the stationery drifting slowly.
+- **Rare**: an Animal Crossing dialogue box. It shows a soft cream bubble, their name on a leaning plate in their own color (read from their face in [`lib/villagers/faceColor.ts`](../packages/ui/src/lib/villagers/faceColor.ts)), their words typed out one letter at a time, and an arrow bobbing once the line finishes.
+- **Legendary**: a letter on their own stationery ([`lib/villagers/stationery.ts`](../packages/ui/src/lib/villagers/stationery.ts), with a pattern per character such as music notes for K.K. Slider or stars for Celeste), and the biggest moment the app has. It arrives as a scene: the envelope's flap swings open and the letter rises out, their face drops onto a perforated stamp, a postmark presses the day's date over it as sparkles pop, the words write themselves onto lined paper, and the name signs itself with a swash over the slowly drifting stationery.
 
-Moving out is a goodbye, not an arrival in reverse: a regular
-villager's face wears a moving box instead of the check, a rare one sits
-packed in their box in the dialogue, and a legendary one's letter is a
-farewell, with their photo taped in the corner in place of the stamp and
-signed "Your friend". In a crowd (a Tidy run) the rare and legendary keep
-their own moments, rarest on top, and the regulars share one toast.
-Villagers moving one at a time join the news still showing about their
-kind of move, so it grows rather than stacking, until it closes.
+Moving out is a goodbye, not an arrival in reverse: a regular villager's face shows a moving box instead of the checkmark, a rare character sits packed in their box inside the dialogue, and a legendary character's letter is a farewell with their photo taped in the corner in place of the stamp and signed "Your friend". In a crowd (such as a Tidy run), rare and legendary characters keep their own moments (rarest on top) while regular villagers share one toast. Villagers moving one at a time join any still-visible news item for their kind of move, growing it rather than stacking new toasts until it closes.
 
-Everyday toasts (a commit) stay small for everyone: the face, and a
-common villager's catchphrase. The dialogue box and the letter take
-doubutsu's hard drop, like any floating surface. Under reduced motion every
-moment is simply there, finished, and the drift holds while nobody is
-looking or the machine is on battery.
+Everyday toasts (such as a commit) stay small for everyone: the character's face plus a common villager's catchphrase. The dialogue box and the letter use doubutsu's hard drop shadow, like any floating surface. Under reduced motion, every moment appears immediately in its finished state. Otherwise, the stationery drift pauses while nobody is looking, or when the machine is on battery (if battery status is available and the Appearance setting is enabled).
 
-And what they say scales the same way (`lib/villagerVoice.ts`):
-regular villagers end a success with their catchphrase, and special
-characters, who have none, speak through their quote (or, with none,
-the move in their own words). News with a rarer character in it stays
-on screen longer.
+What villagers say scales the same way ([`lib/villagerVoice.ts`](../packages/ui/src/lib/villagerVoice.ts)): regular villagers end a success with their catchphrase, and special characters (who have no catchphrase) speak through their quote (or describe the move in their own words if they have no quote). News featuring a rarer character stays on screen longer.
 
-Rules that keep it consistent as features arrive:
+Rules that keep Village life consistent as features arrive:
 
-- **A villager shows through `VillagerFaceView`**, never a bare
-  `VillagerIcon` on a product surface, and a tier's moment is never
-  re-inlined at a call site: it comes from `components/villagers`.
-- **Only success speaks.** Warnings, errors and neutral notices stay
-  plain.
-- **Village news keeps to its own lane.** Moving in and out goes to
-  its own toaster in the top-right corner (`VillageToaster`), never
-  the bottom-right one, so it can't cover an error or an undo, and a
-  click anywhere on it sends it away. A success said by a villager (a
-  commit) answers something you did, so it stays in the everyday lane.
-- **Anything that shows follows `useVillageLife`**, this window's
-  switch, whichever device the worktree lives on, including toasts
-  fired outside render (`lib/villagers/speakers.ts`). Nothing on a
-  device reads it.
-- **A moment happens whoever caused it.** Moving in and out is read off
-  the worktree lists (`lib/villagers/moves.ts`), so the app, `sm` and
-  another device all count. No emojis, and a name that isn't a
-  character's shows nothing.
+- **Show villagers through `VillagerFaceView`**, never a bare `VillagerIcon` on a product surface, and never re-inline a rarity tier's moment at a call site: import it from [`components/villagers`](renderer/components/villagers).
+- **Only success speaks.** Warnings, errors, and neutral notices stay plain.
+- **Village news keeps to its own lane.** Move-in and move-out news goes to its own toaster in the top-right corner (`VillageToaster`), never the bottom-right toaster, so it cannot cover an error or an undo. Clicking anywhere on it dismisses it. A success spoken by a villager (such as a commit) answers something you did, so it stays in the everyday bottom-right lane.
+- **Everything that shows follows `useVillageLife`**, which is this window's switch, regardless of which device the worktree lives on, including toasts fired outside render ([`lib/villagers/speakers.ts`](renderer/lib/villagers/speakers.ts)). Nothing on a device reads this switch.
+- **A moment happens whoever caused it.** Moving in and out is detected from the worktree lists ([`lib/villagers/moves.ts`](renderer/lib/villagers/moves.ts)), so actions from the app, `sm`, and another device all count. No emojis, and a name that is not a character's shows nothing.
 
 ### Birthdays
 
-A villager's birthday (their profile's, on the local calendar) is a
-moment too, on every device's worktrees alike.
+A villager's birthday (from their profile, on the local calendar) is a moment too, on every device's worktrees alike.
 
-- **The name pick ignores them.** A new worktree's name is drawn at
-  random as always: a birthday is celebrated where the villager already
-  lives, never used to pick who moves in.
-- **No announcement.** A birthday is found where the villager lives,
-  not pushed as a toast: a daily one for every villager would repeat
-  itself.
-- **The sidebar row** wears a cake, their face in a party hat in its
-  tooltip.
-- **The worktree page** throws the party in its header, around the
-  face beside the branch title (`BirthdayPartyView`), with no words: the
-  face in a party hat throwing confetti under bunting for a regular
-  villager, the bunting and a wash in their own color for a rare one,
-  and for a legend balloons (one carrying a present), a bigger burst
-  and their stationery.
+- **Name selection ignores birthdays.** A new worktree's name is drawn at random as always: a birthday is celebrated where the villager already lives, never used to pick who moves in.
+- **No announcement.** A birthday is found where the villager lives rather than pushed as a toast, because a daily toast for every villager would repeat itself.
+- **The sidebar row** shows a cake icon, with the villager's face in a party hat inside its tooltip.
+- **The worktree page** throws the party in its header around the face beside the branch title (`BirthdayPartyView`), with no words. A regular villager gets their face in a party hat throwing confetti under bunting. A rare character gets the bunting and a wash in their own color. A legendary character gets balloons (one carrying a present), a bigger confetti burst, and their stationery.
 
 ### Visitors
 
-Every villager who moves in is a visit, and Visitors (a section of
-Settings while Village life shows) collects them like stickers in an
-album.
+Every villager who moves in counts as a visit, and Visitors (a section of Settings shown while Village life is on) collects them like stickers in an album.
 
-- **Rarity scales the sticker** the way it scales the news: a regular
-  villager's face on its tint, a special character's wash and name
-  plate in their own color, a legend on their stationery with their
-  face on a stamp. Every legend's slot shows from the start, as a
-  silhouette, so the rarest are there to chase.
-- **There is one best friend**, the villager met most, and only their
-  sticker and the guest book say so.
+- **Rarity scales the sticker** the same way it scales the news: a regular villager's face sits on its tint, a special character gets a wash and name plate in their own color, and a legendary character appears on their stationery with their face on a stamp. Every legendary character's slot shows from the start as a silhouette so the rarest ones are there to chase.
+- **There is one best friend:** the villager met most often, and only their sticker and the guest book say so.

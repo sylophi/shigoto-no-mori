@@ -49,8 +49,9 @@ sm projects clone <project> --to <device>
 ```
 
 It clones the repo from the machine that has it, with its settings and
-the files its carry-over names. With --from, a name it doesn't know lists the
-projects there. Tell them the path it prints.
+the files listed in its carry-over. With `--from`, passing an unknown
+project name lists the projects available on that device. Tell them the
+path it prints.
 
 ## Stop mirroring
 
@@ -58,19 +59,21 @@ projects there. Tell them the path it prints.
 sm worktrees unmirror
 ```
 
-It removes the copy, never the original. Pass `-f` only when the user
-says the copy can go.
+It removes the copy, never the original (if a copy-removal caveat leaves
+the copy behind, the mirror still stops and exits with code 3). Pass
+`-f` only when the user says the copy can go.
 
 ## Notes
 
 - With several machines, ask the user which one they're on.
-- `mirror`, `send`, `bring` and `projects clone` wait until the worktree
-  or the repo has crossed, as long as that takes, so run them where a
-  long command won't time out. Interrupted before the worktree lands, a
-  `mirror`, `send` or `bring` is cancelled and its copy removed, though
-  a repo it cloned on the other machine stays.
+- `mirror`, `send`, `bring`, and `projects clone` wait until the
+  worktree or the repo finishes transferring, as long as that takes, so
+  run them where a long command won't time out. If interrupted before
+  the worktree lands, `mirror`, `send`, or `bring` cancels and removes
+  its copy, though any repo it cloned on the other machine stays.
 - `send` and `bring` move a worktree once instead of mirroring it. Use
   them only when asked, and pass `--source teardown` (which deletes the
   original) only when the user asks for it.
-- Exit 3 means it landed but a later step didn't. Pass the lines marked
-  `!` on to the user, and don't retry.
+- Exit code 3 means the operation completed with caveats (for example, a
+  carry-over conflict or a later step that did not finish). Pass the
+  lines marked `!` on to the user, and don't retry.
