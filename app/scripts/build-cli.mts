@@ -32,7 +32,7 @@ const version =
     : JSON.parse(readFileSync(join(appRoot, "package.json"), "utf8")).version;
 
 const archAt = process.argv.indexOf("--arch");
-const arch = archAt >= 0 ? process.argv[archAt + 1] : process.arch;
+const arch = archAt >= 0 ? process.argv[archAt + 1] : undefined;
 
 const outdir = join(appRoot, CLI_DIST_DIR);
 // Bun names a Windows binary .exe whatever it is asked for.
@@ -45,7 +45,7 @@ execFileSync(
     outfile,
     `--flavor=${flavor}`,
     `--version=${version}`,
-    `--arch=${arch}`,
+    ...(arch === undefined ? [] : [`--arch=${arch}`]),
   ],
   { cwd: join(repoRoot, "packages", "cli"), stdio: "inherit" },
 );

@@ -58,7 +58,7 @@ if (helper === undefined) {
 }
 const outfile = join(appRoot, programFile(helper.outfile));
 const archAt = process.argv.indexOf("--arch");
-const arch = archAt >= 0 ? process.argv[archAt + 1] : process.arch;
+const arch = archAt >= 0 ? process.argv[archAt + 1] : undefined;
 
 execFileSync(
   "go",
@@ -79,7 +79,9 @@ execFileSync(
     env: {
       ...process.env,
       ...helper.env,
-      GOARCH: arch === "x64" ? "amd64" : arch,
+      ...(arch === undefined
+        ? {}
+        : { GOARCH: arch === "x64" ? "amd64" : arch }),
     },
   },
 );
