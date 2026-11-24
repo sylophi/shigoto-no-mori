@@ -71,6 +71,7 @@ export const LIGHT_THEMES: readonly ThemeOption<LightTheme>[] = [
   },
   { id: "sky", label: "Sky", blurb: "A clear morning, blue on white" },
   { id: "sakura", label: "Sakura", blurb: "Blossom pink all through" },
+  { id: "wisteria", label: "Wisteria", blurb: "Soft lilac paper, iris rail" },
 ];
 
 export const DARK_THEMES: readonly ThemeOption<DarkTheme>[] = [
@@ -84,6 +85,7 @@ export const DARK_THEMES: readonly ThemeOption<DarkTheme>[] = [
     label: "Yozakura",
     blurb: "Blossoms at night, under lanterns",
   },
+  { id: "twilight", label: "Twilight", blurb: "Dusk plum, a wisteria glow" },
 ];
 
 // The appearance settings the overlay reads: the switch, and the pick

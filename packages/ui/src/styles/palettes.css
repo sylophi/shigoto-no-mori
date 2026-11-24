@@ -130,6 +130,41 @@
   --doubutsu-rail-muted-foreground: oklch(0.54 0.05 10);
 }
 
+/* --- Wisteria ---
+   Late-spring arbor: lilac-tinted paper, a soft wisteria rail, plum-slate
+   text, and an iris-wisteria accent (hue 298) for the action, pillow and
+   positive status. Merged-PR violet sits at hue 300 in the default block,
+   so here violet shifts toward berry (332) to stay distinct. */
+[data-theme-scope].doubutsu[data-palette="wisteria"] {
+  --background: oklch(0.974 0.012 302);
+  --foreground: oklch(0.35 0.045 295);
+  --card: oklch(0.992 0.007 302);
+  --card-foreground: oklch(0.35 0.045 295);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.35 0.045 295);
+  --primary: oklch(0.59 0.15 298);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.93 0.038 300);
+  --secondary-foreground: oklch(0.35 0.045 295);
+  --muted: oklch(0.945 0.024 302);
+  --muted-foreground: oklch(0.53 0.042 296);
+  --destructive: oklch(0.6 0.16 30);
+  --input: oklch(0.92 0.03 300);
+  --ring: oklch(0.59 0.15 298);
+  --color-emerald-500: oklch(0.58 0.15 298);
+  --color-emerald-600: oklch(0.51 0.14 298);
+  --color-violet-500: oklch(0.58 0.14 332);
+  --doubutsu-sidebar: oklch(0.92 0.048 300);
+  --doubutsu-stripe: oklch(1 0 0 / 0.3);
+  --doubutsu-watermark: oklch(0.64 0.13 298);
+  --doubutsu-pattern: oklch(0.64 0.13 298);
+  --doubutsu-button-outline: oklch(0.9 0.042 298);
+  --doubutsu-edge: oklch(0.35 0.045 295 / 0.14);
+  --doubutsu-accent: oklch(0.87 0.075 298);
+  --doubutsu-accent-foreground: oklch(0.35 0.045 295);
+  --doubutsu-rail-muted-foreground: oklch(0.52 0.05 298);
+}
+
 /* --- Sky ---
    A clear morning: white with a wash of blue, a pale sky rail, slate
    text, and the selection pillow, the action and the positive status
@@ -304,6 +339,43 @@
   --doubutsu-rail-muted-foreground: oklch(0.8 0.035 355);
   --doubutsu-modal-card: oklch(0.325 0.034 340);
   --doubutsu-modal-muted: oklch(0.4 0.042 340);
+}
+
+/* --- Twilight ---
+   Wisteria after dusk: a deep plum-indigo canvas (hue 292), a rail a
+   step lighter and more lilac, warm cream-lilac text, and a luminous
+   wisteria accent (298) for the action, pillow and positive status.
+   Merged-PR violet shifts to berry (332) to stay clear of the accent. */
+[data-theme-scope].doubutsu.dark[data-palette="twilight"] {
+  --background: oklch(0.218 0.028 292);
+  --foreground: oklch(0.95 0.014 300);
+  --card: oklch(0.285 0.032 292);
+  --card-foreground: oklch(0.95 0.014 300);
+  --popover: oklch(0.3 0.034 292);
+  --popover-foreground: oklch(0.95 0.014 300);
+  --primary: oklch(0.78 0.13 298);
+  --primary-foreground: oklch(0.2 0.04 294);
+  --secondary: oklch(0.355 0.048 295);
+  --secondary-foreground: oklch(0.95 0.014 300);
+  --muted: oklch(0.315 0.034 292);
+  --muted-foreground: oklch(0.77 0.035 296);
+  --destructive: oklch(0.72 0.15 30);
+  --input: oklch(0.335 0.034 292);
+  --ring: oklch(0.78 0.13 298);
+  --color-emerald-400: oklch(0.8 0.12 298);
+  --color-emerald-500: oklch(0.75 0.13 298);
+  --color-violet-500: oklch(0.72 0.13 332);
+  --doubutsu-sidebar: oklch(0.272 0.048 298);
+  --doubutsu-stripe: oklch(1 0 0 / 0.1);
+  --doubutsu-watermark: oklch(0.73 0.12 300);
+  --doubutsu-pattern: oklch(0.73 0.12 300);
+  --doubutsu-button-outline: oklch(0.398 0.046 295);
+  --doubutsu-edge: oklch(0 0 0 / 0.45);
+  --doubutsu-accent: oklch(0.43 0.085 298);
+  --doubutsu-accent-foreground: oklch(0.97 0.014 300);
+  --doubutsu-rail-muted-foreground: oklch(0.79 0.035 298);
+  --doubutsu-modal-card: oklch(0.325 0.034 292);
+  --doubutsu-modal-muted: oklch(0.4 0.042 292);
 }
 
 /* --- Forest ---
@@ -521,4 +593,20 @@
   --doubutsu-button-outline: oklch(0.41 0.05 350);
   --doubutsu-accent: oklch(0.46 0.1 352);
   --doubutsu-accent-foreground: oklch(0.97 0.014 10);
+}
+
+/* Wisteria: dusk indigo-plum with the iris-wisteria lit. */
+[data-theme-scope].doubutsu.dark[data-palette="terminal-wisteria"] {
+  --foreground: oklch(0.96 0.014 300);
+  --card: oklch(0.29 0.038 295);
+  --primary: oklch(0.78 0.13 298);
+  --primary-foreground: oklch(0.2 0.04 295);
+  --muted: oklch(0.325 0.04 295);
+  --muted-foreground: oklch(0.79 0.036 298);
+  --ring: oklch(0.78 0.13 298);
+  --color-emerald-400: oklch(0.8 0.12 298);
+  --color-emerald-500: oklch(0.75 0.13 298);
+  --doubutsu-button-outline: oklch(0.41 0.05 295);
+  --doubutsu-accent: oklch(0.45 0.09 298);
+  --doubutsu-accent-foreground: oklch(0.97 0.014 300);
 }
