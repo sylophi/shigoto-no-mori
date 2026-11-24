@@ -783,6 +783,11 @@
         "lightTheme": "sakura"
       },
       {
+        "theme": "dark",
+        "lightTheme": "wisteria",
+        "darkTheme": "twilight"
+      },
+      {
         "keybindings": {
           "palette": "Mod+P",
           "terminal": "Ctrl+Alt+T"

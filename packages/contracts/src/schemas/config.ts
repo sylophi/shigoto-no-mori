@@ -25,6 +25,7 @@ export const LIGHT_THEME_IDS = [
   "latte-mocha",
   "sky",
   "sakura",
+  "wisteria",
 ] as const;
 export const DARK_THEME_IDS = [
   "charcoal",
@@ -33,6 +34,7 @@ export const DARK_THEME_IDS = [
   "cocoa",
   "midnight",
   "yozakura",
+  "twilight",
 ] as const;
 const LightThemeSchema = Schema.Literals(LIGHT_THEME_IDS);
 const DarkThemeSchema = Schema.Literals(DARK_THEME_IDS);
