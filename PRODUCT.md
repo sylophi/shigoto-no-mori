@@ -1,18 +1,14 @@
 # Product
 
-## Register
-
-product
-
 ## Users
 
 Solo developers running parallel development across the machines they own: a desktop at home, a laptop on the road, maybe a box that stays on. They juggle many feature branches at once, often with AI agents running in worktrees, and want the worktree primitive made first-class on every one of those machines without an opinionated workflow on top.
 
-Context when using: at whichever machine is in front of them, or in a browser tab on one with nothing installed. Switching between branches mid-task, spawning branches for experiments or agent runs, starting a dev server or an agent on another machine and expecting the port or the output to show up here, moving a worktree to the machine with the right hardware. Needing fast access to a shell, editor, or agent inside each worktree.
+Usage context: working from whichever machine is in front of them, or in a browser tab on a machine with nothing installed. They switch between branches mid-task, spawn branches for experiments or agent runs, start a dev server or an agent on another machine and expect the port or output to show up locally, and move a worktree to the machine with the right hardware. They need fast access to a shell, editor, or agent inside each worktree.
 
-The job to be done: manage a forest of git worktrees, on every machine you own, with the ease a CLI power-user expects from a tool like worktrunk, but with a GUI, persistent across sessions, one-click launching of per-worktree commands, and no networking homework. Sign in, add a machine, and it works.
+The job to be done: manage a forest of git worktrees on every machine you own, with the ease a CLI power-user expects from a tool like worktrunk, combined with a GUI that persists across sessions, one-click launching of per-worktree commands, and no networking homework. Sign in, add a machine, and it works.
 
-sm has users beyond its author, and a new one learns it from the guide: their own agent showing them in the app. There is no onboarding: nothing stands between a fresh install and the home, which with no project shows the way to the first one. What a first run could offer lives where it does anyway, in Settings and the account page. Simplicity is a feature, and the author dogfooding every path is the QA strategy. The product is sized for one person to hold in their head. Many-user machinery is not built.
+sm has users beyond its author, and new users learn it from the guide, with their own agent showing them around in the app. There is no onboarding flow: nothing stands between a fresh install and the home screen, which points the way to the first project when no project exists. Anything a first run could offer already lives where it belongs, in Settings and the account page. Simplicity is a feature, and the author dogfooding every path is the QA strategy. The product is sized for one person to hold in their head. Many-user machinery is not built.
 
 ## Product Purpose
 
@@ -21,9 +17,9 @@ Shigoto no Mori is a lightweight desktop app, with a matching website, for manag
 - Create, list, switch, merge, and delete worktrees from a single window, on any of your devices.
 - Launch per-worktree commands (editor, shell, agent CLI, anything configured per project) with one click.
 - Show enough git context per worktree (branch, ahead/behind, diff summary, status) to act without leaving the app.
-- Make the machine a worktree lives on stop mattering: see every project and worktree on every device, reach remote work through port forwarding, continuous syncing, or a one-time transfer (see below), change any device's settings from anywhere.
+- Make the machine a worktree lives on stop mattering: see every project and worktree on every device, reach remote work through port forwarding, continuous syncing, or a one-time transfer (see below), and change any device's settings from anywhere.
 
-It owns the shell for the work done in a worktree, since much of the way from a branch to a landed change happens there. It deliberately does not own the editor, the agent, or the dev server. Those tools already exist and are good. An agent runs in the app's terminal, and the app does not own it. The app's job is the worktree, the shell, the launcher, and the at-a-glance status, wherever the worktree lives.
+Shigoto no Mori owns the shell for work done in a worktree, since much of the path from a branch to a landed change happens there. It deliberately does not own the editor, the agent, or the dev server. Those tools already exist and are good. An agent runs in the app's terminal, and the app does not own the agent. The app's job is the worktree, the shell, the launcher, and the at-a-glance status, wherever the worktree lives.
 
 The product succeeds when a developer can run 3 to 10 parallel worktrees, spread across their machines, with agents or experiments and feel calm, not chaotic. For the multi-device half, the bar is not "remote access works". The bar is that you stop noticing which machine a worktree lives on.
 
@@ -31,22 +27,25 @@ The product succeeds when a developer can run 3 to 10 parallel worktrees, spread
 
 There are exactly three ways to work with a worktree that lives on another machine. Each has its own job, and none is a fallback for another.
 
-- **Port forwarding.** Start the dev server over there, open the port here. Enough for web apps and anything else reached through a browser or a socket. The files stay where they are.
-- **Worktree syncing.** The worktree is continuously mirrored between the two machines: every file, not only what git tracks. Work happens on the remote machine and shows up here instantly, and edits made here show up there. Both sides are real git worktrees whose branch, commits, and uncommitted changes agree, so git behaves identically on either machine. A project's primary checkout can be mirrored too: its copy is a worktree beside the other machine's own primary, on a branch of its own that follows the primary's, so neither primary is disturbed. A machine with no checkout of the repo at all is not a stop either: the mirror clones the repo there first, over the device link, so a repo that lives only on one machine (no remote) still comes across. This is the default answer to "I want that worktree in front of me": for every practical purpose, the remote worktree is on the local disk. Either machine's page pauses, resumes or stops the mirror.
-- **Worktree transfer.** A special case of syncing: the worktree crosses once, in full, uncommitted changes included, and then lives on the destination. Move it, then keep, shelve, or tear down the copy left behind. For when the work belongs on the machine with the right hardware, or the source machine is going away.
+- **Port forwarding.** Start the dev server on the remote machine and open the port locally. This is enough for web apps and anything else reached through a browser or a socket. The files stay where they are.
+- **Worktree syncing.** The worktree is continuously mirrored between the two machines: every file, not only what git tracks. Work happens on the remote machine and shows up locally right away, and local edits show up on the remote machine. Both sides are real git worktrees whose branch, commits, and uncommitted changes agree, so git behaves identically on either machine.
+  - A project's primary checkout can be mirrored too: its copy is a worktree beside the other machine's own primary, on a branch of its own that follows the primary's, so neither primary is disturbed.
+  - A machine with no checkout of the repo at all still works: mirroring clones the repo there first, over the device link, so a repo that lives only on one machine (with no remote) still comes across.
+  - Syncing is the default answer to "I want that worktree in front of me": for every practical purpose, the remote worktree is on the local disk. Either machine's page can pause, resume, or stop the mirror.
+- **Worktree transfer.** A special case of syncing: the worktree crosses once, in full, uncommitted changes included, and then lives on the destination machine. Move it, then keep, shelve, or tear down the copy left behind. Use this when the work belongs on the machine with the right hardware, or when the source machine is going away.
 
 ## How Decisions Get Made
 
-Priorities, in order. When two pull apart, resolve in this order and say so.
+Priorities, in order. When two priorities pull apart, resolve in this order and say so.
 
-1. **Simplicity, YAGNI, maintainability.** The smallest correct thing one person can hold in their head and keep working. Prefer the boring, conventional mechanism over the clever one. In this codebase Effect is that mechanism (`EFFECT.md`): a service, a layer, a scope, a schedule or a stream is the boring choice, and a hand-rolled lifetime, retry or error string is the clever one. When a review proposes armor, ceremony, or abstraction beyond that, cut it.
+1. **Simplicity, YAGNI, maintainability.** The smallest correct thing one person can hold in their head and keep working. Prefer the boring, conventional mechanism over the clever one. In this codebase Effect is that mechanism ([`EFFECT.md`](EFFECT.md)): a service, a layer, a scope, a schedule, or a stream is the boring choice, and a hand-rolled lifetime, retry, or error string is the clever one. When a review proposes armor, ceremony, or abstraction beyond that, cut it.
 2. **Seamlessness.** It matters enormously. A remote machine has to stop feeling remote. Anything that makes the happy path slower, chattier, or more confusing is a bug, not a nice-to-have.
 3. **Everything else.**
 
 Two rules sit alongside the order:
 
 - **YAGNI applies to implementations, never to requirements.** Simplify how a thing is built. Do not trim what the product does to make the build smaller.
-- **Be optimistic.** Secure and seamless are not in tension. The owner's own machines and the managed services carrying their traffic are not adversaries. Keep the cheap correctness that comes for free (validate inputs at the boundary, fail-closed gates because they are simpler to reason about than open ones) and stop there. Hypothetical-threat armor does not get built. The real work is the quality of the workflow.
+- **Be optimistic.** Secure and seamless are not in tension. The owner's own machines and the managed services carrying their traffic are not adversaries. Keep the cheap correctness that comes for free (validate inputs at the boundary, and use fail-closed gates because they are simpler to reason about than open ones) and stop there. Hypothetical-threat armor does not get built. The real work is the quality of the workflow.
 
 ## Brand Personality
 
@@ -56,7 +55,7 @@ Two rules sit alongside the order:
 
 Three-word personality: **calm, direct, earned-playful**.
 
-Remote devices feel native. A worktree on another machine is drawn the same as one here, not set apart. Devices are not separated in the UI. Worktree flows are merged across them as far as possible, so the device is a detail of a worktree, not a mode the app is in.
+Remote devices feel native. A worktree on another machine is drawn the same as a local one, not set apart. Devices are not separated in the UI. Worktree flows are merged across devices as far as possible, so the device is a detail of a worktree, not a mode the app is in.
 
 ## Anti-references
 

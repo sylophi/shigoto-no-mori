@@ -1,72 +1,52 @@
 # The bridge
 
-What a `js` step can ask a device window, and the same verbs from a
-terminal. The page's api (`renderer/lib/runtime/pageApi.tsx`) is built
-over the window's real links, to its shell and to its host. A call is an
-effect, and the api runs it on the window's runtime: `api.run(call)` is
-the call's answer as a Promise, which a `js` step awaits. The calls below
-are written bare. Run each the same way.
+Device windows expose a page API for `js` steps, and the CLI exposes the same operations from a terminal. The page API ([`renderer/lib/runtime/pageApi.tsx`](../renderer/lib/runtime/pageApi.tsx)) sits directly on top of the window's real links to its shell and host. Each call returns an Effect that the API runs on the window's runtime: `api.run(call)` executes the call and returns its result as a Promise, which a `js` step awaits. The calls in the table below are written bare. Pass each one to `api.run(...)` the same way.
 
-The app keeps it in a React context, not on `window`. A dev build, the
-fake host and a test flavor started with `--sm-lab` hand it to tools
-outside the page as `window.__smLab.api`
-(`renderer/lib/runtime/labHandle.ts`), which `api` below stands for.
-Reaching it takes a debugging port, which a packaged prod build
-refuses (`dev-app.md`, "Packaged prod build"):
+Normally the app stores this API in a React context rather than on `window`. When running a dev build, the fake host, or a test flavor launched with `--sm-lab`, [`renderer/lib/runtime/labHandle.ts`](../renderer/lib/runtime/labHandle.ts) exposes it to external tools as `window.__smLab.api` (abbreviated as `api` below). Reaching it requires a debugging port, which a packaged prod build refuses ([`dev-app.md`](dev-app.md), "Packaged prod build"):
 
 ```json
 { "js": "((api) => api.run(api.hub.status()))(window.__smLab.api)" }
 ```
 
-The lab's scripts read it through `reliability/pageApi.mts`.
+Lab scripts access `window.__smLab.api` through [`reliability/pageApi.mts`](reliability/pageApi.mts).
 
 ## Useful bridge calls
 
 | Call | Returns |
 | --- | --- |
-| `api.deviceId` | This window's device id. |
+| `api.deviceId` | This window's device ID. |
 | `api.account.status()` | `signedIn`, `accountId`, `deviceName`, `configured`. |
-| `api.account.listDevices()` | The account's device registry from the hub, with `online`. |
-| `api.account.setAcceptsCommands(bool)` | Flips this device's command-access switch. |
-| `api.sharing.set(bool)` | Flips this device's sharing switch. |
-| `api.account.signOut()` | Revokes this device and clears the credential. Clerk is untouched. |
-| `api.hub.status()` | Socket phase, `onlineDeviceIds`, `tunnel`, and per direct session `peerAppVersions`, `peerAcceptsCommands`, `peerSharesData` and, for a peer on another release, `peerOutdated` (the modules this device can't call there), and `peerCoreOutdated` for the peers too far apart to link with. |
-| `api.hub.invokePeer({deviceId, channel, input})` | Any host call on a peer, e.g. `worktrees:list`. |
-| `api.peerApi(deviceId)` | A peer's api over the same hop: its host modules, pushes and views, and no client modules. |
-| `api.sync.pullWorktree({...})` | Brings a peer's worktree here. The result's `worktree` is the copy. |
-| `api.sync.sendWorktree({targetDeviceId, projectId, worktreeId, ...})` | The pull turned around ("Transplant to"). The result's `worktree` is the copy on the peer. |
-| `api.sync.cancelMove({sourceWorktreeId})` | Cancels a pull, send or mirror start in flight, by its source worktree, with `cancelled: false` when none was. |
-| `api.sync.teardownSource({direction, deviceId, projectId, worktreeId})` | A transplant's second half: removes the source while it is still what moved. |
-| `api.sync.ignoredPaths({projectId, worktreeId})` | A worktree's ignored files (`paths`, `total`) and the rules behind them (`patterns`). |
-| `api.sync.worktreeFolder({projectId, worktreeId, relative, ruleIgnored})` | One folder of a worktree, with git's ignore verdict per entry. |
-| `api.worktrees.readFile({projectId, worktreeId, path})` | One file: `text` with its contents, or `binary`, `media`, `tooLarge` or `missing`. |
-| `api.projects.carryOverListing({...})` | One folder of a project, across its checkouts on that device. |
-| `api.portForward.start({deviceId, remotePort})` | Forwards a peer's loopback port and returns `localPort`. |
-| `api.mirror.startTo({targetDeviceId, projectId, worktreeId, ...})` | Copies a worktree to a peer and keeps the two mirrored. Returns the copy and its `session` (`startFrom` asks a peer to mirror towards here). |
-| `api.mirror.list()` | This device's mirror sessions, and the streams it serves for peers. |
-| `api.mirror.stop({session, force?})` / `pause({session})` / `resume({session})` | Controls a session this device runs. Stop removes the peer's copy (not when the original is gone), and unforced it is refused unless the copy holds nothing the original lacks. |
-| `api.mirror.setIgnores({session, ignoreMode, ignores})` | Changes what a running mirror leaves out and returns the new `session`. |
-| `api.mirror.history({localWorktreeId})` | The mirror's events, kept by the device that runs it. |
-
+| `api.account.listDevices()` | The account's device registry from the hub, including each device's `online` status. |
+| `api.account.setAcceptsCommands(bool)` | Sets this device's command-access switch. |
+| `api.sharing.set(bool)` | Sets this device's sharing switch. |
+| `api.account.signOut()` | Revokes this device and clears its local credential. Clerk is untouched. |
+| `api.hub.status()` | Socket phase, `onlineDeviceIds`, `tunnel`, and per-direct-session `peerAppVersions`, `peerAcceptsCommands`, `peerSharesData`. For a peer on another release, also includes `peerOutdated` (the modules this device cannot call on that peer) and `peerCoreOutdated` for peers too far apart to link with. |
+| `api.hub.invokePeer({deviceId, channel, input})` | Calls any host channel on a peer, e.g. `worktrees:list`. |
+| `api.peerApi(deviceId)` | Returns a peer's API over the same hop: its host modules, pushes, and views, without client modules. |
+| `api.sync.pullWorktree({...})` | Copies a peer's worktree onto this device. The result's `worktree` is the new copy. |
+| `api.sync.sendWorktree({targetDeviceId, projectId, worktreeId, ...})` | The reverse of a pull ("Transplant to"): sends a local worktree to a peer. The result's `worktree` is the copy on the peer. |
+| `api.sync.cancelMove({sourceWorktreeId})` | Cancels an in-flight pull, send, or mirror start by its source worktree. Returns `cancelled: false` when none was in flight. |
+| `api.sync.teardownSource({direction, deviceId, projectId, worktreeId})` | Runs the second half of a transplant: removes the source worktree while it still matches what was moved. |
+| `api.sync.ignoredPaths({projectId, worktreeId})` | Returns a worktree's ignored files (`paths`, `total`) and the ignore rules behind them (`patterns`). |
+| `api.sync.worktreeFolder({projectId, worktreeId, relative, ruleIgnored})` | Lists one folder of a worktree, with git's ignore verdict for each entry. |
+| `api.worktrees.readFile({projectId, worktreeId, path})` | Reads one file and returns `text` with its contents, or `binary`, `media`, `tooLarge`, or `missing`. |
+| `api.projects.carryOverListing({...})` | Lists one folder of a project across all of its checkouts on that device. |
+| `api.portForward.start({deviceId, remotePort})` | Forwards a peer's loopback port to this machine and returns `localPort`. |
+| `api.mirror.startTo({targetDeviceId, projectId, worktreeId, ...})` | Copies a worktree to a peer and keeps both copies mirrored. Returns the copy and its `session` (`startFrom` asks a peer to mirror toward this device instead). |
+| `api.mirror.list()` | Lists this device's mirror sessions and the streams it serves for peers. |
+| `api.mirror.stop({session, force?})` / `pause({session})` / `resume({session})` | Controls a mirror session this device runs. Stop removes the peer's copy (unless the original is already gone); without `force`, it is refused unless the copy contains nothing the original lacks. |
+| `api.mirror.setIgnores({session, ignoreMode, ignores})` | Updates what a running mirror excludes and returns the new `session`. |
+| `api.mirror.history({localWorktreeId})` | Returns the mirror's event history, stored by the device that runs it. |
 
 ## Arguments
 
-`api.<module>.<call>` and `hub.invokePeer` both take the call's
-contract payload, from `packages/contracts/src/modules/<module>.ts`,
-e.g. `portForward.stop({forwardId})` and
-`ports.list({projectId, worktreeId})`. A push is a stream, by its
-module and name, and `api.listen` reads it until the stop it returns:
-`api.listen(api.pushes(mirrorContract, "changed"), handler)`.
+`api.<module>.<call>` and `hub.invokePeer` both accept the call's contract payload from `packages/contracts/src/modules/<module>.ts`, such as `portForward.stop({forwardId})` and `ports.list({projectId, worktreeId})`. A push is a stream identified by its module contract and event name. `api.listen` subscribes to it and returns a stop function that ends the subscription: `api.listen(api.pushes(mirrorContract, "changed"), handler)`.
 
-A rejection naming a missing or unexpected key means the payload does not
-match the call's contract schema.
-
+If a call rejects with an error naming a missing or unexpected key, the payload does not match the call's contract schema.
 
 ## From a terminal
 
-The same verbs are on the CLI, which asks the running app for them
-(over the loopback, `host/socket/Loopback.ts`). Point `smd` at the profile whose app
-should act, from a checkout of the repo:
+The CLI exposes the same operations by forwarding requests to the running app over the loopback socket ([`host/socket/Loopback.ts`](../host/socket/Loopback.ts)). From a checkout of the repo, point `smd` at the data directory of the profile whose app should act:
 
 ```sh
 export SHIGOMORI_DATA_DIR=~/.smd-profiles/<tag>-a/data
@@ -80,14 +60,8 @@ smd worktrees mirrors                              # the mirrors this device is 
 smd worktrees unmirror [<name>] [-f]               # mirror.stop, through the peer for a mirror it runs
 ```
 
-With the app not running (or another profile's data dir) every verb
-fails with `app-not-running`.
-
+If no app is running or reachable at the selected `SHIGOMORI_DATA_DIR`, the commands above fail with `app-not-running`.
 
 ## DOM hooks
 
-Use the DOM only where a person would click. The account page (the
-device registry) is the Account row of Settings' sidebar list (the
-sidebar's Settings button has `aria-label="Settings"`), or just
-navigate to `/account`. Clerk's
-modal is plain DOM in the page, with `.cl-*` classes.
+Use the DOM only where a user would click. To reach the account page (the device registry), open Settings using the sidebar's Settings button (`aria-label="Settings"`) and select the Account row in Settings' sidebar list, or navigate directly to `/account`. Clerk's modal renders as plain DOM in the page with `.cl-*` classes.

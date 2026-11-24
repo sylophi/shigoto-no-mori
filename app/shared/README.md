@@ -1,32 +1,11 @@
 # shared
 
-The app's code that more than one of its sides compiles: the host, the
-shell (`main/`), the renderer and the web client. What crosses a wire
-or every package needs is the contracts' (`packages/contracts`). What
-is here is the app's own.
+App code compiled by more than one side: the host, the shell ([`main/`](../main/)), the renderer, and the web client. Code that crosses a wire or is needed by every package lives in [`packages/contracts`](../../packages/contracts). Everything here is internal to the app.
 
-- `remote/`, `hub/`: reaching a device. The device link's client over
-  a Colibrii link (`remote/linkSocket.ts`) and its greeting, the
-  loopback the windows dial (`remote/hostLink.ts`), and the direct
-  plane that dials peers through this device's Colibrii device.
-- `ipc/`: what the shell and a web tab serve, module by module
-  (`served.ts`), a push as it goes out, checked at its source
-  (`push.ts`), a module's client, its invokes as effects over a link
-  (`effectClient.ts`), and the window's port to its shell (`shell.ts`).
-- `paths.ts`, `shellEnv.ts`, `observability.ts`, `lifetimes.ts`,
-  `layerLatch.ts`, `hostFacts.ts`, `cliLaunchers.ts`: what the host and
-  the shell both compile (the data dir, the login shell's environment,
-  the logger and tracer, the layer helpers, the facts the shell hands
-  its host, the terminal command's place on the Windows PATH).
-- `account/`: the account calls every shell serves, and the profile
-  (name, icon, command switch) kept beside Colibrii's enrollment.
-- `log.ts`: the app's `logger`, which writes Effect code's `Effect.log*`
-  lines, and `log` for Promise code, so a line from either reads the
-  same in the trace (EFFECT.md, section 7). `config.ts`: an environment setting for Promise code.
-- The rules two sides must apply alike, as pure functions:
-  `busy.ts`, `reorder.ts`, `pullCollision.ts`,
-  `cloneDestination.ts`, `cloneUrl.ts` (the add-project flow's reading
-  of a pasted string, over `predicates/remoteUrl.ts` in the contracts),
-  `releases.ts`, `ports/`, `villagers/`.
-- `packaging/`: the build's own modules (the flavor's names, the
-  bundled binaries, signing, the dmg), run by forge and the scripts.
+- [`remote/`](remote/), [`hub/`](hub/): reaching a device. Includes the device link client over a Colibrii link ([`remote/linkSocket.ts`](remote/linkSocket.ts)) and its greeting, the loopback connection that desktop windows dial ([`remote/hostLink.ts`](remote/hostLink.ts)), and the direct plane that dials peers through this device's Colibrii device.
+- [`ipc/`](ipc/): modules served by the shell and a web tab ([`served.ts`](ipc/served.ts)), outgoing pushes checked at their source ([`push.ts`](ipc/push.ts)), module clients that expose invokes as effects over a link ([`effectClient.ts`](ipc/effectClient.ts)), and the window's port to its shell ([`shell.ts`](ipc/shell.ts)).
+- [`paths.ts`](paths.ts), [`shellEnv.ts`](shellEnv.ts), [`observability.ts`](observability.ts), [`lifetimes.ts`](lifetimes.ts), [`layerLatch.ts`](layerLatch.ts), [`hostFacts.ts`](hostFacts.ts), [`cliLaunchers.ts`](cliLaunchers.ts): modules compiled by both the host and the shell, covering the data dir, the login shell's environment, the logger and tracer, the layer helpers, the facts the shell hands its host, and the terminal command's place on the Windows PATH.
+- [`account/`](account/): the account calls served by every shell, plus the profile (name, icon, command switch) stored alongside Colibrii's enrollment.
+- [`log.ts`](log.ts): the app's `logger` (which writes `Effect.log*` lines for Effect code) and `log` (for Promise code), so lines from either format identically in the trace ([`EFFECT.md`](../../EFFECT.md), section 7). [`config.ts`](config.ts) reads an environment setting for Promise code.
+- Pure functions for rules that two sides must apply alike: [`busy.ts`](busy.ts), [`reorder.ts`](reorder.ts), [`pullCollision.ts`](pullCollision.ts), [`cloneDestination.ts`](cloneDestination.ts), [`cloneUrl.ts`](cloneUrl.ts) (how the add-project flow parses a pasted string, over [`predicates/remoteUrl.ts`](../../packages/contracts/src/predicates/remoteUrl.ts) in contracts), [`releases.ts`](releases.ts), [`ports/`](ports/), and [`villagers/`](villagers/).
+- [`packaging/`](packaging/): build modules (the flavor's names, bundled binaries, signing, and the dmg), run by forge and the scripts.
