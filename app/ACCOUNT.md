@@ -70,6 +70,10 @@ there naming that secret.
 
 ## Clerk instance configuration
 
+The desktop app is a native application to Clerk, which turns its
+requests away (`native_api_disabled`) until the Native API is enabled
+on each instance, on the dashboard's Native applications page.
+
 The desktop renderer lives on a custom-scheme origin and authenticates
 Clerk's Frontend API with an `Authorization` header, which Clerk
 rejects from an origin it does not know
