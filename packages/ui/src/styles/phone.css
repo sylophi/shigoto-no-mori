@@ -88,7 +88,7 @@
    corner radii are fixed lengths, so a 24px button that doubutsu's
    radius rounds into a circle would come out a rounded square at 40px.
    One step up the radius scale grows the corner with the box: a circle
-   again in doubutsu, and v1's rounded square in proportion. */
+   again in doubutsu, and the plain-mode rounded square in proportion. */
   [data-shell] [data-size^="icon"] {
     min-width: var(--control);
     border-radius: var(--radius-xl);
@@ -216,7 +216,7 @@
 /* The fill, by the surface the button sits on. The canvas by default.
    doubutsu's header band, its card-coloured panels and its floating
    surfaces are the card colour themselves, so a button on one steps
-   down to the muted fill its chips wear (v1's surfaces are all one
+   down to the muted fill its chips wear (the plain-mode surfaces are all one
    white, and the hairline does the work there). A page's footer bar
    keeps its buttons bare: a bar along the screen's edge already reads
    as controls, and a fill on each only crowds it. A dialog's footer is
@@ -246,7 +246,7 @@
    tapped. The same goes for the bare icon buttons written outside the
    primitive (primitives/icon-button.tsx and its kin), which mark themselves
    with data-icon-button. Both rest on a fill here, with the hairline
-   v1's outline buttons wear (doubutsu zeroes --border, and its cream
+   the plain-mode outline buttons wear (doubutsu zeroes --border, and its cream
    card already stands off the patterned canvas). The back button opts
    out: an arrow in the top corner needs no more. In the base layer so
    the variant's own state fills (aria-expanded, aria-pressed) and a

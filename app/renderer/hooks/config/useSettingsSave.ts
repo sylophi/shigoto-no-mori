@@ -14,7 +14,7 @@ function toClientConfig(state: ClientFormState): ClientConfig {
   return {
     theme: storedClientSetting("theme", state.theme),
     doubutsu: storedClientSetting("doubutsu", state.doubutsu),
-    // Kept while the switch is off, so they come back with it.
+    // Kept while doubutsu is off, so they come back with it.
     ...storedPicks(state.lightTheme, state.darkTheme),
     themeRotation: state.themeRotation ? state.themeRotationEvery : undefined,
     pauseAnimationsOnBattery: storedClientSetting(

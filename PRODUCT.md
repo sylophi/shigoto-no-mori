@@ -52,7 +52,7 @@ Two rules sit alongside the order:
 
 **Doubutsu** is the default, shipped look: Animal Crossing themed. Bold, colorful, rounded, playful. Zen Maru Gothic typography, OKLCH chromatic palette (leaf, wood, amber, sky, pink), watermark kanji, gentle motion. Voice: warm and assured, low-key whimsical, never childish.
 
-**v1** is the opt-out: restrained, tool-shaped, in the lineage of tuneloupe / hewwo / fileatlas. Geist sans plus Geist mono, OKLCH neutrals, single accent reserved for primary actions, dashed drop-zone affordances. It is also the vocabulary every component is written in. Doubutsu is an overlay that remaps it, never a second component tree.
+**Plain mode** is the opt-out ("Boring mode" in Settings): restrained, tool-shaped, in the lineage of tuneloupe / hewwo / fileatlas. Geist sans plus Geist mono, OKLCH neutrals, single accent reserved for primary actions, dashed drop-zone affordances. It is also the vocabulary every component is written in. Doubutsu is an overlay that remaps it, never a second component tree.
 
 Three-word personality: **calm, direct, earned-playful**.
 
@@ -80,7 +80,7 @@ t3 code is the comparison product for the multi-device half: a real account, a r
 
 4. **Keyboard parity for the core loop.** Switching, creating, and launching across worktrees must be keyboardable. Other surfaces can be mouse-first.
 
-5. **Build in v1 vocabulary, verify in all four modes.** New surfaces are written in v1 terms (tokens, borders, shadows) and inherit doubutsu through the overlay. A theme-specific fork of a component is a bug. Light, dark, and both with doubutsu get eyeballed before chrome changes ship.
+5. **Build in plain-mode vocabulary, verify in all four modes.** New surfaces are written in plain-mode terms (tokens, borders, shadows) and inherit doubutsu through the overlay. A theme-specific fork of a component is a bug. Light, dark, and both with doubutsu get eyeballed before chrome changes ship.
 
 ## Accessibility & Inclusion
 

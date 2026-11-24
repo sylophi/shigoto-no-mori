@@ -6,7 +6,7 @@
 // Electron, and a phone-width browser tab gets the phone layout: a
 // bottom tab bar (forest, devices, settings), the forest as a page of
 // its own (ForestPage), and the worktree pages stacked over it behind
-// a slim back bar. Built in v1 vocabulary (theme tokens only), per the
+// a slim back bar. Built in plain-mode vocabulary (theme tokens only), per the
 // theming contract.
 import { useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "@tanstack/react-router";

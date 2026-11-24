@@ -37,7 +37,7 @@ interface LookState {
   saved: Look;
   // Live values, `override` over `saved` field by field. What the root
   // wears follows from them: the `dark` class and the BrowserWindow
-  // background from the theme, the `.doubutsu` class from the switch,
+  // background from the theme, the `.doubutsu` class from the doubutsu flag,
   // `data-palette` from the resolved appearance's pick.
   applied: Look;
   resolved: "light" | "dark";
@@ -49,7 +49,7 @@ interface LookState {
 
 const LookContext = createContext<LookState | null>(null);
 // The localStorage mirrors the boot script reads
-// (web/public/boot-theme.js): the theme, the switch, and a pick per
+// (web/public/boot-theme.js): the theme, the doubutsu flag, and a pick per
 // appearance.
 const STORAGE_KEYS = {
   theme: "shigomori.theme",

@@ -3,7 +3,7 @@ import { cn } from "../../lib/utils.ts";
 
 // A project's icon: the logo its repo carries, or, for a repo with none,
 // a tile with the name's initial in a hue drawn from the name. Keyed by
-// name, so the same repo wears the same tile on every device. v1 draws
+// name, so the same repo wears the same tile on every device. Plain mode draws
 // it as a rounded square and doubutsu as a leaf (both shapes ship, and
 // the theme picks one), styled through the project-tile slot in
 // index.css and doubutsu.css.
@@ -40,7 +40,7 @@ export function ProjectIconView({
         style={{ "--project-hue": nameHue(name) } as CSSProperties}
         className={cn(base, className)}
       >
-        <g className="v1-only">
+        <g className="plain-only">
           <rect width="16" height="16" rx="5" fill="currentColor" />
           <TileInitial x={8} y={8} size={10} initial={initial} />
         </g>

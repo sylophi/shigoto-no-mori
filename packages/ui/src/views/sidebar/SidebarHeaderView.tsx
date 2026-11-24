@@ -23,7 +23,7 @@ type ThemeHeaderProps = DevAffordance & {
 // "which shell" vs "which build"). An experimental build wears
 // "experimental" there instead.
 
-// Both headers always render, and `doubutsu-only` / `v1-only` pick which
+// Both headers always render, and `doubutsu-only` / `plain-only` pick which
 // shows. A JS branch on the theme would fork this component per theme.
 // SidebarHeader binds the dev mark and the experimental one (client
 // facts off the preload bridge) and the dev mark's one-way reveal.
@@ -141,9 +141,9 @@ function DoubutsuBrandHeader({
   );
 }
 
-// Both v1 corner chips are the same quiet mono pill. Deliberately not
+// Both plain-mode corner chips are the same quiet mono pill. Deliberately not
 // primitives/chip-button.tsx: that primitive is ring-based and carries
-// data-slot="chip" for doubutsu to restyle, and this markup is v1-only.
+// data-slot="chip" for doubutsu to restyle, and this markup is `plain-only`.
 const HEADER_CHIP =
   "shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-4xs leading-none font-medium tracking-widest text-muted-foreground uppercase";
 
@@ -161,7 +161,7 @@ function DefaultSidebarHeader({
       // clearing the caption buttons. The web bar has no buttons to
       // clear or line up with, and drops all three.
       className={cn(
-        "v1-only flex items-center gap-2",
+        "plain-only flex items-center gap-2",
         hasLocalHost
           ? "h-11.5 px-3 pl-[92px] sidebar-right:pr-caption sidebar-right:pl-4"
           : "h-13 px-4",

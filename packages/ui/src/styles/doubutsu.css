@@ -1,6 +1,6 @@
 /*
  * Doubutsu theme: the default Animal Crossing visual overlay. Opt out
- * via Settings -> Appearance, which restores the plain v1 look.
+ * via Settings -> Appearance (Boring mode), which restores plain mode.
  * Activated by adding `.doubutsu` to the theme root (via useLook).
  * Orthogonal to .dark:
  * .doubutsu and .doubutsu.dark each remap the shadcn-style tokens every
@@ -30,7 +30,7 @@
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar",
  *    data-doubutsu-page="settings|tidy|devices|forest|visitors"
- *    picking the canvas wallpaper, and the `doubutsu-only` / `v1-only`
+ *    picking the canvas wallpaper, and the `doubutsu-only` / `plain-only`
  *    classes (per-theme markup shipped side by side).
  *
  * 4. Upstream library attributes (re-verify on upgrades): Base UI's
@@ -368,7 +368,7 @@
 }
 
 /* --- Outline button fill ---
-   In v1, the outline variant relies on its 1px border to read as a
+   In plain mode, the outline variant relies on its 1px border to read as a
    button against the canvas. In doubutsu the border is gone, so we
    give it a peach pastel fill, a distinct hue from secondary's sand
    and clearly different from canvas, so outline / secondary read as
@@ -394,7 +394,7 @@
 }
 
 /* --- Lists and placeholders framed by a border alone ---
-   v1 draws a list of rows, or an empty state's panel, as a box from its
+   Plain mode draws a list of rows, or an empty state's panel, as a box from its
    border. With the border gone its rows would float on the wallpaper,
    so the box (data-slot="frame") becomes a tray: the card's fill, thin
    enough for the wallpaper to show through. */
@@ -467,7 +467,7 @@
 }
 
 /* --- Toasts speak doubutsu ---
-   sonner's own pieces are v1's (a small glyph in the text color, a
+   sonner's own pieces are plain-mode ones (a small glyph in the text color, a
    black action chip, a hairline close button) and sit outside our
    component tree, so they are restyled here by sonner's attributes.
    The kind of a toast wears its tone the way the rest of the app does,
@@ -532,7 +532,7 @@
   }
 
   /* The close button hangs off the card's corner, so it is a floating
-     surface of its own: a sand disc on the small sticker drop, where v1
+     surface of its own: a sand disc on the small sticker drop, where plain mode
      draws a hairline ring. Its fill and ink are the toaster's important
      utilities (AppChrome.tsx), which outrank any rule here, so the
      tokens they read are moved instead, its hover ones too: the stripes
@@ -586,7 +586,7 @@
 }
 
 /* --- Text fields read as inset trays ---
-   v1 fields are border-input + bg-background: with borders gone they'd
+   Plain-mode fields are border-input + bg-background: with borders gone they'd
    melt into the canvas. Filling the field slots (and the segmented-
    control tracks) with the --input tray tint keeps them legible
    without hairlines. */
@@ -598,7 +598,7 @@
   ) {
   background-color: var(--input);
 }
-/* A field under the pointer deepens its tray, where v1 tints its
+/* A field under the pointer deepens its tray, where plain mode tints its
    border (primitives/input.tsx). Not once focused: the focus ring says more. */
 @media (hover: hover) {
   .doubutsu
@@ -636,7 +636,7 @@
 }
 
 /* --- Search strips and popup footers, without rules ---
-   v1 rules a search strip off from the list under it, and a popup's
+   Plain mode rules a search strip off from the list under it, and a popup's
    footer off from its body. Here the strip becomes the field tray
    every text field is, inset as far as the list's rows. In a popup it
    and the footer (a band) wear the palette's verbs pane's wash
@@ -667,14 +667,14 @@
 }
 
 /* The palette's verbs pane, a column edge to edge between the search
-   strip and the footer in v1, would butt into the round tray and the
+   strip and the footer in plain mode, would butt into the round tray and the
    band as a seam. It floats as a panel of its own instead. */
 .doubutsu [data-slot="palette-verbs"] {
   margin: calc(var(--spacing) * 2);
   border-radius: var(--radius-lg);
 }
 
-/* Quiet action chips built on an inset ring alone in v1. The muted
+/* Quiet action chips built on an inset ring alone in plain mode. The muted
    pill fill makes them read as controls with the rings gone. */
 .doubutsu [data-slot="chip"] {
   background-color: var(--muted);
@@ -704,7 +704,7 @@
   background-color: var(--doubutsu-button-outline);
 }
 
-/* An unticked checkbox is a hairline box on the surface colour in v1,
+/* An unticked checkbox is a hairline box on the surface colour in plain mode,
    and hairlines are exactly what the reset above strips. Left alone it
    would be a control you cannot see, on a list that removes things. It
    gets a fill of its own instead, which is how every other surface here
@@ -724,7 +724,7 @@
 }
 
 /* --- Open popups keep their trigger lit ---
-   v1 marks an open trigger with border-input + a ring, both stripped.
+   Plain mode marks an open trigger with border-input + a ring, both stripped.
    The accent pillow is doubutsu's "active" signal everywhere else, so
    use it here too. aria-haspopup scopes this to menu/combobox triggers:
    tooltip triggers also carry data-popup-open but no haspopup, and the
@@ -739,7 +739,7 @@
 }
 
 /* --- Detail page zones get lifted, translucent bands ---
-   Header + footer of the main detail surfaces in v1 are bounded by
+   Header + footer of the main detail surfaces in plain mode are bounded by
    border-b / border-t hairlines. With borders gone, they would bleed
    into content. Lift them to bg-card so each reads as its own panel
    stacked on the cream canvas.
@@ -750,7 +750,7 @@
    ::before at z-index -1: above main's background paint, below every
    in-flow child, so a band that lets light through reveals the pattern
    still moving underneath. Flat alpha, no backdrop blur: frosted glass
-   is a v1 idiom, and doubutsu color-blocks.
+   is a plain-mode idiom, and doubutsu color-blocks.
 
    Alpha (--doubutsu-band-fill) is the whole knob here, and it trades
    against the lift. Light mode has only 0.018 of lightness between
@@ -880,7 +880,7 @@
    overhangs the card above it. Two stacked blocks that nearly line up read worse than two that
    either match or clearly don't. The rows underneath are text with only
    a hover fill, so they can run full width without the same clash.
-   v1 has no card, so it keeps the px-2. The device filter's pills are
+   Plain mode has no card, so it keeps the px-2. The device filter's pills are
    filled surfaces too, in both views, and line up with the same edge. */
 .doubutsu
   :is([data-slot="sidebar-inbox-create"], [data-slot="sidebar-device-filter"]) {
@@ -888,7 +888,7 @@
 }
 
 /* The phone layout's tab bar: a cream tray along the bottom edge,
-   set off by its fill alone rather than the border v1 draws, with the
+   set off by its fill alone rather than the border plain mode draws, with the
    current tab a leaf-green sticker slapped on at a tilt like the brand
    header's corner pills. The tray is a card, not the rail's mint, so
    it stays its own surface on the mint forest page too. */
@@ -1084,7 +1084,7 @@
 }
 
 /* `doubutsu-only` lets components ship the AC-specific overlay/markup
-   inline. Hidden in v1, visible when `.doubutsu` lights up. */
+   inline. Hidden in plain mode, visible when `.doubutsu` lights up. */
 .doubutsu-only {
   display: none;
 }
@@ -1092,11 +1092,11 @@
   display: block;
 }
 
-/* The mirror: `v1-only` markup keeps its natural display in v1 and
+/* The mirror: `plain-only` markup keeps its natural display in plain mode and
    drops out under doubutsu. Together the two let a component ship both
-   theme's markup side by side rather than branching on the theme in
+   themes' markup side by side rather than branching on the theme in
    JS. */
-.doubutsu .v1-only {
+.doubutsu .plain-only {
   display: none;
 }
 
