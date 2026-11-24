@@ -108,7 +108,7 @@ if (purify.isSupported) {
   });
 }
 
-// Written in v1's vocabulary like any component: tokens only, so the
+// Written in the plain-mode vocabulary like any component: tokens only, so the
 // doubutsu overlay and the palettes carry over.
 const PROSE = cn(
   "text-xs leading-relaxed break-words select-text",

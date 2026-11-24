@@ -90,18 +90,10 @@ export function AppearanceSectionView({
         options={options}
         optionClassName="px-3 py-1.5 text-xs"
       />
-      <ToggleRowView
-        checked={doubutsu}
-        onCheckedChange={onDoubutsuChange}
-        label="Doubutsu theme"
-        description="Bold, color-blocked Animal Crossing inspired theme, over light or dark."
-      />
-      {/* Its palettes, one per appearance the way most apps offer it,
+      {/* Doubutsu's palettes, one per appearance the way most apps offer it,
           so a cream day and a navy night can go together. They wait,
-          greyed, while the switch is off. */}
-      <div
-        className={cn("space-y-3 pl-11", !doubutsu && "pointer-events-none")}
-      >
+          greyed, while Boring mode is on. */}
+      <div className={cn("space-y-3", !doubutsu && "pointer-events-none")}>
         <PaletteRow label="Light palette" disabled={!doubutsu}>
           {lightPalette}
         </PaletteRow>
@@ -125,6 +117,12 @@ export function AppearanceSectionView({
           />
         </div>
       </div>
+      <ToggleRowView
+        checked={!doubutsu}
+        onCheckedChange={(boring) => onDoubutsuChange(!boring)}
+        label="Boring mode"
+        description="Plain, neutral look without the Doubutsu theme."
+      />
       <ToggleRowView
         checked={darkTerminals}
         onCheckedChange={onDarkTerminalsChange}
@@ -150,7 +148,7 @@ export function AppearanceSectionView({
         />
       </div>
       {/* A browser without the Battery Status API has nothing to pause
-          on, and neither does the plain look: the wallpaper is doubutsu's. */}
+          on, and neither does plain mode: the wallpaper is doubutsu's. */}
       {battery && (
         <ToggleRowView
           checked={pauseAnimationsOnBattery}
@@ -165,7 +163,7 @@ export function AppearanceSectionView({
   );
 }
 
-// A labelled palette row under the switch, greyed with it.
+// A labelled palette row, greyed while Boring mode is on.
 function PaletteRow({
   label,
   disabled,

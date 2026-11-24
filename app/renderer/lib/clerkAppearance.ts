@@ -36,7 +36,7 @@ export const clerkAppearance: ClerkProviderProps["appearance"] = {
     // literal is right here.
     colorModalBackdrop: "rgb(0 0 0 / 0.4)",
     borderRadius: "var(--radius)",
-    // Geist in v1, Zen Maru under doubutsu.
+    // Geist in plain mode, Zen Maru under doubutsu.
     fontFamily: "var(--font-sans)",
   },
 };

@@ -2,7 +2,7 @@
 // VillagerIcon.tsx), a standalone fake host page over the fixture bridge:
 // http://localhost:<FAKE_HOST_PORT>/villager-icons.html
 //   default       the doubutsu overlay (one panel, in ?theme)
-//   ?doubutsu=0   v1 light and dark side by side, since v1's dark
+//   ?doubutsu=0   plain mode light and dark side by side, since the plain-mode dark
 //                 tokens also apply under a nested .dark
 // The faces come from lab/fake-host/villager-data (villagerData.ts), a
 // download that never enters the repo. Without it the sheet says so,
@@ -51,7 +51,7 @@ function Panel({ dark }: { dark: boolean }) {
       )}
     >
       <h2 className="text-sm font-medium">
-        {doubutsu ? "doubutsu" : "v1"} {dark ? "dark" : "light"}
+        {doubutsu ? "doubutsu" : "plain"} {dark ? "dark" : "light"}
       </h2>
       <div className="grid grid-cols-10 gap-x-1 gap-y-2">
         {SHEET.map((slug) => (

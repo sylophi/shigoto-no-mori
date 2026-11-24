@@ -20,7 +20,7 @@ export function Chip({
 }
 
 // Quiet inline action chip.
-// Reads as a control via its inset ring in v1, and doubutsu restyles it
+// Reads as a control via its inset ring in plain mode, and doubutsu restyles it
 // through the data-slot hook.
 export function ChipButton({
   className,

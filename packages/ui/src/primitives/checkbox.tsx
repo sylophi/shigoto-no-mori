@@ -11,7 +11,7 @@ import type { WithoutTitle } from "./tooltip.tsx";
 // `label:has(input[type="checkbox"])` row-hover hook doubutsu.css hangs
 // off keeps matching.
 //
-// v1 draws the empty box the way the rest of v1 draws things, with a
+// Plain mode draws the empty box the way the rest of plain mode draws things, with a
 // hairline. doubutsu strips hairlines, so it fills the box instead. See
 // the `[data-unchecked]` rule in doubutsu.css.
 //

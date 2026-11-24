@@ -9,13 +9,13 @@ render.
 
 The app ships two designs: **doubutsu** (default: Animal Crossing
 overlay, class `doubutsu` on the theme root, orthogonal to light/dark) and
-**v1** (neutral shadcn-style, the opt-out via Settings → Appearance).
-There is ONE component tree: doubutsu is
+**plain mode** (neutral shadcn-style, turned on as "Boring mode" in
+Settings → Appearance). There is ONE component tree: doubutsu is
 `packages/ui/src/styles/doubutsu.css` remapping tokens and hooking
-stable attributes on top of the v1 base. Keep it that way, and never fork a
-component per theme. Components are still written in v1's vocabulary
-(tokens, borders, shadows), and the overlay handles translation, so
-build in v1 terms and verify in both.
+stable attributes on top of the plain-mode base. Keep it that way, and
+never fork a component per theme. Components are still written in the
+plain-mode vocabulary (tokens, borders, shadows), and the overlay
+handles translation, so build in plain-mode terms and verify in both.
 
 The theme lives on a **theme root**, an element carrying
 `data-theme-scope` with the theme classes (`dark`, `doubutsu`),
@@ -30,7 +30,7 @@ a browser tab paints it from the root's background (`AppShell`), and
 Clerk's modal, which mounts on the body, gets its colors resolved
 against the root (`ClerkGate`).
 
-Doubutsu comes in palettes, picked per appearance under its switch (a
+Doubutsu comes in palettes, picked per appearance in Appearance (a
 light one and a dark one, `lightTheme` / `darkTheme` beside `doubutsu`
 in client config, the catalog in `packages/ui/src/lib/themes.ts`). The
 pick lands as `data-palette` on the theme root:
@@ -82,7 +82,7 @@ Rules that keep both themes cheap to maintain:
   `hover:bg-accent`. A row in a list hovers with `hover:bg-accent/60`,
   and a picked row keeps its `bg-accent` under the pointer: the hover
   class goes on the unpicked branch. `muted` is for a surface that
-  already has a fill. The two are one grey in v1 and two colours in
+  already has a fill. The two are one grey in plain mode and two colours in
   doubutsu, so a `hover:bg-muted` on a bare control only shows as wrong
   there.
 - **Hover hints are the app's tooltip**, `SimpleTooltip` from
@@ -121,7 +121,7 @@ Rules that keep both themes cheap to maintain:
   edge: fills set surfaces apart, and a floating one stands on a hard,
   blur-less drop (`--doubutsu-sticker-shadow`). Keyboard focus rings
   are the one exception, and the guide's ring around what it points
-  at, a pointer like focus (`data-slot="guide-ring"`). So rows that v1 rules off say what they are
+  at, a pointer like focus (`data-slot="guide-ring"`). So rows that plain mode rules off say what they are
   instead: a search strip carries `data-slot="search-row"` (it becomes
   an inset tray) and a popup's footer `data-slot="footer-row"` (a
   muted band). A list or a panel that is a box from its border alone
@@ -303,7 +303,7 @@ browser tab has no window buttons and keeps the sidebar on the left.
   from it, such as the resize handle and the toasts, follows it.
 - **Room for the buttons.** The strip under the caption buttons is
   `--caption-room` wide, and a header that shares a row with them pads
-  past it. In the plain theme the sidebar's title truncates to make
+  past it. In plain mode the sidebar's title truncates to make
   room. In doubutsu the buttons sit above the logo card.
 - **Something to drag by.** The top strips of the sidebar and the page
   drag the window, as they do on a Mac. A window without a sidebar,

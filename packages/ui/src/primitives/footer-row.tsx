@@ -2,7 +2,7 @@ import type React from "react";
 import { cn } from "../lib/utils.ts";
 
 // A popup's footer: its key hints and its actions in a muted band
-// under a rule (v1), or a muted fill (doubutsu, by the data-slot).
+// under a rule (plain mode), or a muted fill (doubutsu, by the data-slot).
 export function FooterRow({
   className,
   ...props

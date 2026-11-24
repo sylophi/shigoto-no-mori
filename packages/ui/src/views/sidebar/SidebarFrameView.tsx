@@ -78,7 +78,7 @@ export function ViewPaneView({
 
 // The inbox has no project headers to hang a + off, so creating lives
 // here: New worktree, and add project beside it. px-2 like the rows
-// below it, which is where v1 wants it. doubutsu pulls it in to its
+// below it, which is where plain mode wants it. doubutsu pulls it in to its
 // banner card, hence the slot.
 export function InboxCreateRowView({
   button,

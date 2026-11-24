@@ -1,6 +1,6 @@
 // The doubutsu palette catalog behind Settings > Appearance: what each
 // pick is called, and how a stored client config decodes into the
-// switch and the two picks. The ids are the schema's
+// doubutsu flag and the two picks. The ids are the schema's
 // (packages/contracts/src/schemas/config.ts), and the colors the stylesheets' (DESIGN.md,
 // "Theming").
 import {
@@ -88,7 +88,7 @@ export const DARK_THEMES: readonly ThemeOption<DarkTheme>[] = [
   { id: "twilight", label: "Twilight", blurb: "Dusk plum, a wisteria glow" },
 ];
 
-// The appearance settings the overlay reads: the switch, and the pick
+// The appearance settings the overlay reads: the doubutsu flag, and the pick
 // each appearance wears while it is on.
 export interface DoubutsuPicks {
   doubutsu: boolean;
@@ -118,8 +118,7 @@ export function storedPicks(
   };
 }
 
-// The palette the current appearance wears, or null with the switch
-// off.
+// The palette the current appearance wears, or null with doubutsu off.
 export function activeTheme(
   picks: DoubutsuPicks,
   resolved: "light" | "dark",
@@ -159,7 +158,7 @@ const ROTATION_MS: Record<Exclude<ThemeRotation, "launch">, number> = {
 
 // The rotation's next turn, if one is due: the pair after the light
 // pick's, round to the first after the last, stamped `now`. Null with
-// rotation or the switch off. A launch is a moment like any other to
+// rotation or doubutsu off. A launch is a moment like any other to
 // the timed rotations. A stamp ahead of `now` is a clock set back since
 // the last turn, which turns again rather than waiting the clock out.
 export function rotationTurn(
