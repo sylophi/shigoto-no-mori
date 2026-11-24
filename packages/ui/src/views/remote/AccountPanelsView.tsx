@@ -72,7 +72,7 @@ function StatePanel({
 }
 
 // The .env.local hint is dev-only: a packaged build sources the account
-// service from its build environment alone (hub/README.md), so the
+// service from its build environment alone (app/ACCOUNT.md), so the
 // advice would mislead there.
 export function NotConfiguredPanelView({
   isDev,

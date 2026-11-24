@@ -25,7 +25,6 @@ The install keeps its versions in `~/.local/share/shigomori`, links `sm` into `~
 | Folder | What it is |
 | --- | --- |
 | `app/` | The Electron desktop app and the web client |
-| `hub/` | The device hub, a Cloudflare Worker |
 | `marketing/` | The shigomori.com site, built with Astro |
 | `lint/` | The repo's own oxlint rules |
 | `packages/` | The workspace packages: `contracts` (what crosses a wire), `engine` (the data model, the store and git), `ui` (the views and the fixture world), and `cli` (the terminal `sm`) |
@@ -50,7 +49,7 @@ the root. `pnpm check` runs every check CI runs.
 Each folder documents itself: [`app/README.md`](app/README.md) is the
 app's layout, [`app/DESIGN.md`](app/DESIGN.md) its visual rules,
 [`app/lab/README.md`](app/lab/README.md) how to test it by hand on the
-real UI, [`app/test/README.md`](app/test/README.md) its proofs, [`hub/README.md`](hub/README.md) the device hub,
+real UI, [`app/test/README.md`](app/test/README.md) its proofs, [`app/ACCOUNT.md`](app/ACCOUNT.md) the account service it signs in to,
 [`marketing/README.md`](marketing/README.md) the site,
 [`lint/README.md`](lint/README.md) the repo's lint rules, and each
 package under `packages/` has a README of its own.

@@ -3,7 +3,7 @@
 // bridge (main/electron/clerk.ts), the packaged Info.plist registration
 // (forge.config.ts protocols), the dev per-worktree bundle
 // registration (scripts/lib/devBundle.mts), and the Clerk instance's
-// allowed_origins (hub/README.md).
+// allowed_origins (ACCOUNT.md).
 // A divergence breaks packaged OAuth deep links with no build error,
 // so every consumer derives from here. Constant-only module aside from
 // the flavor switch: forge config, main and check scripts all import

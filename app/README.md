@@ -3,10 +3,11 @@
 The Electron desktop app and the web client, one package of the
 root pnpm workspace. Paths here are relative to this directory. The
 terminal `sm` (`packages/cli`) and the mirroring engine (`file-sync/`)
-it bundles, and the device hub (`hub/`) it talks to, are siblings one
-level up.
+it bundles are siblings one level up.
 
 - `DESIGN.md`: rules for the visual layer.
+- `ACCOUNT.md`: the account service (Colibrii and Clerk), its build
+  settings and the Clerk instance's configuration.
 - `lab/dev-app.md`: the builds (prod, dev and the test flavors), each
   with its own name, bundle id, scheme, data dir, userData, logs and
   `sm`, from one table (`packages/engine/src/flavor.ts`), so they run

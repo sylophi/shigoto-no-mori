@@ -398,7 +398,7 @@ jobs:
         run: gh release upload "$TAG" assets/* --clobber
 
   # Vercel deploys app.shigomori.com from web-client-prod
-  # (hub/README.md). The ref update refuses a non-fast-forward, so a
+  # (app/web/README.md). The ref update refuses a non-fast-forward, so a
   # branch moved by hand fails here instead of being overwritten. The
   # job token triggers no workflow run, but Vercel's GitHub app still
   # sees the push.

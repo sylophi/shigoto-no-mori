@@ -2,7 +2,6 @@
 # and the settings below for all of them.
 packages:
   - app
-  - hub
   - marketing
   - lint
   - packages/*
@@ -60,11 +59,10 @@ trustPolicyExclude:
 # run install scripts.
 allowBuilds:
   electron: true
-  # esbuild (vite's, Astro's and wrangler's bundler) and workerd (the
-  # hub's Worker runtime) validate their platform binary in a
-  # postinstall, the binary itself arriving as an optional dependency.
+  # esbuild (vite's and Astro's bundler) validates its platform binary
+  # in a postinstall, the binary itself arriving as an optional
+  # dependency.
   esbuild: true
-  workerd: true
   lefthook: true
   # appdmg's two native addons, pulled in by the dmg maker
   # (@electron-forge/maker-dmg -> electron-installer-dmg -> appdmg).
@@ -107,13 +105,11 @@ overrides:
   # Forcing 7.x keeps every consumer on the attested line.
   "semver@<7.7.2": "^7.7.2"
   # Force sharp >= 0.35.5 to patch the bundled libheif (GHSA-g89c-p67h-r497,
-  # GHSA-2jg2-4ch7-h545) and GHSA-wq5f-xc86-pv6w. miniflare (under the
-  # hub's wrangler) pins sharp to 0.35.2 exactly. Drop this once wrangler
-  # ships past it.
+  # GHSA-2jg2-4ch7-h545) and GHSA-wq5f-xc86-pv6w. marketing and Astro ask
+  # for ^0.35.4.
   "sharp@<0.35.5": "^0.35.5"
   # Force undici >= 7.30.1 to patch the advisories fixed through it
-  # (GHSA-w293-vg96-wgc3 among them). miniflare pins 7.29.0 exactly. Drop
-  # this once it ships past it.
+  # (GHSA-w293-vg96-wgc3 among them). @electron/get asks for ^7.24.4.
   "undici@>=7.0.0 <7.30.1": "7.30.1"
 
 # The versions the packages share, pinned once. A package depends on
@@ -128,7 +124,6 @@ catalog:
   "@effect/platform-bun": 4.1.4
   "@effect/platform-node": 4.1.4
   "@effect/sql-sqlite-bun": 4.1.4
-  "@effect/sql-sqlite-do": 4.1.4
   "@effect/sql-sqlite-node": 4.1.4
   "@effect/tsgo": 0.51.1
   "@fontsource-variable/geist": ^5.2.9

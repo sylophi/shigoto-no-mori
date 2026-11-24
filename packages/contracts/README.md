@@ -1,11 +1,10 @@
 # contracts
 
-What crosses a wire or sits on disk, described once for every side: the app's main process, host and renderer, the web client and the hub that builds before Colibrii connected through.
+What crosses a wire or sits on disk, described once for every side: the app's main process, host and renderer, and the web client.
 
 - `src/schemas/`: the data shapes, as Effect Schema, with `strict` and `loose` for contract payloads and `index.ts` as their barrel.
 - `src/modules/`: one contract per module, an `RpcGroup` of the calls and pushes each side serves, each tagged with its channel and classified by annotations (`src/contract.ts`). `src/grants.ts` holds the consent lines a remote gated call names. `src/types.ts` derives the client and handler types from the groups.
-- `src/hubApi.ts`: the hub Worker's HTTP API, the refusals no window tells apart, and its two bearer tiers, which the Worker serves to builds before Colibrii.
-- `src/hubProtocol.ts`: the bodies that API carries and the socket envelopes between such a build and the hub, and the account's device as the app shows it (`DeviceInfo`).
+- `src/hubProtocol.ts`: the account's device as the app shows it (`DeviceInfo`) and its id.
 - `src/errors.ts`: the errors a contract names and the renderer recognizes, the hub's refusals of this device among them, which cross every wire as themselves.
 - The host serves a host-scoped module through its handler map, `app/host/ipc/modules/<module>.ts`, which `app/host/process/handlers.ts` gathers into the layer the host's listeners serve. The shell serves a client-scoped one (`app/main/ipc/modules/`). A call's annotations say who may make it, and `defineContract` throws as the module loads when a host call lacks one: a host invoke or view says `remote` (true only if a peer may call it, and said once for a module on the loopback alone, as `{ scope: "host", remote: false }`), a remote one says `gated` (true for anything that changes what the user owns, and for the reads `src/contract.ts` lists), and a remote gated one names the consent line that covers it (`grant`, from `src/grants.ts`). `tracksProjectUsage` and `busy` (what a quit waits on the call for) are opt-in (`src/contract.ts` says when).
 - `src/link.ts`: the device link's `RpcGroup`, every module's remote calls plus the link's own (`src/modules/link.ts`), and the middleware tags that guard it. `src/allModules.ts` lists the modules it is built from, and `ChannelRefusedError` (`src/errors.ts`) the reasons a byte channel's open is refused with.
@@ -23,7 +22,7 @@ The package's runtime dependencies are `effect` and `semver`, and it imports not
 
 What crosses the wire between two builds is versioned in parts (`src/protocol.ts`), so two devices on different releases keep their link and lose only what changed.
 
-The core is what any link needs: the greeting and the byte channels (`src/modules/link.ts`), the frame encoding and the failure union (`CallFailureSchema`). Its version is `CORE_VERSION`. Two builds on different cores hold no link at all: a host's listener refuses a dialer's hello on any core but its own, and the dialer reads which end is older from the refusal. The hub's floor (`HUB_PROTOCOL_FLOOR`) stays at the last core that connected through it.
+The core is what any link needs: the greeting and the byte channels (`src/modules/link.ts`), the frame encoding and the failure union (`CallFailureSchema`). Its version is `CORE_VERSION`. Two builds on different cores hold no link at all: a host's listener refuses a dialer's hello on any core but its own, and the dialer reads which end is older from the refusal.
 
 Every other module a build of another release calls names a version in its `defineContract`: a module a peer reaches, and the ones the terminal `sm` calls on its own machine's app. A host's welcome carries the version of each module it serves. The dialing end holds them against its own (`outdatedModules` in `src/link.ts`) and refuses a call into a module at another version before it is sent, with a `ModuleOutdatedError` naming the module, the device on the older build and the one on the newer. Such a module's pushes are never asked for. Every call, view and push of a link is asked for by its dialing end, so that is the one place a call is refused. `mirror` and `sync` share `MIRROR_VERSION`: a mirror runs on sync's calls, so the two change as one. `account` and `sharing` are at the core's version: their pushes are how a session keeps what its peer allows current, so they hold between any two builds that link.
 
