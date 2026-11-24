@@ -160,11 +160,12 @@ screen, which an agent's session has no permission to capture.
 | `SHIGOMORI_UPDATE_FEED_URL`        | App only. Stand-in for the update server, the fallback for the release list. |
 | `SHIGOMORI_UPDATE_RELEASES_URL`    | App only. Stand-in for the GitHub release list.                              |
 
-`.env.local` holds the dev hub's URL and the dev Clerk instance's
-publishable key, neither a secret, and is not in the repo: a worktree
+`.env.local` holds the Colibrii instance's address, the app's id on
+it and the dev Clerk instance's publishable key, none a secret, and is
+not in the repo: a worktree
 `sm` makes carries it over from the primary checkout (the project's
 carry-over setting), and a checkout made any other way copies it from
-there. Without both values the account reads as unconfigured: the
+there. Without all three the account reads as unconfigured: the
 web client never dials its hub socket, Sign in stays off, and the
 migration's page leaves its sign-in step out.
 
@@ -309,10 +310,16 @@ removed one the next time they read the registry. A relaunch after
   worktrees, run and watch its scripts, change its settings) works
   from a browser tab the same way, and anything local by nature
   (launch tools, this device's settings, port forwarding) is absent.
-- **Local Colibrii service** (Colibrii's `service/README.md` says how
-  to run one). Set `SM_DEVICE_HUB_URL` to its address
-  (`http://localhost:8787`) and `SM_DEVICE_HUB_APP` to the app it
-  keeps for sm, to run against it instead of the dev instance.
+- **Local Colibrii service** (Colibrii's `service/README.md`, "Local
+  development", says how to run one). It serves on
+  `http://localhost:8787` and knows only the apps added to its local
+  database, so add one for sm there first (its `app --local` script),
+  with the dev Clerk instance's public key and the dev app's origins.
+  Set `SM_DEVICE_HUB_URL` to that address and `SM_DEVICE_HUB_APP` to
+  the app's id to run against it instead of the dev instance. It makes
+  no tunnels (provisioning one calls Cloudflare), so devices on it
+  reach each other over the LAN and the web client, which dials
+  tunnels alone, reaches none.
 - **Packaged build, as a test flavor** (`SM_FLAVOR=<word> pnpm
   package`, `lab` by convention). A word that is no build's makes a
   test flavor: every name follows from it (`Shigoto no Mori (lab)`,

@@ -24,7 +24,7 @@ device link, which are where its projects are seen and driven.
 - `account.ts`: the account with no window to sign in from. `sm login`
   asks Clerk for a device code and enrolls with the access token
   Clerk issues once the code is approved (the device grant,
-  `hub/README.md`). The credential is kept in an owner-only file,
+  `../ACCOUNT.md`). The credential is kept in an owner-only file,
   since a server has no keyring to keep it in.
 - `nuke.ts`: `sm nuke` with no window. The command takes the unit out
   and starts the host with `--sm-nuke`, which runs the host's half of

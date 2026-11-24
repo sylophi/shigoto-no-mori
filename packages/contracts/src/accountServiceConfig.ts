@@ -5,8 +5,7 @@ export type AccountServiceConfig = {
   // The Colibrii instance's hub address, and this app's id there.
   hubUrl: string;
   app: string;
-  // Of the Clerk application whose secret key the hub verifies tokens
-  // with.
+  // Of the Clerk instance this app is registered with on the hub.
   publishableKey: string;
   // The one origin the device's listener admits browser dials from. Not
   // part of isConfigured.

@@ -239,10 +239,9 @@ export class LinkUnauthenticatedError extends Schema.TaggedError<LinkUnauthentic
   }
 }
 
-// The hub's rate limiter turned a call away (a 429, which the hub's API
-// names no error for). `retryAfterSeconds` is the hub's Retry-After,
-// which the device list waits out before asking again. Nothing retries
-// it sooner, and a write is not replayed.
+// The hub's rate limiter turned a call away. `retryAfterSeconds` is the
+// hub's Retry-After, which the device list waits out before asking
+// again. Nothing retries it sooner, and a write is not replayed.
 // Raised by the account service, which no peer-served call reaches, so
 // it never crosses a device link to an older build: only the loopback,
 // to the terminal's `sm` of the app's own bundle.
@@ -259,46 +258,30 @@ export class HubRateLimitedError extends Schema.TaggedError<HubRateLimitedError>
 
 export const isHubRateLimitedError = Schema.is(HubRateLimitedError);
 
-// The hub's refusals of this device (its HTTP API's, hubApi.ts).
-
-export class HubLoginRejectedError extends Schema.TaggedError<HubLoginRejectedError>()(
-  "HubLoginRejectedError",
-  {},
-  { httpApiStatus: 401 },
-) {
-  override get message(): string {
-    return "The device hub did not accept this sign-in.";
-  }
-}
+// The hub's refusals of this device.
 
 export class HubCredentialRejectedError extends Schema.TaggedError<HubCredentialRejectedError>()(
   "HubCredentialRejectedError",
   {},
-  { httpApiStatus: 401 },
 ) {
   override get message(): string {
     return "The device hub no longer accepts this device's credential.";
   }
 }
 
-// The one refusal the app signs out on. The socket's close code only
-// reaches a device online at the revoke.
 export class HubDeviceRevokedError extends Schema.TaggedError<HubDeviceRevokedError>()(
   "HubDeviceRevokedError",
   {},
-  { httpApiStatus: 403 },
 ) {
   override get message(): string {
     return "This device was removed from the account.";
   }
 }
 
-// `error` is the sentence a v2 build shows (it knows no tags). A 403,
-// which v2 treats as terminal rather than retrying forever.
+// `error` is the hub's own sentence for it.
 export class HubUpdateRequiredError extends Schema.TaggedError<HubUpdateRequiredError>()(
   "HubUpdateRequiredError",
   { floor: Schema.Int, error: Schema.String },
-  { httpApiStatus: 403 },
 ) {
   override get message(): string {
     return this.error;
@@ -308,7 +291,6 @@ export class HubUpdateRequiredError extends Schema.TaggedError<HubUpdateRequired
 // Terminal until the account changes: a retry can't succeed.
 export const isHubRefusal = Schema.is(
   Schema.Union([
-    HubLoginRejectedError,
     HubCredentialRejectedError,
     HubDeviceRevokedError,
     HubUpdateRequiredError,
@@ -406,7 +388,6 @@ export const ContractErrorSchema = Schema.Union([
   HubUnreachableError,
   // The hub's refusals of this device, which a window words apart
   // (isHubRefusal).
-  HubLoginRejectedError,
   HubCredentialRejectedError,
   HubDeviceRevokedError,
   HubUpdateRequiredError,

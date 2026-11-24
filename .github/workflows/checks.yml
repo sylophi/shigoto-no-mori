@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # oxlint and oxfmt are root dev dependencies, and their scripts run
-    # over every package (app, hub, marketing, packages, cli).
+    # over every package (app, marketing, lint, packages).
     steps:
       # Pinned to commit digests like release.yml, so a retagged action
       # cannot change what runs here.

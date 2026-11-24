@@ -4,8 +4,8 @@ The site for shigomori.com, built with Astro into static HTML. Its
 pictures of the app are the app's own: the views from `@shigomori/ui`,
 drawn over the fixture world at build time, and for the windows, the
 real app over the fixture world once they come near the screen. It is a
-package of the repo's pnpm workspace, like `hub/`: install from the
-repo root, run its scripts from here.
+package of the repo's pnpm workspace: install from the repo root, run
+its scripts from here.
 
 ```sh
 pnpm install  # from the repo root
@@ -27,7 +27,7 @@ This package pins TypeScript 6: `astro check` needs its programmatic
 API, which the native TypeScript 7 compiler lacks.
 
 It deploys from `main` as its own Vercel project, set up as
-`hub/README.md` ("The Vercel projects") says. `vercel.json` pins the
+`app/web/README.md` ("The Vercel projects") says. `vercel.json` pins the
 Astro preset and the install command, and holds the headers.
 
 ## Layout

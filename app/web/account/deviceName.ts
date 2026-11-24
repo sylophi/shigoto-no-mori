@@ -90,8 +90,8 @@ function firstMatch(
   return null;
 }
 
-// Always non-empty and far under EnrollRequestSchema's 256-char name
-// bound, so a stored default can never later fail enroll's schema.
+// Always non-empty and far under the hub's 256-byte bound on a device
+// name, so a stored default can never later fail enrollment.
 export function defaultWebDeviceName(
   userAgent: string,
   hints: BrowserHints = {},

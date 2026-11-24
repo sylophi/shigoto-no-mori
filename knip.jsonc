@@ -34,12 +34,6 @@
         "lab/relaunch.mts",
       ],
     },
-    "hub": {
-      "ignoreDependencies": [
-        // cloudflare:workers is workerd's built-in module.
-        "cloudflare",
-      ],
-    },
     "marketing": {},
     // Its exports map makes every module an entry, and an entry's
     // exports count as used unless this says otherwise.

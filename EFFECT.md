@@ -331,9 +331,6 @@ export const layer = Layer.effect(Registry, make);
   per-module `RpcGroup`. Its payload, success and error schemas are
   the single description of the call for every transport: the device
   socket, the loopback the shells use, the terminal's control client.
-  The hub's own routes are an `HttpApi`
-  (`packages/contracts/src/hubApi.ts`), each endpoint's schemas the
-  one description of that route.
 - The per-call classification travels as annotations on the
   definition, read by middleware: `remote` (reaches a peer), `gated`
   (served to a peer only with the command switch on),
