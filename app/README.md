@@ -38,8 +38,9 @@ PowerShell, which terminals run. The build needs Node, pnpm, Go (for
 terminal `sm`), as on the other OSes, and the installer the .NET SDK
 (for Velopack's `vpk`, `scripts/package-windows.mts`). Install scripts
 are off, so run `pnpm run postinstall` after `pnpm install`. Windows
-has the desktop app only, with no headless host or service, on x64,
-and its builds are unsigned. The builds are in `lab/dev-app.md`, device windows in
+has the desktop app only, with no headless host or service, on x64
+and, experimentally, arm64, and its builds are unsigned. The builds
+are in `lab/dev-app.md`, device windows in
 `lab/devices.md`, which notes Windows' own steps, and the release in
 `lab/release.md`.
 

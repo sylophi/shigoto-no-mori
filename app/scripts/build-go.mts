@@ -6,9 +6,11 @@
 // binding for) or the Windows launcher of the terminal command
 // (cli-launcher/, for the packaged build's flavor, SM_FLAVOR). The
 // engine and the helper are built by `pnpm dev` beside the dev CLI, and
-// the prePackage hook builds what a release ships.
+// the prePackage hook builds what a release ships, for the package's
+// arch (node's name for it, x64 or arm64).
 //
 // Run: pnpm file-sync:build, pnpm nativefs:build, pnpm cli-launcher:build
+//      node scripts/build-go.mts <helper> [--arch arm64]
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { programFile } from "@shigomori/engine/executables";
@@ -55,6 +57,8 @@ if (helper === undefined) {
   throw new Error(`Usage: build-go.mts <${Object.keys(HELPERS).join("|")}>`);
 }
 const outfile = join(appRoot, programFile(helper.outfile));
+const archAt = process.argv.indexOf("--arch");
+const arch = archAt >= 0 ? process.argv[archAt + 1] : undefined;
 
 execFileSync(
   "go",
@@ -69,6 +73,16 @@ execFileSync(
     outfile,
     ".",
   ],
-  { cwd: appRoot, stdio: "inherit", env: { ...process.env, ...helper.env } },
+  {
+    cwd: appRoot,
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      ...helper.env,
+      ...(arch === undefined
+        ? {}
+        : { GOARCH: arch === "x64" ? "amd64" : arch }),
+    },
+  },
 );
 console.log(`built ${outfile}`);

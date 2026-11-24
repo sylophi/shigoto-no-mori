@@ -387,6 +387,7 @@ export async function createWebBridge(deps: WebBridgeDeps): Promise<WebBridge> {
     // empty means no ClerkProvider (ClerkGate).
     clerkPublishableKey: config.publishableKey,
     isDev: deps.isDev,
+    isExperimental: false,
     // App-only UI (the port-forward controls) gates its mount on this:
     // a browser cannot bind a local TCP listener, and the tab's registrar
     // rejects the client-scoped portForward channels anyway.

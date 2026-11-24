@@ -28,6 +28,8 @@ const bridge = {
   clerkPublishableKey: optionalArgFlag(CLERK_PK_FLAG),
   route: requireArgFlag(ROUTE_FLAG),
   isDev: process.argv.includes(DEV_BUILD_FLAG),
+  // Windows on Arm, which no one has run by hand (release.yml).
+  isExperimental: currentPlatform() === "win32" && process.arch === "arm64",
   isLab: process.argv.includes(LAB_FLAG),
   sidebarSide: process.argv.includes(SIDEBAR_RIGHT_FLAG) ? "right" : "left",
   // Client fact, constant per bridge: true here, false on the web

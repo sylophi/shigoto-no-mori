@@ -20,20 +20,22 @@ type ThemeHeaderProps = DevAffordance & {
 // right on Windows (lib/platform.ts). A browser tab has neither, and
 // wears a static "web" marker in the corner slot beside the dev sticker
 // (a dev web build carries both: they answer different questions,
-// "which shell" vs "which build").
+// "which shell" vs "which build"). An experimental build wears
+// "experimental" there instead.
 
 // Both headers always render, and `doubutsu-only` / `v1-only` pick which
 // shows. A JS branch on the theme would fork this component per theme.
-// SidebarHeader binds the dev mark (a client fact off the preload
-// bridge) and its one-way reveal.
+// SidebarHeader binds the dev mark and the experimental one (client
+// facts off the preload bridge) and the dev mark's one-way reveal.
 export function SidebarHeaderView({
   hasLocalHost,
+  isExperimental,
   ...dev
-}: DevAffordance & { hasLocalHost: boolean }) {
+}: DevAffordance & { hasLocalHost: boolean; isExperimental: boolean }) {
   const props = {
     ...dev,
     hasLocalHost,
-    badge: hasLocalHost ? undefined : "web",
+    badge: !hasLocalHost ? "web" : isExperimental ? "experimental" : undefined,
   };
   return (
     <>

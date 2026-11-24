@@ -2587,6 +2587,7 @@ export function installFakeHostBridge(
     appVersion: FAKE_APP_VERSION,
     clerkPublishableKey: "pk_test_fake",
     isDev: opts.dev ?? true,
+    isExperimental: false,
     isElectron: !WEB_SHELL,
     platform: WEB_SHELL
       ? WEB_PLATFORM
