@@ -1,9 +1,5 @@
 # Product
 
-## Register
-
-product
-
 ## Users
 
 Solo developers running parallel development across the machines they own: a desktop at home, a laptop on the road, maybe a box that stays on. They juggle many feature branches at once, often with AI agents running in worktrees, and want the worktree primitive made first-class on every one of those machines without an opinionated workflow on top.

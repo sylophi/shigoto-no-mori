@@ -171,12 +171,3 @@ A host view (a streaming RPC) reaches a container as an atom on the client's run
 A request (either a value computed when asked or an action) is a React Query query or mutation, and a push never feeds a reactivity key. A data family becomes a view once the host holds it as state and serves a view of it, while a one-off read stays a query. Requests do not go through `effect/reactivity`'s AtomRpc: its reactivity keys would be the push-to-key mapping ([`renderer/lib/hostWatch.ts`](app/renderer/lib/hostWatch.ts)) under another name, and what React Query gives a request (error toasts, focus refetch, staleness, and abort on unmount) would have to be rebuilt.
 
 Each fact the renderer shows has one owner: a view or a request. A bridge that keeps two representations of one fact in agreement must explain why it stays.
-
-## Before you push
-
-- Does any handler you touched do more than decode input, call one service method, and map errors?
-- Did you extend the domain's service before adding a new one?
-- Does the error you added name its operation and resource, keep the `cause`, and leak no payload?
-- Is every resource you opened released by a scope?
-- Did knip pass? A new export with no importer fails it.
-- Does every disabled diagnostic explain why in a comment above it?
