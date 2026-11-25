@@ -513,7 +513,7 @@ export function SceneSidebar({
                 <SidebarNavActionsView
                   hasLocalHost={hasLocalHost}
                   pathname={pathname}
-                  live={{ label: "Live", dot: null }}
+                  live={[]}
                   updateReady={false}
                   onNavigate={noop}
                 />

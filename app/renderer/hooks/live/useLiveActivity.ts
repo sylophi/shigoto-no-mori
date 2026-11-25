@@ -173,13 +173,18 @@ export function useLiveMirrors(): LiveMirror[] {
   return liveMirrorsOf(useEveryHostMirrors());
 }
 
-// How many things are live, for the sidebar's mark. An open terminal
-// is not: a shell kept open in a drawer is how a day's work goes, and
-// would keep the mark lit. Live lists them.
-export function useLiveCount(): number {
+// How many of each kind are live, for the sidebar's mark.
+export function useLiveCounts() {
   const scripts = useRunningScripts().reduce(
     (sum, host) => sum + host.runs.length,
     0,
   );
-  return scripts + usePortForwardCount() + useLiveMirrors().length;
+  const terminals = useOpenTerminals().flatMap((host) => host.terminals);
+  return {
+    scripts,
+    terminals: terminals.length,
+    terminalsBusy: terminals.some((terminal) => terminal.busy),
+    forwards: usePortForwardCount(),
+    mirrors: useLiveMirrors().length,
+  };
 }
