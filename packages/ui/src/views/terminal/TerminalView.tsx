@@ -267,6 +267,9 @@ export function TerminalView({
       // asks (Claude Code, Codex, Neovim) can tell Shift+Enter from Enter.
       vtExtensions: { kittyKeyboard: true },
       convertEol: lineFeedsReturn,
+      // OSC 8 hyperlinks (what Claude Code, gh, and `ls --hyperlink`
+      // print), which xterm would otherwise confirm() and window.open.
+      linkHandler: { activate: (_event, uri) => link(uri) },
     });
     // Other ⌘ chords are the window's (copy, paste, the menu's), which
     // kitty mode would send to the program instead. xterm keeps ⌘A, its
