@@ -872,6 +872,13 @@
 .doubutsu [data-doubutsu-zone="sidebar"] {
   background-color: var(--doubutsu-sidebar);
   --muted-foreground: var(--doubutsu-rail-muted-foreground);
+  --dot-cutout: var(--doubutsu-sidebar);
+}
+
+/* The Live button's stacked dots keep a 1px cutout in the button's
+   surface (--cutout, which SidebarFooterView sets) so they separate. */
+.doubutsu [data-slot="live-dot"] {
+  box-shadow: 0 0 0 1px var(--cutout);
 }
 
 /* The inbox's create buttons (New worktree, Add project) are filled

@@ -13,6 +13,7 @@ import {
   Settings as SettingsIcon,
 } from "lucide-react";
 import type { SidebarView } from "@shigomori/contracts/schemas";
+import { listed } from "@shigomori/contracts/words";
 import { harnessLabel } from "@shigomori/contracts/harnesses";
 import {
   GUIDE_QUESTION,
@@ -35,6 +36,7 @@ import {
   SegmentedControl,
   type SegmentedOption,
 } from "../../primitives/segmented-control.tsx";
+import { StatusDot, TONE_BG, type Tone } from "../../primitives/status-dot.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
 import { SIDEBAR_FOOTER_BAR, SIDEBAR_ICON_BUTTON } from "./sidebarChrome.ts";
@@ -110,15 +112,19 @@ export function SidebarViewToggleView({
   );
 }
 
+export interface LiveActivityMark {
+  tone: Tone;
+  label: string;
+}
+
 // The footer's page-nav cluster (Live, Projects, Settings). Projects is
 // the home page's grid, where a fresh window opens, and the footer is
 // the one bar both sidebar views show. Devices and tidying are sections
 // of Settings. A hostless client's home is the Devices page, so its
 // Devices button stands where Projects would: always there, since
 // unconfigured or signed out the page itself explains the state.
-// Live wears a dot while anything runs, an amber one while an agent
-// waits on you instead. Settings wears a dot while any device holds an
-// update this window could install.
+// Live wears a dot per kind of thing live, stacked. Settings wears a
+// dot while any device holds an update this window could install.
 export function SidebarNavActionsView({
   hasLocalHost,
   pathname,
@@ -129,7 +135,7 @@ export function SidebarNavActionsView({
   hasLocalHost: boolean;
   // The page on screen, whose button lights.
   pathname: string;
-  live: { label: string; dot: "amber" | "emerald" | null };
+  live: readonly LiveActivityMark[];
   updateReady: boolean;
   onNavigate: (to: "/live" | "/" | "/account" | "/settings") => void;
 }) {
@@ -137,18 +143,50 @@ export function SidebarNavActionsView({
     active: pathname === to,
     onClick: () => onNavigate(to),
   });
+  const liveLabel =
+    live.length > 0
+      ? `Live (${listed(live.map((item) => item.label))})`
+      : "Live";
+  const liveTip =
+    live.length > 0 ? (
+      <span className="flex flex-col gap-0.5">
+        {live.map((item) => (
+          <StatusDot
+            key={item.label}
+            tone={item.tone}
+            label={item.label}
+            className="text-xs"
+          />
+        ))}
+      </span>
+    ) : undefined;
   return (
     <>
-      <NavIconButton {...button("/live")} label={live.label}>
+      <NavIconButton {...button("/live")} label={liveLabel} tip={liveTip}>
         <Radio className="size-3.5" />
-        {live.dot !== null && (
+        {live.length > 0 && (
           <span
             aria-hidden
             className={cn(
-              "pointer-events-none absolute top-1 right-1 size-1.5 rounded-full ring-2 ring-card",
-              live.dot === "amber" ? "bg-amber-500" : "bg-emerald-500",
+              "pointer-events-none absolute flex items-center",
+              live.length > 1
+                ? "top-0.5 right-0.5 -space-x-0.75"
+                : "top-1 right-1",
             )}
-          />
+          >
+            {live.map((item, index) => (
+              <span
+                key={item.label}
+                data-slot="live-dot"
+                className={cn(
+                  "size-1.5 rounded-full ring-(--cutout) [--cutout:var(--dot-cutout,var(--background))] group-hover:[--cutout:var(--accent)] group-aria-[current=page]:[--cutout:var(--accent)]",
+                  TONE_BG[item.tone],
+                  live.length > 1 ? "ring-1" : "ring-2",
+                )}
+                style={{ zIndex: live.length - index }}
+              />
+            ))}
+          </span>
         )}
       </NavIconButton>
       {hasLocalHost ? (
@@ -168,7 +206,7 @@ export function SidebarNavActionsView({
         {updateReady && (
           <span
             aria-hidden
-            className="pointer-events-none absolute top-1 right-1 size-1.5 rounded-full bg-sky-500 ring-2 ring-card"
+            className="pointer-events-none absolute top-1 right-1 size-1.5 rounded-full bg-sky-500 ring-2 ring-background"
           />
         )}
       </NavIconButton>
@@ -252,26 +290,30 @@ function NavIconButton({
   active,
   onClick,
   label,
+  tip,
   children,
 }: {
   active: boolean;
   onClick: () => void;
   label: string;
+  tip?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        SIDEBAR_ICON_BUTTON,
-        "relative",
-        active && "bg-accent text-foreground",
-      )}
-    >
-      {children}
-    </button>
+    <SimpleTooltip tip={tip}>
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={label}
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          SIDEBAR_ICON_BUTTON,
+          "group relative",
+          active && "bg-accent text-foreground",
+        )}
+      >
+        {children}
+      </button>
+    </SimpleTooltip>
   );
 }

@@ -5,17 +5,19 @@ import { useBinding } from "@/hooks/ui/useKeymap";
 import { startGuide, useGuideChoices } from "@/hooks/useGuide";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useClientFlag } from "@/hooks/config/useSidebarMarks";
-import { useLiveCount } from "@/hooks/live/useLiveActivity";
+import { useLiveCounts } from "@/hooks/live/useLiveActivity";
 import {
   useSetSidebarView,
   useSidebarView,
 } from "@/hooks/projects/useSidebarView";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
+import { pluralize } from "@shigomori/contracts/words";
 import { agentsNeedYou } from "@shigomori/ui/lib/agentNeeds.ts";
 import { useWaitingAgents } from "@/lib/agentWatch";
 import { useHasLocalHost } from "@/lib/localHost";
 import { useApi } from "@/lib/runtime/pageApi";
 import {
+  type LiveActivityMark,
   SidebarFooterView,
   SidebarGuideMenuView,
   SidebarNavActionsView,
@@ -38,9 +40,23 @@ export function SidebarFooter({
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const updateReady = Object.keys(useStagedUpdates()).length > 0;
-  const running = useLiveCount();
+  const counts = useLiveCounts();
   const waiting = useWaitingAgents().length;
   const needsYou = useClientFlag("markAgentsWaiting") && waiting > 0;
+  const kinds: [number, string, LiveActivityMark["tone"]][] = [
+    [counts.scripts, "script", "violet"],
+    [counts.terminals, "terminal", counts.terminalsBusy ? "sky" : "slate"],
+    [counts.forwards, "port forward", "emerald"],
+    [counts.mirrors, "mirror", "indigo"],
+  ];
+  const live: LiveActivityMark[] = [
+    ...(needsYou
+      ? [{ tone: "amber" as const, label: agentsNeedYou(waiting) }]
+      : []),
+    ...kinds
+      .filter(([count]) => count > 0)
+      .map(([count, noun, tone]) => ({ tone, label: pluralize(count, noun) })),
+  ];
   const guides = useGuideChoices();
   const api = useApi();
   return (
@@ -66,14 +82,7 @@ export function SidebarFooter({
           <SidebarNavActionsView
             hasLocalHost={hasLocalHost}
             pathname={pathname}
-            live={{
-              label: needsYou
-                ? `Live (${agentsNeedYou(waiting)})`
-                : running > 0
-                  ? `Live (${running} running)`
-                  : "Live",
-              dot: needsYou ? "amber" : running > 0 ? "emerald" : null,
-            }}
+            live={live}
             updateReady={updateReady}
             onNavigate={(to) => void navigate({ to })}
           />

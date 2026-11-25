@@ -16,14 +16,17 @@ export type Tone =
   | "indigo"
   | "slate";
 
-// The tones a status dot, a status word and a status pill take.
+// The tones a status word and a status pill take.
 export type StatusTone = Exclude<Tone, "violet" | "indigo">;
 
-const TONE_BG: Record<StatusTone, string> = {
+// A dot's fill.
+export const TONE_BG: Record<Tone, string> = {
   emerald: "bg-emerald-500",
   rose: "bg-rose-500",
   amber: "bg-amber-500",
   sky: "bg-sky-500",
+  violet: "bg-violet-500",
+  indigo: "bg-indigo-500",
   // slate rides the theme's muted token so it tracks light and dark.
   slate: "bg-muted-foreground",
 };
@@ -86,7 +89,7 @@ export function StatusDot({
   className,
   ...props
 }: WithoutTitle<React.ComponentProps<"span">> & {
-  tone: StatusTone;
+  tone: Tone;
   label?: React.ReactNode;
   // A soft breathing halo in the dot's own tone, for a state that is
   // live right now (a server answering on a port) rather than merely
