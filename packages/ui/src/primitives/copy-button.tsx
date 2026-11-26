@@ -1,12 +1,16 @@
 import { type ComponentProps, useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, type LucideIcon } from "lucide-react";
 import { IconButton } from "./icon-button.tsx";
+import { SimpleTooltip } from "./tooltip.tsx";
 import { cn } from "../lib/utils.ts";
 
 interface CopyButtonProps {
-  value: string;
+  value: string | (() => string);
   label?: string;
   size?: ComponentProps<typeof IconButton>["size"];
+  icon?: LucideIcon;
+  // For an icon that doesn't say what it copies.
+  tip?: string;
 }
 
 // Copies a value and says so for a moment: the check a copy control
@@ -25,10 +29,16 @@ export function useCopied(
   return [copied, copy];
 }
 
-export function CopyButton({ value, label = "Copy", size }: CopyButtonProps) {
+export function CopyButton({
+  value,
+  label = "Copy",
+  size,
+  icon: Icon = Copy,
+  tip,
+}: CopyButtonProps) {
   const [copied, copy] = useCopied(value);
   const icon = size === "xs" ? "size-3" : "size-3.5";
-  return (
+  const button = (
     <IconButton
       onClick={copy}
       aria-label={label}
@@ -39,8 +49,9 @@ export function CopyButton({ value, label = "Copy", size }: CopyButtonProps) {
       {copied ? (
         <Check className={cn(icon, "text-foreground")} />
       ) : (
-        <Copy className={icon} />
+        <Icon className={icon} />
       )}
     </IconButton>
   );
+  return tip ? <SimpleTooltip tip={tip}>{button}</SimpleTooltip> : button;
 }

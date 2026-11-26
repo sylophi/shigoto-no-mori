@@ -269,6 +269,7 @@ export function DiffPage({
       hunks={changes?.readOnly ? undefined : changes?.hunks}
       busy={changes?.busy ?? false}
       loadSides={namesBlobsInFull(shown) ? loadSides : undefined}
+      patch={patch}
       media={
         isMediaBinary(shown) && (
           <MediaDiff
