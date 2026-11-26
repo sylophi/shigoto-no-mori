@@ -4,7 +4,6 @@
 // Its calls are the desktop's (shared/account/handlers.ts), and signing
 // in is the terminal's (`sm login`, the login contract): Clerk's device
 // grant, whose access token enrolls this device once and is dropped.
-import { join } from "node:path";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import type { AccountStatus } from "@shigomori/contracts/modules/account";
 import {
@@ -66,7 +65,7 @@ export function headlessAccount(facts: HostFacts) {
   const deviceIdOf = new Promise<string>((resolve) => {
     deviceIdIs = resolve;
   });
-  const profile = profileFile(join(facts.userDataPath, "account.json"));
+  const profile = profileFile(facts.userDataPath);
 
   // The host holds the switch against the account it is on.
   void noteAcceptsCommands(profile.read().acceptsCommandsFor ?? null);

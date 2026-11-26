@@ -30,6 +30,7 @@ import type { Link } from "@shared/ipc/transport";
 import {
   type LinkChannels,
   LinkGroup,
+  LoopbackGroup,
   type OutdatedModules,
   outdatedModules,
   versionsOf,
@@ -187,7 +188,6 @@ export const dialHost = (
     readonly openSocket: OpenClientSocket;
     // How long the whole dial may take, the socket's open included.
     readonly deadlineMs: number;
-    readonly group: typeof LinkGroup;
   },
 ): Effect.Effect<DialedDevice, RemoteConnectError, Scope.Scope> => {
   // Whatever the platform said about why the socket failed (`ws` names
@@ -236,6 +236,7 @@ export const dialHost = (
     );
     return yield* linkOver(ws, {
       ...options,
+      group: LoopbackGroup,
       local: true,
       greet: (call) =>
         call("link:hello", {

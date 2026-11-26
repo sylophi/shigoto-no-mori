@@ -1,6 +1,6 @@
 # Effect conventions
 
-These rules govern how Effect is written across every TypeScript package in this repo: the engine, the host, the desktop and web shells, the contracts, the hub, and the renderer's data layer. Code reviews enforce these rules on the lines a PR changes, not on untouched older code. The shell's Electron-facing modules (the menu, windows, and deep links) stay plain Electron code. [`app/main/README.md`](app/main/README.md) documents which parts of the shell use Effect.
+These rules govern how Effect is written across every TypeScript package in this repo: the engine, the host, the desktop and web shells, the contracts, and the renderer's data layer. Code reviews enforce these rules on the lines a PR changes, not on untouched older code. The shell's Electron-facing modules (the menu, windows, and deep links) stay plain Electron code. [`app/main/README.md`](app/main/README.md) documents which parts of the shell use Effect.
 
 Effect is pinned to one exact version, the latest stable release, in the workspace catalog, and a version bump is a PR of its own. Wrap gaps in Effect on our side. Patch Effect itself only for a bug no wrapper can reach, because much of what this repo uses is unstable and every patch has to be redone against each release. Any patch must name the upstream issue or fix, and is removed in the version bump that includes the fix.
 

@@ -1,12 +1,11 @@
 // Durable proof for the source teardown of a move between devices
 // (direct-only): the pull or the send lands the worktree on the other
-// device over a REAL DIRECT websocket between the two fixtures,
-// brokered by the stub device hub exactly as production does
-// (test/lib/directBoot.mts), and the source goes only once the copy
-// holds it. The listener serves the REAL sync and worktrees
-// contracts and handlers on a real direct listener, and the handlers
-// run the REAL engine in-process, which runs REAL git against fixture
-// repos. Asserts:
+// device over an in-memory link between the two fixtures, where
+// Colibrii would carry it (test/lib/directBoot.mts), and the source
+// goes only once the copy holds it. The listener serves the REAL sync
+// and worktrees contracts and handlers on the REAL link server, and the
+// handlers run the REAL engine in-process, which runs REAL git against
+// fixture repos. Asserts:
 //   - a clean transplant (the pull plus the source's teardown over the
 //     peer's grant-gated worktrees:delete) removes the source worktree,
 //     its sm data and its branch;
@@ -25,7 +24,7 @@
 //
 // Both "devices" share one node process and one sandboxed
 // SHIGOMORI_DATA_DIR holding two projects (source and target repos);
-// what separates them is the direct wire between them. Run: pnpm test
+// what separates them is the link between them. Run: pnpm test
 // sync-transfer.
 import assert from "node:assert/strict";
 import * as Schema from "effect/Schema";

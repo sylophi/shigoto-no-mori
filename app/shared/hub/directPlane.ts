@@ -59,22 +59,14 @@ export type PeerDevice = Pick<Device, "account" | "roster" | "dial" | "wakes">;
 
 export type DirectPlaneDeps = {
   readonly device: PeerDevice;
-  // Identity facts, as getters because the host's are post-boot facts
-  // read on first dial, not at wiring time.
-  localDeviceId(): string;
-  localAppVersion(): string;
+  readonly localDeviceId: string;
+  readonly localAppVersion: string;
   // The owner's fan-out sinks: every window the host serves, the tab's
   // own wire in the browser.
   broadcastStatus(status: HubStatus): void;
   broadcastPeerPush(push: HubPeerPush): void;
   // This device's tunnel, absent on the web client, which runs none.
   readonly tunnel?: Stream.Stream<TunnelState>;
-};
-
-export type DirectPlane = {
-  // The renderer-facing hub bridge, for the contract registration.
-  // Teardown is the plane's scope closing, not a call in here.
-  handlers: HubHandlers;
 };
 
 // The words a person reads for each socket a person must act on.
@@ -107,7 +99,7 @@ const socketOf = (account: AccountState): HubSocketStatus => {
 // closes every cached peer session.
 export const make = (
   deps: DirectPlaneDeps,
-): Effect.Effect<DirectPlane, never, Scope.Scope> =>
+): Effect.Effect<HubHandlers, never, Scope.Scope> =>
   Effect.gen(function* () {
     let socket: HubSocketStatus = { phase: "stopped" };
     let online: ReadonlyArray<string> = [];
@@ -138,14 +130,14 @@ export const make = (
       Effect.gen(function* () {
         const link = yield* deps.device.dial(
           deviceId,
-          encodeHello(deps.localAppVersion()),
+          encodeHello(deps.localAppVersion),
         );
         const welcome = decodeWelcome(link.greeting);
         if (welcome === null) {
           return yield* new UnreadableWelcomeError({ deviceId });
         }
         const dialed = yield* peerLink(link, welcome, {
-          localDeviceId: deps.localDeviceId(),
+          localDeviceId: deps.localDeviceId,
           onPush: (channel, payload) => onPush(deviceId, channel, payload),
         });
         return {
@@ -241,5 +233,5 @@ export const make = (
       });
     }
 
-    return { handlers };
+    return handlers;
   });

@@ -171,17 +171,16 @@ export async function createWebBridge(deps: WebBridgeDeps): Promise<WebBridge> {
   // The direct plane's shared composition (shared/hub/directPlane.ts),
   // the same assembly the host's (host/process/wires.ts), with no
   // tunnel: a page runs none.
-  const directPlane = Effect.runSync(
+  const hubHandlers = Effect.runSync(
     DirectPlane.make({
       device,
-      localDeviceId: () => deviceId,
-      localAppVersion: () => deps.appVersion,
+      localDeviceId: deviceId,
+      localAppVersion: deps.appVersion,
       broadcastStatus: (status) =>
         tab.push(hubContract, "statusChanged", status),
       broadcastPeerPush: (push) => tab.push(hubContract, "peerPush", push),
     }).pipe(Scope.provide(deviceScope)),
   );
-  const hubHandlers = directPlane.handlers;
 
   // ---- account module ----
 

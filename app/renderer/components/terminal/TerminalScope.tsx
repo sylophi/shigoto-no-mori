@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { clientSetting } from "@shigomori/contracts/schemas";
 import { activeTheme } from "@shigomori/ui/lib/themes.ts";
-import { cn } from "@shigomori/ui/lib/utils.ts";
+import { TerminalScopeView } from "@shigomori/ui/views/terminal/TerminalScopeView.tsx";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useLook } from "@/hooks/ui/useLook";
 
@@ -10,7 +10,13 @@ import { useLook } from "@/hooks/ui/useLook";
 // dark in a light window, the light palette's own terminal dark
 // (palettes.css) rather than the dark pick. Always a root, so a
 // terminal watching it re-themes in place when either changes.
-export function TerminalScope({ children }: { children: ReactNode }) {
+export function TerminalScope({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
   const { data: config } = useClientConfig();
   const { applied, resolved } = useLook();
   const darkened =
@@ -18,16 +24,13 @@ export function TerminalScope({ children }: { children: ReactNode }) {
   const theme = activeTheme(applied, resolved);
   const palette = darkened && theme ? `terminal-${theme}` : theme;
   return (
-    <div
-      data-theme-scope
-      data-palette={palette ?? undefined}
-      className={cn(
-        "contents",
-        (darkened || resolved === "dark") && "dark",
-        applied.doubutsu && "doubutsu",
-      )}
+    <TerminalScopeView
+      palette={palette ?? undefined}
+      dark={darkened || resolved === "dark"}
+      doubutsu={applied.doubutsu}
+      className={className}
     >
       {children}
-    </div>
+    </TerminalScopeView>
   );
 }

@@ -26,9 +26,7 @@ import {
   stagingHolder,
   UpdateInProgress,
 } from "../stagingLock.ts";
-import type { ListedProject } from "../Registry.ts";
 import * as Terrier from "../Terrier.ts";
-import { terrierProjects } from "../Terrier.ts";
 import * as WorktreeData from "../WorktreeData.ts";
 import * as Worktrees from "../Worktrees.ts";
 import { type WorktreeIdentity } from "../Worktrees.ts";
@@ -285,13 +283,8 @@ export type ProjectChecked = {
 export const listProjects = (listing: Terrier.TerrierListing) =>
   Effect.gen(function* () {
     const registry = yield* Registry.Registry;
-    const registered = yield* registry.projects;
-    const extras = terrierProjects(
-      new Set(registered.map(({ path: at }) => at)),
-      listing.paths,
-    );
     return {
-      projects: [...registered, ...extras] as ReadonlyArray<ListedProject>,
+      projects: yield* registry.listedOver(listing),
       complete: Option.isNone(listing.trouble),
     };
   });

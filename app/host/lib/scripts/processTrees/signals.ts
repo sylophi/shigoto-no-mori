@@ -7,25 +7,11 @@ import * as Effect from "effect/Effect";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schedule from "effect/Schedule";
 import { readDescendants } from "@shigomori/engine/processTable/ps";
-import { pidAlive } from "@shigomori/engine/processes";
+import { pidAlive, safeKill } from "@shigomori/engine/processes";
 import { exitedWithin, type Stop, type Tree } from "./tree";
 
 const SIGNALS = { stop: "SIGTERM", hangup: "SIGHUP" } as const;
 const GROUP_POLL_MS = 100;
-
-function safeKill(pid: number, signal: NodeJS.Signals): void {
-  // kill(-1) signals every process the user may signal, kill(0) our
-  // own group, kill(1) launchd. No real child or group ever maps to
-  // these, so refuse them at the chokepoint every pid source funnels
-  // through.
-  if (!Number.isInteger(pid) || Math.abs(pid) < 2) return;
-  try {
-    process.kill(pid, signal);
-  } catch {
-    // ESRCH (no such process) is the common case once the tree is down.
-    // EPERM means we lost ownership; nothing we can do either way.
-  }
-}
 
 export const makeSignals = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;

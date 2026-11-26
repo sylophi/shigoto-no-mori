@@ -56,9 +56,7 @@ let cachedProfile: ProfileStore | null = null;
 let cachedConfig: AccountServiceConfig | null = null;
 
 function profile(): ProfileStore {
-  return (cachedProfile ??= profileFile(
-    join(app.getPath("userData"), "account.json"),
-  ));
+  return (cachedProfile ??= profileFile(app.getPath("userData")));
 }
 
 // The resolved service config (hostShell.ts), resolved once and cached:

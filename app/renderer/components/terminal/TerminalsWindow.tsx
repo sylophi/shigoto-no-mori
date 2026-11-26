@@ -33,24 +33,22 @@ function WindowTabs({ worktree }: { worktree: Worktree }) {
     (param) => paramToSlot(param) ?? [],
   );
   return (
-    <TerminalScope>
-      <div className="h-full bg-card">
-        <TerminalTabs
-          worktree={worktree}
-          slots={slots}
-          onCloseScript={(closed) =>
-            update({
-              scripts: search.scripts?.filter(
-                (param) => param !== slotToParam(closed),
-              ),
-            })
-          }
-          picked={search.tab ?? null}
-          onPick={(tab) => update({ tab })}
-          onEmpty={() => window.close()}
-          titleBar
-        />
-      </div>
+    <TerminalScope className="h-full bg-card">
+      <TerminalTabs
+        worktree={worktree}
+        slots={slots}
+        onCloseScript={(closed) =>
+          update({
+            scripts: search.scripts?.filter(
+              (param) => param !== slotToParam(closed),
+            ),
+          })
+        }
+        picked={search.tab ?? null}
+        onPick={(tab) => update({ tab })}
+        onEmpty={() => window.close()}
+        titleBar
+      />
     </TerminalScope>
   );
 }

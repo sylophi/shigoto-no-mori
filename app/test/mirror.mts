@@ -3,12 +3,12 @@
 // isn't its own, through the whole production chain. The dialer runs
 // the REAL mirror daemon (a freshly built file-sync engine, Mutagen
 // inside) behind the REAL gateway (host/mirror/MirrorGateway.ts). The
-// gateway dials the listener's REAL mirror:openStream over a REAL
-// direct websocket (brokered by the stub device hub exactly as
-// production does, test/lib/directBoot.mts), the listener's handler
-// spawns a REAL `file-sync serve` for a REAL registered worktree. Bytes
-// cross on a byte channel of the direct socket (shared/remote/channels.ts,
-// bridged by host/portForward/bridge.ts). The sm CLI is built too, only
+// gateway dials the listener's REAL mirror:openStream over the REAL
+// link server, on an in-memory link where Colibrii would carry it
+// (test/lib/directBoot.mts), and the listener's handler spawns a REAL
+// `file-sync serve` for a REAL registered worktree. Bytes cross on a
+// byte channel of the link (shared/remote/channels.ts, bridged by
+// host/portForward/bridge.ts). The sm CLI is built too, only
 // to register the fixture project the way the app would. Asserts:
 //   - a create converges seeded content both ways and holds each side's
 //     .git pointer file back,

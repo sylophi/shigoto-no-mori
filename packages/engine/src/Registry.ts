@@ -83,6 +83,11 @@ export class Registry extends Context.Service<
     // Every project the device lists, in the manual order: the
     // registry's, then terrier's while that integration is on.
     readonly listed: Effect.Effect<ReadonlyArray<ListedProject>>;
+    // The same unordered, over a terrier listing the caller also reads
+    // for whether terrier answered.
+    readonly listedOver: (
+      listing: Terrier.TerrierListing,
+    ) => Effect.Effect<ReadonlyArray<ListedProject>>;
     // The rows the sidebar shows, in the manual order: each project
     // with whether its folder is there, its identity and remote, its use
     // stats and its icon. The hue is always null, kept for the JSON's shape.
@@ -345,14 +350,20 @@ const make = Effect.gen(function* () {
     return true;
   }, Effect.orDie);
 
-  const listed = Effect.gen(function* () {
+  const listedOver = Effect.fn("Registry.listedOver")(function* (
+    listing: Terrier.TerrierListing,
+  ) {
     const registered = yield* projects;
     const extras = terrierProjects(
       new Set(registered.map(({ path }) => path)),
-      (yield* terrier.listing).paths,
+      listing.paths,
     );
-    return orderProjects<ListedProject>(
-      [...registered, ...extras],
+    return [...registered, ...extras] as ReadonlyArray<ListedProject>;
+  });
+
+  const listed = Effect.gen(function* () {
+    return orderProjects(
+      yield* listedOver(yield* terrier.listing),
       yield* order,
     );
   }).pipe(Effect.withSpan("Registry.listed"));
@@ -626,6 +637,7 @@ const make = Effect.gen(function* () {
     projects,
     relocate,
     listed,
+    listedOver,
     rows,
     register,
     unregister,
