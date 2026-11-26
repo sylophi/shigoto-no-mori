@@ -1,11 +1,12 @@
-// The profile (profile.ts) in a file only its owner reads: the
-// desktop's and the headless host's.
+// The profile (profile.ts) in userData's account.json, a file only its
+// owner reads: the desktop's and the headless host's.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { type ProfileStore, profileStore } from "./profile";
 
-export const profileFile = (path: string): ProfileStore =>
-  profileStore({
+export const profileFile = (userDataPath: string): ProfileStore => {
+  const path = join(userDataPath, "account.json");
+  return profileStore({
     readRaw: () => {
       try {
         return readFileSync(path, "utf8");
@@ -20,3 +21,4 @@ export const profileFile = (path: string): ProfileStore =>
       renameSync(`${path}.tmp`, path);
     },
   });
+};

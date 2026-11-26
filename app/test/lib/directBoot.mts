@@ -250,17 +250,17 @@ function bridgeTo(
   onPeerPush: (push: HubPeerPush) => void,
 ): HubHandlers {
   const scope = Scope.makeUnsafe();
-  const plane = Effect.runSync(
+  const handlers = Effect.runSync(
     makeDirectPlane({
       device: dialerDevice(listener),
-      localDeviceId: () => DIALER,
-      localAppVersion: () => "1.0.0",
+      localDeviceId: DIALER,
+      localAppVersion: "1.0.0",
       broadcastStatus: () => {},
       broadcastPeerPush: onPeerPush,
     }).pipe(Scope.provide(scope)),
   );
   track(() => Effect.runPromise(Scope.close(scope, Exit.void)));
-  return plane.handlers;
+  return handlers;
 }
 
 type PeerReachDeps = Omit<

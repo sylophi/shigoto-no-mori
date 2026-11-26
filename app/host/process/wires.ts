@@ -9,11 +9,11 @@ import * as Stream from "effect/Stream";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import * as Terrier from "@shigomori/engine/Terrier";
 import * as HostPushes from "@host/lib/HostPushes";
-import * as Graph from "./graph";
 import { join } from "node:path";
 import { LOOPBACK_FILE } from "@shigomori/contracts/link";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import * as DirectPlane from "@shared/hub/directPlane";
+import type { HubHandlers } from "@shared/hub/bridgeHandlers";
 import { notStarted } from "@shared/hub/inertDevice";
 import { serviceConfigOf } from "@shared/account/hostShell";
 import { LayerDownError, layerLatch } from "@shared/layerLatch";
@@ -56,14 +56,6 @@ export const loopbackLayer = Layer.unwrap(
   ),
 );
 
-// This device's id, for the root's synchronous callbacks, which run
-// once the graph is up.
-let deviceId: string | undefined;
-const deviceIdNow = () =>
-  (deviceId ??= Graph.readNow(DeviceId.current, () => {
-    throw new Error("The device id was asked before launch read it.");
-  }));
-
 // Each peer as it comes to take this device's calls (PeerReach's
 // admissions), off the status snapshots.
 export const peerAdmissions = Effect.runSync(PeerReach.makeAdmissions);
@@ -75,12 +67,12 @@ export const hubHandlers = () => {
   if (up === undefined) {
     throw new LayerDownError({ name: "The device hub", reason: "is not up" });
   }
-  return up.handlers;
+  return up;
 };
 
 // The peer plane (shared/hub/directPlane.ts), for the length of the
 // graph. Closing it closes the peer sessions.
-const plane = layerLatch<DirectPlane.DirectPlane>("The device hub");
+const plane = layerLatch<HubHandlers>("The device hub");
 export const remotePlanesLayer = Layer.effectDiscard(
   plane.provide(
     Effect.gen(function* () {
@@ -89,8 +81,8 @@ export const remotePlanesLayer = Layer.effectDiscard(
       return yield* DirectPlane.make({
         device,
         tunnel: device.tunnel,
-        localDeviceId: deviceIdNow,
-        localAppVersion: () => hostFacts().appVersion,
+        localDeviceId: yield* DeviceId.current,
+        localAppVersion: hostFacts().appVersion,
         broadcastStatus: (status) => {
           peerAdmissions.note(status);
           pushes.publishUnsafe(hubContract, "statusChanged", status);

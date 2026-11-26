@@ -42,26 +42,6 @@ const MAX_CONNECTIONS = 64;
 // How long a socket asked to close has before it is cut.
 const TERMINATE_GRACE_MS = 1_500;
 
-// The page origins the upgrade admits beside an origin-less dial (the
-// terminal's, the shell's): the window's own, and a loopback http page
-// (the web client's dev server).
-function isAllowedOrigin(
-  origin: string | undefined,
-  allowedOrigin: string | undefined,
-): boolean {
-  if (origin === undefined) return true;
-  if (allowedOrigin !== undefined && origin === allowedOrigin) return true;
-  try {
-    const url = new URL(origin);
-    return (
-      url.protocol === "http:" &&
-      (url.hostname === "localhost" || url.hostname === "127.0.0.1")
-    );
-  } catch {
-    return false;
-  }
-}
-
 // close() alone is advisory: ws keeps delivering frames for a while.
 // The close frame, then a hard cut.
 function closeThenTerminate(
@@ -138,8 +118,11 @@ const make = (options: {
       port: 0,
       maxPayload: MAX_MESSAGE_BYTES,
       perMessageDeflate: false,
-      verifyClient: (info: { req: IncomingMessage }) =>
-        isAllowedOrigin(info.req.headers.origin, options.allowedOrigin),
+      // An origin-less dial (the terminal's, the shell's) or the
+      // window's own page.
+      verifyClient: ({ req }: { req: IncomingMessage }) =>
+        req.headers.origin === undefined ||
+        req.headers.origin === options.allowedOrigin,
     });
     wss.on("connection", (ws) => {
       if (wss.clients.size > MAX_CONNECTIONS) {

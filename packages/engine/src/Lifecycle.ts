@@ -21,7 +21,7 @@ import * as Result from "effect/Result";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { fileUntilExit } from "./processes.ts";
+import { fileUntilExit, safeKill } from "./processes.ts";
 import * as Paths from "./Paths.ts";
 import { byFamily } from "./platform.ts";
 import { readDescendants } from "./processTable/ps.ts";
@@ -107,11 +107,7 @@ const make = Effect.gen(function* () {
       posix: readDescendants(pid).pipe(
         Effect.map((descendants) => {
           for (const descendant of descendants) {
-            try {
-              process.kill(descendant, "SIGTERM");
-            } catch {
-              // Gone already.
-            }
+            safeKill(descendant, "SIGTERM");
           }
         }),
         Effect.ignore,

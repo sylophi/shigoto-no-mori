@@ -316,7 +316,7 @@ export function noteDeviceAccount(state: AccountState): Promise<void> {
     reportedAccount === undefined &&
     Predicate.isTagged(state, "SignedOut") &&
     !state.removed &&
-    profileFile(join(hostFacts().userDataPath, "account.json")).enrolledBefore()
+    profileFile(hostFacts().userDataPath).enrolledBefore()
   ) {
     return Promise.resolve();
   }
@@ -391,21 +391,20 @@ export const rootServices = Layer.mergeAll(
           catch: listDevicesFailure,
         }),
       ),
-      directPeers: Effect.map(
-        Effect.promise(async () => hubHandlers().status()),
-        (status) =>
-          Object.fromEntries(
-            Object.entries(status.peerAcceptsCommands).map(
-              ([deviceId, acceptsCommands]) => [
-                deviceId,
-                {
-                  acceptsCommands,
-                  sharesData: status.peerSharesData[deviceId] ?? true,
-                },
-              ],
-            ),
+      directPeers: Effect.sync(() => {
+        const status = hubHandlers().status();
+        return Object.fromEntries(
+          Object.entries(status.peerAcceptsCommands).map(
+            ([deviceId, acceptsCommands]) => [
+              deviceId,
+              {
+                acceptsCommands,
+                sharesData: status.peerSharesData[deviceId] ?? true,
+              },
+            ],
           ),
-      ),
+        );
+      }),
     }),
   ),
 );

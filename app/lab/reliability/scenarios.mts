@@ -611,7 +611,7 @@ const appRelaunch: Scenario = {
 
 const laptopSleep: Scenario = {
   name: "laptop-sleep",
-  does: "The clients' machine sleeps for 30 to 120 s (past a hub ticket's 60 s life about half the time): every tab hidden and frozen, the desktop apps stopped (SIGSTOP), the network gone. Then the network comes back changed, the apps go on (SIGCONT) and their windows hear the network come back, as a wake tells them, and the tabs wake.",
+  does: "The clients' machine sleeps for 30 to 120 s: every tab hidden and frozen, the desktop apps stopped (SIGSTOP), the network gone. Then the network comes back changed, the apps go on (SIGCONT) and their windows hear the network come back, as a wake tells them, and the tabs wake.",
   boundMs: 30_000,
   async run(lab, random) {
     const ms = between(random, 30_000, 120_000);
@@ -761,7 +761,7 @@ const reloadAndThirdWindow: Scenario = {
 
 const twoTabsRedial: Scenario = {
   name: "two-tabs-redial",
-  does: "A second tab of the profile is opened, and both tabs' flows are cut at once, three times, so both dial the host together each time. Every tab has to recover each time. A host that mints a device's direct tickets as one set refuses one of two tabs dialing together, and that tab has to ask again.",
+  does: "A second tab of the profile is opened, and both tabs' flows are cut at once, three times, so both dial the host together each time. Every tab has to recover each time.",
   boundMs: 30_000,
   applies: (lab) => lab.has("web"),
   async run(lab) {
@@ -785,7 +785,7 @@ const twoTabsRedial: Scenario = {
 
 const tokenExpiry: Scenario = {
   name: "token-expiry",
-  does: "Every tab sleeps (hidden and frozen) and every window goes offline, the network gone for 75 s, past the Clerk session token's minute and a hub ticket's minute, then they wake on a changed network, so every connection is dialed again after its tokens lapsed. Then each page mints a fresh Clerk token and lists the account's devices. The device's hub credential has no expiry. Real time passes, rather than a page clock moving, which would skew the page against every other device (`clock-skew` does that on purpose).",
+  does: "Every tab sleeps (hidden and frozen) and every window goes offline, the network gone for 75 s, past the Clerk session token's minute, then they wake on a changed network, so every connection is dialed again after its tokens lapsed. Then each page mints a fresh Clerk token and lists the account's devices. The device's hub credential has no expiry. Real time passes, rather than a page clock moving, which would skew the page against every other device (`clock-skew` does that on purpose).",
   boundMs: 30_000,
   async run(lab) {
     await Promise.all(lab.tabs.map((tab) => tab.setHidden(true)));

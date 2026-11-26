@@ -123,6 +123,20 @@ export const isPidAlive = (pid: number) => {
 
 export const pidAlive = (pid: number) => Effect.sync(() => isPidAlive(pid));
 
+export function safeKill(pid: number, signal: NodeJS.Signals): void {
+  // kill(-1) signals every process the user may signal, kill(0) our
+  // own group, kill(1) launchd. No real child or group ever maps to
+  // these, so refuse them at the chokepoint every pid source funnels
+  // through.
+  if (!Number.isInteger(pid) || Math.abs(pid) < 2) return;
+  try {
+    process.kill(pid, signal);
+  } catch {
+    // ESRCH (no such process) is the common case once the tree is down.
+    // EPERM means we lost ownership; nothing we can do either way.
+  }
+}
+
 const text = <E>(stream: Stream.Stream<Uint8Array, E>) =>
   stream.pipe(Stream.decodeText(), Stream.mkString);
 

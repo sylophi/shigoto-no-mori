@@ -5,7 +5,6 @@
 // then, so a host that went away (and came back on another port) is a
 // reconnect: calls made meanwhile wait for it, and push subscriptions
 // carry over. A view ends with the link it ran on.
-import { LoopbackGroup } from "@shigomori/contracts/link";
 import type { HostAddress } from "@shigomori/contracts/modules/window";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import * as Deferred from "effect/Deferred";
@@ -61,7 +60,6 @@ export const hostLink = Effect.fnUntraced(function* (options: {
     const dialed = yield* dialHost({
       url: `ws://127.0.0.1:${port}`,
       token,
-      group: LoopbackGroup,
       appVersion: options.appVersion,
       localDeviceId: deviceId,
       openSocket: options.openSocket,
