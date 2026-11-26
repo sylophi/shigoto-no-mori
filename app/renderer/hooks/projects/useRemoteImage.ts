@@ -22,6 +22,9 @@ export function useRemoteImage(
         api.run(api.projects.remoteImage({ projectId, url }), { signal }),
       staleTime: Infinity,
       retry: false,
+      // Waits for the network, so one asked for offline isn't kept as
+      // unreadable.
+      networkMode: "online",
       // A refused or unreadable image stays blank, which says so.
       meta: { silentError: true },
     });

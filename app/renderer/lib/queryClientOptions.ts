@@ -85,7 +85,15 @@ export function createAppQueryClient(
 ): QueryClient {
   return new QueryClient({
     defaultOptions: {
+      // A call runs whether or not the machine has a network: most go to
+      // this machine's own host, and one to a peer or the hub fails on
+      // its own, quietly for a lost session (below), and is asked again
+      // as the session lands (remoteDeviceSync).
       queries: {
+        networkMode: "always",
+        // Off by default in that mode. A read that failed for the
+        // network (a PR from GitHub) is asked again as it comes back.
+        refetchOnReconnect: true,
         // Local git/fs state can change at any moment via another tool,
         // so no "TTL" is meaningful. Refetch whenever an observer
         // mounts, the window regains focus, or a mutation invalidates us.
@@ -115,6 +123,7 @@ export function createAppQueryClient(
             !isModuleOutdatedError(error) &&
             !isPeerRefusal(error)),
       },
+      mutations: { networkMode: "always" },
     },
     queryCache: new QueryCache({
       onError: (err, query) => {
