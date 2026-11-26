@@ -9,7 +9,7 @@ import {
 } from "@/hooks/launchers/useLaunchers";
 import { useLaunchShortcuts } from "@/hooks/launchers/useLaunchShortcuts";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
-import { useKeymap } from "@/hooks/ui/useKeymap";
+import { useHeldModifiers, useKeymap } from "@/hooks/ui/useKeymap";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { LauncherRowView } from "@shigomori/ui/views/worktreeDetail/LauncherRowView.tsx";
@@ -26,15 +26,18 @@ export function LauncherRow({ worktree }: { worktree: Worktree }) {
   // is up.
   const { paletteOpen } = useOverlays();
   useLaunchShortcuts(paletteOpen ? undefined : worktree, data?.entries);
+  const held = useHeldModifiers(!paletteOpen);
+  const bindings = data?.entries.map((_, i) =>
+    keymap.get(`launchTool${i + 1}`),
+  );
 
   return (
     <LauncherRowView
       entries={isLoading ? undefined : (data?.entries ?? [])}
       allHidden={(data?.hiddenCount ?? 0) > 0}
       pendingId={launch.isPending ? launch.variables?.launcherId : undefined}
-      keys={data?.entries.map(
-        (_, i) => keymap.get(`launchTool${i + 1}`)?.label,
-      )}
+      keys={bindings?.map((binding) => binding?.label)}
+      heldKeys={bindings?.map((binding) => binding?.heldKey(held))}
       onLaunch={(entry) =>
         launch.mutate({
           projectId: worktree.projectId,

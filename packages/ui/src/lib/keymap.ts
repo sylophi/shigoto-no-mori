@@ -262,13 +262,29 @@ function chordText(chord: Chord, mod = "Mod"): string {
     .join("+");
 }
 
-// The keys a chord presses on this platform: Ctrl and `Mod` are one
-// key off macOS.
-interface Pressed {
+export interface HeldModifiers {
   readonly meta: boolean;
   readonly ctrl: boolean;
   readonly alt: boolean;
   readonly shift: boolean;
+}
+
+export const NO_MODIFIERS: HeldModifiers = {
+  meta: false,
+  ctrl: false,
+  alt: false,
+  shift: false,
+};
+
+export const sameModifiers = (a: HeldModifiers, b: HeldModifiers): boolean =>
+  a.meta === b.meta &&
+  a.ctrl === b.ctrl &&
+  a.alt === b.alt &&
+  a.shift === b.shift;
+
+// The keys a chord presses on this platform: Ctrl and `Mod` are one
+// key off macOS.
+interface Pressed extends HeldModifiers {
   readonly key: string;
 }
 
@@ -283,11 +299,7 @@ function pressed(chord: Chord, mac: boolean): Pressed {
 }
 
 const samePressed = (a: Pressed, b: Pressed): boolean =>
-  a.meta === b.meta &&
-  a.ctrl === b.ctrl &&
-  a.alt === b.alt &&
-  a.shift === b.shift &&
-  a.key === b.key;
+  sameModifiers(a, b) && a.key === b.key;
 
 // The fields of a key event a chord is read from.
 export interface KeyPress {
@@ -333,6 +345,9 @@ const OTHER_KEYS: Readonly<Record<string, string>> = {
   Right: "→",
 };
 
+const keyLabel = (key: string, mac: boolean): string =>
+  (mac ? MAC_KEYS : OTHER_KEYS)[key] ?? key;
+
 // A chord as the screen shows it: the Mac's glyphs (⌃⌥⇧⌘K) on macOS,
 // names joined with + elsewhere.
 function chordLabel(chord: Chord, mac: boolean): string {
@@ -343,7 +358,7 @@ function chordLabel(chord: Chord, mac: boolean): string {
       keys.alt && "⌥",
       keys.shift && "⇧",
       keys.meta && "⌘",
-      MAC_KEYS[keys.key] ?? keys.key,
+      keyLabel(keys.key, mac),
     ]
       .filter(Boolean)
       .join("");
@@ -352,7 +367,7 @@ function chordLabel(chord: Chord, mac: boolean): string {
     keys.ctrl && "Ctrl",
     keys.alt && "Alt",
     keys.shift && "Shift",
-    OTHER_KEYS[keys.key] ?? keys.key,
+    keyLabel(keys.key, mac),
   ]
     .filter(Boolean)
     .join("+");
@@ -394,6 +409,8 @@ export interface Binding {
   // For `aria-keyshortcuts`.
   readonly aria: string;
   readonly matches: (e: KeyPress) => boolean;
+  // The key it waits on while exactly its modifiers are `held`.
+  readonly heldKey: (held: HeldModifiers) => string | undefined;
 }
 
 export function bindingOf(
@@ -437,6 +454,10 @@ export function bindingOf(
         !taken.some((other) => samePressed(other, held))
       );
     },
+    heldKey: (held) =>
+      !sameModifiers(held, NO_MODIFIERS) && sameModifiers(held, keys)
+        ? keyLabel(keys.key, mac)
+        : undefined,
   };
 }
 

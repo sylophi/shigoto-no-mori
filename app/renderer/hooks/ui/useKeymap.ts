@@ -4,19 +4,23 @@
 // useKeymapAction while it is on screen, and shows its keys with
 // useBinding. The menu's actions are the shell's: their keys go to its
 // menu (useMenuChords), which runs them.
-import { useEffect, useEffectEvent } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import {
   createExternalStore,
   useExternalStore,
 } from "@shigomori/ui/lib/externalStore.ts";
 import {
   type Binding,
+  type HeldModifiers,
   KEYMAP_ACTIONS,
+  NO_MODIFIERS,
   menuAccelerators,
   resolveKeymap,
+  sameModifiers,
 } from "@shigomori/ui/lib/keymap.ts";
 import { isMac, viewerOs } from "@shigomori/ui/lib/platform.ts";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
+import { onWindowFocus } from "@/lib/focus";
 import { isEditableTarget, isOverlayOpen, isRawKeySurface } from "@/lib/dom";
 import { useHasLocalHost } from "@/lib/localHost";
 import { useApi } from "@/lib/runtime/pageApi";
@@ -197,4 +201,55 @@ function useMenuChords(
     const chords = paused ? {} : menuAccelerators(keymap);
     void api.run(api.menu.setChords({ chords }));
   }, [keymap, paused, api, hasLocalHost]);
+}
+
+const modifiersOf = (e: KeyboardEvent): HeldModifiers => ({
+  meta: e.metaKey,
+  ctrl: e.ctrlKey,
+  alt: e.altKey,
+  shift: e.shiftKey,
+});
+
+const MODIFIER_KEYS = new Set(["Meta", "Control", "Alt", "Shift"]);
+
+// How long modifiers stay down alone before they count as held, so a
+// chord typed straight through (⌘C) doesn't flash them.
+const HOLD_MS = 400;
+
+// Which modifier keys are held down alone in this window while
+// `enabled`. Cleared when the window loses focus because a launched app
+// or app switch takes it before the keyup arrives.
+export function useHeldModifiers(enabled: boolean): HeldModifiers {
+  const [held, setHeld] = useState<HeldModifiers>(NO_MODIFIERS);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const update = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      clearTimeout(timer);
+      setHeld(NO_MODIFIERS);
+      if (!MODIFIER_KEYS.has(e.key)) return;
+      const next = modifiersOf(e);
+      if (!sameModifiers(next, NO_MODIFIERS)) {
+        timer = setTimeout(() => setHeld(next), HOLD_MS);
+      }
+    };
+    window.addEventListener("keydown", update, true);
+    window.addEventListener("keyup", update, true);
+    const stopFollowingFocus = onWindowFocus((focused) => {
+      if (focused) return;
+      clearTimeout(timer);
+      setHeld(NO_MODIFIERS);
+    });
+    return () => {
+      window.removeEventListener("keydown", update, true);
+      window.removeEventListener("keyup", update, true);
+      stopFollowingFocus();
+      clearTimeout(timer);
+      setHeld(NO_MODIFIERS);
+    };
+  }, [enabled]);
+
+  return held;
 }

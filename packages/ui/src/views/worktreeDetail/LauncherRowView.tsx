@@ -12,6 +12,7 @@ export function LauncherRowView({
   allHidden = false,
   pendingId,
   keys,
+  heldKeys,
   onLaunch,
   onChooseTools,
   onConfigure,
@@ -25,6 +26,9 @@ export function LauncherRowView({
   // The keys that launch each tool, in order (the keymap's ⌘1..⌘9),
   // shown as its tip.
   keys?: readonly (string | undefined)[];
+  // The key each tool waits on while its shortcut's modifiers are held,
+  // drawn in place of its icon.
+  heldKeys?: readonly (string | undefined)[];
   onLaunch: (entry: LauncherEntry) => void;
   onChooseTools: () => void;
   onConfigure: () => void;
@@ -72,18 +76,28 @@ export function LauncherRowView({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {entries.map((entry, i) => (
-        <SimpleTooltip key={entry.id} tip={keys?.[i]}>
-          <Button variant="outline" size="sm" onClick={() => onLaunch(entry)}>
-            {entry.id === pendingId ? (
-              <Loader2 className="animate-spin" />
-            ) : (
-              <LauncherIconView entry={entry} />
-            )}
-            <span>{entry.label}</span>
-          </Button>
-        </SimpleTooltip>
-      ))}
+      {entries.map((entry, i) => {
+        const heldKey = heldKeys?.[i];
+        return (
+          <SimpleTooltip key={entry.id} tip={keys?.[i]}>
+            <Button variant="outline" size="sm" onClick={() => onLaunch(entry)}>
+              {entry.id === pendingId ? (
+                <Loader2 className="animate-spin" />
+              ) : heldKey !== undefined ? (
+                <span
+                  aria-hidden
+                  className="flex h-4 min-w-4 items-center justify-center rounded-sm bg-foreground/10 px-0.5 text-xs font-semibold tabular-nums"
+                >
+                  {heldKey}
+                </span>
+              ) : (
+                <LauncherIconView entry={entry} />
+              )}
+              <span>{entry.label}</span>
+            </Button>
+          </SimpleTooltip>
+        );
+      })}
     </div>
   );
 }
