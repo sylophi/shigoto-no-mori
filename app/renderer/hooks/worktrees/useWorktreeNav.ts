@@ -172,9 +172,14 @@ export function useWorktreeNav() {
     },
 
     // The same with the sidebar on the History tab's commits rather
-    // than the commit's files, from within the Git page.
-    toCommitList(projectId: string, worktreeId: string, hash: string) {
-      go("commit", { projectId, worktreeId, hash }, true, { list: true });
+    // than the commit's files.
+    toCommitList(
+      projectId: string,
+      worktreeId: string,
+      hash: string,
+      replace = false,
+    ) {
+      go("commit", { projectId, worktreeId, hash }, replace, { list: true });
     },
 
     toPrDiff(projectId: string, worktreeId: string) {

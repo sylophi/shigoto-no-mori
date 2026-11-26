@@ -144,6 +144,7 @@ const NAV = {
   toDiff: noop,
   toStash: noop,
   toCommit: noop,
+  toHistory: noop,
   toBranchDiff: noop,
 };
 
