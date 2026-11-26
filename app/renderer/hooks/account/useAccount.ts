@@ -173,6 +173,9 @@ export function useEnroll() {
       if (!token) throw new Error("Clerk returned no session token");
       return api.run(api.account.enroll(token));
     },
+    // Waits for the network: ClerkAccountSync asks once per session, so
+    // one that failed offline would not be asked again.
+    networkMode: "online",
     meta: { errorTitle: "Couldn't enroll this device" },
   });
 }
