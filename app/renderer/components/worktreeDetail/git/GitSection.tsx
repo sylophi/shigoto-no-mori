@@ -58,6 +58,7 @@ export function GitSection({ worktree }: { worktree: Worktree }) {
         toDiff: () => nav.toDiff(projectId, worktreeId),
         toStash: (hash) => nav.toStash(projectId, worktreeId, hash),
         toCommit: (hash) => nav.toCommit(projectId, worktreeId, hash),
+        toHistory: (hash) => nav.toCommitList(projectId, worktreeId, hash),
         toBranchDiff: () => nav.toBranchDiff(projectId, worktreeId),
       }}
       warm={warm}

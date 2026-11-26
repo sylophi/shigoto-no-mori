@@ -55,6 +55,8 @@ export function GitSectionView({
     toDiff: () => void;
     toStash: (hash: string) => void;
     toCommit: (hash: string) => void;
+    // The History tab's list, from `hash`.
+    toHistory: (hash: string) => void;
     toBranchDiff: () => void;
   };
   // The reads each way in opens on, started as the pointer rests on it.
@@ -68,6 +70,7 @@ export function GitSectionView({
   const count = worktree.changedCount;
   const unnamed = (count ?? 0) - named.length;
   const newestStash = stashes[0];
+  const head = worktree.recentCommits[0];
   const sum = (side: "additions" | "deletions") =>
     files.reduce((n, file) => n + (file.counts?.[side] ?? 0), 0);
 
@@ -170,11 +173,13 @@ export function GitSectionView({
             />
           ))
         )}
-        {branch && (
-          <BranchLine
+        {commits && head && (
+          <HistoryLine
             behind={worktree.behindPrimary}
-            {...branch}
-            onOpen={nav.toBranchDiff}
+            branch={branch}
+            onHistory={() => nav.toHistory(head.hash)}
+            warmHistory={warm && (() => warm.commit(head.hash))}
+            onBranch={nav.toBranchDiff}
           />
         )}
       </div>
@@ -282,37 +287,62 @@ function CommitRow({
 }
 
 // Under the newest commits: how the branch stands against the primary
-// branch ("5 commits ahead of origin/main, 4 behind"), and the way to
-// everything it changes at once.
-function BranchLine({
+// branch ("5 commits ahead of origin/main, 4 behind"), and the ways to
+// the whole history and to everything the branch changes at once.
+function HistoryLine({
   behind,
-  base,
-  own,
-  more,
-  onOpen,
+  branch,
+  onHistory,
+  warmHistory,
+  onBranch,
 }: {
   behind: number;
-  base: string;
-  own: number;
-  // More commits than the history read returned.
-  more: boolean;
-  onOpen: () => void;
+  // `more`: more commits than the history read returned.
+  branch: { base: string; own: number; more: boolean } | undefined;
+  onHistory: () => void;
+  warmHistory?: () => void;
+  onBranch: () => void;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 pl-19 text-xs text-muted-foreground">
-      <span>
-        {more ? `${own}+ commits` : pluralize(own, "commit")} ahead of {base}
-        {behind > 0 && `, ${behind} behind`}
+      {branch && (
+        <span>
+          {branch.more
+            ? `${branch.own}+ commits`
+            : pluralize(branch.own, "commit")}{" "}
+          ahead of {branch.base}
+          {behind > 0 && `, ${behind} behind`}
+        </span>
+      )}
+      <span className="ml-auto flex items-center gap-3">
+        <LineLink onOpen={onHistory} warm={warmHistory}>
+          All history
+        </LineLink>
+        {branch && <LineLink onOpen={onBranch}>All branch changes</LineLink>}
       </span>
-      <button
-        type="button"
-        onClick={onOpen}
-        className="ml-auto inline-flex items-center gap-0.5 hover:text-foreground"
-      >
-        All branch changes
-        <ChevronRight aria-hidden className="size-3.5 opacity-60" />
-      </button>
     </div>
+  );
+}
+
+function LineLink({
+  onOpen,
+  warm,
+  children,
+}: {
+  onOpen: () => void;
+  warm?: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      {...warmOnRest(warm)}
+      className="inline-flex items-center gap-0.5 hover:text-foreground"
+    >
+      {children}
+      <ChevronRight aria-hidden className="size-3.5 opacity-60" />
+    </button>
   );
 }
 

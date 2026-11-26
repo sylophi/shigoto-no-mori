@@ -44,7 +44,7 @@ export function GitPageSidebar({
         if (next === "changes") {
           nav.toDiff(projectId, worktreeId, { replace: true });
         } else if (next === "history" && head) {
-          nav.toCommitList(projectId, worktreeId, head);
+          nav.toCommitList(projectId, worktreeId, head, true);
         } else if (next === "stashes") {
           if (newestStash) {
             nav.toStashList(projectId, worktreeId, newestStash);
