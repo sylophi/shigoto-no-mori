@@ -43,10 +43,15 @@
   },
   {
     "id": "antigravity",
-    "label": "Antigravity",
-    "bundleNames": ["Antigravity.app"],
-    "cli": "agy",
+    "label": "Antigravity IDE",
+    "bundleNames": ["Antigravity IDE.app"],
+    "cli": "agy-ide",
     "editor": true
+  },
+  {
+    "id": "antigravity-app",
+    "label": "Antigravity",
+    "bundleNames": ["Antigravity.app"]
   },
   {
     "id": "codex",
@@ -227,6 +232,7 @@
   { "id": "opencode", "label": "OpenCode", "inTerminal": "opencode" },
   { "id": "amp", "label": "Amp", "inTerminal": "amp" },
   { "id": "cursor-agent", "label": "Cursor CLI", "inTerminal": "cursor-agent" },
+  { "id": "antigravity-cli", "label": "Antigravity CLI", "inTerminal": "agy" },
   { "id": "copilot", "label": "Copilot CLI", "inTerminal": "copilot" },
   { "id": "aider", "label": "Aider", "inTerminal": "aider" },
   { "id": "pi", "label": "Pi", "inTerminal": "pi" },
