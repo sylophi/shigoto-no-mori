@@ -238,7 +238,7 @@ const zoomBy =
   (step: number): MenuItemConstructorOptions["click"] =>
   (_item, focusedWindow) => {
     const wc = (focusedWindow as BrowserWindow | undefined)?.webContents;
-    if (wc) zoomTo(wc.getZoomLevel() + step);
+    if (wc) void zoomTo(wc.getZoomLevel() + step);
   };
 
 // Chrome's View menu. macOS puts its own Enter Full Screen in it.
@@ -253,7 +253,7 @@ function viewMenu(mac: boolean): MenuItemConstructorOptions {
       {
         label: "Actual Size",
         accelerator: "CmdOrCtrl+0",
-        click: () => zoomTo(0),
+        click: () => void zoomTo(0),
       },
       { label: "Zoom In", accelerator: "CmdOrCtrl+=", click: zoomBy(0.5) },
       // ⌘+ too, the same key with Shift.

@@ -15,9 +15,10 @@ import type { ChangeMark, IndexEntry } from "./indexEntry.ts";
 
 // Stable identity for one file inside one patch. `name` alone collides
 // on a rename pair (the old path can still appear as another entry), so
-// the previous name is part of the key.
+// the previous name is part of the key, quoted since a path can hold
+// any separator.
 export function fileKey(file: FileDiffMetadata): string {
-  return `${file.prevName ?? ""} ${file.name}`;
+  return JSON.stringify([file.prevName ?? null, file.name]);
 }
 
 // The parts of a patch that are one file's, as git printed them: two

@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { EditorFooterView } from "@shigomori/ui/views/shared/EditorFooterView.tsx";
 import { patchClientConfig } from "@/hooks/config/useClientConfig";
 import { useSettingsSave } from "@/hooks/config/useSettingsSave";
@@ -137,6 +138,14 @@ function SettingsPage({
   const localDeviceId = api.deviceId;
   const hasLocalHost = useHasLocalHost();
   const save = useSettingsSave();
+  const reset = useMutation({
+    mutationFn: () =>
+      Promise.all([
+        patchClientConfig(api, registry, { terminalFontSize: undefined }),
+        hasLocalHost && api.run(api.window.resetLayout()),
+      ]),
+    meta: { errorTitle: "Couldn't reset the layout" },
+  });
   const { setOverride } = useLook();
   const peers = useHostDevices().filter((device) => !device.isThisDevice);
   const roster = useDeviceRoster();
@@ -319,10 +328,7 @@ function SettingsPage({
           onReset={() => {
             resetLayout();
             setField("terminalFontSize")(undefined);
-            void patchClientConfig(api, registry, {
-              terminalFontSize: undefined,
-            });
-            if (hasLocalHost) void api.run(api.window.resetLayout());
+            reset.mutate();
           }}
           zoom={hasLocalHost}
           {...(hasLocalHost && {
