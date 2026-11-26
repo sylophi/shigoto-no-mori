@@ -489,13 +489,13 @@ const MAX_ZOOM_LEVEL = 8.5;
 // Every window takes the zoom, and the width it keeps for its side
 // terminals with it. Kept for the windows opened later and the next
 // launch.
-export function zoomTo(level: number): void {
+export function zoomTo(level: number): Promise<unknown> {
   const zoomLevel = Math.min(MAX_ZOOM_LEVEL, Math.max(MIN_ZOOM_LEVEL, level));
   for (const entry of held) {
     entry.window.webContents.setZoomLevel(zoomLevel);
     fitWidth(entry);
   }
-  void updateClientConfig((config) =>
+  return updateClientConfig((config) =>
     clientSetting(config, "zoomLevel") === zoomLevel
       ? config
       : { ...config, zoomLevel: storedClientSetting("zoomLevel", zoomLevel) },

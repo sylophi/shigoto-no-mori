@@ -40,9 +40,9 @@ export const windowHandlers: Handlers<typeof windowContract, HandlerContext> = {
     openWindow(route);
   },
 
-  resetLayout: () => {
+  resetLayout: async () => {
     forgetTerminalsSize();
-    zoomTo(0);
+    await zoomTo(0);
   },
 
   widen: ({ width }, { windowId }) => {
