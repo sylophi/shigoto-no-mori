@@ -28,6 +28,7 @@ export const makeDiffs = ({ running }: { readonly running: RunningArea }) =>
       // path git doesn't count as a change (an ignored .env). Read-only
       // peers reach this, so git says first whether it is an untracked
       // change. A symlink prints where it points, never what is there.
+      let unindexed = false;
       if (untracked) {
         // Output past the cap still fails: an answer cut short says
         // nothing about whether the file is there.
@@ -43,7 +44,7 @@ export const makeDiffs = ({ running }: { readonly running: RunningArea }) =>
           ],
           { anyExit: true },
         ).pipe(Effect.catchTags({ GitCommandError: () => Effect.succeed("") }));
-        if (known === "") return "";
+        unindexed = known !== "";
       }
       // Full blob ids, since a binary file's new side is read back by
       // its id, and only a full one reaches the disk (isWorkingTreeBlob).
@@ -52,7 +53,7 @@ export const makeDiffs = ({ running }: { readonly running: RunningArea }) =>
         [
           ...pathspec,
           ...PATCH_CONFIG,
-          ...(untracked
+          ...(unindexed
             ? [
                 "diff",
                 "--no-index",
@@ -64,7 +65,9 @@ export const makeDiffs = ({ running }: { readonly running: RunningArea }) =>
                 file,
               ]
             : // diff-index, which never writes the index back (see the
-              // runner), `-M` for the renames porcelain diff finds.
+              // runner), `-M` for the renames porcelain diff finds. A file
+              // added with `git add -N`, which the status reads as
+              // untracked, comes out as new.
               [
                 "diff-index",
                 "-p",
