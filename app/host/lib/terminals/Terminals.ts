@@ -273,6 +273,9 @@ interface Session {
   // Followed as output comes in, for what a snapshot of the screen
   // doesn't carry.
   followed: Followed;
+  // The clients subscribed to its events: output none of them takes has
+  // its queries answered by the screen.
+  viewers: number;
   // Closed by its user or with its worktree, or its shell ended, so not
   // saved for the next start.
   forget: boolean;
@@ -492,10 +495,11 @@ const make = <R, E>(options: {
           const chunks = pieces(data);
           // Queued before any goes out, so an attach's snapshot has all
           // the chunks it missed.
-          session.screen.write(data, {
-            ...session.followed,
-            seq: session.seq + chunks.length,
-          });
+          session.screen.write(
+            data,
+            { ...session.followed, seq: session.seq + chunks.length },
+            session.viewers === 0,
+          );
           for (const piece of chunks) {
             session.seq += 1;
             session.history.append(session.seq, piece);
@@ -629,6 +633,9 @@ const make = <R, E>(options: {
             size,
             restored === undefined ? "" : restored.history + RESTORED_TAIL,
             { ...followed, seq: first },
+            (answer) => {
+              if (Option.isNone(session.exited)) pty.write(answer);
+            },
           ),
           events: yield* PubSub.bounded<TerminalEvent>(CLIENT_BACKLOG),
           scope,
@@ -638,6 +645,7 @@ const make = <R, E>(options: {
           size,
           exited: Option.none(),
           followed,
+          viewers: 0,
           forget: false,
         };
         yield* Scope.addFinalizer(scope, PubSub.shutdown(session.events));
@@ -832,6 +840,15 @@ const make = <R, E>(options: {
           const live = yield* PubSub.subscribe(session.events).pipe(
             Scope.provide(subscribed),
           );
+          yield* Effect.acquireRelease(
+            Effect.sync(() => {
+              session.viewers += 1;
+            }),
+            () =>
+              Effect.sync(() => {
+                session.viewers -= 1;
+              }),
+          ).pipe(Scope.provide(subscribed));
           // A chunk sent between the subscription and this read is in
           // both, and the seq tells which.
           const { past, head } = yield* headOf;

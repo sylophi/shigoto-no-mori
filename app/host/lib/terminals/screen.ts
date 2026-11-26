@@ -14,7 +14,9 @@ import * as Effect from "effect/Effect";
 
 export type Screen<A> = {
   // Queues `data`, whose `at` the screen shows once it is parsed.
-  readonly write: (data: string, at: A) => void;
+  // `unseen` is output no window took, whose queries the screen
+  // answers.
+  readonly write: (data: string, at: A, unseen?: boolean) => void;
   // How much of what was written is still to parse.
   readonly behind: () => number;
   // Once what was written is parsed.
@@ -36,12 +38,23 @@ export type Screen<A> = {
 // A scroll region set at the end of the output, and its top row.
 const REGION_LAST = new RegExp(String.raw`\x1b\[(\d+);\d+r$`);
 
-// A screen of `size` that has parsed `past`, at `at`.
-export function makeScreen<A>(size: GridSize, past: string, at: A): Screen<A> {
+// A screen of `size` that has parsed `past`, at `at`, which `answer`s
+// the queries in output no window took (a program launched into a new
+// terminal asks before any window shows it). A window answers the
+// rest, colors included, which only it knows.
+export function makeScreen<A>(
+  size: GridSize,
+  past: string,
+  at: A,
+  answer: (data: string) => void,
+): Screen<A> {
   const term = new Terminal({
     ...size,
     scrollback: TERMINAL_SCROLLBACK,
     allowProposedApi: true,
+    // As a window has them (TerminalView), for what the screen answers.
+    cursorBlink: true,
+    vtExtensions: { kittyKeyboard: true },
   });
   // A client's widths (TerminalView), so the lines come out as it lays
   // them out.
@@ -50,7 +63,19 @@ export function makeScreen<A>(size: GridSize, past: string, at: A): Screen<A> {
   term.loadAddon(serializer);
   let parsed = at;
   let behind = 0;
-  const write = (data: string, next: A) => {
+  // Whether the output being parsed is unseen, and the last write's.
+  let unseen = false;
+  let queuedUnseen = false;
+  term.onData((data) => {
+    if (unseen) answer(data);
+  });
+  const write = (data: string, next: A, nextUnseen = false) => {
+    if (nextUnseen !== queuedUnseen) {
+      queuedUnseen = nextUnseen;
+      term.write("", () => {
+        unseen = nextUnseen;
+      });
+    }
     behind += data.length;
     term.write(data, () => {
       behind -= data.length;
