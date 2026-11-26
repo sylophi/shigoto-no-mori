@@ -41,11 +41,13 @@ const APP_ICON_URL = new Map(
   ).map(([path, url]) => [path.slice(path.lastIndexOf("/") + 1, -4), url]),
 );
 
-// Terminal tools wearing their app's icon.
+// Launchers wearing a sibling app's icon.
 const ICON_ALIAS = new Map([
   ["claude-code", "claude"],
   ["codex-cli", "codex"],
   ["cursor-agent", "cursor"],
+  ["antigravity-app", "antigravity"],
+  ["antigravity-cli", "antigravity"],
 ]);
 
 const SVG_ICON = new Map<string, ComponentType<{ className: string }>>([
