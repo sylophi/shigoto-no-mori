@@ -7,7 +7,12 @@ import {
   type Virtualizer,
 } from "@pierre/diffs";
 import { FileDiff, VirtualizerContext } from "@pierre/diffs/react";
-import { Files, Loader2, WrapText } from "lucide-react";
+import {
+  FileDiff as FileDiffIcon,
+  Files,
+  Loader2,
+  WrapText,
+} from "lucide-react";
 import { PAGE_HEADER_PADDING } from "../shared/PageHeaderView.tsx";
 import { CenteredMessage } from "../../primitives/centered-message.tsx";
 import { EmptyPanel } from "../../primitives/empty-panel.tsx";
@@ -17,7 +22,7 @@ import { IconButton } from "../../primitives/icon-button.tsx";
 import { SegmentedControl } from "../../primitives/segmented-control.tsx";
 import { BottomSheet } from "../../primitives/sheet.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { fileKey, isBinaryChange } from "../../lib/patchFiles.ts";
+import { fileKey, filePatch, isBinaryChange } from "../../lib/patchFiles.ts";
 import { cn } from "../../lib/utils.ts";
 import {
   CODE_GAP_BLOCK,
@@ -288,6 +293,7 @@ export function DiffFileRowView({
   busy,
   media,
   loadSides,
+  patch,
 }: {
   fileDiff: FileDiffMetadata;
   diffStyle: DiffStyle;
@@ -305,6 +311,8 @@ export function DiffFileRowView({
   media?: ReactNode;
   // Reads a changed file's two sides, for its hidden lines to expand.
   loadSides?: FileDiffContentsLoader;
+  // The patch the file is from, for its part to be copied.
+  patch?: string;
 }) {
   const binary = isBinaryChange(fileDiff);
   return (
@@ -334,11 +342,22 @@ export function DiffFileRowView({
             : undefined
         }
         renderHeaderFilenameSuffix={() => (
-          <CopyButton
-            value={fileDiff.name}
-            label={`Copy ${fileDiff.name}`}
-            size="xs"
-          />
+          <>
+            <CopyButton
+              value={fileDiff.name}
+              label={`Copy ${fileDiff.name}`}
+              size="xs"
+            />
+            {patch !== undefined && (
+              <CopyButton
+                value={() => filePatch(patch, fileDiff)}
+                label={`Copy the diff of ${fileDiff.name}`}
+                size="xs"
+                icon={FileDiffIcon}
+                tip="Copy diff"
+              />
+            )}
+          </>
         )}
       />
       {binary &&

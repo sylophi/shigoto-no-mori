@@ -2,7 +2,12 @@
 // pane and the file rail agree on, the counts and marker each
 // row shows, and the two ways a rail's rows are built (from a patch on
 // a read-only diff, from git status on the changes page).
-import type { ChangeTypes, FileDiffMetadata } from "@pierre/diffs";
+import {
+  GIT_DIFF_FILE_BREAK_REGEX,
+  processFile,
+  type ChangeTypes,
+  type FileDiffMetadata,
+} from "@pierre/diffs";
 import { changeKey, isFullObjectId } from "@shigomori/contracts/schemas";
 import type { ChangedFile, ChangeKind } from "@shigomori/contracts/schemas";
 import { mediaTypeOf } from "@shigomori/contracts/mediaTypes";
@@ -13,6 +18,21 @@ import type { ChangeMark, IndexEntry } from "./indexEntry.ts";
 // the previous name is part of the key.
 export function fileKey(file: FileDiffMetadata): string {
   return `${file.prevName ?? ""} ${file.name}`;
+}
+
+// The parts of a patch that are one file's, as git printed them: two
+// when its type changed (a deletion and an addition). Only each part's
+// header is parsed: it names the file.
+export function filePatch(patch: string, file: FileDiffMetadata): string {
+  const key = fileKey(file);
+  return patch
+    .split(GIT_DIFF_FILE_BREAK_REGEX)
+    .filter((part) => {
+      const hunks = part.indexOf("\n@@");
+      const parsed = processFile(hunks === -1 ? part : part.slice(0, hunks));
+      return parsed !== undefined && fileKey(parsed) === key;
+    })
+    .join("");
 }
 
 // The empty blob's id, which an added or emptied empty file names.

@@ -52,12 +52,15 @@ const PARSE_IN_WORKER_FROM = 1_000_000;
 
 const NO_FILES: FileDiffMetadata[] = [];
 
+type Parse = { patch: string; files: FileDiffMetadata[] };
+
 // In path order, which is how git emits a commit or a PR anyway, so the
 // sort only ever settles a tie.
 const byName = (files: FileDiffMetadata[]) =>
   files.toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 
-// The patch's files, or undefined until a worker's first parse answers.
+// The patch's files, with the patch they were parsed from, or undefined
+// until a worker's first parse answers.
 // The parse in place stays cached for the patch: uncached, every
 // render would hand every row a new fileDiff, which pierre draws and
 // highlights again.
@@ -66,7 +69,7 @@ function usePatchFiles(
   // Which page the patch is for (one commit, the branch against a base,
   // one picked file), so one page never shows another's files.
   page: string,
-): FileDiffMetadata[] | undefined {
+): Parse | undefined {
   // The patch, when it is a worker's to parse.
   const big =
     patch !== undefined && patch.length >= PARSE_IN_WORKER_FROM
@@ -75,17 +78,14 @@ function usePatchFiles(
   // The page's last parse, which stays up while a patch that changed
   // under it (a commit made while it's open) is parsed again, so the
   // page keeps its place.
-  const [parsed, setParsed] = useState<{
-    page: string;
-    files: FileDiffMetadata[];
-  }>();
+  const [parsed, setParsed] = useState<Parse & { page: string }>();
   useEffect(() => {
     if (big === undefined) return;
     const worker = new PatchFilesWorker();
     worker.addEventListener(
       "message",
       (event: MessageEvent<FileDiffMetadata[]>) => {
-        setParsed({ page, files: byName(event.data) });
+        setParsed({ page, patch: big, files: byName(event.data) });
         worker.terminate();
       },
     );
@@ -93,10 +93,13 @@ function usePatchFiles(
     worker.postMessage(big);
     return () => worker.terminate();
   }, [big, page]);
-  if (patch === undefined) return NO_FILES;
+  if (patch === undefined) return { patch: "", files: NO_FILES };
   if (big === undefined)
-    return byName(parsePatchFiles(patch).flatMap((p) => p.files));
-  return parsed?.page === page ? parsed.files : undefined;
+    return {
+      patch,
+      files: byName(parsePatchFiles(patch).flatMap((p) => p.files)),
+    };
+  return parsed?.page === page ? parsed : undefined;
 }
 
 export function DiffPage({
@@ -198,8 +201,8 @@ export function DiffPage({
   // shows, so it is no part of that.
   const { pathname, search } = useLocation();
   const page = `${pathname}${JSON.stringify({ ...search, list: undefined })}\n${changes?.selectedKey ?? ""}`;
-  const parsedFiles = usePatchFiles(patch, page);
-  const allFiles = parsedFiles ?? NO_FILES;
+  const parse = usePatchFiles(patch, page);
+  const allFiles = parse?.files ?? NO_FILES;
 
   // The file the pane shows: the one picked from a whole patch's list,
   // kept while the next patch has it too (the same file in the next
@@ -269,6 +272,7 @@ export function DiffPage({
       hunks={changes?.readOnly ? undefined : changes?.hunks}
       busy={changes?.busy ?? false}
       loadSides={namesBlobsInFull(shown) ? loadSides : undefined}
+      patch={parse?.patch}
       media={
         isMediaBinary(shown) && (
           <MediaDiff
@@ -327,7 +331,7 @@ export function DiffPage({
             // Until the status list answers, or the patch is parsed, an
             // empty pane would read as a clean tree.
             state={
-              isLoading || changes?.loading || parsedFiles === undefined
+              isLoading || changes?.loading || parse === undefined
                 ? "loading"
                 : // A pull request's patch asked again for its media keeps
                   // showing when that ask fails. Any other page says so.
