@@ -156,19 +156,25 @@ function tellCarryOver(
   }
   const sourced = evt.report.sourced ?? [];
   if (sourced.length > 0) {
-    toast.info("Carried over from other worktrees", {
-      description: clippedLines(
-        sourced.map(
-          (s) =>
-            `${s.path} from ${s.source}${
-              s.copiedInstead
-                ? " (copied: symlinks only target the primary checkout)"
-                : ""
-            }`,
-        ),
-        4,
+    const sources = new Set(sourced.map((s) => s.source));
+    const [only] = sources;
+    const single = sources.size === 1;
+    const lines = clippedLines(
+      sourced.map(
+        (s) =>
+          `${single ? s.path : `${s.path} from ${s.source}`}${s.copiedInstead ? " (copied)" : ""}`,
       ),
-    });
+      4,
+    );
+    const copiedNote = sourced.some((s) => s.copiedInstead)
+      ? "\nSymlink entries were copied, since links only point into the primary checkout."
+      : "";
+    toast.info(
+      single
+        ? `Carried over from ${only}`
+        : "Carried over from other worktrees",
+      { description: lines + copiedNote },
+    );
   }
   if (failures.length === 0) return;
   toast.warning(
