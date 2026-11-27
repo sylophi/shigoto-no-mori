@@ -427,9 +427,14 @@ const make = Effect.gen(function* () {
     yield* Effect.addFinalizer(() =>
       fs.remove(staging, { recursive: true, force: true }).pipe(Effect.ignore),
     );
+    // A link only targets the primary, so a symlink entry looks there
+    // first.
+    const linkSources = sources.toSorted(
+      (a, b) => Number(b.isPrimary) - Number(a.isPrimary),
+    );
     for (const entry of entries) {
       const outcome = yield* applyOne(
-        sources,
+        entry.mode === "symlink" ? linkSources : sources,
         input.destination,
         staging,
         entry,

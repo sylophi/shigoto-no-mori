@@ -58,7 +58,7 @@ const TOAST_CLASSES: ToastClassnames = {
   // what follows it off the card.
   content: "min-w-0",
   title: "!select-text",
-  description: "!text-muted-foreground !select-text",
+  description: "!text-muted-foreground !select-text !whitespace-pre-line",
   error: "!text-destructive",
   closeButton:
     "!left-auto !right-0 ![transform:translate(35%,-35%)] !bg-popover !text-muted-foreground !border-border hover:!bg-accent hover:!text-foreground",
