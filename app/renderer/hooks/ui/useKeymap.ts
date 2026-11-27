@@ -14,6 +14,7 @@ import {
   type HeldModifiers,
   KEYMAP_ACTIONS,
   NO_MODIFIERS,
+  TERMINAL_SCOPE_ACTIONS,
   menuAccelerators,
   resolveKeymap,
   sameModifiers,
@@ -21,7 +22,12 @@ import {
 import { isMac, viewerOs } from "@shigomori/ui/lib/platform.ts";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { onWindowFocus } from "@/lib/focus";
-import { isEditableTarget, isOverlayOpen, isRawKeySurface } from "@/lib/dom";
+import {
+  isEditableTarget,
+  isInTerminalTabs,
+  isOverlayOpen,
+  isRawKeySurface,
+} from "@/lib/dom";
 import { useHasLocalHost } from "@/lib/localHost";
 import { useApi } from "@/lib/runtime/pageApi";
 
@@ -72,23 +78,35 @@ const handlers = new Map<string, Handler[]>();
 export function useKeymapAction(
   id: string,
   run: (e: KeyboardEvent) => boolean | void,
+  options: { enabled?: boolean; overOverlays?: boolean } = {},
+): void {
+  useKeymapActions([id], (_id, e) => run(e), options);
+}
+
+// What each of `ids` does, as useKeymapAction, told which was pressed.
+export function useKeymapActions(
+  ids: readonly string[],
+  run: (id: string, e: KeyboardEvent) => boolean | void,
   { enabled = true, overOverlays = false } = {},
 ): void {
   // The latest closure, so a render does not re-register.
   const latest = useEffectEvent(run);
+  const key = ids.join(" ");
   useEffect(() => {
     if (!enabled) return;
-    const handler: Handler = {
-      run: (e) => latest(e),
-      overOverlays,
-    };
-    handlers.set(id, [...(handlers.get(id) ?? []), handler]);
+    const registered = key.split(" ").map((id) => {
+      const handler: Handler = { run: (e) => latest(id, e), overOverlays };
+      handlers.set(id, [...(handlers.get(id) ?? []), handler]);
+      return [id, handler] as const;
+    });
     return () => {
-      const left = (handlers.get(id) ?? []).filter((h) => h !== handler);
-      if (left.length > 0) handlers.set(id, left);
-      else handlers.delete(id);
+      for (const [id, handler] of registered) {
+        const left = (handlers.get(id) ?? []).filter((h) => h !== handler);
+        if (left.length > 0) handlers.set(id, left);
+        else handlers.delete(id);
+      }
     };
-  }, [id, enabled, overOverlays]);
+  }, [key, enabled, overOverlays]);
 }
 
 // The actions whose keys `e` presses, with what they do.
@@ -134,7 +152,8 @@ const CTRL_TWIN_ACTIONS = new Set(
 // shell is sent (pastShell), and the terminal's own toggle. Those are
 // claimed in the capture phase, before the terminal sees them. The rest
 // wait for the bubble, so a control that spent the key (an editor's
-// Escape) keeps it.
+// Escape) keeps it. The terminal tabs' own actions act only from a
+// terminal, or the tabs, with what a terminal gives up.
 export function useKeymapListener(): void {
   const keymap = useKeymap();
   const paused = useExternalStore(recording);
@@ -145,6 +164,12 @@ export function useKeymapListener(): void {
       found: { id: string; handler: Handler }[],
     ) => {
       const overlay = isOverlayOpen();
+      // The terminal's own first, as it takes its keys before the window.
+      found.sort(
+        (a, b) =>
+          Number(TERMINAL_SCOPE_ACTIONS.has(b.id)) -
+          Number(TERMINAL_SCOPE_ACTIONS.has(a.id)),
+      );
       for (const { handler } of found) {
         if (overlay && !handler.overOverlays) continue;
         if (handler.run(e) === false) continue;
@@ -169,12 +194,13 @@ export function useKeymapListener(): void {
       if (e.repeat || e.isComposing || e.defaultPrevented) return;
       if (isRawKeySurface(e.target)) return;
       const mod = isMac ? e.metaKey : e.ctrlKey;
-      const found = pressedActions(keymap, e).filter(
-        ({ id }) =>
-          mod ||
-          TERMINAL_ACTIONS.has(id) ||
-          (isMac && e.ctrlKey && CTRL_TWIN_ACTIONS.has(id)) ||
-          !isEditableTarget(e.target),
+      const found = pressedActions(keymap, e).filter(({ id }) =>
+        TERMINAL_SCOPE_ACTIONS.has(id)
+          ? isInTerminalTabs(e.target) && ((isMac && e.metaKey) || pastShell(e))
+          : mod ||
+            TERMINAL_ACTIONS.has(id) ||
+            (isMac && e.ctrlKey && CTRL_TWIN_ACTIONS.has(id)) ||
+            !isEditableTarget(e.target),
       );
       run(e, found);
     };
@@ -189,7 +215,8 @@ export function useKeymapListener(): void {
 }
 
 // The menu's actions' keys, handed to the shell's menu, which shows the
-// focused window's.
+// focused window's: without those the terminal tabs hold while they
+// have focus, as the menu would take them first.
 function useMenuChords(
   keymap: ReadonlyMap<string, Binding>,
   paused: boolean,
@@ -198,8 +225,25 @@ function useMenuChords(
   const hasLocalHost = useHasLocalHost();
   useEffect(() => {
     if (!hasLocalHost) return;
-    const chords = paused ? {} : menuAccelerators(keymap);
-    void api.run(api.menu.setChords({ chords }));
+    let inTerminal = isInTerminalTabs(document.activeElement);
+    const send = () => {
+      const chords = paused ? {} : menuAccelerators(keymap, inTerminal);
+      void api.run(api.menu.setChords({ chords }));
+    };
+    const follow = (target: EventTarget | null) => {
+      if (isInTerminalTabs(target) === inTerminal) return;
+      inTerminal = !inTerminal;
+      send();
+    };
+    const onFocusIn = (e: FocusEvent) => follow(e.target);
+    const onFocusOut = (e: FocusEvent) => follow(e.relatedTarget);
+    window.addEventListener("focusin", onFocusIn);
+    window.addEventListener("focusout", onFocusOut);
+    send();
+    return () => {
+      window.removeEventListener("focusin", onFocusIn);
+      window.removeEventListener("focusout", onFocusOut);
+    };
   }, [keymap, paused, api, hasLocalHost]);
 }
 

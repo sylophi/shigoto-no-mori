@@ -31,7 +31,8 @@ type KeymapScope =
   | "changes"
   | "palette"
   | "folders"
-  | "editing";
+  | "editing"
+  | "terminal";
 
 const SCOPE_LABELS: Readonly<Record<KeymapScope, string>> = {
   window: "Anywhere",
@@ -40,6 +41,7 @@ const SCOPE_LABELS: Readonly<Record<KeymapScope, string>> = {
   palette: "The palette",
   folders: "Adding a project, picking a folder",
   editing: "Editing a description or a commit's message",
+  terminal: "A focused terminal",
 };
 
 export interface KeymapAction {
@@ -54,6 +56,13 @@ export interface KeymapAction {
   // On macOS its `Mod` chord also answers Ctrl in place of ⌘.
   readonly ctrlTwin?: true;
 }
+
+const terminalTab = (n: number): KeymapAction => ({
+  id: `terminalTab${n}`,
+  label: `Go to tab ${n}`,
+  chord: `Mod+${n}`,
+  scope: "terminal",
+});
 
 const launchTool = (n: number): KeymapAction => ({
   id: `launchTool${n}`,
@@ -75,6 +84,13 @@ export const KEYMAP_ACTIONS: readonly KeymapAction[] = [
     id: "newWindow",
     label: "New window",
     chord: "Mod+N",
+    scope: "window",
+    menu: true,
+  },
+  {
+    id: "closeWindow",
+    label: "Close the window",
+    chord: "Mod+W",
     scope: "window",
     menu: true,
   },
@@ -142,15 +158,46 @@ export const KEYMAP_ACTIONS: readonly KeymapAction[] = [
     ctrlTwin: true,
   },
   ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map(launchTool),
+  // A focused terminal claims only what a shell is never sent: ⌘ chords
+  // on a Mac, and on Windows its Ctrl+digits (useKeymapListener).
+  { id: "newTerminalTab", label: "New tab", chord: "Mod+T", scope: "terminal" },
+  {
+    id: "closeTerminalTab",
+    label: "Close the tab",
+    chord: "Mod+W",
+    scope: "terminal",
+  },
+  {
+    id: "previousTerminalTab",
+    label: "Previous tab",
+    chord: "Mod+Shift+[",
+    scope: "terminal",
+  },
+  {
+    id: "nextTerminalTab",
+    label: "Next tab",
+    chord: "Mod+Shift+]",
+    scope: "terminal",
+  },
+  ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map(terminalTab),
 ];
+
+// The actions only a focused terminal hears.
+export const TERMINAL_SCOPE_ACTIONS: ReadonlySet<string> = new Set(
+  KEYMAP_ACTIONS.filter((action) => action.scope === "terminal").map(
+    (action) => action.id,
+  ),
+);
 
 const actionOf = (id: string): KeymapAction | undefined =>
   KEYMAP_ACTIONS.find((action) => action.id === id);
 
 // Two actions can hear the same keys when one acts anywhere or both act
-// in the same place.
+// in the same place. A focused terminal takes its keys before the
+// window does, so its own share none with the window's.
 const scopesOverlap = (a: KeymapScope, b: KeymapScope): boolean =>
-  a === b || a === "window" || b === "window";
+  a === b ||
+  (a !== "terminal" && b !== "terminal" && (a === "window" || b === "window"));
 
 // ---- chords ----
 
@@ -493,13 +540,26 @@ export function resolveKeymap(
 }
 
 // The menu's actions' chords as accelerators, for the shell's menu.
+// While a terminal holds focus (`inTerminal`), the menu gives up the
+// chords its actions hold, as the menu would take them first.
 export function menuAccelerators(
   keymap: ReadonlyMap<string, Binding>,
+  inTerminal = false,
 ): Readonly<Record<string, string>> {
+  const terminalChords = inTerminal
+    ? [...TERMINAL_SCOPE_ACTIONS].flatMap((id) => {
+        const binding = keymap.get(id);
+        return binding ? [chordAccelerator(binding.chord)] : [];
+      })
+    : [];
   const accelerators: Record<string, string> = {};
   for (const action of KEYMAP_ACTIONS) {
     const binding = action.menu ? keymap.get(action.id) : undefined;
-    if (binding) accelerators[action.id] = chordAccelerator(binding.chord);
+    if (!binding) continue;
+    const accelerator = chordAccelerator(binding.chord);
+    if (!terminalChords.includes(accelerator)) {
+      accelerators[action.id] = accelerator;
+    }
   }
   return accelerators;
 }

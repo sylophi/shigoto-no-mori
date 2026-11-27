@@ -80,6 +80,7 @@ export function TerminalTabsView({
   );
   return (
     <Tabs.Root
+      data-slot="terminal-tabs"
       value={selectedId}
       onValueChange={(id: string) => onSelect(id)}
       className="flex h-full min-h-0 flex-col bg-card"

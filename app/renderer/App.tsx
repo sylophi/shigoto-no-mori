@@ -2,7 +2,6 @@ import { RouterProvider } from "@tanstack/react-router";
 import { ErrorBoundary } from "react-error-boundary";
 import { AppErrorFallback } from "@/components/AppChrome";
 import { DevThemeHotkeys } from "@/components/DevThemeHotkeys";
-import { useCloseKey } from "@/hooks/ui/useCloseKey";
 import { OverlaysProvider } from "@/hooks/ui/useOverlays";
 import { LookProvider } from "@/hooks/ui/useLook";
 import type { AppRouter } from "./router";
@@ -20,9 +19,6 @@ export function App({
   // place of the settings' (LookProvider).
   themeFromRoot: boolean;
 }) {
-  // Outside the error boundary, so a window that fell over with a
-  // terminal focused still closes.
-  useCloseKey();
   return (
     <LookProvider fromRoot={themeFromRoot}>
       <ErrorBoundary FallbackComponent={AppErrorFallback}>
