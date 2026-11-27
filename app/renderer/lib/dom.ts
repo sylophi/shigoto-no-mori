@@ -21,6 +21,15 @@ export function isRawKeySurface(target: EventTarget | null): boolean {
   );
 }
 
+// True when a keydown originated in a worktree's terminal tabs: a
+// terminal, or the tabs themselves, which hear the tabs' own keys.
+export function isInTerminalTabs(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    target.closest('[data-slot="terminal-tabs"]') !== null
+  );
+}
+
 // True while something is layered over the page and owns the keyboard:
 // a modal shell, a sheet, an open menu, popover or combobox popup, or
 // the blocking veil. The keymap's listener hears a key wherever focus

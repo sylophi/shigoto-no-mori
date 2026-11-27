@@ -5,16 +5,19 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useScopedDeviceLabel } from "@/hooks/remote/useHostScope";
 import { useTerminals } from "@/hooks/terminals/useTerminals";
-import { useCloseKeyClosesTab } from "@/hooks/ui/useCloseKey";
+import { useKeymapActions } from "@/hooks/ui/useKeymap";
 import { notifyError } from "@/lib/toast";
 import { scriptTabId, terminalTabLabel } from "@/store/terminalDrawer";
 import { slotLabel, type ScriptSlot } from "@/store/scriptSlot";
 import { Terminal } from "./Terminal";
 import { TerminalMove } from "./TerminalMove";
 import { TerminalTabsView } from "@shigomori/ui/views/terminal/TerminalTabsView.tsx";
+import { TERMINAL_SCOPE_ACTIONS } from "@shigomori/ui/lib/keymap.ts";
 import { peerTerminalsHiddenNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 
 type TerminalTabsProps = Parameters<typeof AttachedTerminalTabs>[0];
+
+const TAB_ACTIONS = [...TERMINAL_SCOPE_ACTIONS];
 
 // The tabs while this device may command the scoped one. While it may
 // not (its control turned off, with a terminal open here), the words
@@ -116,8 +119,22 @@ function AttachedTerminalTabs({
         notifyError("Couldn't close the terminal", error),
       );
   };
-  useCloseKeyClosesTab(() => {
-    if (selectedId !== null) close(selectedId);
+  useKeymapActions(TAB_ACTIONS, (action) => {
+    if (action === "newTerminalTab") return void open();
+    if (action === "closeTerminalTab") {
+      if (selectedId === null) return false;
+      return void close(selectedId);
+    }
+    const at = tabs.findIndex((tab) => tab.id === selectedId);
+    const index =
+      action === "previousTerminalTab"
+        ? (at - 1 + tabs.length) % tabs.length
+        : action === "nextTerminalTab"
+          ? (at + 1) % tabs.length
+          : Number(action.replace("terminalTab", "")) - 1;
+    const tab = tabs[index];
+    if (tab === undefined) return false;
+    pick(tab.id);
   });
 
   // Once per mount: the first answer with no tab at all opens a

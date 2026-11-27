@@ -426,7 +426,8 @@ export function TerminalView({
   }, [fontSize]);
 
   // An exited shell takes no keystrokes: the cursor goes, and focus is
-  // handed back, so Tab and the app's bare-key shortcuts work again. One
+  // handed to its tab, so Tab, the app's bare-key shortcuts and the tabs'
+  // keys work again. One
   // that comes alive (a script's run past its start) claims its size,
   // which its process could not take before it ran, and takes focus
   // unless something else on the page holds it (a field typed in
@@ -439,17 +440,23 @@ export function TerminalView({
     term.write(live ? SHOW_CURSOR : HIDE_CURSOR);
     const host = hostRef.current;
     if (!live && host?.contains(host.ownerDocument.activeElement)) {
-      term.blur();
+      const tab = host
+        .closest("[data-slot=terminal-tabs]")
+        ?.querySelector<HTMLElement>(
+          "[data-slot=terminal-tab-pick][aria-selected=true]",
+        );
+      if (tab) tab.focus();
+      else term.blur();
     }
     if (live && !wasLive.current) {
       proposeRef.current?.(true);
       const document = host?.ownerDocument;
       const active = document?.activeElement;
-      const drawer = host?.closest("[data-slot=terminal-drawer]");
+      const tabs = host?.closest("[data-slot=terminal-tabs]");
       if (
         active == null ||
         active === document?.body ||
-        drawer?.contains(active) === true
+        tabs?.contains(active) === true
       ) {
         term.focus();
       }
@@ -474,12 +481,13 @@ export function TerminalView({
   // host's box, so padding on the host itself would count as columns.
   // `isolate` keeps xterm's z-indexes from competing with the drawer's
   // controls, and its viewport's black lets the background through.
+  // Its text dims while it doesn't hold focus, so where keys go shows.
   return (
     <div
       data-slot="terminal"
       data-keyboard-surface="raw"
       {...usersAlone("terminal")}
-      className="isolate h-full w-full overflow-hidden bg-card px-3 py-1 font-terminal text-xs"
+      className="group/terminal isolate h-full w-full overflow-hidden bg-card px-3 py-1 font-terminal text-xs"
       onDragOver={(e) => {
         if (dropPath && holdsFiles(e)) e.preventDefault();
       }}
@@ -501,7 +509,7 @@ export function TerminalView({
       </TerminalTabToolbar>
       <div
         ref={hostRef}
-        className="h-full w-full overflow-hidden [&_.xterm-viewport]:bg-transparent"
+        className="h-full w-full overflow-hidden opacity-60 transition-opacity group-focus-within/terminal:opacity-100 [&_.xterm-viewport]:bg-transparent"
       />
     </div>
   );
